@@ -22,7 +22,7 @@ ROOT = Path(__file__).resolve().parents[1]
 LAUNCHER = ROOT / "launcher"
 APP_NAME = "Fanxi Launcher"
 BUNDLE_ID = "com.fanxi.launcher"
-VERSION = "0.1.0"
+VERSION = "0.2.0"
 
 STUB = """#!/bin/sh
 # Fanxi Launcher: runs the Python package inside this bundle.

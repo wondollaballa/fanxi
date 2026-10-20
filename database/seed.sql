@@ -20,7 +20,7 @@ INSERT OR IGNORE INTO settings (key, value) VALUES
     ('motd', 'Welcome to Fanxi. Say !help in the zone for commands.'),
     ('registration_open', '1'),
     ('world_id', '1'),
-    ('schema_version', '1'),
+    ('schema_version', '2'),
     ('seed_version', '1');
 
 INSERT OR IGNORE INTO news (slug, title, body, published_at, created_at)

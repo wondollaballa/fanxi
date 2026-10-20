@@ -120,7 +120,8 @@ Zone packets are:
 ```
 
 - Header: server packet id, client id, timestamps.
-- Body: messages, each 4-byte header (9-bit type, 4-bit size in 2-byte units, sync) plus payload.
+- Body: messages, each with a 4-byte header: a 16-bit word carrying a 9-bit type and a 7-bit
+  size in **32-bit units**, followed by a 16-bit sync/sequence. The payload starts at byte 4.
 - Compression: the fixed Huffman table in the player's `res/compress.dat` (2048 bytes).
 - Encryption: the client's Blowfish variant over the body, keyed by:
   `md5(session_hash) + view_key_adjustment` (20 bytes). The client's `0xA2` key replaces the
@@ -131,25 +132,81 @@ On the clear `0x00A` login Fanxi:
 1. finds the character by content id in the packet;
 2. finds the prepared `ZoneSession` from the lobby, or an active `game_sessions` row;
 3. loads the position from `characters`;
-4. sends the zone-in sequence: zone id, position, clock, music, character looks/jobs, HP/MP,
-   item containers (empty), quest/mission logs (empty), blacklist (empty), and the server message.
+4. replies with equipment clear (`0x04F`), appearance (`0x051`), item capacities (`0x01C`) and the
+   260-byte zone login (`0x00A`).
+
+When the client sends `0x00C` (game OK), Fanxi sends the rest of the zone state: zone bitmap
+(`0x008`), jobs (`0x01B`), status/HP (`0x037`), stats/EXP (`0x061`), exact HP/MP (`0x0DF`), the
+self `0x00D`, empty key-item/mission/magic/mount/command blocks, character sync (`0x067`),
+inventory (`0x01C`, `0x020`, `0x01D`), blacklist and the MOTD.
+
+**NPCs and monsters are not sent at `0x00A` or `0x00C`.** The client's first `0x015` (or
+`0x01A SendResRdy`) is the trigger: Fanxi sends one `0x00E` per placed NPC/monster, then updates
+them as they move or take damage.
 
 Implemented client messages:
 
 | Type | Meaning | Fanxi behavior |
 |---|---|---|
-| `0x00C` | zone fully loaded | sends the rest of the zone-in state |
-| `0x015` | position update | stores position (throttled) |
+| `0x00C` | zone fully loaded | sends the bulk zone/UI state |
+| `0x015` | position update | stores position (throttled) and spawns nearby entities on first use |
+| `0x01A` | target action | Talk, Attack, AttackOff, ChangeTarget, SendResRdy |
+| `0x083` | shop buy | charges gil, adds item, replies `0x03F` and inventory |
+| `0x016`, `0x017` | entity request | self `0x00D`/status, or re-sends an NPC/mob spawn |
+| `0x061` | status request | stats and exact HP/MP |
 | `0x05E` | zone line | changes zone if `zone_lines` has the rect |
-| `0x0B5` | chat | `!zone`, `!pos`, `!where`, `!time`, `!help` |
+| `0x0B5` | chat | `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!time`, `!help` |
 | `0x04B` | server message request | sends the MOTD in chunks |
-| `0x016`, `0x061` | character asks about itself | status, stats, party line |
 | `0x05A` | conquest | zeroed standings |
 | `0x03C` | blacklist | empty |
-| `0x0E7` | logout/shutdown | saves position, sends 0x00B |
+| `0x0E7` | logout/shutdown | saves position, sends `0x00B` |
 
-Everything else is ignored (logged once at debug level). There are no entities, NPCs, monsters,
-items, combat, quests or chat channels other than the command replies.
+`0x00F` (CLSTAT) and `0x00D` (NETEND) are ignored; `0x00D` is also the server's player-entity
+packet, so direction matters.
+
+### 4.1 Entities
+
+NPC/mob identity follows the client's convention:
+
+```
+long id  = 0x01000000 | (zone << 12) | targid
+targid   = static NPCs/mobs 0x000-0x3FF, players 0x400-0x6FF, pets 0x700-0x8FF
+```
+
+Fanxi places three NPCs at `0x100`–`0x102` and six monsters at `0x200`–`0x205` in their zones.
+`0x00E` is 88 bytes total; its payload is x/y/z floats, rotation, speed, HP percentage, animation,
+status, triggerable flag, model/size and a 16-byte name. `0x00D` is the equivalent for the player.
+
+### 4.2 Combat
+
+A player attacks with `C2S 0x01A`, action `0x02`; `0x04` disengages. Each swing sends an S2C
+`0x028` bit-packed battle action with:
+
+- actor id and one target id;
+- category `1` (basic attack) and action id `atk0` (`0x306B7461`);
+- hit or miss resolution, critical/defeated flags, animation, damage and message id.
+
+`0x029` carries the defeat and gil lines; `0x02D` carries EXP and level-up. HP changes update
+`0x00E`, `0x037`, `0x061` and `0x0DF`. See [world.md](world.md) for the full combat loop.
+
+### 4.3 Inventory and shops
+
+- Gil is item id `65535` in container `0`, slot `0`.
+- `0x01C` advertises container capacities.
+- `0x020` carries one item's quantity, id, container, slot and 24-byte attribute block.
+- `0x01D` marks a container (or all containers) loaded.
+- `0x01E` updates only a quantity (used for gil).
+- `0x01F` is a lighter item list, available for future equipment changes.
+
+The Moogle shop uses `0x03E` (open, item count), `0x03C` (price/item/index rows, final flag
+`0x89`), `C2S 0x083` (buy) and `0x03F` (result), followed by an inventory refresh.
+
+### 4.4 NPC dialogue and quests
+
+`C2S 0x01A` action `0x00` is Talk. Fanxi requires an NPC within 6 yalms and calls an original
+content function. Dialogue is sent as `0x017` chat lines. FINAL FANTASY XI event bodies and menus
+are client DAT content; Fanxi does not open an event it cannot author, and does not copy retail
+text. Quest state is persisted in `char_quests`, not in a client event.
 
 Chat commands:
 
@@ -157,6 +214,8 @@ Chat commands:
 !zone <id> [x y z [rot]]   change zone, optional position
 !pos <x> <y> <z> [rot]     reposition in the current zone
 !where                     print zone and position
+!entities                  list live NPCs/monsters and targids
+!heal                      restore HP/MP
 !time <hour>               set Vana'diel hour (0-23, fractions allowed)
 !help                      list commands
 ```
@@ -179,8 +238,12 @@ never hardcoded.
 
 - No search server (`54002/udp` is advertised but not bound).
 - No friends list, linkshell, bazaar, auction house, mail, party or chat channels.
+- Client event cutscenes and DAT menus are not implemented; NPC dialogue uses chat and the shop
+  uses the dedicated shop packets.
+- Combat is one melee target: no spells, job abilities, weapon skills, ranged attacks, TP moves,
+  skillchains, status effects, raise or enmity list.
 - Character creation and deletion in the client are acknowledged but not persisted; use the
   launcher.
 - One character per account by default (`FANXI_MAX_CHARACTERS`).
-- The gateway is not a full world server; it is the smallest world that lets the client sign in,
-  stand in a zone, move and change zones against the Fanxi database.
+- The gateway is not a full world server; it is a small original world that lets the client sign
+  in, see and talk to NPCs, fight a camp, shop, take a quest and change zones against SQLite.

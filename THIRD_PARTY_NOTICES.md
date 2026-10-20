@@ -49,6 +49,14 @@ notices in their folders under `third_party/`:
 If a license file is missing from a vendored folder, the upstream project's license applies; see
 that project's distribution.
 
+## Research references
+
+[LandSandBoat/server](https://github.com/LandSandBoat/server) is a GPL-3.0 FINAL FANTASY XI server
+emulator. It was studied read-only to understand zone, entity, combat and content flows. No
+LandSandBoat code, SQL, Lua, YAML, schema, comments or transcribed game text is included in
+Fanxi. The clean-room notes and license boundary are in
+[docs/landsandboat-study.md](docs/landsandboat-study.md).
+
 ## Game data
 
 Fanxi ships no FINAL FANTASY XI data, binaries or assets extracted from the game. The client is

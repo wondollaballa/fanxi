@@ -19,7 +19,8 @@ Fanxi is four pieces that share one repository and one vocabulary:
                                                               ┌──────────────────────────┐
                                                               │ data/fanxi.db (SQLite)   │
                                                               │ accounts, characters,    │
-                                                              │ sessions, zones, news    │
+                                                              │ sessions, inventory,     │
+                                                              │ NPCs, mobs, quests       │
                                                               └──────────────────────────┘
 ```
 
@@ -58,14 +59,18 @@ The FINAL FANTASY XI-facing side. Four listeners:
 | search | `54002/udp` | advertised in the lobby; reserved |
 
 The gateway is a small world: one character per account by default, zone-in, movement,
-zone changes, chat commands. It has no NPCs, monsters, items, combat or quests.
+zone changes, chat commands, NPCs, monsters, basic melee combat, inventory, a shop and a hunt
+quest. It is a real subset of the client protocol, not a full retail simulation. The design and
+limits are in [world.md](world.md); the LandSandBoat research notes are in
+[landsandboat-study.md](landsandboat-study.md).
 
 ### Database (`database/`, `data/fanxi.db`)
 
 SQLite, in WAL mode, with foreign keys on. Schema changes are numbered files in
 `database/migrations/`; starter data is `database/seed.sql`. The server applies both on startup.
-The database is the source of truth for accounts, characters and positions; there is no hidden
-in-memory state that survives a restart.
+The database is the source of truth for accounts, characters, positions, inventory and quest
+state; there is no hidden in-memory state that survives a restart. Live monster HP, aggro and
+timers are per-process and reset on restart (their spawn definitions are durable).
 
 ### Client (`recomp/`, `runtime/`, `host/`)
 
@@ -113,6 +118,9 @@ MIT-licensed codebase and carries Fanxi's identity.
 7. The client logs in to the zone over UDP. The zone key starts from `md5(session_hash)` plus the
    view-key adjustment; the client's 0xA2 key (sent on the data connection) overrides it when
    present. The gateway creates a `ZoneSession`, sends the zone-in packets and persists movement.
+8. On the client's first `0x015` position, the gateway sends `0x00E` spawns for the NPCs and
+   monsters in the zone. From there it runs the 250 ms world tick: roaming, aggro, melee swings,
+   rewards, death and respawn.
 
 ## Trust boundaries
 

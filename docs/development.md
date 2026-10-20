@@ -16,8 +16,8 @@
 | `launcher/tests/` | settings, HTTP client, game-folder and command-line tests |
 | `launcher/build_app.py` | macOS `.app` / Linux `.desktop` packaging |
 | `server/fanxi_server/` | `config.py`, `db.py`, `security.py`, `service.py`, `http_api.py`, `cli.py` |
-| `server/fanxi_server/game/` | `cipher.py`, `world.py`, `zone.py`, `gateway.py` |
-| `server/tests/` | service, API and live-gateway tests |
+| `server/fanxi_server/game/` | `cipher.py`, `world.py`, `zone.py`, `gateway.py`, `packets.py`, `entities.py`, `content.py` |
+| `server/tests/` | service, API, packet, world/combat/quest and live-gateway tests |
 | `database/` | migrations and seed SQL |
 | `host/`, `runtime/`, `recomp/`, `tools/` | the recompiled client, its platform layer and build tools |
 | `tests/` | the client's game-free tests (replay, VFS, geometry, addons, Android) |
@@ -40,6 +40,32 @@ python3 tests/geometry_simd_test.py
 The server tests start the real TLS auth listener on free ports, exchange a launch token, open
 the lobby, request the character list and zone hand-off, and send a synthetic zone login packet.
 They use a generated 8-bit Huffman table, so they run without `compress.dat`.
+
+World tests build a scratch database, create a character, load the seeded Port Jeuno/West
+Ronfaure content, exercise the first-`0x015` spawn trigger, talk to the Guide, buy from the
+Moogle, fight a monster to death, check the reward packets and quest progress, and verify that a
+dead monster respawns. Packet tests decode the bit-packed `0x028` action and check the fixed
+sizes of the login, job, status and inventory packets.
+
+## Adding world content
+
+Static content lives in SQL migrations:
+`database/migrations/0002_world_content.sql` defines the tables and
+`0003_world_content.sql` seeds the starter slice. Add a new numbered migration; do not edit an
+applied one.
+
+- NPC instance: `world_npcs` (zone, script, position, model, flags), optional `npc_lines` lines.
+- Monster template: `monster_templates`; placement: `monster_spawns`.
+- Item: `items`; starter inventory and gil are rows in `char_inventory`.
+- Quest: `quests` + `char_quests`.
+
+Behaviour is ordinary Python in `server/fanxi_server/game/content.py`. An NPC script key is matched
+in `npc_talk`; a monster kill can advance a quest through `mob_killed`. Keep content original:
+do not paste retail dialogue, event scripts or another server's data. See
+[landsandboat-study.md](landsandboat-study.md) for the clean-room boundary.
+
+Packet and entity layout notes are in `game/packets.py` and `game/entities.py`; the protocol
+reference is [protocol.md](protocol.md) and the world design is [world.md](world.md).
 
 ## Conventions
 
@@ -150,4 +176,5 @@ FANXI_LAUNCHER_DIR=/tmp/fanxi-test ./launcher/fanxi-launcher
 3. Build `python3 launcher/build_app.py` and launch it once.
 4. Run `python3 -m fanxi_server run` against a fresh database and play a full launch.
 5. Publish the launcher artifact and a `releases` row (platform, version, URL, SHA-256).
-6. Tag the repository; keep `data/` and certificates out of the artifact.
+6. Tag the repository (`v0.2.0` for the world slice); keep `data/` and certificates out of the
+   artifact.

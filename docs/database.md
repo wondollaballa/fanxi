@@ -1,8 +1,8 @@
 # Database
 
 Fanxi uses SQLite. One file (`data/fanxi.db` by default) holds everything the server knows:
-accounts, sessions, characters, zone positions, news, releases and settings. There is no separate
-database server to install.
+accounts, sessions, characters, zone positions, inventory, quest state, NPC/monster content,
+news, releases and settings. There is no separate database server to install.
 
 ## Location and settings
 
@@ -20,14 +20,15 @@ on startup, so a fresh checkout only needs `init` once (or nothing at all).
 The server never edits an applied migration; add a new numbered file:
 
 ```
-database/migrations/0002_add_mounts.sql
+database/migrations/0004_add_mounts.sql
 ```
 
 The runner splits the file into complete statements and runs it in a transaction. Use
 `CREATE TABLE IF NOT EXISTS` / `ALTER TABLE` as appropriate; SQLite has no `DROP COLUMN` on old
 versions, so rebuild tables if needed.
 
-The current schema is `0001_initial.sql`:
+The current schema is migrations `0001_initial.sql`, `0002_world_content.sql` and
+`0003_world_content.sql`:
 
 | Table | Purpose | Key columns |
 |---|---|---|
@@ -35,7 +36,7 @@ The current schema is `0001_initial.sql`:
 | `api_sessions` | Launcher Bearer tokens | `token_hash` (unique SHA-256), `account_id`, `expires_at`, `revoked_at` |
 | `game_sessions` | In-game sessions | `session_hash` (16-byte BLOB, unique), `account_id`, `expires_at` |
 | `login_tokens` | Launcher → host64 hand-off | `token_hash` (unique), `used_at`, `expires_at` |
-| `characters` | Adventurers | `account_id`, `char_id` (content id), `name` (unique), stats, zone/position, looks |
+| `characters` | Adventurers | `account_id`, `char_id` (content id), `name` (unique), stats, zone/position, looks, `hp_current`, `mp_current`, `exp`, `gil`, home point, playtime |
 | `worlds` | World name and advertised ports | `name`, `host`, ports, `status` |
 | `zones` | Zone names and default positions/music | `id`, `name`, `pos_*`, `music_*` |
 | `zone_lines` | Optional zone-line triggers | `rect`, `to_zone`, `x/y/z/rot` |
@@ -44,6 +45,14 @@ The current schema is `0001_initial.sql`:
 | `settings` | Small server settings | `key`, `value` (e.g. `server_name`, `motd`, `registration_open`, `world_id`) |
 | `audit_log` | Account and admin events | `account_id`, `action`, `detail`, `ip`, `created_at` |
 | `schema_migrations` | Applied migration files | `version`, `name`, `applied_at` |
+| `world_npcs` | Placed city NPCs | `zone`, `name`, `script`, `pos_*`, `rot`, `model`, `triggerable`, `widescan` |
+| `npc_lines` | Ambient lines | `npc_id`, `line_no`, `text` |
+| `monster_templates` | Monster templates | `name`, `model`, `level_min/max`, `hp`, combat stats, `aggro`, `roam_radius`, `respawn_seconds` |
+| `monster_spawns` | Monster placements | `template_id`, `zone`, `pos_*`, `rot`, `level`, `respawn_seconds` |
+| `items` | Item catalogue | `item_id`, `name`, `stack`, `usable`, `equip_slot`, `level` |
+| `char_inventory` | Character slots | `character_id`, `container`, `slot`, `item_id`, `quantity`; slot 0 / item 65535 is gil |
+| `quests` | Quest definitions | `quest_key`, `name`, reward, `required_template_id`, `required_kills` |
+| `char_quests` | Quest progress | `character_id`, `quest_id`, `state` (`active`/`complete`), `progress` |
 
 Relationships:
 
@@ -55,7 +64,16 @@ accounts 1──n characters
 accounts 1──n audit_log
 worlds   1──n (advertised by /status and /launch)
 zones    ── characters.zone / zone_lines.to_zone
+characters 1──n char_inventory
+characters 1──n char_quests ──n quests
+monster_templates 1──n monster_spawns
+world_npcs 1──n npc_lines
+quests   ── monster_templates (required_template_id)
 ```
+
+Gil is deliberately stored in the same table as items: container `0`, slot `0`, item id
+`65535`. The client expects that slot; the `characters.gil` column is a denormalized mirror used
+by the HTTP API and reward code. Both are updated together.
 
 All times are ISO-8601 UTC strings (`2026-10-20T02:34:18.331Z`), written by the server. Sorting
 the text sorts the times.
@@ -66,6 +84,8 @@ the text sorts the times.
 
 - world `Fanxi` on `127.0.0.1` with the standard ports;
 - eight zones with safe spawn positions (Port Jeuno by default);
+- three Port Jeuno NPCs, six West Ronfaure monsters, items and the Pest Control quest
+  (migration `0003_world_content.sql`, applied after the base seed);
 - welcome news;
 - settings: `server_name`, `motd`, `registration_open`, `world_id`, `schema_version`,
   `seed_version`.
@@ -116,6 +136,10 @@ sqlite> select id, username, role, status, created_at from accounts;
 sqlite> select id, name, account_id, zone, pos_x, pos_y, pos_z from characters;
 sqlite> select * from settings;
 sqlite> select * from audit_log order by id desc limit 20;
+sqlite> select name, script, zone, pos_x, pos_y, pos_z from world_npcs;
+sqlite> select p.name, s.zone, s.pos_x, s.pos_y, s.respawn_seconds from monster_spawns s join monster_templates p on p.id=s.template_id;
+sqlite> select character_id, item_id, quantity from char_inventory where container=0 order by slot;
+sqlite> select q.quest_key, cq.state, cq.progress from char_quests cq join quests q on q.id=cq.quest_id;
 ```
 
 Useful queries:
@@ -146,6 +170,9 @@ delete from audit_log     where created_at < datetime('now', '-180 days');
 
 Run these in a transaction during a quiet period. Keep audit history as long as your community
 needs it.
+
+Live NPC/monster positions, HP, aggro and respawn timers are not stored; they reset when the
+server restarts. Character inventory, gil, EXP, level and quest progress are durable.
 
 ## Migrating to PostgreSQL
 

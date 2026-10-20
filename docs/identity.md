@@ -12,8 +12,8 @@ IDs and boundaries so future changes stay consistent.
 | Repository | `fanxi` |
 | Server name (default) | `Fanxi` |
 | Launcher window | `Fanxi Launcher` |
-| Launcher version | `Fanxi Launcher 0.1.0` |
-| API server header | `Fanxi/0.1.0` |
+| Launcher version | `Fanxi Launcher 0.2.0` |
+| API server header | `Fanxi/0.2.0` |
 | Server tagline | FINAL FANTASY XI, on your own terms. |
 
 The game's own title, **FINAL FANTASY XI**, stays as the game title in the window, bundle file

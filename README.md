@@ -22,8 +22,9 @@ a server that belong to the same project:
 > **Project status.** The client is the mature part: the recompiler, renderer, audio, input and
 > addon host are ported from a working native build. The Fanxi launcher, server and database are
 > new and functional: sign-in, character creation, launch hand-off, lobby and zone-in work end to
-> end. The world is deliberately small — no NPCs, monsters, combat, items or quests yet. The
-> ground is prepared for them; the content is not there.
+> end. The world is now a small original vertical slice: NPCs, a shop, a hunt quest, roaming
+> monsters, basic melee combat, EXP/levels, inventory and respawns. It is not a full retail world
+> yet; the boundary is documented in [docs/world.md](docs/world.md).
 
 ## Quick start
 
@@ -59,6 +60,11 @@ In the launcher:
    game**. The first build translates the game and compiles `host64`; it takes a few minutes.
 4. Press **Play**. The launcher asks the server for a single-use launch token, starts `host64`,
    and the game signs in through Fanxi's auth gateway.
+
+You start in Port Jeuno. Target the Fanxi Guide and use the action button to start **Pest
+Control**; the Wandering Moogle opens a shop. Say `!zone 100` to visit the West Ronfaure camp,
+fight three Orcish Grunts, then return to the Guide. `!entities`, `!heal`, `!where` and `!help`
+are available in chat.
 
 The launcher's default server is `http://127.0.0.1:8080`. Everything can live on one machine, or
 the server can run elsewhere and the launcher can point at it in **Settings**.
@@ -101,9 +107,19 @@ minutes; the game gateway consumes it, creates a 16-byte session, and that sessi
 cipher. The launcher never sees the game password and host64 never sees the launcher token after
 it is used.
 
-The zone gateway implements the packets needed to stand in a zone, see the character, move,
-change zones and chat with a few server commands (`!zone`, `!pos`, `!where`, `!time`, `!help`).
-Positions are persisted to the database (throttled to a few writes a second at most).
+The zone gateway implements the packets needed to sign in, stand in a zone, see the character,
+move, change zones and talk/attack. Its small world adds:
+
+- three original NPCs in Port Jeuno (`!zone 246`), including the Fanxi Guide and a Moogle shop;
+- six roaming/aggro monsters in West Ronfaure (`!zone 100`);
+- click-to-talk dialogue and the persistent **Pest Control** hunt quest;
+- basic melee combat with `0x028` action packets, HP updates, EXP, gil and level-ups;
+- an 80-slot inventory with gil, Potions and starter swords;
+- monster death, rewards and respawn.
+
+Servers commands: `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!time`, `!help`. Positions are
+persisted to the database (throttled to a few writes a second at most). See
+[docs/world.md](docs/world.md) for content, packet flow and limits.
 
 ### Our database
 
@@ -111,7 +127,9 @@ Positions are persisted to the database (throttled to a few writes a second at m
 `database/seed.sql`. It is one file to back up, inspect or move. Tables:
 
 `accounts`, `api_sessions`, `game_sessions`, `login_tokens`, `characters`, `worlds`, `zones`,
-`zone_lines`, `news`, `releases`, `settings`, `audit_log`, `schema_migrations`.
+`zone_lines`, `news`, `releases`, `settings`, `audit_log`, `schema_migrations`, plus the world
+tables `world_npcs`, `npc_lines`, `monster_templates`, `monster_spawns`, `items`, `char_inventory`, `quests`
+and `char_quests`.
 
 There is no default password and no shipped secret. Create the first administrator yourself:
 
@@ -151,9 +169,10 @@ fanxi/
 ├── server/              Fanxi server (stdlib HTTP + game sockets)
 │   └── fanxi_server/
 │       ├── http_api.py  /api/v1 router
-│       ├── service.py   accounts, characters, sessions, launch tokens
+│       ├── service.py   accounts, characters, sessions, inventory, quests
 │       ├── db.py        SQLite connections + migrations
-│       └── game/        ciphers, world, lobby, auth, zone
+│       └── game/        ciphers, world, lobby, auth, zone,
+│                        packets, entities, content
 ├── database/            schema migrations and seed data
 ├── data/                fanxi.db, TLS certificate (git-ignored)
 ├── host/ runtime/ recomp/ tools/   the native client and its build
@@ -233,7 +252,9 @@ is done by the launcher (or `python3 tools/setup.py` for the full macOS app bund
 - [Launcher](docs/launcher.md) — settings, build, troubleshooting
 - [Server](docs/server.md) — API reference, deployment, admin operations
 - [Database](docs/database.md) — schema, migrations, backup and restore
+- [World](docs/world.md) — NPCs, monsters, combat, inventory, shop and quest
 - [Protocol](docs/protocol.md) — the auth, lobby and zone subset
+- [LandSandBoat study](docs/landsandboat-study.md) — clean-room research notes and license boundary
 - [Development](docs/development.md) — repository layout, tests, conventions
 - [Identity](docs/identity.md) — naming, bundle IDs and removed integrations
 - [Security](SECURITY.md) — reporting, secrets and the trust model

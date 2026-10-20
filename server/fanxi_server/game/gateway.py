@@ -13,6 +13,7 @@ import ssl
 import struct
 import subprocess
 import threading
+import time
 
 from ..config import Config
 from ..security import signed_bytes
@@ -218,8 +219,10 @@ class Gateway:
         sockets.append(_listen(bind, ports["view_port"], self.lobby.serve))
         udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp.bind((bind, ports["zone_port"]))
+        udp.settimeout(0.25)
         sockets.append(udp)
         self._udp = udp
+        self.world.udp = udp
         self.world.sockets.extend(sockets)
         threading.Thread(target=self.zone_loop, args=(udp,), name="fanxi-zone", daemon=True).start()
         log.info("game gateway: auth %d/tcp, data %d/tcp, lobby %d/tcp, zone %d/udp",
@@ -313,6 +316,12 @@ class Gateway:
         while True:
             try:
                 data, addr = udp.recvfrom(4096)
+            except socket.timeout:
+                try:
+                    self.world.tick(time.time())
+                except Exception as exc:
+                    log.warning("world tick: %s: %s", type(exc).__name__, exc)
+                continue
             except OSError:
                 return
             try:
@@ -320,5 +329,6 @@ class Gateway:
                 out = ZoneSession.incoming(self.world, session, addr, bytearray(data))
                 if out:
                     udp.sendto(out, addr)
+                self.world.flush()
             except Exception as exc:  # one bad packet must not stop the zone
                 log.warning("zone %s: %s: %s", addr, type(exc).__name__, exc)

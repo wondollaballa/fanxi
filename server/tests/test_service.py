@@ -125,6 +125,42 @@ class ServiceTest(unittest.TestCase):
             self.register()
         self.assertEqual(ctx.exception.status, 403)
 
+    def test_starter_inventory_and_gil(self):
+        account = self.register().account
+        character = self.service.create_character(account["id"], {"name": "Fanxi", "race": 1})
+        inventory = {item["item_id"]: item["quantity"] for item in self.service.inventory(character["id"])}
+        self.assertEqual(inventory[65535], 1000)
+        self.assertEqual(inventory[4112], 2)
+        self.assertEqual(inventory[16534], 1)
+        self.assertEqual(character["gil"], 1000)
+
+    def test_experience_levels_up(self):
+        account = self.register().account
+        character = self.service.create_character(account["id"], {"name": "Fanxi", "race": 1})
+        updated = self.service.award_exp_gil(character["id"], 120, 25)
+        self.assertEqual(updated["levels_gained"], 1)
+        self.assertEqual(updated["main_level"], 2)
+        self.assertEqual(updated["exp"], 20)
+        self.assertEqual(updated["gil"], 1025)
+        self.assertEqual(updated["hp"], 1520)
+
+    def test_quest_rewards_once(self):
+        account = self.register().account
+        character = self.service.create_character(account["id"], {"name": "Fanxi", "race": 1})
+        quest = self.service.quest_by_key("pest_control")
+        self.service.start_quest(character["id"], quest["id"])
+        self.service.advance_quest(character["id"], quest["id"], 3)
+        state = self.service.complete_quest(character["id"], quest["id"])
+        self.assertEqual(state["state"], "complete")
+        self.assertEqual(self.service.character(character["id"])["gil"], 1300)
+        potion = next(item for item in self.service.inventory(character["id"]) if item["item_id"] == 4112)
+        self.assertEqual(potion["quantity"], 4)
+        # Completing again must not pay twice.
+        self.service.complete_quest(character["id"], quest["id"])
+        self.assertEqual(self.service.character(character["id"])["gil"], 1300)
+        potion = next(item for item in self.service.inventory(character["id"]) if item["item_id"] == 4112)
+        self.assertEqual(potion["quantity"], 4)
+
     def test_admin_account(self):
         account_id = self.db.execute(
             "INSERT INTO accounts (username, password_hash, status, role, created_at, updated_at) "

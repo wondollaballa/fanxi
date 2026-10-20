@@ -54,6 +54,26 @@ It prints the repository, database, HTTP address, public host, game ports, game 
 
 The data and zone ports share `54230` on TCP and UDP, as the client expects.
 
+## The world
+
+The zone gateway hosts a small original world. Its design, packet flow and limits are in
+[world.md](world.md). In short:
+
+- **Port Jeuno (246):** the Fanxi Guide (quest), the Wandering Moogle (shop), the Chocobo
+  Stablehand (dialogue);
+- **West Ronfaure (100):** three Orcish Grunts and three Lambton Worms, with roam, aggro, combat,
+  EXP/gil and respawn;
+- **Quest:** Pest Control — defeat three Orcish Grunts and return to the Guide for 300 gil and two
+  Potions;
+- **Inventory:** 1,000 starter gil, two Potions and an Onion Sword, stored in SQLite.
+
+NPCs and monsters are sent only after the client's first position (`0x015`), not during zone-in.
+In game, use `!entities` to see targids, `!zone 100` for the camp and `!zone 246` for town.
+
+Content lives in `world_npcs`, `npc_lines`, `monster_templates`, `monster_spawns`, `items`, `quests` and
+`char_inventory`/`char_quests`; behaviour is in `server/fanxi_server/game/content.py`. The data is
+durable; live monster HP/aggro/timers are in memory and reset on restart.
+
 ## HTTP API
 
 Base path: `/api/v1`. Requests and responses are JSON unless noted. Errors look like:
@@ -109,6 +129,9 @@ Character fields:
 - `race`: 1–8 (Hume M/F, Elvaan M/F, Tarutaru M/F, Mithra, Galka).
 - `face`: 1–8, `size`: 0–2, `nation`: 0–2 (San d'Oria, Bastok, Windurst).
 - `main_job`: 1–22, `sub_job`: 0–22.
+
+Character responses also include `hp`, `mp`, `hp_current`, `mp_current`, `exp`, `exp_next` and
+`gil`. They are updated by the zone gateway as the player fights, shops and completes quests.
 
 ### Admin
 
@@ -166,6 +189,7 @@ Everything is environment-driven. The command line for `run` can override the ma
 | `FANXI_CORS_ORIGIN` | `*` | Set to your web origin if you build a browser front end |
 | `FANXI_LOG_LEVEL` | `info` | `debug` for protocol logs |
 | `FANXI_ZONE_DEBUG` | unset | `1` logs every zone message type received |
+| `FANXI_LAUNCHER_DIR` | platform data dir | Overrides the launcher's settings/token folder (development) |
 
 ## Deploying
 
@@ -259,5 +283,7 @@ setting decides; `FANXI_REGISTRATION=0` closes registration regardless of the da
 | Client connects to the wrong address | `FANXI_PUBLIC_HOST` must be the address reachable from the client; the lobby and `/launch` both use it. |
 | `database is locked` | SQLite WAL should prevent it; check for a stale process or a network filesystem (SQLite does not support network filesystems). |
 | Zone login rejected | The launch token was already used or expired. Press Play again. Check the server log for `without an active session`. |
+| Zone loads but no NPCs/monsters appear | The client has not sent its first `0x015` position yet, or `FANXI_ZONE_DEBUG=1` shows no `0x00E` replies. Check that the content migration ran (`sqlite3 data/fanxi.db "select count(*) from world_npcs"`). |
+| Inventory looks empty or gil is wrong | The gil slot must be item id `65535` in container 0 slot 0. Migration `0003_world_content.sql` backfills old rows. |
 | `TLS` errors | Delete `data/tls/auth-cert.pem` and `auth-key.pem` and restart to regenerate; the client does not verify the certificate. |
 | Character name rejected | 3–15 ASCII letters, unique across the world. |

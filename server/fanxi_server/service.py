@@ -37,6 +37,13 @@ CHAR_ID_BASE = 0x01000000
 DEFAULT_ZONE = 246
 FAILED_LOGIN_LIMIT = 5
 LOCK_MINUTES = 15
+STARTER_GIL = 1000
+STARTER_ITEMS = ((1, 4112, 2), (2, 16534, 1))  # slot, item id, quantity
+
+
+def exp_for_level(level: int) -> int:
+    """Experience needed to reach the next level. Fanxi's own curve, not retail's table."""
+    return max(100, int(100 * (max(1, int(level)) ** 1.5)))
 
 
 class ApiError(Exception):
@@ -253,6 +260,11 @@ class FanxiService:
             "sub_level": row["sub_level"],
             "hp": row["hp"],
             "mp": row["mp"],
+            "hp_current": row.get("hp_current", row["hp"]),
+            "mp_current": row.get("mp_current", row["mp"]),
+            "exp": row.get("exp", 0),
+            "exp_next": exp_for_level(row["main_level"]),
+            "gil": row.get("gil", 0),
             "zone": row["zone"],
             "position": {"x": row["pos_x"], "y": row["pos_y"], "z": row["pos_z"], "rot": row["rot"]},
             "created_at": row["created_at"],
@@ -290,12 +302,12 @@ class FanxiService:
             try:
                 conn.execute(
                     "INSERT INTO characters (id, account_id, slot, char_id, name, race, face, size, nation, "
-                    "main_job, sub_job, main_level, sub_level, hp, mp, speed, zone, pos_x, pos_y, pos_z, rot, "
-                    "created_at, updated_at) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 1500, 0, 50, ?, ?, ?, ?, ?, ?, ?)",
+                    "main_job, sub_job, main_level, sub_level, hp, mp, hp_current, mp_current, exp, gil, "
+                    "speed, zone, pos_x, pos_y, pos_z, rot, created_at, updated_at) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, 0, 1500, 0, 1500, 0, 0, ?, 50, ?, ?, ?, ?, ?, ?, ?)",
                     (
                         next_id, account_id, count + 1, char_id, name, race, face, size, nation,
-                        main_job, sub_job,
+                        main_job, sub_job, STARTER_GIL,
                         int(zone["id"]) if zone else DEFAULT_ZONE,
                         float(zone["pos_x"]) if zone else 0.0,
                         float(zone["pos_y"]) if zone else 0.0,
@@ -306,6 +318,13 @@ class FanxiService:
                 )
             except sqlite3.IntegrityError:
                 raise ApiError(409, "name_taken", "that character name is already taken")
+            conn.execute(
+                "INSERT OR IGNORE INTO char_inventory (character_id, container, slot, item_id, quantity) "
+                "VALUES (?, 0, 0, 65535, ?)", (next_id, STARTER_GIL))
+            for slot, item_id, quantity in STARTER_ITEMS:
+                conn.execute(
+                    "INSERT OR IGNORE INTO char_inventory (character_id, container, slot, item_id, quantity) "
+                    "VALUES (?, 0, ?, ?, ?)", (next_id, slot, item_id, quantity))
             self._audit_conn(conn, account_id, "character.create", name)
         return self.public_character(self.character_for_account(account_id))
 
@@ -353,6 +372,11 @@ class FanxiService:
             "sub_level": row["sub_level"],
             "hp": row["hp"],
             "mp": row["mp"],
+            "hp_current": row.get("hp_current", row["hp"]),
+            "mp_current": row.get("mp_current", row["mp"]),
+            "exp": row.get("exp", 0),
+            "exp_next": exp_for_level(row["main_level"]),
+            "gil": row.get("gil", 0),
             "zone": row["zone"],
             "pos": [row["pos_x"], row["pos_y"], row["pos_z"], row["rot"]],
             "head": row["head"],
@@ -366,6 +390,7 @@ class FanxiService:
             "speed": row["speed"],
             "server_name": server_name,
             "server_id": 1,
+            "targid": 0x400,
             "content_id": row["char_id"],
         }
 
@@ -496,6 +521,190 @@ class FanxiService:
         return int(self.db.scalar(
             "SELECT COUNT(*) FROM game_sessions WHERE expires_at > ?", (now_iso(),), 0
         ))
+
+    # --- world content -------------------------------------------------------------------------
+    def npcs_for_zone(self, zone: int) -> list[dict]:
+        return [dict(r) for r in self.db.all(
+            "SELECT * FROM world_npcs WHERE zone = ? ORDER BY id", (int(zone),))]
+
+    def npc_lines(self, npc_id: int) -> list[str]:
+        return [r["text"] for r in self.db.all(
+            "SELECT text FROM npc_lines WHERE npc_id = ? ORDER BY line_no", (int(npc_id),))]
+
+    def monster_spawns_for_zone(self, zone: int) -> list[dict]:
+        rows = self.db.all(
+            "SELECT s.*, t.name AS template_name, t.model, t.size, t.level_min, t.level_max, "
+            "t.hp AS template_hp, t.mp AS template_mp, t.attack, t.defense, t.accuracy, t.evasion, "
+            "t.attack_delay_ms, t.aggro, t.links, t.roam_radius, t.respawn_seconds AS template_respawn, "
+            "t.name_prefix, t.behavior, t.content_tag "
+            "FROM monster_spawns s JOIN monster_templates t ON t.id = s.template_id "
+            "WHERE s.zone = ? AND s.enabled = 1 ORDER BY s.id", (int(zone),))
+        return [dict(r) for r in rows]
+
+    def inventory(self, character_id: int) -> list[dict]:
+        return [dict(r) for r in self.db.all(
+            "SELECT ci.container, ci.slot, ci.item_id, ci.quantity, "
+            "CASE WHEN ci.item_id = 65535 THEN 'Gil' ELSE COALESCE(i.name, 'Item') END AS name, "
+            "COALESCE(i.stack, 1) AS stack, COALESCE(i.usable, 0) AS usable "
+            "FROM char_inventory ci LEFT JOIN items i ON i.item_id = ci.item_id "
+            "WHERE ci.character_id = ? ORDER BY ci.container, ci.slot", (int(character_id),))]
+
+    def item(self, item_id: int) -> dict | None:
+        row = self.db.one("SELECT * FROM items WHERE item_id = ?", (int(item_id),))
+        return dict(row) if row else None
+
+    def save_vitals(self, character_id: int, hp: int, mp: int) -> None:
+        self.db.execute(
+            "UPDATE characters SET hp_current = ?, mp_current = ?, updated_at = ? WHERE id = ?",
+            (max(0, int(hp)), max(0, int(mp)), now_iso(), int(character_id)),
+        )
+
+    def record_death(self, character_id: int) -> None:
+        self.db.execute(
+            "UPDATE characters SET hp_current = 0, mp_current = 0, death_count = death_count + 1, "
+            "updated_at = ? WHERE id = ?", (now_iso(), int(character_id)))
+
+    def set_gil(self, character_id: int, amount: int) -> int:
+        amount = max(0, int(amount))
+        with self.db.transaction() as conn:
+            conn.execute("UPDATE characters SET gil = ?, updated_at = ? WHERE id = ?",
+                         (amount, now_iso(), int(character_id)))
+            conn.execute(
+                "INSERT INTO char_inventory (character_id, container, slot, item_id, quantity) "
+                "VALUES (?, 0, 0, 65535, ?) ON CONFLICT(character_id, container, slot) "
+                "DO UPDATE SET item_id = 65535, quantity = excluded.quantity",
+                (int(character_id), amount),
+            )
+        return amount
+
+    def add_item(self, character_id: int, item_id: int, quantity: int = 1) -> dict:
+        if quantity <= 0:
+            raise ApiError(422, "validation_error", "quantity must be positive")
+        item = self.item(item_id)
+        stack = int(item["stack"]) if item else 1
+        with self.db.transaction() as conn:
+            rows = conn.execute(
+                "SELECT slot, quantity FROM char_inventory WHERE character_id = ? AND container = 0 "
+                "AND item_id = ? ORDER BY slot", (int(character_id), int(item_id))).fetchall()
+            for row in rows:
+                if int(row["quantity"]) < stack:
+                    take = min(stack - int(row["quantity"]), quantity)
+                    conn.execute(
+                        "UPDATE char_inventory SET quantity = quantity + ? WHERE character_id = ? "
+                        "AND container = 0 AND slot = ?",
+                        (take, int(character_id), int(row["slot"])))
+                    quantity -= take
+                    if quantity <= 0:
+                        break
+            while quantity > 0:
+                used = {int(r["slot"]) for r in conn.execute(
+                    "SELECT slot FROM char_inventory WHERE character_id = ? AND container = 0",
+                    (int(character_id),))}
+                slot = next((s for s in range(1, 81) if s not in used), None)
+                if slot is None:
+                    raise ApiError(409, "inventory_full", "the inventory is full")
+                put = min(stack, quantity)
+                conn.execute(
+                    "INSERT INTO char_inventory (character_id, container, slot, item_id, quantity) "
+                    "VALUES (?, 0, ?, ?, ?)",
+                    (int(character_id), slot, int(item_id), put))
+                quantity -= put
+        return {"item_id": int(item_id), "name": item["name"] if item else str(item_id)}
+
+    def award_exp_gil(self, character_id: int, exp: int, gil: int) -> dict:
+        """Add experience and gil, level up while the experience covers the next level."""
+        exp, gil = max(0, int(exp)), max(0, int(gil))
+        levels = 0
+        with self.db.transaction() as conn:
+            row = conn.execute("SELECT * FROM characters WHERE id = ?", (int(character_id),)).fetchone()
+            if row is None:
+                raise ApiError(404, "not_found", "character not found")
+            level = int(row["main_level"])
+            total_exp = int(row["exp"]) + exp
+            hp, mp = int(row["hp"]), int(row["mp"])
+            while level < 99 and total_exp >= exp_for_level(level):
+                total_exp -= exp_for_level(level)
+                level += 1
+                hp += 20
+                mp += 10
+                levels += 1
+            current_hp = hp if levels else int(row["hp_current"])
+            current_mp = mp if levels else int(row["mp_current"])
+            total_gil = int(row["gil"]) + gil
+            conn.execute(
+                "UPDATE characters SET main_level = ?, exp = ?, hp = ?, mp = ?, hp_current = ?, "
+                "mp_current = ?, gil = ?, updated_at = ? WHERE id = ?",
+                (level, total_exp, hp, mp, current_hp, current_mp,
+                 total_gil, now_iso(), int(character_id)),
+            )
+            conn.execute(
+                "INSERT INTO char_inventory (character_id, container, slot, item_id, quantity) "
+                "VALUES (?, 0, 0, 65535, ?) ON CONFLICT(character_id, container, slot) "
+                "DO UPDATE SET item_id = 65535, quantity = excluded.quantity",
+                (int(character_id), total_gil),
+            )
+        character = self.character(int(character_id))
+        character["levels_gained"] = levels
+        return character
+
+    def quest_by_key(self, key: str) -> dict | None:
+        row = self.db.one("SELECT * FROM quests WHERE quest_key = ?", (key,))
+        return dict(row) if row else None
+
+    def quest_for_template(self, template_id: int) -> dict | None:
+        row = self.db.one("SELECT * FROM quests WHERE required_template_id = ? LIMIT 1", (int(template_id),))
+        return dict(row) if row else None
+
+    def quest_state(self, character_id: int, quest_id: int) -> dict | None:
+        row = self.db.one(
+            "SELECT q.*, cq.state, cq.progress FROM quests q JOIN char_quests cq ON cq.quest_id = q.id "
+            "WHERE cq.character_id = ? AND q.id = ?", (int(character_id), int(quest_id)))
+        return dict(row) if row else None
+
+    def start_quest(self, character_id: int, quest_id: int) -> dict:
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO char_quests (character_id, quest_id, state, progress, updated_at) "
+                "VALUES (?, ?, 'active', 0, ?)", (int(character_id), int(quest_id), now_iso()))
+        return self.quest_state(character_id, quest_id) or {}
+
+    def advance_quest(self, character_id: int, quest_id: int, amount: int = 1) -> dict:
+        with self.db.transaction() as conn:
+            conn.execute(
+                "UPDATE char_quests SET progress = progress + ?, updated_at = ? "
+                "WHERE character_id = ? AND quest_id = ? AND state = 'active'",
+                (max(1, int(amount)), now_iso(), int(character_id), int(quest_id)))
+        return self.quest_state(character_id, quest_id) or {}
+
+    def complete_quest(self, character_id: int, quest_id: int) -> dict:
+        quest = self.db.one("SELECT * FROM quests WHERE id = ?", (int(quest_id),))
+        if quest is None:
+            raise ApiError(404, "not_found", "quest not found")
+        rewarded = False
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT state FROM char_quests WHERE character_id = ? AND quest_id = ?",
+                (int(character_id), int(quest_id))).fetchone()
+            if row is None:
+                raise ApiError(404, "not_found", "quest is not active for this character")
+            if row["state"] != "complete":
+                conn.execute(
+                    "UPDATE char_quests SET state = 'complete', updated_at = ? "
+                    "WHERE character_id = ? AND quest_id = ?",
+                    (now_iso(), int(character_id), int(quest_id)))
+                conn.execute("UPDATE characters SET gil = gil + ? WHERE id = ?",
+                             (int(quest["reward_gil"]), int(character_id)))
+                gil = conn.execute("SELECT gil FROM characters WHERE id = ?",
+                                   (int(character_id),)).fetchone()["gil"]
+                conn.execute(
+                    "INSERT INTO char_inventory (character_id, container, slot, item_id, quantity) "
+                    "VALUES (?, 0, 0, 65535, ?) ON CONFLICT(character_id, container, slot) "
+                    "DO UPDATE SET item_id = 65535, quantity = excluded.quantity",
+                    (int(character_id), int(gil)))
+                rewarded = True
+        if rewarded and quest["reward_item_id"] and quest["reward_item_qty"]:
+            self.add_item(character_id, int(quest["reward_item_id"]), int(quest["reward_item_qty"]))
+        return self.quest_state(character_id, int(quest_id)) or {}
 
     # --- content -------------------------------------------------------------------------------
     def news(self, limit: int = 10) -> list[dict]:
