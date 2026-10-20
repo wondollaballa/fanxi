@@ -7,7 +7,7 @@ import sys
 from . import APP_NAME, __version__
 from .api import FanxiApi
 from .config import LauncherConfig, config_path, data_dir
-from .game import find_game_dir, find_host64
+from .game import find_game_dir, find_host64, repo_root
 
 
 def main(argv=None) -> int:
@@ -35,6 +35,7 @@ def main(argv=None) -> int:
 
     if args.check:
         print("%s %s" % (APP_NAME, __version__))
+        print("checkout:  %s" % repo_root())
         print("settings:  %s" % config_path())
         print("data:      %s" % data_dir())
         game = find_game_dir(config.game_dir)
