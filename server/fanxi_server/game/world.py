@@ -182,7 +182,8 @@ class World:
                 if s.logged_in and not s.zoning and int(s.zone) == int(zone) and s.key]
 
     # --- the tick ------------------------------------------------------------------------------
-    def tick(self, now: float | None = None) -> None:
+    def advance(self, now: float | None = None) -> None:
+        """Run timers, AI and combat without sending; the caller decides when to flush."""
         now = time.time() if now is None else now
         self.last_tick = now
         for session in list(self.sessions.values()):
@@ -195,6 +196,9 @@ class World:
             for entity in entities:
                 if entity.is_mob():
                     self._tick_mob(entity, sessions, now)
+
+    def tick(self, now: float | None = None) -> None:
+        self.advance(now)
         self.flush(now)
 
     def _tick_mob(self, entity: ZoneEntity, sessions: list, now: float) -> None:

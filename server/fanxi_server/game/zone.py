@@ -153,6 +153,9 @@ class ZoneSession:
             return None
         session.client_hdr = bytes(buf[:HDR])
         session.parse(buf, body)
+        # Run due timers in the same exchange so swings, rewards and roaming are not starved
+        # while a client is sending position packets continuously.
+        world.advance(time.time())
         # Delivery is one packet at a time: until the client acknowledges the last one, it is sent again.
         if session.last is not None and struct.unpack_from("<H", buf, 2)[0] != session.server_id:
             return session.resend()
