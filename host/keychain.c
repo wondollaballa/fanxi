@@ -7,7 +7,7 @@
 #include <CoreFoundation/CoreFoundation.h>
 #include <Security/Security.h>
 
-#define SERVICE "FINAL FANTASY XI sign-in"
+#define SERVICE "Fanxi sign-in"
 
 /* A query for key's item: class, service and account; the caller adds the rest and releases it. */
 static CFMutableDictionaryRef query(const char* key)
