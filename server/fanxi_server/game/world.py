@@ -65,7 +65,8 @@ class World:
         try:
             self.host_ip = socket.gethostbyname(config.public_host)
         except OSError:
-            self.host_ip = config.public_host
+            # The launcher still gets the name in /launch; the lobby needs a literal IPv4.
+            self.host_ip = "127.0.0.1"
         self.ports = dict(config.ports)
         self.zones = Zones(service.zones(), service.zone_lines())
         self.server_name = service.server_name()
