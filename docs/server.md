@@ -156,7 +156,7 @@ Everything is environment-driven. The command line for `run` can override the ma
 | `FANXI_GAME_DIR` | auto-detect | Folder containing `FFXiMain.dll` and `res/compress.dat` |
 | `FANXI_HUFFMAN` | — | Folder containing `compress.dat` (wins over game dir) |
 | `FANXI_ADMIN_KEY` | empty | If empty, only `role = admin` accounts can use admin endpoints |
-| `FANXI_REGISTRATION` | `1` | `0` closes registration |
+| `FANXI_REGISTRATION` | `1` | `0` closes registration (also `settings.registration_open`) |
 | `FANXI_MAX_CHARACTERS` | `1` | Per account |
 | `FANXI_SESSION_DAYS` | `30` | Launcher token lifetime |
 | `FANXI_LOGIN_TOKEN_SECONDS` | `120` | Launch token lifetime |
@@ -226,6 +226,15 @@ Open only what players need: `8080/tcp` (or 443 if proxied), `54231/tcp`, `54230
 
 The script uses SQLite's online backup API, so it is safe while the server runs. Keep a copy
 off-machine. The TLS private key and `launcher.json` (on a player machine) are separate secrets.
+
+### Closing registration without restarting
+
+```bash
+sqlite3 data/fanxi.db "update settings set value='0' where key='registration_open';"
+```
+
+Set it back to `'1'` to reopen. With `FANXI_REGISTRATION` at its default (`1`), the database
+setting decides; `FANXI_REGISTRATION=0` closes registration regardless of the database.
 
 ## Security checklist
 
