@@ -3,6 +3,7 @@
 set -e
 ROOT=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
 DB=${FANXI_DB:-$ROOT/data/fanxi.db}
+case "$DB" in /*) ;; *) DB="$ROOT/$DB" ;; esac
 OUT=${1:-$ROOT/data/backups}
 mkdir -p "$OUT"
 STAMP=$(date +%Y%m%d-%H%M%S)
