@@ -1,0 +1,44 @@
+/* Config > Advanced (modern.c): a list in the game's own Config menu of pages - Display, Graphics,
+ * Lighting, Atmosphere, Interface and Addons - drawn and run by the game's menu code: its window,
+ * cursor, sounds and open/close effects. They switch this port's additions (the scene effects of
+ * the graphics back ends' settings file, draw distance, the frame rate, the interface's shape,
+ * nameplates) and show or hide items of the game's own menus, each at once or as it next opens. */
+#pragma once
+
+#include <stdint.h>
+
+typedef struct ModernSetup
+{
+    const char* game; /* the FINAL FANTASY XI folder as the game sees it: the menu DAT the layouts are cut from */
+    const char* data_dir;  /* modern.cfg: the frame rate, the interface's shape and what Menus hides */
+    uint32_t* fps_divisor; /* host64's: 1 60 fps, 2 30 */
+    int fps_given, ui_aspect_given; /* on the command line: modern.cfg does not override them */
+    const char* settings_reg; /* the game's display settings (0001/0002, 0003/0004, 0037/0038): Config > Display writes them */
+    int* nameplate_fix;       /* host64's: 1 names over heads keep their 4:3 shape, 0 as the game draws them */
+    float *nameplate_sx, *nameplate_sy; /* ... and their size across and down */
+    int nameplates_given;     /* --nameplates or --nameplate-scale: modern.cfg does not override them */
+    void (*fps_chosen)(void); /* host64's: the player picked a frame rate, even the one shown (an addon's ends) */
+    uint32_t* fps_limit;      /* host64's: uncapped (divisor 0), held to this many frames a second; 0 none */
+} ModernSetup;
+
+/* Reads modern.cfg, applying what the command line did not give. */
+void modern_init(const ModernSetup* setup);
+/* From the Present hook, on the game's thread: puts the items and pages into the game's menus once
+ * its menu data is loaded (and again if it reloads it). */
+void modern_frame(void);
+
+/* Config > Addons: the addon host's installed addons, a row each (host/addons/manage.c). Each call
+ * is on the game's thread. */
+typedef struct ModernAddons
+{
+    int (*scan)(void);           /* the folders read again: the count */
+    const char* (*name)(int i);  /* by name, without case */
+    const char* (*kind)(int i);  /* "xi", "Ashita", "Windower" */
+    int (*is_new)(int i);        /* installed since the page last closed */
+    int (*get)(int i);           /* on (or asked to be) */
+    void (*set)(int i, int on);  /* loads or unloads on the next frame, and remembers it */
+    void (*seen)(void);          /* the page closed: none is new */
+} ModernAddons;
+
+/* Before the menus are in (modern_frame's first): with NULL or never called, no Addons page. */
+void modern_set_addons(const ModernAddons* ops);

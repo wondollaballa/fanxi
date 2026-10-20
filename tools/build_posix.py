@@ -1,0 +1,620 @@
+"""Build driver for POSIX hosts (clang): arm64 macOS for R3, Linux as a by-product.
+
+  python3 tools/build_posix.py prepare --game <FINAL FANTASY XI folder>
+        identify the player's build (meta/builds.json) and unpack FFXiMain.dll and FFXi.dll into
+        generated/ (Square Enix code: generated/ is gitignored, never committed)
+  python3 tools/build_posix.py boot64 --game <folder>    the boot test (R3.1)
+  python3 tools/build_posix.py host64 --game <folder>    the game host, with SDL3
+  python3 tools/build_posix.py gfxtest                   the graphics back end and the D3D8 front end,
+        offscreen, without the game (tests/gfx_test.c, tests/d3d8_test.c)
+  python3 tools/build_posix.py vfstest                   the game's paths to host paths (runtime/portable/vfs.c),
+        without the game (tests/vfs_test.c)
+  python3 tools/build_posix.py datuitest --game <folder>  the game's UI art read from its DATs (host/datui.c):
+        parse checks, and renders in build/datui/ (tests/datui_test.c)
+  python3 tools/build_posix.py app --game <folder> [--server name] [--resolution WxH]
+        [--menu-resolution WxH] [--window-mode 0-3] [--background picture] [--fullscreen-space 0|1]
+        [--nameplates fix|off] [--nameplate-scale s] [--ui-aspect w:h|off] [--draw-distance k] [--lod near|game] [--cexi off|items|full] [--dats folder]
+        [--sign-identity name]
+        build/Fanxi.app: host64 with its libraries, ffxi.reg and the defaults above in
+        its Info.plist (host/appdefaults.h), so it starts from Finder with no command line. The values
+        go into the built app only: nothing names a server in the source.
+
+  python3 tools/build_posix.py desktop --game <folder> [--server name]
+        (Linux) build/host64 in the applications menu: fanxi.desktop and its icon in
+        ~/.local/share, named for host64's app id, so docks and window switchers show its icon.
+
+  python3 tools/build_posix.py kit --out <dir>     (Linux) the kit: every library and every source that
+        does not name a game build's addresses (build.h), built into static archives, and kit.json.
+        tools/linux/kit.sh makes it with zig for the Steam Deck and other x86_64 Linux.
+  python3 tools/build_posix.py host64 --game <folder> --kit <dir>
+        host64 from a kit: translates the player's DLLs and compiles only that and the sources that
+        include build.h, then links against the kit. What the launcher runs on a Steam Deck, where
+        zig is the only compiler (XI_CC="zig cc -target ...", XI_CXX="zig c++ -target ...").
+
+The compilers are clang and clang++, or XI_CC and XI_CXX (each a command line).
+
+The same sources as tools/build.py's boot64/host64 targets, with plat_posix.c for plat_win.c.
+Needs: clang (Xcode command line tools) and python3 with capstone and pefile. SDL3 and mbedtls are
+vendored in third_party/ and built with clang (tools/thirdparty.py). The game folder is the retail "FINAL FANTASY XI"
+folder copied from a Windows install, with the viewer folder from the same install next to it.
+"""
+import argparse
+import concurrent.futures
+import glob
+import json
+import os
+import shlex
+import shutil
+import subprocess
+import sys
+
+HERE = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, HERE)
+import build  # noqa: E402  (constants and source lists; nothing Windows-only runs on import)
+import buildinfo  # noqa: E402
+import thirdparty  # noqa: E402
+
+ROOT = build.ROOT
+GEN_FFXI_IMAGE = build.FFXI_IMAGE
+CC, CXX = thirdparty.CC, thirdparty.CXX
+CFLAGS = ['-O2', '-std=c11', '-g', '-DRT_GUEST_WINDOW', '-fno-strict-aliasing', '-I', 'runtime', '-I', 'runtime/portable',
+          '-I', 'generated', '-I', 'third_party/stb']
+if sys.platform != 'darwin':
+    CFLAGS.append('-D_GNU_SOURCE')  # glibc hides POSIX (strdup, getaddrinfo, sigaction) under -std=c11
+CFLAGS += thirdparty.PIE
+PIE_LINK = ['-pie'] if thirdparty.PIE else []  # host64 above 4 GB (thirdparty.PIE)
+# the generated C: every label and local is emitted whether used or not
+GEN_WARNINGS = ['-Wno-unused-label', '-Wno-unused-variable', '-Wno-unused-but-set-variable', '-Wno-unused-function',
+                '-Wno-parentheses-equality', '-Wno-unreachable-code']
+# the graphics back end: Metal on macOS (R3.2), Vulkan elsewhere
+if sys.platform == 'darwin':
+    GFX_SOURCES = ['runtime/portable/gfx_fx.c', 'runtime/portable/gfx_scene.c', 'runtime/portable/gfx_msl.c', 'runtime/portable/gfx_msl_shaders.c',
+                   'runtime/portable/gfx_metal.m']
+    GFX_LIBS = ['-framework', 'Metal', '-framework', 'QuartzCore', '-framework', 'Foundation',
+                '-framework', 'Security']  # Security: the sign-in screen's saved passwords
+else:
+    # Vulkan 1.3 (gfx_vulkan.c), its shaders compiled with glslang, memory through VMA (third_party/vma)
+    GFX_SOURCES = ['runtime/portable/gfx_fx.c', 'runtime/portable/gfx_scene.c', 'runtime/portable/gfx_msl.c', 'runtime/portable/gfx_msl_shaders.c',
+                   'runtime/portable/gfx_vulkan.c', 'runtime/portable/gfx_vma.cpp', 'third_party/volk/volk.c']
+    GFX_LIBS = ['-Wl,--start-group', '-lglslang-default-resource-limits', '-lglslang', '-lSPIRV',
+                '-lMachineIndependent', '-lGenericCodeGen', '-lOSDependent', '-lSPIRV-Tools-opt', '-lSPIRV-Tools',
+                '-Wl,--end-group', '-lstdc++', '-lpthread', '-ldl', '-lm']
+    CFLAGS += ['-I', 'third_party/vma', '-I', 'third_party/volk']
+    # XI_DEPS: a prefix with SDL3 and glslang built for the kit (tools/linux/kit.sh), else the system's
+    if os.environ.get('XI_DEPS'):
+        CFLAGS += ['-I', os.path.join(os.environ['XI_DEPS'], 'include')]
+        GFX_LIBS = ['-L' + os.path.join(os.environ['XI_DEPS'], 'lib')] + GFX_LIBS
+HOST_SOURCES = ['runtime/portable/user32.c', 'runtime/portable/d3d8.c', 'runtime/portable/dsound.c',
+                'runtime/portable/input.c', 'runtime/portable/dinput.c', 'runtime/portable/ws2.c', 'host/host64.c',
+                'host/lsb_login.c', 'host/datui.c', 'host/uidraw.c', 'host/modern.c', 'host/cexi.c', 'host/frame.c', 'host/signin.c', 'host/sewave.c', 'host/ui_art.c', 'host/keychain.c', 'host/appdefaults.c',
+                'runtime/portable/geometry_hooks.c'] + GFX_SOURCES
+# the addon host (host/addons/, docs/addon-compat-design.md): C, C++ (ImGui) and its embedded Lua
+ADDON_SOURCES = sorted('host/addons/' + f for f in os.listdir(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'host', 'addons'))
+                       if f.endswith('.c') or f.endswith('.cpp')) + ['generated/addons_lua.c']
+ADDON_LIBS = ('luajit', 'imgui', 'luasocket', 'lfs', 'sqlite')
+
+
+def posix(p):
+    return p.replace('\\', '/')
+
+
+PORTABLE = [posix(p).replace('plat_win.c', 'plat_posix.c') for p in build.PORTABLE]
+
+
+def run(cmd, **kw):
+    line = ' '.join(shlex.quote(c) for c in cmd)
+    print('>', line if len(line) < 200 else line[:200] + ' ...')
+    subprocess.check_call(cmd, cwd=ROOT, **kw)
+
+
+# FFXI_PROGRESS=1 (tools/setup.py): the phases and the compile's progress as lines of their own
+PROGRESS = bool(os.environ.get('FFXI_PROGRESS'))
+
+
+def phase(name):
+    if PROGRESS:
+        print('@phase ' + name, flush=True)
+
+
+def sdl():
+    """SDL3 from third_party/sdl3: (compile flags, link flags)."""
+    thirdparty.build('sdl3')
+    return thirdparty.flags('sdl3'), thirdparty.libs('sdl3')
+
+
+def tls():
+    """mbedtls from third_party/mbedtls (the LandSandBoat sign-in's TLS, host/lsb_login.c)."""
+    thirdparty.build('mbedtls')
+    return thirdparty.flags('mbedtls'), thirdparty.libs('mbedtls')
+
+
+def newest_header():
+    """The newest runtime/host header: a changed struct must rebuild everything that may include it
+    (no per-file dependency tracking; the generated code has its own headers, which it rebuilds with)."""
+    newest = 0
+    for d in ('runtime', 'runtime/portable', 'runtime/win32', 'host'):
+        full = os.path.join(ROOT, d)
+        if os.path.isdir(full):
+            for f in os.listdir(full):
+                if f.endswith('.h'):
+                    newest = max(newest, os.path.getmtime(os.path.join(full, f)))
+    return newest
+
+
+def stale(s, obj, headers):
+    """Whether obj must be rebuilt: missing, older than its source, older than the newest runtime
+    header (our own sources), or older than build.h when the source includes it (another build's
+    addresses)."""
+    src = os.path.join(ROOT, s)
+    if not os.path.exists(obj):
+        return True
+    stamp = os.path.getmtime(src)
+    if not s.startswith('generated/'):
+        stamp = max(stamp, headers)
+    if os.path.getmtime(obj) < stamp:
+        return True
+    if not s.startswith('generated/') and os.path.getmtime(obj) < os.path.getmtime(build.BUILD_H):
+        with open(src, errors='replace') as f:
+            return '"build.h"' in f.read()
+    return False
+
+
+def compile_stale(sources, objdir, extra):
+    """Compiles every source whose object is missing or older than it (or than the newest runtime
+    header, for our own sources), in parallel; returns the objects. Every one, when objdir's were
+    compiled with other flags (its .flags): their dates alone would keep position-dependent objects in
+    a position-independent host64. They are deleted and the new flags recorded first, so a rebuild cut
+    short goes on where it stopped. A folder from before .flags is taken as compiled with these, but
+    where they are position-independent (Linux, thirdparty.PIE)."""
+    os.makedirs(os.path.join(ROOT, objdir), exist_ok=True)
+    headers = newest_header()
+    flags_file = os.path.join(ROOT, objdir, '.flags')
+    want = json.dumps(CC + CXX + CFLAGS + extra)
+    try:
+        with open(flags_file) as f:
+            recorded = f.read()
+    except OSError:
+        recorded = None
+    if recorded != want:
+        if recorded is not None or thirdparty.PIE:
+            for s in sources:
+                obj = os.path.join(ROOT, objdir, os.path.splitext(os.path.basename(s))[0] + '.o')
+                if os.path.exists(obj):
+                    os.remove(obj)
+        with open(flags_file, 'w') as f:
+            f.write(want)
+    objs, jobs = [], []
+    for s in sources:
+        obj = os.path.join(objdir, os.path.splitext(os.path.basename(s))[0] + '.o')
+        objs.append(obj)
+        full_obj = os.path.join(ROOT, obj)
+        if stale(s, full_obj, headers):
+            flags = CFLAGS + extra + (GEN_WARNINGS if s.startswith('generated/') else [])
+            cc = CC
+            if s.endswith('.m'):  # Objective-C: references counted by hand (gfx_metal.m)
+                flags = [f for f in flags if f != '-std=c11'] + ['-fno-objc-arc']
+            elif s.endswith('.cpp'):  # the addon host's ImGui side
+                flags = [f for f in flags if f != '-std=c11'] + ['-std=c++17']
+                cc = CXX
+            jobs.append(cc + ['-c'] + flags + [s, '-o', obj])
+    if jobs:
+        print('compiling %d of %d' % (len(jobs), len(sources)))
+        failed = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=os.cpu_count() or 4) as ex:
+            for n, (cmd, rc) in enumerate(zip(jobs, ex.map(lambda c: subprocess.call(c, cwd=ROOT), jobs)), 1):
+                if rc:
+                    failed.append(cmd[-3])
+                if PROGRESS:
+                    print('@progress %d %d' % (n, len(jobs)), flush=True)
+        if failed:
+            # once more, one at a time: zig's first compiles on a cold cache can trip over each other
+            # (a player's first build on a Steam Deck); a real error fails again, alone
+            retry = [cmd for cmd in jobs if cmd[-3] in failed]
+            failed = [cmd[-3] for cmd in retry if subprocess.call(cmd, cwd=ROOT)]
+        if failed:
+            raise SystemExit('failed: ' + ', '.join(failed))
+    return objs
+
+
+def generated(sub):
+    d = os.path.join(ROOT, 'generated', sub)
+    return ['generated/%s/%s' % (sub, f) for f in sorted(os.listdir(d)) if f.endswith('.c')]
+
+
+def prepare(game):
+    run([sys.executable, 'tools/prepare.py', '--game', game])  # and FFXi.dll
+
+
+def translate():
+    if build.BUILD is None:
+        raise SystemExit('run: python3 tools/build_posix.py prepare --game <folder>')
+    build.write_build_h()
+    build.recomp('generated/all', ['--all'])
+
+
+def boot64(game):
+    translate()
+    # objects live apart from the binaries (build/boot64 is the program); the translation's are
+    # shared with host64
+    objs = compile_stale(generated('all'), 'build/all64', ['-I', 'generated/all'])
+    objs += compile_stale(PORTABLE + ['tests/boot64.c'], 'build/obj/boot64', [])
+    run(CC + ['-o', 'build/boot64'] + objs + ['-lm', '-lpthread'])
+    run(['build/boot64', build.RETAIL, game])
+
+
+def addons(make=True):
+    """The addon host's libraries and embedded Lua: (compile flags, link flags). make=False: the flags
+    alone (a kit has the libraries)."""
+    if make:
+        run([sys.executable, 'tools/embed_lua.py'])
+    cflags, libs = ['-I', 'host/addons', '-DIMGUI_USER_CONFIG="imconfig_xi.h"'], []
+    for name in ADDON_LIBS:
+        if make:
+            thirdparty.build(name)
+        cflags += thirdparty.flags(name)
+        libs += thirdparty.libs(name)
+    return cflags, libs + (['-lc++'] if sys.platform == 'darwin' else ['-lstdc++', '-ldl'])
+
+
+def names_build(s):
+    """Whether a source of ours includes build.h (a game build's addresses): compiled per build."""
+    with open(os.path.join(ROOT, s), errors='replace') as f:
+        return '"build.h"' in f.read()
+
+
+def kit(out):
+    """The kit (Linux): host64 less the game, as static archives, for a machine with no compiler but
+    zig and no headers but glibc's (the Steam Deck). Everything that is not Square Enix's code and does
+    not name a build's addresses is built here; the rest (the translation, and the sources that include
+    build.h, listed in kit.json) is compiled where the game files are (host64 --kit)."""
+    if sys.platform == 'darwin':
+        raise SystemExit('the kit is for Linux')
+    out = os.path.abspath(out)
+    os.makedirs(os.path.join(out, 'lib'), exist_ok=True)
+    sdl_cflags, sdl_libs = sdl()
+    tls_cflags, tls_libs = tls()
+    addon_cflags, addon_libs = addons()
+    every = PORTABLE + HOST_SOURCES + ADDON_SOURCES
+    device = [s for s in every if not s.startswith('generated/') and names_build(s)]
+    objs = compile_stale([s for s in every if s not in device], 'build/kit-obj', sdl_cflags + tls_cflags + addon_cflags)
+    lib = os.path.join(out, 'lib', 'libxi.a')
+    if os.path.exists(lib):
+        os.remove(lib)
+    run(['ar', 'rcs', lib] + objs)
+    # the libraries host64 links: ours, then the archives named in the link flags, copied in
+    libs = ['libxi.a']
+    for flag in tls_libs + addon_libs + sdl_libs + GFX_LIBS:
+        path = None
+        if flag.endswith('.a') and os.path.exists(flag):
+            path = flag
+        elif flag.startswith('-l'):
+            for d in [f[2:] for f in sdl_libs + GFX_LIBS if f.startswith('-L')]:
+                if os.path.exists(os.path.join(d, 'lib%s.a' % flag[2:])):
+                    path = os.path.join(d, 'lib%s.a' % flag[2:])
+                    break
+        if path and os.path.basename(path) not in libs:
+            shutil.copyfile(path, os.path.join(out, 'lib', os.path.basename(path)))
+            libs.append(os.path.basename(path))
+    # the commit whose sources go with the kit (the launcher downloads them): XI_COMMIT, else the checkout's
+    commit = os.environ.get('XI_COMMIT') or subprocess.run(['git', 'rev-parse', 'HEAD'], cwd=ROOT, capture_output=True,
+                                                           text=True).stdout.strip()
+    with open(os.path.join(ROOT, 'runtime.json')) as f:
+        runtime = json.load(f)
+    manifest = {
+        'commit': commit,
+        'runtime': runtime,
+        'cc': ' '.join(CC),
+        'libs': libs,
+        'system': ['-lpthread', '-ldl', '-lm'],
+        'device_sources': device,
+        'pie': bool(thirdparty.PIE),  # its archives position-independent: host64 --kit links -pie
+    }
+    with open(os.path.join(out, 'kit.json'), 'w') as f:
+        json.dump(manifest, f, indent=1)
+    print('kit in %s: %d libraries, %d sources left for the device' % (out, len(libs), len(device)))
+
+
+def host64_kit(game, kitdir):
+    """host64 from a kit (kit()): the translation and the build.h sources compiled here, the rest linked
+    from the kit's archives."""
+    kitdir = os.path.abspath(kitdir)
+    with open(os.path.join(kitdir, 'kit.json')) as f:
+        k = json.load(f)
+    if PIE_LINK and not k.get('pie'):
+        raise SystemExit('%s: a kit from before host64 was position-independent (#74): get the kit for these sources'
+                         % kitdir)
+    translate()
+    run([sys.executable, 'recomp/recomp.py', '--meta', build.FFXI_META, '--image', GEN_FFXI_IMAGE, '--retail',
+         build.FFXI_RETAIL, '--module', 'ffxi', '--out', 'generated/ffxi', '--all'])
+    phase('compile')
+    objs = compile_stale(generated('all'), 'build/all64', ['-I', 'generated/all'])
+    objs += compile_stale(generated('ffxi'), 'build/ffxi64', ['-I', 'generated/ffxi'])
+    # the headers: SDL3's public ones are the same on every platform (third_party/sdl3/include)
+    addon_cflags, _ = addons(make=False)
+    inc = ['-I', 'third_party/sdl3/include'] + thirdparty.flags('mbedtls') + addon_cflags
+    objs += compile_stale(k['device_sources'], 'build/obj/host64-kit', inc)
+    libs = [os.path.join(kitdir, 'lib', l) for l in k['libs'] if l != 'libxi.a']
+    # libxi.a whole, as the other builds link every object: addons find win32_ffi.c's and gdifont_ffi.c's
+    # functions by name (ffi.C), so nothing references them and an archive would leave them out
+    xi = ['-Wl,--whole-archive', os.path.join(kitdir, 'lib', 'libxi.a'), '-Wl,--no-whole-archive']
+    run(CXX + PIE_LINK + ['-o', 'build/host64'] + objs + xi + ['-Wl,--start-group'] + libs + ['-Wl,--end-group'] + k['system'] +
+        ['-rdynamic'])
+    buildinfo.stamp(os.path.join(ROOT, 'build', 'runtime.json'))
+    print('built build/host64 from the kit; run: build/host64 --game %s --server <name>' % shlex.quote(game))
+
+
+def host64(game):
+    translate()
+    run([sys.executable, 'recomp/recomp.py', '--meta', build.FFXI_META, '--image', GEN_FFXI_IMAGE, '--retail',
+         build.FFXI_RETAIL, '--module', 'ffxi', '--out', 'generated/ffxi', '--all'])
+    sdl_cflags, sdl_libs = sdl()
+    tls_cflags, tls_libs = tls()
+    phase('compile')
+    objs = compile_stale(generated('all'), 'build/all64', ['-I', 'generated/all'])
+    objs += compile_stale(generated('ffxi'), 'build/ffxi64', ['-I', 'generated/ffxi'])
+    addon_cflags, addon_libs = addons()
+    objs += compile_stale(PORTABLE + HOST_SOURCES + ADDON_SOURCES, 'build/obj/host64', sdl_cflags + tls_cflags + addon_cflags)
+    # -export_dynamic: addons' ffi.C finds D3DX and Win32 (host/addons/d3d_ffi.c, win32_ffi.c) with
+    # dlsym(RTLD_DEFAULT), so their symbols stay in the executable's export table
+    export = ['-Wl,-export_dynamic'] if sys.platform == 'darwin' else ['-rdynamic']
+    run(CC + PIE_LINK + ['-o', 'build/host64'] + objs + sdl_libs + tls_libs + addon_libs + GFX_LIBS + ['-lm', '-lpthread'] + export)
+    buildinfo.stamp(os.path.join(ROOT, 'build', 'runtime.json'))
+    print('built build/host64; run: build/host64 --game %s --server <name>' % shlex.quote(game))
+
+
+def gfxtest():
+    """The back end alone (gfx_test), then the D3D8 front end on it through its COM thunks (d3d8_test)."""
+    sdl_cflags, sdl_libs = sdl()
+    objs = compile_stale(GFX_SOURCES + ['tests/gfx_test.c'], 'build/gfxtest', sdl_cflags)
+    run(CC + ['-o', 'build/gfx_test'] + objs + sdl_libs + GFX_LIBS)
+    run(['build/gfx_test'])
+    objs = compile_stale(PORTABLE + GFX_SOURCES + ['runtime/portable/user32.c', 'runtime/portable/input.c',
+                                                   'runtime/portable/d3d8.c', 'tests/d3d8_test.c'], 'build/d3d8test', sdl_cflags)
+    run(CC + ['-o', 'build/d3d8_test'] + objs + sdl_libs + GFX_LIBS + ['-lm', '-lpthread'])
+    run(['build/d3d8_test'])
+
+
+def vfstest():
+    """runtime/portable/vfs.c on this host, with plat_posix.c: tests/vfs_test.c."""
+    os.makedirs(os.path.join(ROOT, 'build'), exist_ok=True)
+    run(CC + CFLAGS + ['-o', 'build/vfs_test', 'tests/vfs_test.c', 'runtime/portable/vfs.c', 'runtime/portable/plat_posix.c',
+                       '-lpthread'])
+    run(['build/vfs_test'])
+
+
+DESKTOP_ID = 'fanxi'  # host64's app id on Linux (host64.c XI_APP_ID)
+DESKTOP_MARK = 'X-Fanxi-Source-Build=true'  # an entry this wrote, not the launcher's
+
+
+def desktop_quote(arg):
+    """One Exec= argument, quoted as the Desktop Entry spec asks: escaped inside its quotes, then
+    every backslash doubled, as the value is unescaped as a string before it is split."""
+    arg = arg.replace('%', '%%')
+    if not any(c in arg for c in ' \t\n"\'\\><~|&;$*?#()`'):
+        return arg
+    return '"%s"' % ''.join('\\' + c if c in '"`$\\' else c for c in arg).replace('\\', '\\\\')
+
+
+def desktop(game, server):
+    """(Linux) build/host64 in the applications menu, as fanxi.desktop with the game's
+    icon: the name of host64's app id, so docks and window switchers show the icon for its windows.
+    Icon= is the file's path, not a theme name: shells that index icon themes once at login
+    (Omarchy's switcher) would show nothing for a theme icon installed since."""
+    if sys.platform == 'darwin':
+        raise SystemExit('the desktop entry is for Linux (macOS: the app target)')
+    exe = os.path.join(ROOT, 'build', 'host64')
+    if not os.path.exists(exe):
+        raise SystemExit('no build/host64: build it first (host64 --game <folder>)')
+    data = os.environ.get('XDG_DATA_HOME') or os.path.expanduser('~/.local/share')
+    entry = os.path.join(data, 'applications', DESKTOP_ID + '.desktop')
+    if os.path.exists(entry):
+        with open(entry, errors='replace') as f:
+            if DESKTOP_MARK not in f.read():
+                raise SystemExit('%s exists and was not written by this tool: left as it is' % entry)
+    icon = os.path.join(data, 'icons', DESKTOP_ID + '.png')
+    os.makedirs(os.path.dirname(icon), exist_ok=True)
+    shutil.copyfile(os.path.join(ROOT, 'assets', 'icon.png'), icon)
+    cmd = [exe, '--game', game] + (['--server', server] if server else [])
+    os.makedirs(os.path.dirname(entry), exist_ok=True)
+    # written beside it and renamed over it: shells watch the folder, which an edit in place does not
+    # change, and would keep showing the entry as they first read it
+    with open(entry + '.tmp', 'w') as f:
+        f.write('[Desktop Entry]\nType=Application\nName=%s\nComment=FINAL FANTASY XI, built from %s\n'
+                'Exec=%s\nIcon=%s\nStartupWMClass=%s\nCategories=Game;\nTerminal=false\n%s\n'
+                % (APP_NAME, ROOT, ' '.join(desktop_quote(a) for a in cmd), icon, DESKTOP_ID, DESKTOP_MARK))
+    os.replace(entry + '.tmp', entry)
+    print('installed %s and %s' % (entry, icon))
+
+
+def datuitest(game):
+    """host/datui.c against the install's DATs; renders the windows and lobby into build/datui/."""
+    os.makedirs(os.path.join(ROOT, 'build', 'datui'), exist_ok=True)
+    run(['clang', '-O2', '-std=c11', '-Wall', '-I', 'host', '-o', 'build/datui_test', 'tests/datui_test.c',
+         'host/datui.c', '-lm'])
+    run(['build/datui_test', '--game', game, '--out', 'build/datui'])
+
+
+APP_NAME = 'Fanxi'
+
+
+def plist_escape(v):
+    return str(v).replace('&', '&amp;').replace('<', '&lt;').replace('>', '&gt;')
+
+
+def bundle_dylibs(exe, frameworks):
+    """Copies the non-system libraries exe links (and theirs) into frameworks and points exe at
+    them through @rpath, so the app runs without Homebrew."""
+    os.makedirs(frameworks, exist_ok=True)
+    def deps(path):
+        out = subprocess.check_output(['otool', '-L', path], text=True).splitlines()[1:]
+        return [l.split()[0] for l in out if l.strip()]
+    todo, seen = [exe], set()
+    while todo:
+        img = todo.pop()
+        for d in deps(img):
+            name = os.path.basename(d)
+            if not (d.startswith('/opt/') or d.startswith('/usr/local/')):
+                continue
+            dst = os.path.join(frameworks, name)
+            if name not in seen:
+                seen.add(name)
+                shutil.copy(d, dst)
+                os.chmod(dst, 0o755)
+                subprocess.check_call(['install_name_tool', '-id', '@rpath/' + name, dst])
+                todo.append(dst)
+            if img != dst:
+                subprocess.check_call(['install_name_tool', '-change', d, '@rpath/' + name, img])
+    subprocess.check_call(['install_name_tool', '-add_rpath', '@executable_path/../Frameworks', exe])
+    return sorted(seen)
+
+
+# A self-signed code-signing certificate in the login keychain, made once per machine (README):
+# signed with it, every build of the app is the same app to macOS, so the keychain's "Always Allow"
+# for its saved passwords survives rebuilds. Ad hoc otherwise.
+LOCAL_IDENTITY = 'Fanxi Local Code Signing'
+
+
+def signing_identity(given):
+    if given or os.environ.get('FFXI_SIGN_IDENTITY'):
+        return given or os.environ['FFXI_SIGN_IDENTITY']
+    found = subprocess.run(['security', 'find-certificate', '-c', LOCAL_IDENTITY], capture_output=True)
+    return LOCAL_IDENTITY if found.returncode == 0 else '-'
+
+
+def app(game, a):
+    """host64 as build/Fanxi.app, with the first-run defaults in its Info.plist."""
+    host64(game)
+    phase('app')
+    bundle = os.path.join(ROOT, 'build', APP_NAME + '.app')
+    shutil.rmtree(bundle, ignore_errors=True)
+    contents = os.path.join(bundle, 'Contents')
+    macos, res = os.path.join(contents, 'MacOS'), os.path.join(contents, 'Resources')
+    os.makedirs(macos)
+    os.makedirs(res)
+    exe = os.path.join(macos, APP_NAME)
+    shutil.copy(os.path.join(ROOT, 'build', 'host64'), exe)
+    shutil.copy(os.path.join(ROOT, 'ffxi.reg'), res)
+    shutil.copy(os.path.join(ROOT, 'assets', 'icon.icns'), res)
+    shutil.copy(os.path.join(ROOT, 'build', 'runtime.json'), res)  # the launcher's rebuild check
+    shutil.copytree(os.path.join(ROOT, 'assets', 'textures'), os.path.join(res, 'textures'))  # bundled hi-res packs
+    keys = {'FFXIGameFolder': game}
+    if a.server:
+        keys['FFXIServer'] = a.server
+    if a.resolution:
+        keys['FFXIResolution'] = a.resolution
+    if a.menu_resolution:
+        keys['FFXIMenuResolution'] = a.menu_resolution
+    if a.window_mode is not None:
+        keys['FFXIWindowMode'] = a.window_mode
+    if a.fullscreen_space is not None:
+        keys['FFXIFullscreenSpace'] = a.fullscreen_space
+    if a.nameplates:
+        keys['FFXINameplates'] = a.nameplates
+    if a.nameplate_scale:
+        keys['FFXINameplateScale'] = a.nameplate_scale
+    if a.ui_aspect:
+        keys['FFXIUIAspect'] = a.ui_aspect
+    if a.draw_distance:
+        keys['FFXIDrawDistance'] = a.draw_distance
+    if a.lod:
+        keys['FFXILod'] = a.lod
+    if a.cexi:
+        keys['FFXICexi'] = a.cexi
+    if a.dats:
+        keys['FFXIDats'] = os.path.abspath(os.path.expanduser(a.dats))
+    if a.background:
+        # the sign-in screen reads PNG, JPEG and BMP; anything else (WebP) becomes a PNG
+        src, ext = os.path.expanduser(a.background), os.path.splitext(a.background)[1].lower()
+        name = 'background' + (ext if ext in ('.png', '.jpg', '.jpeg', '.bmp') else '.png')
+        if name.endswith('.png') and ext != '.png':
+            run(['sips', '-s', 'format', 'png', src, '--out', os.path.join(res, name)])
+        else:
+            shutil.copy(src, os.path.join(res, name))
+        keys['FFXIBackground'] = name
+    extra = ''.join('\t<key>%s</key>%s\n' % (k, '<integer>%d</integer>' % v if isinstance(v, int)
+                                              else '<string>%s</string>' % plist_escape(v)) for k, v in keys.items())
+    with open(os.path.join(contents, 'Info.plist'), 'w') as f:
+        f.write(APP_INFO_PLIST.replace('@NAME@', APP_NAME).replace('@VERSION@', buildinfo.runtime()['version'])
+                .replace('@EXTRA@', extra))
+    libs = bundle_dylibs(exe, os.path.join(contents, 'Frameworks'))
+    identity = signing_identity(a.sign_identity)
+    run(['codesign', '--force', '--deep', '--sign', identity, bundle])
+    if identity == '-':
+        print('note: signed ad hoc: macOS asks again for the saved password after each rebuild; '
+              'a code-signing identity in the keychain (%s) keeps its answer' % LOCAL_IDENTITY)
+    print('built %s (%s bundled; defaults: %s)' % (bundle, ', '.join(libs) or 'no libraries',
+                                                    ', '.join('%s=%s' % kv for kv in keys.items())))
+
+
+# CFBundleIdentifier is Fanxi's own; it must stay stable so Keychain "Always Allow"
+# answers and saved settings survive rebuilds.
+APP_INFO_PLIST = '''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+	<key>CFBundleExecutable</key><string>@NAME@</string>
+	<key>CFBundleIdentifier</key><string>com.fanxi.game</string>
+	<key>CFBundleName</key><string>@NAME@</string>
+	<key>CFBundleDisplayName</key><string>@NAME@</string>
+	<key>CFBundleIconFile</key><string>icon</string>
+	<key>CFBundlePackageType</key><string>APPL</string>
+	<key>CFBundleInfoDictionaryVersion</key><string>6.0</string>
+	<key>CFBundleShortVersionString</key><string>@VERSION@</string>
+	<key>CFBundleVersion</key><string>1</string>
+	<key>LSMinimumSystemVersion</key><string>12.0</string>
+	<key>LSApplicationCategoryType</key><string>public.app-category.role-playing-games</string>
+	<key>NSHighResolutionCapable</key><true/>
+@EXTRA@</dict>
+</plist>
+'''
+
+
+def main():
+    ap = argparse.ArgumentParser()
+    ap.add_argument('target', choices=['prepare', 'boot64', 'host64', 'gfxtest', 'vfstest', 'datuitest', 'app', 'kit', 'desktop'])
+    ap.add_argument('--out', default='build/kit')  # kit: where it goes
+    ap.add_argument('--kit')  # host64: build from this kit
+    ap.add_argument('--game', default=os.path.expanduser('~/SquareEnix/FINAL FANTASY XI'))
+    # app: its first-run defaults (host/appdefaults.h)
+    ap.add_argument('--server')
+    ap.add_argument('--resolution')
+    ap.add_argument('--menu-resolution')
+    ap.add_argument('--window-mode', type=int, choices=[0, 1, 2, 3])
+    ap.add_argument('--background')
+    ap.add_argument('--sign-identity')
+    ap.add_argument('--fullscreen-space', type=int, choices=[0, 1])
+    ap.add_argument('--nameplates', choices=['fix', 'off'])
+    ap.add_argument('--nameplate-scale')
+    ap.add_argument('--draw-distance')
+    ap.add_argument('--lod', choices=['near', 'game'])
+    ap.add_argument('--cexi', choices=['off', 'items', 'full'])
+    ap.add_argument('--ui-aspect')
+    ap.add_argument('--dats')
+    args = ap.parse_args()
+    if args.target == 'gfxtest':
+        return gfxtest()
+    if args.target == 'vfstest':
+        return vfstest()
+    if args.target == 'kit':
+        return kit(args.out)
+    game = os.path.abspath(args.game)
+    if not os.path.exists(os.path.join(game, 'FFXiMain.dll')):
+        raise SystemExit('no FFXiMain.dll in %s (--game)' % game)
+    if args.target == 'datuitest':
+        return datuitest(game)
+    if args.target == 'app':
+        return app(game, args)
+    if args.target == 'desktop':
+        return desktop(game, args.server)
+    if args.target == 'prepare':
+        prepare(game)
+    elif args.target == 'boot64':
+        boot64(game)
+    elif args.kit:
+        host64_kit(game, args.kit)
+    else:
+        host64(game)
+
+
+if __name__ == '__main__':
+    main()

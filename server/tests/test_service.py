@@ -1,0 +1,144 @@
+"""Account, character and launch-token behaviour."""
+from __future__ import annotations
+
+import tempfile
+import unittest
+from pathlib import Path
+
+from support import make_service
+
+from fanxi_server.security import hash_password
+from fanxi_server.service import ApiError
+
+
+class ServiceTest(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        self.config, self.db, self.service = make_service(Path(self.tmp.name))
+
+    def register(self, username="tester", password="password123"):
+        return self.service.register(username, password, ip="127.0.0.1")
+
+    def test_register_and_authenticate(self):
+        result = self.register()
+        self.assertEqual(result.account["username"], "tester")
+        self.assertEqual(result.account["role"], "player")
+        account = self.service.authenticate(result.token)
+        self.assertEqual(account["id"], result.account["id"])
+        self.assertNotIn("password_hash", result.account)
+
+    def test_duplicate_username(self):
+        self.register()
+        with self.assertRaises(ApiError) as ctx:
+            self.register()
+        self.assertEqual(ctx.exception.status, 409)
+
+    def test_short_password_rejected(self):
+        with self.assertRaises(ApiError) as ctx:
+            self.service.register("tester", "short")
+        self.assertEqual(ctx.exception.status, 422)
+
+    def test_bad_username_rejected(self):
+        with self.assertRaises(ApiError) as ctx:
+            self.service.register("no spaces", "password123")
+        self.assertEqual(ctx.exception.status, 422)
+
+    def test_login_and_wrong_password(self):
+        self.register()
+        result = self.service.login("tester", "password123", ip="127.0.0.1")
+        self.assertTrue(result.token)
+        with self.assertRaises(ApiError) as ctx:
+            self.service.login("tester", "wrong-password", ip="127.0.0.1")
+        self.assertEqual(ctx.exception.status, 401)
+
+    def test_account_locks_after_failures(self):
+        self.register()
+        for _ in range(5):
+            with self.assertRaises(ApiError):
+                self.service.login("tester", "wrong", ip="127.0.0.1")
+        with self.assertRaises(ApiError) as ctx:
+            self.service.login("tester", "password123", ip="127.0.0.1")
+        self.assertEqual(ctx.exception.status, 423)
+
+    def test_logout_revokes_token(self):
+        result = self.register()
+        self.service.logout(result.token)
+        with self.assertRaises(ApiError):
+            self.service.authenticate(result.token)
+
+    def test_character_creation_and_limit(self):
+        account = self.register().account
+        character = self.service.create_character(account["id"], {
+            "name": "Fanxi", "race": 1, "face": 1, "size": 1, "nation": 0, "main_job": 1,
+        })
+        self.assertEqual(character["name"], "Fanxi")
+        self.assertEqual(character["zone"], 246)
+        with self.assertRaises(ApiError) as ctx:
+            self.service.create_character(account["id"], {"name": "Second", "race": 1})
+        self.assertEqual(ctx.exception.status, 409)
+
+    def test_character_name_validation(self):
+        account = self.register().account
+        for name in ("ab", "has space", "12345", "x" * 16):
+            with self.assertRaises(ApiError):
+                self.service.create_character(account["id"], {"name": name, "race": 1})
+
+    def test_launch_token_is_single_use(self):
+        result = self.register()
+        self.service.create_character(result.account["id"], {"name": "Fanxi", "race": 1})
+        launch = self.service.launch(result.account, None, ip="127.0.0.1")
+        self.assertTrue(launch["login_token"])
+        account, session_hash = self.service.game_login({"login_token": launch["login_token"]}, "127.0.0.1")
+        self.assertEqual(account["username"], "tester")
+        self.assertEqual(len(session_hash), 16)
+        self.assertEqual(self.service.online_count(), 1)
+        with self.assertRaises(ApiError) as ctx:
+            self.service.game_login({"login_token": launch["login_token"]}, "127.0.0.1")
+        self.assertEqual(ctx.exception.game_result, 0x14)
+
+    def test_game_login_with_password(self):
+        self.register()
+        account, session_hash = self.service.game_login(
+            {"username": "tester", "password": "password123"}, "127.0.0.1")
+        self.assertEqual(account["username"], "tester")
+        found = self.service.game_account_by_hash(session_hash)
+        self.assertEqual(found["id"], account["id"])
+        self.assertIsNone(self.service.game_account_by_hash(b"\0" * 16))
+
+    def test_launch_needs_character(self):
+        result = self.register()
+        with self.assertRaises(ApiError) as ctx:
+            self.service.launch(result.account, None)
+        self.assertEqual(ctx.exception.code, "no_character")
+
+    def test_status_and_news_seeded(self):
+        status = self.service.status()
+        self.assertEqual(status["name"], "Fanxi")
+        self.assertEqual(status["accounts"], 0)
+        self.assertGreaterEqual(len(self.service.news()), 1)
+        self.assertEqual(self.service.world()["name"], "Fanxi")
+
+    def test_registration_can_close(self):
+        self.db.set_setting("registration_open", "0")
+        with self.assertRaises(ApiError) as ctx:
+            self.register()
+        self.assertEqual(ctx.exception.status, 403)
+
+    def test_admin_account(self):
+        account_id = self.db.execute(
+            "INSERT INTO accounts (username, password_hash, status, role, created_at, updated_at) "
+            "VALUES ('root', ?, 'active', 'admin', 'now', 'now')",
+            (hash_password("password123"),),
+        )
+        result = self.service.login("root", "password123")
+        self.assertEqual(result.account["role"], "admin")
+        self.service.create_news("patch-notes", "Patch notes", "Hello")
+        post = self.service.news()[0]
+        self.assertEqual(post["slug"], "patch-notes")
+        suspended = self.service.set_account_status(account_id, "suspended")
+        self.assertEqual(suspended["status"], "suspended")
+
+
+if __name__ == "__main__":
+    unittest.main()

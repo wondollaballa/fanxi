@@ -1,0 +1,29 @@
+name: Fanxi
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  python:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+      - name: Server tests
+        run: python3 -m unittest discover -s server/tests -v
+      - name: Launcher tests
+        run: python3 -m unittest discover -s launcher/tests -v
+      - name: Syntax and packaging checks
+        run: |
+          python3 -m compileall -q server/fanxi_server launcher/fanxi_launcher tools/make_brand_assets.py
+          python3 launcher/build_app.py --check
+          bash -n install.sh
+          bash -n setup.command
+          bash -n tools/install-source.sh

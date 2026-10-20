@@ -1,0 +1,4 @@
+#!/bin/sh
+# Start the Fanxi launcher from this checkout.
+here=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+PYTHONPATH="$here${PYTHONPATH:+:$PYTHONPATH}" exec "${PYTHON:-python3}" -m fanxi_launcher "$@"

@@ -1,0 +1,234 @@
+/* The addon host's internals, shared by its C files (not by the rest of host64: addons.h). */
+#pragma once
+
+#include <stddef.h>
+#include <stdint.h>
+
+#include "xi.h"
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+typedef struct lua_State lua_State;
+
+/* Which API an addon is written for. */
+enum
+{
+    XI_KIND_XI,       /* ours: xi.* */
+    XI_KIND_ASHITA,   /* Ashita v4 */
+    XI_KIND_WINDOWER, /* Windower 4 */
+    XI_KINDS,
+};
+extern const char* const xi_kind_name[XI_KINDS]; /* "xi", "ashita", "windower" */
+
+/* An addon's time in one kind of call (prof.c): self time, without the addons it called into. */
+typedef struct XiProfSlot
+{
+    uint64_t calls, wall_ns, cpu_ns, max_ns;
+} XiProfSlot;
+/* frame, present, postrender, packet_in, packet_out, text_in, text_out, command, key, mouse, load,
+ * other (prof.c's names) */
+#define XI_PROF_SLOTS 12
+
+typedef struct Addon
+{
+    char name[64];
+    int kind;
+    char dir[1024];  /* its folder, host path, trailing '/' */
+    char file[1024]; /* its main .lua */
+    lua_State* L;
+    int hooks;       /* registry ref: the table xi.lua returns (raise, frame, ...) */
+    int dead;        /* faulted in native code: its state is abandoned, never entered again */
+    int unloading;   /* unload requested while it (or another addon) was running */
+    /* errors: an addon failing continuously for 5 s is unloaded */
+    uint64_t err_since, err_last;
+    char err_text[256];
+    unsigned err_repeats;
+    /* the events it has handlers for (xi.lua events.on / off: native.listen): the others are not
+     * raised to it. listen_all when there are more names than fit. */
+    char listen[24][24];
+    unsigned nlisten, listen_all;
+    /* its time in Lua (prof.c): per kind of call, since the last /addon prof reset */
+    XiProfSlot prof[XI_PROF_SLOTS];
+    uint64_t prof_frame_ns; /* in the current frame */
+    int heap_kb;            /* its Lua heap after its last call */
+} Addon;
+
+/* --addon-harness: no game running (chat lines to stdout, commands routed directly, no GPU). */
+extern int xi_headless;
+/* A web page in the player's browser (never from the harness). */
+int xi_open_url(const char* url);
+
+/* --- registry (core.c) ----------------------------------------------------------------------- */
+
+unsigned xi_addon_count(void);
+Addon* xi_addon_at(unsigned i);
+Addon* xi_addon_find(const char* name);
+/* kind -1: the first folder (xi, ashita, windower) that has it. 1 on success; errors go to chat. */
+int xi_addon_load(const char* name, int kind);
+/* Unload now, or as soon as no Lua is running. */
+void xi_addon_unload(Addon* a);
+void xi_addon_reload(Addon* a);
+/* A built-in addon (xi kind) whose source is embedded: host/addons/lua/<name>.lua. */
+int xi_addon_load_builtin(const char* name);
+/* The addon whose Lua is running on this thread (NULL outside Lua). */
+Addon* xi_current(void);
+/* An addon's handlers for an event: its first (on) or its last gone (off) - xi_raise skips the others. */
+void xi_listen(Addon* a, const char* name, int on);
+/* An error from an addon (Lua error text, first line to chat once, all to the log). */
+void xi_addon_error(Addon* a, const char* where, const char* msg);
+
+/* <data dir>/<kind>/ (ashita/, windower/, xi/): that ecosystem's install layout, trailing '/'. */
+const char* xi_kind_root(int kind);
+
+/* --- events (core.c) ------------------------------------------------------------------------- */
+
+/* One event raised to every addon, in load order. The C side fills what the event has; each
+ * addon's Lua sees it as a table (xi.lua) and may set blocked, a modified buffer or mode. The
+ * compat layers (ashita.lua, windower.lua) turn it into their own events. */
+typedef struct XiEvent
+{
+    const char* name; /* command, text_in, text_out, packet_in, packet_out, key, mouse, frame, ... */
+    int mode, injected, blocked;
+    uint32_t id;
+    const uint8_t* data; size_t size;      /* the original: command line, chat text, packet */
+    uint8_t* mod; size_t mod_size, mod_cap; /* the modified copy, updated from Lua (mod_cap 0: none) */
+    int mode_mod;
+    const uint8_t* chunk; size_t chunk_size; /* packets: the whole buffer's packets */
+    uint32_t sequence;
+    int x, y, delta, msg; /* mouse: window message, game pixels, wheel */
+    uint32_t key, flags, vk; int down; /* keys: DIK code, flags, virtual key */
+    int handled;          /* any addon returned true */
+} XiEvent;
+
+void xi_raise(XiEvent* e);
+/* A drawing event with no data (present, postrender). */
+void xi_frame_draw(const char* name);
+/* Only addons of one kind (-1: all). */
+void xi_raise_kind(XiEvent* e, int kind);
+
+/* --- hooks and chat (hooks.c) ---------------------------------------------------------------- */
+
+/* A line for the game alone, next frame: it already went through the host's commands and the addons
+ * (a line text_out changed, an alias nobody handled). */
+void xi_chat_queue_game(int mode, const char* line);
+/* Whether text_in sees the game's own lines (chat, battle and system messages), not only the host's. */
+int xi_chat_game_lines(void);
+
+void xi_hooks_init(void);
+void xi_hooks_frame(void);            /* chat lines and commands queued for the game */
+/* The chat input line: text, open state. */
+int xi_chat_input(char* out, size_t n);
+int xi_chat_input_open(void);
+void xi_chat_set_input(const char* text);
+/* Packets queued for the next buffer (whole packets: header included), handled by the addons there. */
+void xi_packet_inject(int outgoing, const uint8_t* p, size_t n);
+/* An addon's packet (Ashita's AddOutgoingPacket/AddIncomingPacket, Windower's packets.inject): through
+ * the addons' handlers now, with injected set, as Ashita does (LuAshitacast re-injects under a flag it
+ * clears straight after), then queued as they left it. Injected from a handler of an injected packet (or
+ * of one the queue drains), it is still handled at once, one level deep (hooks.c, INJECT_DEPTH); deeper,
+ * it waits for the next buffer and is handled there. */
+void xi_packet_inject_handled(int outgoing, const uint8_t* p, size_t n);
+/* The last packet of an id seen in a direction (0x200 bytes max): size, or 0. */
+size_t xi_packet_last(int outgoing, uint16_t id, uint8_t* out, size_t cap, uint64_t* when_ms);
+/* A plain buffer (0x1C header, packets) through the pipeline, as the packet hooks do (the harness). */
+size_t xi_packets_process(int outgoing, const uint8_t* buf, size_t size, uint8_t* out, size_t cap);
+
+/* --- profile (prof.c) ------------------------------------------------------------------------ */
+
+/* One call into an addon's Lua, timed: begin before it, end after (where: the event's name, "frame",
+ * "load"...). Calls nest (a command from an addon): each addon is charged its own time only. */
+typedef struct XiProfMark
+{
+    uint64_t wall, cpu;
+    int heap_kb;
+} XiProfMark;
+void xi_prof_begin(XiProfMark* m, Addon* a);
+void xi_prof_end(const XiProfMark* m, Addon* a, const char* where);
+/* The event being raised, for the slow-call log; returns the one before (a raise inside a raise). */
+const XiEvent* xi_prof_event(const XiEvent* e);
+/* At the start of every frame: logs a frame that came late and the addons' share of the wait. */
+void xi_prof_frame(void);
+/* At the end of the addon host's frame (addons_frame). */
+void xi_prof_frame_end(void);
+/* /addon prof [reset | slow <ms> | <name>] */
+void xi_prof_command(char w[][256], int n);
+
+/* --- code patches (patch.c) ------------------------------------------------------------------ */
+
+/* An addon is about to write n bytes at addr (xi.memory): reported if it is in the game's code. */
+void xi_code_patch(Addon* a, uint32_t addr, const uint8_t* bytes, uint32_t n);
+/* Every frame: finds code changed by other means (ffi stores). */
+void xi_patch_watch(void);
+/* How many code changes were seen so far (writes through xi.memory and the watcher's finds): what a
+ * cached pattern scan depends on. */
+uint32_t xi_code_changes(void);
+/* Whether code changes are seen at all (the watcher has its snapshot of the code). */
+int xi_code_watched(void);
+/* An addon is about to write n bytes at addr (xi.memory): if they cover the game's frame-rate divisor,
+ * host64 takes the new value as the addon's frame rate (AddonsSetup.fps_request); it would put its own
+ * back the next frame otherwise. */
+void xi_fps_write(uint32_t addr, const uint8_t* bytes, uint32_t n);
+/* Windower's //config FrameRateDivisor: the divisor asked for, -1 the player's own */
+void xi_fps_request(int divisor);
+
+/* --- commands (cmd.c) ------------------------------------------------------------------------ */
+
+/* A line from the command line (or injected): 1 if the host or an addon handled it (the game
+ * doesn't see it). */
+int xi_command(const char* line, int mode, int injected);
+/* Runs a script file (scripts/<name>.txt of a kind, or a path): each line as if typed. */
+int xi_exec_script(const char* name, int kind);
+void xi_cmd_frame(void); /* scripts' waits, the boot script on the first frame */
+/* Config > Addons' list (manage.c): the ones on load on the first frame; the page's switches after */
+void xi_manage_frame(void);
+/* Aliases: /alias add /foo /bar. */
+void xi_alias_set(const char* name, const char* expansion);
+
+/* --- input (input.c) ------------------------------------------------------------------------- */
+
+void xi_input_init(void);
+/* Binds (Ashita's /bind syntax, Windower's bind): key text like "^!f1". 1 if parsed. */
+int xi_bind(const char* key, const char* command, int down_too);
+int xi_unbind(const char* key);
+void xi_bind_list(void);
+/* DIK key state as the game last read it. */
+int xi_key_down(uint32_t dik);
+/* A key name as binds take it ("enter", "numpad5", "f1"; "0x1C" for a DIK code): its DIK code, or -1. */
+int xi_key_code(const char* name);
+/* Presses (down 1) or releases a key for the game, as the keyboard would (focus or not). */
+void xi_key_inject(uint32_t dik, int down);
+
+/* --- the overlay (gui.cpp) ------------------------------------------------------------------- */
+
+void xi_gui_init(void);
+/* Between the addons' frame events and the frame going out. */
+void xi_gui_begin(uint32_t w, uint32_t h);
+void xi_gui_end(void);
+int xi_gui_in_frame(void);
+/* Around one addon's drawing event: what it leaves open in ImGui is closed (and logged). */
+void xi_gui_addon_begin(void);
+void xi_gui_addon_end(Addon* a);
+/* Input: 1 when the overlay takes it (the game must not see it). */
+int xi_gui_mouse(int msg, int x, int y, int delta);
+int xi_gui_key(uint32_t vk, int down, uint32_t scancode);
+int xi_gui_text(const char* utf8);
+/* The game's window gaining (1) or losing (0) focus; the mouse leaving it. */
+void xi_gui_focus(int on);
+void xi_gui_mouse_leave(void);
+int xi_gui_wants_keyboard(void);
+int xi_gui_wants_mouse(void);
+/* Objects an addon owns (text objects, primitives, textures) freed when it unloads. */
+void xi_gui_free_owned(Addon* a);
+
+/* --- Lua (lua_xi.c) -------------------------------------------------------------------------- */
+
+/* Pushes the native xi table for an addon's state. */
+void xi_lua_open(lua_State* L, Addon* a);
+/* Embedded Lua sources (generated/addons_lua.c from host/addons/lua/). */
+const char* xi_embedded(const char* name, size_t* size);
+
+#ifdef __cplusplus
+}
+#endif

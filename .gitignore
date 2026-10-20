@@ -1,0 +1,31 @@
+# Never commit anything derived from Square Enix binaries (README, "Rules").
+generated/
+build/
+out/
+*.dll
+*.exe
+*.dat
+*.DAT
+*.unpacked.*
+
+# Fanxi's own runtime data: database, TLS keys, launcher settings and logs
+data/
+*.db
+*.db-wal
+*.db-shm
+.env
+.venv/
+
+# Tooling noise
+__pycache__/
+*.pyc
+*.obj
+*.pdb
+*.ilk
+*.lib
+*.exp
+.vs/
+
+# Jython compiles the discovery scripts next to themselves
+*$py.class
+.DS_Store
