@@ -1,7 +1,7 @@
 #!/bin/bash
 # Install the Fanxi launcher, and optionally this machine's own Fanxi server.
 #
-#   curl -fsSL https://raw.githubusercontent.com/wondochoung/fanxi/main/install.sh | bash
+#   curl -fsSL https://raw.githubusercontent.com/wondollaballa/fanxi/main/install.sh | bash
 #
 # Fanxi is self-hosted: the launcher signs in to a Fanxi server you run (or one you trust). With
 # no arguments this installs the launcher, creates data/fanxi.db and starter content, and prints
@@ -61,7 +61,7 @@ else
         fi
     fi
     SRC="$FANXI_HOME/source"
-    REPO="${FANXI_REPO:-https://github.com/wondochoung/fanxi.git}"
+    REPO="${FANXI_REPO:-https://github.com/wondollaballa/fanxi.git}"
     if [ -d "$SRC/.git" ]; then
         say "Updating Fanxi in $SRC"
         git -C "$SRC" fetch --depth 1 origin main
