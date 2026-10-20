@@ -85,7 +85,7 @@ def build_desktop() -> Path:
         "Type=Application\n"
         "Name=%s\n"
         "Comment=Sign in and play FINAL FANTASY XI on Fanxi\n"
-        "Exec=%s\n"
+        'Exec="%s"\n'
         "Icon=%s\n"
         "Terminal=false\n"
         "Categories=Game;\n"
