@@ -329,6 +329,5 @@ class Gateway:
                 out = ZoneSession.incoming(self.world, session, addr, bytearray(data))
                 if out:
                     udp.sendto(out, addr)
-                self.world.flush()
             except Exception as exc:  # one bad packet must not stop the zone
                 log.warning("zone %s: %s: %s", addr, type(exc).__name__, exc)
