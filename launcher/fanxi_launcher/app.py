@@ -181,8 +181,8 @@ class LauncherApp(tk.Tk):
     def __init__(self, config: LauncherConfig | None = None):
         super().__init__()
         self.config = config or LauncherConfig.load()
-        insecure = os.environ.get("FANXI_API_INSECURE", "") in ("1", "true", "yes")
-        self.api = FanxiApi(self.config.api_url, insecure=insecure)
+        self.insecure = os.environ.get("FANXI_API_INSECURE", "") in ("1", "true", "yes")
+        self.api = FanxiApi(self.config.api_url, insecure=self.insecure)
         self.game = GameManager(self.config)
         self.account: dict | None = None
         self.characters: list[dict] = []
@@ -458,7 +458,7 @@ class LauncherApp(tk.Tk):
             url = server.get().strip() or self.config.api_url
             if url.rstrip("/") != self.config.api_url.rstrip("/"):
                 self.config.api_url = url.rstrip("/")
-                self.api = FanxiApi(self.config.api_url)
+                self.api = FanxiApi(self.config.api_url, insecure=self.insecure)
                 self.config.save()
             user = username.get().strip()
             pw = password.get()
@@ -811,13 +811,13 @@ class LauncherApp(tk.Tk):
         if new_api and new_api != old_api:
             self.config.clear_session()
             self.config.save()
-            self.api = FanxiApi(new_api)
+            self.api = FanxiApi(new_api, insecure=self.insecure)
             self.show_auth()
             self.set_status("Server changed; sign in again")
         else:
             self.set_status("Settings saved")
 
-    def _build_game(self, game_var):
+    def _build_game(self, game_var, confirm=True):
         if self._building:
             return
         folder = game_var.get().strip()
@@ -826,7 +826,7 @@ class LauncherApp(tk.Tk):
             folder = game_var.get().strip()
             if not is_game_dir(folder):
                 return
-        if not messagebox.askyesno(
+        if confirm and not messagebox.askyesno(
                 "Build Fanxi",
                 "Build host64 from your own game files?\n\nThis translates the game's code and compiles it; "
                 "the first build takes several minutes.", parent=self):
@@ -871,7 +871,7 @@ class LauncherApp(tk.Tk):
         if find_host64(self.config) is None:
             if messagebox.askyesno("Fanxi", "host64 is not built yet. Build it now?", parent=self):
                 self.show_view("settings")
-                self._build_game(tk.StringVar(value=game_dir))
+                self._build_game(tk.StringVar(value=game_dir), confirm=False)
             return
         self.set_status("Starting Fanxi…")
         self.run_bg(lambda: self.api.launch(self.config.token, character["id"]), self._start_game,

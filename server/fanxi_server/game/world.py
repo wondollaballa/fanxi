@@ -5,6 +5,7 @@ the lobby-to-zone hand-off map, and the zone rows read from the database.
 """
 from __future__ import annotations
 
+import socket
 import struct
 import threading
 from pathlib import Path
@@ -60,7 +61,11 @@ class World:
         self.service = service
         self.huff = huffman
         self.bind = bind or config.bind
-        self.host_ip = config.public_host
+        self.public_name = config.public_host
+        try:
+            self.host_ip = socket.gethostbyname(config.public_host)
+        except OSError:
+            self.host_ip = config.public_host
         self.ports = dict(config.ports)
         self.zones = Zones(service.zones(), service.zone_lines())
         self.server_name = service.server_name()
