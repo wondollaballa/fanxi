@@ -1,7 +1,7 @@
 # locate the statically linked MSVC CRT. Reports (1) functions Ghidra named (Function ID,
 # symbols), (2) where calls to CRT-only imports come from, (3) where CRT error strings are used.
 # Jython headless post-script, read-only.
-# @category FFXIRecomp
+# @category Fanxi
 import collections
 
 out_path = getScriptArgs()[0]

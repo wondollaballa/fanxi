@@ -3,7 +3,7 @@
 # With FIX=1 as the second script argument, clears the overlapping code units and functions and
 # re-disassembles from the fall-through, so the real decode wins.
 # Jython headless post-script.
-# @category FFXIRecomp
+# @category Fanxi
 from ghidra.app.cmd.disassemble import DisassembleCommand
 
 args = getScriptArgs()

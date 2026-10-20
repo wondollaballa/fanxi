@@ -1,6 +1,6 @@
 # diagnostics: where is the code Ghidra did not attach to a function, and which computed jumps
 # are unresolved. Jython, run as a headless post-script against an analysed FFXiMain.
-# @category FFXIRecomp
+# @category Fanxi
 import collections
 
 out_path = getScriptArgs()[0]

@@ -3,7 +3,7 @@
 # Adds computed-jump references to every case, disassembles them and extends the function body.
 # Prints one line per switch; this is the switch section of the per-build metadata.
 # Jython headless post-script; modifies the program.
-# @category FFXIRecomp
+# @category Fanxi
 import re
 from ghidra.app.cmd.disassemble import DisassembleCommand
 from ghidra.app.cmd.function import CreateFunctionCmd

@@ -3,7 +3,7 @@
 #   B. 16-byte-aligned addresses right after nop/int3 padding (MSVC 6 function alignment)
 # Every candidate is disassembled; if the disassembly hits a bad instruction the candidate is
 # rolled back. Jython headless post-script; modifies the program. Run until it creates 0.
-# @category FFXIRecomp
+# @category Fanxi
 from ghidra.app.cmd.disassemble import DisassembleCommand
 from ghidra.program.model.address import AddressSet
 

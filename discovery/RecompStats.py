@@ -1,5 +1,5 @@
 # Feasibility stats for static recompilation of FFXiMain. Jython, run as a headless post-script.
-# @category FFXIRecomp
+# @category Fanxi
 import collections
 
 from ghidra.program.model.symbol import FlowType

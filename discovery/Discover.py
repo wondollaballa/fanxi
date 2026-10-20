@@ -3,7 +3,7 @@
 # Seeds, in order of confidence:
 #   1. data -> code pointer targets (vtables, callback tables) that are orphan instructions
 #   2. the first instruction of every orphan run that something references (DATA or jump)
-# @category FFXIRecomp
+# @category Fanxi
 out_path = getScriptArgs()[0]
 prog = currentProgram
 listing = prog.getListing()

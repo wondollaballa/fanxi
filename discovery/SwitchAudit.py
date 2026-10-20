@@ -2,7 +2,7 @@
 # plausibly runs (consecutive entries that point into .text within 64 KB of the jump). A run longer
 # than the attached set means Ghidra may have under-bounded it; review those by hand.
 # Jython headless post-script, read-only.
-# @category FFXIRecomp
+# @category Fanxi
 import re
 
 out_path = getScriptArgs()[0]

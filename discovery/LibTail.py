@@ -3,7 +3,7 @@
 # that is closed under direct calls: nothing at or above the boundary calls below it.
 # Prints every such boundary with the tail size, plus direct-call statistics per 64 KB.
 # Jython headless post-script, read-only.
-# @category FFXIRecomp
+# @category Fanxi
 out_path = getScriptArgs()[0]
 prog = currentProgram
 listing = prog.getListing()

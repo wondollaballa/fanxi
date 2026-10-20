@@ -1,6 +1,6 @@
 # classify every byte of .text that is not an instruction, and every data->code pointer whose
 # target is not an instruction. Jython headless post-script, read-only.
-# @category FFXIRecomp
+# @category Fanxi
 import collections
 
 out_path = getScriptArgs()[0]

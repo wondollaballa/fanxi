@@ -3,7 +3,7 @@
 # Args: <out.json> <sha256 of the retail, packed DLL> <build label> [module name]
 # The module name defaults to the imported image's name: FFXiMain.unpacked.dll -> FFXiMain.dll.
 # Jython headless post-script, read-only.
-# @category FFXIRecomp
+# @category Fanxi
 import json
 import re
 

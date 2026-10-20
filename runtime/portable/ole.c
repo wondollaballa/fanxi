@@ -240,7 +240,7 @@ static void WMI_Get(Guest* g)
         RET(WBEM_E_NOT_FOUND, 6);
     char id[64];
     uint32_t pad = rd32(ARG(0) + 4);
-    snprintf(id, sizeof id, "USB\\VID_045E&PID_028E&IG_%02u\\XIRECOMP&%u", pad, pad);
+    snprintf(id, sizeof id, "USB\\VID_045E&PID_028E&IG_%02u\\FANXI&%u", pad, pad);
     uint32_t n = (uint32_t)strlen(id), b = bstr_alloc(0, n);
     for (uint32_t i = 0; i < n; ++i)
         wr16(b + 2 * i, (uint16_t)(uint8_t)id[i]);

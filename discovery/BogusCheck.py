@@ -4,7 +4,7 @@
 #   - no references to the entry at all
 # Arg 2 = REMOVE=<addr,addr,...> clears those functions and their code units (manual verdicts).
 # Jython headless post-script.
-# @category FFXIRecomp
+# @category Fanxi
 args = getScriptArgs()
 out_path = args[0]
 prog = currentProgram

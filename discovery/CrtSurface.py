@@ -2,7 +2,7 @@
 # directly from outside it, with call counts, Ghidra's name if it has one, and the imports each
 # one reaches (its own calls, one level). Args: <out> <crt_start hex> <crt_end hex>
 # Jython headless post-script, read-only.
-# @category FFXIRecomp
+# @category Fanxi
 import collections
 
 args = getScriptArgs()
