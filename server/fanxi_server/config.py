@@ -54,7 +54,8 @@ class Config:
     huffman_dir: Path | None = None
     admin_key: str = ""
     registration_open: bool = True
-    max_characters: int = 1
+    max_characters: int = 0  # 0 = no limit
+    max_subs: int = 5  # server-owned sub-accounts one main may have; 0 disables them
     api_session_days: int = 30
     game_session_hours: int = 12
     login_token_seconds: int = 120
@@ -79,7 +80,8 @@ class Config:
             huffman_dir=Path(os.path.expanduser(huffman)).resolve() if huffman else None,
             admin_key=_env("FANXI_ADMIN_KEY", ""),
             registration_open=_bool("FANXI_REGISTRATION", True),
-            max_characters=_int("FANXI_MAX_CHARACTERS", 1),
+            max_characters=_int("FANXI_MAX_CHARACTERS", 0),
+            max_subs=_int("FANXI_MAX_SUBS", 5),
             api_session_days=_int("FANXI_SESSION_DAYS", 30),
             game_session_hours=_int("FANXI_GAME_SESSION_HOURS", 12),
             login_token_seconds=_int("FANXI_LOGIN_TOKEN_SECONDS", 120),

@@ -42,6 +42,12 @@ def candidate_game_dirs(configured: str = "") -> list[Path]:
         candidates.append(Path(configured).expanduser())
     if os.environ.get("FANXI_GAME_DIR"):
         candidates.append(Path(os.environ["FANXI_GAME_DIR"]).expanduser())
+    games = home / "Games"
+    if games.is_dir():
+        try:
+            candidates += [child for child in sorted(games.iterdir()) if child.is_dir()]
+        except OSError:
+            pass
     candidates += [
         home / "Games" / "FINAL FANTASY XI",
         home / "SquareEnix" / "FINAL FANTASY XI",
@@ -220,21 +226,22 @@ class GameManager:
 
     # --- launch --------------------------------------------------------------------------------
     def launch(self, game_dir: str | Path, client: dict, login_token: str,
-               extra: list[str] | None = None) -> subprocess.Popen:
+               extra: list[str] | None = None, extra_env: dict | None = None,
+               log_name: str = "game.log") -> subprocess.Popen:
         host64 = find_host64(self.config)
         if host64 is None:
             raise GameError("host64 is not built yet. Open Settings and press Build game.")
         if not is_game_dir(game_dir):
             raise GameError("the game folder is missing or incomplete: %s" % game_dir)
         command = build_launch_command(host64, game_dir, client, login_token, extra)
-        log_path = log_dir() / "game.log"
+        log_path = self.log_path(log_name)
         log = open(log_path, "ab")
         options = {
             "cwd": str(self.root),
             "stdin": subprocess.DEVNULL,
             "stdout": log,
             "stderr": subprocess.STDOUT,
-            "env": dict(os.environ),
+            "env": dict(os.environ, **(extra_env or {})),
         }
         if os.name != "nt":
             options["start_new_session"] = True
@@ -245,8 +252,11 @@ class GameManager:
         return process
 
     # --- little helpers for the UI -------------------------------------------------------------
+    def log_path(self, name: str = "game.log") -> Path:
+        return log_dir() / name
+
     def log_tail(self, lines: int = 40) -> str:
-        return self._tail(log_dir() / "game.log", lines)
+        return self._tail(self.log_path("game.log"), lines)
 
     def build_log_tail(self, lines: int = 40) -> str:
         return self._tail(self.build_log_path, lines)

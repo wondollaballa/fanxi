@@ -805,6 +805,134 @@ static void report_overlay(const char* name, unsigned files)
 #include <unistd.h>
 #endif
 
+/* -- FANXI_ITEM_DUMP: read item model ids out of the running client.
+ *
+ * Item data is not a flat table in the ROM: the client resolves an item id through its
+ * item-range table into a compressed DAT and leaves the decoded record in guest memory. The
+ * record carries the model id the client would draw, which is the number the server must send.
+ * Wait until the game has loaded them, find the record array by looking for an item whose model
+ * id is already confirmed in play (Opashoro 22106 -> 912), check the layout against items with
+ * known ids, then print the Prime weapons. */
+static uint32_t item_record_stride;
+static uint32_t item_record_model_off;
+static int64_t item_record_base;
+
+static int item_rd16(uint32_t a, uint16_t* out)
+{
+    if (a < 0x1000u || a >= 0xFFF00000u || !gwin_is_committed(a))
+        return 0;
+    *out = rd16(a);
+    return 1;
+}
+
+static int item_dump_scan(void)
+{
+    /* The records are indexed by item id, so an item's model sits at base + id * stride and the
+     * id is not stored.  Old items whose model ids are settled in the server data anchor it:
+     * Onion Sword and Bronze Sword are adjacent items with adjacent models (264, 268), and
+     * Mjollnir / Claustrum are adjacent too (553, 554) 3315 ids further on.  Both spacings have
+     * to agree for a candidate stride. */
+    static const struct { uint16_t id; uint16_t model; } known[] = {
+        { 16534, 264 },  /* Onion Sword */
+        { 16535, 268 },  /* Bronze Sword */
+        { 19849, 553 },  /* Mjollnir */
+        { 19850, 554 },  /* Claustrum */
+    };
+    uint32_t pages = 0, hits = 0;
+
+    for (uint32_t page = 0x00100000u; page < 0xFFF00000u; page += 0x1000u)
+    {
+        if (!gwin_is_committed(page))
+            continue;
+        ++pages;
+        for (uint32_t off = 0; off + 2 <= 0x1000u; off += 2)
+        {
+            uint16_t v;
+            if (!item_rd16(page + off, &v) || v != known[0].model)
+                continue;
+            ++hits;
+            uint32_t at = page + off;
+            for (uint32_t stride = 2; stride <= 0x400; stride += 2)
+            {
+                int good = 1;
+                for (unsigned i = 1; i < sizeof known / sizeof known[0]; ++i)
+                {
+                    int64_t d = (int64_t)(known[i].id - known[0].id) * (int64_t)stride;
+                    int64_t addr = (int64_t)at + d;
+                    uint16_t got;
+                    if (addr < 0 || addr > 0xFFFFFFFFll - 8)
+                        break;
+                    if (!item_rd16((uint32_t)addr, &got) || got != known[i].model)
+                        break;
+                    ++good;
+                }
+                if (good < (int)(sizeof known / sizeof known[0]))
+                    continue;
+                item_record_stride = stride;
+                item_record_model_off = 0;
+                item_record_base = (int64_t)at - (int64_t)known[0].id * (int64_t)stride;
+                rt_log("[items] model array at %#x stride %#x, all %u known models agree (pages=%u hits=%u)\n",
+                       (unsigned)at, (unsigned)stride, (unsigned)(sizeof known / sizeof known[0]),
+                       pages, hits);
+                for (unsigned i = 0; i < sizeof known / sizeof known[0]; ++i)
+                {
+                    int64_t addr = item_record_base + (int64_t)known[i].id * stride;
+                    uint16_t got = 0;
+                    if (addr < 0 || addr > 0xFFFFFFFFll - 8 || !item_rd16((uint32_t)addr, &got))
+                        continue;
+                    rt_log("[items]   %5u -> model %u (expect %u)\n", known[i].id, got,
+                           known[i].model);
+                }
+                return 1;
+            }
+        }
+    }
+    rt_log("[items] no model array (pages=%u 264-hits=%u)\n", pages, hits);
+    return 0;
+}
+
+static void item_dump_report(void)
+{
+    static const struct { const char* name; uint16_t first, last; } groups[] = {
+        { "sword",     21612, 21615 },
+        { "greatsword", 21696, 21699 },
+        { "polearm",   21739, 21742 },
+        { "greataxe",  21782, 21785 },
+        { "scythe",    21868, 21871 },
+        { "staff",     22103, 22106 },
+        { "gun",       22189, 22192 },
+        { "horn",      22275, 22278 },
+        { "shield",    22361, 22364 },
+    };
+    for (unsigned i = 0; i < sizeof groups / sizeof groups[0]; ++i)
+    {
+        for (uint32_t id = groups[i].first; id <= groups[i].last; ++id)
+        {
+            int64_t addr = item_record_base + (int64_t)id * item_record_stride;
+            uint16_t model = 0;
+            if (addr < 0 || addr > 0xFFFFFFFFll - 8 || !item_rd16((uint32_t)addr, &model))
+                continue;
+            rt_log("[items] %-11s %5u -> model %u\n", groups[i].name, (unsigned)id, model);
+        }
+    }
+}
+
+static void item_dump_thread(void* unused)
+{
+    (void)unused;
+    for (int i = 0; i < 120; ++i)
+    {
+        plat_sleep_ms(1000);
+        if (!rt_guest_base)
+            continue;
+        if (item_dump_scan())
+        {
+            item_dump_report();
+            return;
+        }
+    }
+}
+
 #if defined(_WIN32) && !defined(_MSC_VER)
 /* mingw-w64 (llvm-mingw's clang): the UCRT writes an unbuffered stderr a character at a time, a
  * system call each - 0.5 ms a line, where MSVC's build buffers each fprintf whole (6 us) - and the
@@ -834,6 +962,8 @@ int main(int argc, char** argv)
     /* a write to a closed socket (the game's, the sign-in's TLS, a closed control socket) is an error, not a signal */
     signal(SIGPIPE, SIG_IGN);
 #endif
+    if (getenv("FANXI_ITEM_DUMP"))
+        plat_thread_start(item_dump_thread, NULL);
 #if defined(__linux__) && !defined(__ANDROID__)
     /* the Wayland app id (X11 class) of the sign-in's and the game's windows, before SDL starts:
      * fanxi-launcher.desktop (install.sh) or fanxi.desktop (build_posix.py desktop) names its icon; without it docks
@@ -863,6 +993,7 @@ int main(int argc, char** argv)
     const char* regs[8];
     unsigned nregs = 0;
     const char* overlay = NULL;
+    static char default_overlay[1100];
     const char* data_dir = NULL;
     const char* addon_harness = NULL; /* --addon-harness script: addons without the game (host/addons/harness.c) */
     const char* finals[8];
@@ -1215,6 +1346,52 @@ int main(int argc, char** argv)
         gamecore_set_lobby(game_server);
         rt_log("[recomp] game hosts -> %u.%u.%u.%u\n", game_server >> 24, (game_server >> 16) & 255,
             (game_server >> 8) & 255, game_server & 255);
+    }
+    {
+        /* The July 2025 client's 0x00A handler refuses to finish the login when its connection
+         * state is not exactly 2, leaving the zone drawn but the player without controls.  The
+         * translated variant at 0x100fa988 forces the success path. */
+        extern volatile int rt_patch_login_control;
+        rt_patch_login_control = 1;
+        rt_log("[recomp] login-control patch on\n");
+    }
+    if (!overlay)
+    {
+        /* The game writes its display and sound settings through the registry thunks.  With no
+         * overlay those writes are dropped, so every launch came up on the defaults -- and the
+         * default volume.  Keep them in the per-user Fanxi folder, next to the launcher's own
+         * settings, and let a later launch load them back. */
+        char dir[1024];
+        const char* base = NULL;
+#ifdef _WIN32
+        base = getenv("APPDATA");
+#elif defined(__APPLE__)
+        const char* home = getenv("HOME");
+        if (home && home[0])
+        {
+            static char mac[1024];
+            snprintf(mac, sizeof mac, "%s/Library/Application Support", home);
+            base = mac;
+        }
+#else
+        const char* xdg = getenv("XDG_DATA_HOME");
+        const char* home = getenv("HOME");
+        if (xdg && xdg[0])
+            base = xdg;
+        else if (home && home[0])
+        {
+            static char linux_base[1024];
+            snprintf(linux_base, sizeof linux_base, "%s/.local/share", home);
+            base = linux_base;
+        }
+#endif
+        if (base && base[0])
+        {
+            snprintf(dir, sizeof dir, "%s%cFanxi", base, plat_path_sep);
+            plat_mkdir(dir);
+            snprintf(default_overlay, sizeof default_overlay, "%s%csaved.reg", dir, plat_path_sep);
+            overlay = default_overlay;
+        }
     }
     reg_init(regs, nregs, overlay);
     for (unsigned i = 0; i < nfinals; ++i)

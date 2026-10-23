@@ -46,6 +46,10 @@ def build_macos() -> Path:
     resources.mkdir(parents=True)
     shutil.copytree(LAUNCHER / "fanxi_launcher", resources / "app" / "fanxi_launcher",
                     ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
+    defaults = ROOT / "gearswap"
+    if defaults.is_dir():
+        shutil.copytree(defaults, resources / "app" / "gearswap",
+                        ignore=shutil.ignore_patterns("__pycache__", "*.pyc"))
     icon = ROOT / "assets" / "icon.icns"
     if icon.exists():
         shutil.copyfile(icon, resources / "icon.icns")
@@ -111,6 +115,8 @@ def main() -> int:
             print("tkinter:    no (%s)" % exc)
         print("icon:       %s" % ((ROOT / "assets" / "icon.icns") if sys.platform == "darwin"
                                   else (ROOT / "assets" / "icon.png")))
+        defaults = ROOT / "gearswap"
+        print("gearswap:   %s" % (defaults if defaults.is_dir() else "missing"))
         return 0
     if args.desktop:
         print("wrote %s" % build_desktop())

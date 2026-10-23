@@ -14,8 +14,8 @@ license boundary is.
   independent protocol documentation (notably the XiPackets packet reference); test Fanxi's
   implementation against its own synthetic client and database.
 
-No LandSandBoat source, SQL, Lua, YAML, comments, schema or transcribed game dialogue is included
-in Fanxi. See [Provenance and license](#provenance-and-license) below.
+No LandSandBoat source code, SQL text, Lua, YAML, comments, schema definitions or transcribed
+game dialogue is included in Fanxi; factual game data is cross-checked separately. See [Provenance and license](#provenance-and-license) below.
 
 ## 1. The server is several services, not one program
 
@@ -100,10 +100,10 @@ Useful behaviours from the study:
 - Death is a state: the monster stays dead for a while, rewards are distributed at a delay,
   then it fades/despawns and registers a respawn.
 
-Fanxi implements the shape, not the full simulation: a single melee swing, a simple hit/crit
-roll, one target, 8-yalm aggro, 30-yalm disengage, 5-yalm roam, 20–25 s respawn, no enmity list,
-claim, linking, TP moves or spells. The packet flow is real; the combat math is deliberately
-small.
+Fanxi implements the shape, not the full simulation: a main-hand swing (plus an off-hand
+swing when dual wielding), a simple hit/crit roll, one target, 8-yalm aggro, 30-yalm
+disengage, 5-yalm roam, 20–25 s respawn, no enmity list, claim, linking, TP moves or spells.
+The packet flow is real; the combat math is deliberately small.
 
 ## 4. The action packet
 
@@ -212,8 +212,14 @@ content its own.
 - **Fanxi code:** MIT. See `LICENSE`.
 - **Fanxi content:** original names, dialogue, quest text and numbers authored for this project.
   No retail dialogue, event scripts, DAT files, models, music or zone geometry are shipped.
-- **LandSandBoat:** GPL-3.0. It was read as a reference only. No files, code, SQL rows, Lua,
+- **LandSandBoat:** GPL-3.0. It was read as a reference only. No files, code, SQL text, Lua,
   YAML, schema definitions, comments or transcribed dialogue were copied into Fanxi.
+- **Item metadata:** item ids, names, equip-slot/job masks and model ids are functional game
+  data cross-checked against public item databases (BG-Wiki, LandSandBoat's item tables); the
+  migrations and gear-library names are Fanxi's own.
+- **Job trait data:** trait ids, names, job/level gates and modifier values are functional game
+  data cross-checked against public references (BG-Wiki and LandSandBoat's trait tables);
+  Fanxi's module, table shape and lookup code are its own.
 - **Protocol facts:** packet ids, field layouts and state-machine behaviour are functional facts;
   the implementation here was written independently and is tested against Fanxi's own fixtures.
 - **FINAL FANTASY XI:** trademarks and game content belong to Square Enix. Fanxi is unofficial,

@@ -1,0 +1,27 @@
+[harness] = 0 false 0 false false focus=0
+--- a repeated job block keeps the locks
+[harness] = 8 true 2 true true focus=2
+[harness] = 8 true 2 true true focus=2
+--- a main job change releases them
+[harness] = 13 false 0 false false focus=0
+--- the support job is a job change too
+[harness] = 13 true 2 false false focus=0
+[harness] = 13 false 0 false false focus=0
+--- a repeated pair keeps them again
+[harness] = 13 true 2 false false focus=0
+[harness] = 13 true 2 false false focus=0
+--- the launcher plan can see the new job first
+[harness] = 13 true 2 false false focus=0
+[harness] = 8 false 0 false false focus=0
+--- the same plan keeps a lock taken after it
+[harness] = 8 true 2 false false focus=0
+[harness] = 8 true 2 false false focus=0
+--- a different character starts unlocked
+[harness] = 8 true 2 false false focus=0
+[harness] = 8 false 0 false false focus=0
+--- the released state set is worn once the client has settled
+[harness] = true
+[harness] = true
+[harness] = 1
+[harness] = false
+[harness] = 13

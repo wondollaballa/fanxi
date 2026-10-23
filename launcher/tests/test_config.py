@@ -62,6 +62,41 @@ class ConfigTest(unittest.TestCase):
     def test_data_dir_override(self):
         self.assertEqual(data_dir(), Path(self.tmp.name).resolve())
 
+    def test_account_vault_keeps_multiple_tokens(self):
+        config = LauncherConfig(username="onedough", token="one", character_id=1)
+        config.remember_account({"username": "mule"}, "two", "2026-12-01",
+                                [{"id": 2, "name": "Mule"}])
+        self.assertEqual(config.username, "mule")
+        self.assertEqual(config.token, "two")
+        self.assertEqual(len(config.accounts), 2)
+        self.assertTrue(config.activate_account("onedough"))
+        self.assertEqual(config.token, "one")
+        self.assertEqual(config.character_id, 1)
+        config.forget_account("onedough")
+        self.assertEqual(config.username, "mule")
+        self.assertEqual(config.token, "two")
+        self.assertEqual(len(config.saved_accounts()), 1)
+
+    def test_legacy_session_becomes_an_account(self):
+        path = config_path()
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(json.dumps({"token": "abc", "username": "tester",
+                                    "character_id": 3}), encoding="utf-8")
+        config = LauncherConfig.load()
+        self.assertEqual(len(config.accounts), 1)
+        self.assertEqual(config.accounts[0]["username"], "tester")
+        self.assertEqual(config.accounts[0]["character_id"], 3)
+
+    def test_remember_account_keeps_a_valid_character(self):
+        config = LauncherConfig()
+        config.remember_account({"username": "tester"}, "one", "", [{"id": 1, "name": "A"}])
+        config.remember_account({"username": "tester"}, "two", "", [{"id": 1, "name": "A"},
+                                                                    {"id": 2, "name": "B"}])
+        self.assertEqual(config.character_id, 1)
+        config.remember_account({"username": "tester"}, "three", "",
+                                [{"id": 2, "name": "B"}])
+        self.assertEqual(config.character_id, 2)
+
 
 if __name__ == "__main__":
     unittest.main()

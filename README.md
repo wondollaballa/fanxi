@@ -15,9 +15,15 @@ a server that belong to the same project:
 | Piece | What it is | Where |
 |---|---|---|
 | **Client** | The game, statically recompiled from *your* install and run natively (no Wine, no Rosetta) | `recomp/`, `runtime/`, `host/` |
-| **Launcher** | A dependency-free desktop app: account, character, Play, settings, builds | `launcher/` |
+| **Launcher** | A dependency-free Python/Tk desktop app, plus a Rust + Tauri rebuild in progress | `launcher/`, `launcher-rs/` |
 | **Server** | Fanxi's HTTP API plus the FINAL FANTASY XI auth, lobby and zone gateway | `server/` |
 | **Database** | SQLite: accounts, sessions, characters, zones, news, releases | `database/` |
+
+> **Rust launcher preview.** `launcher-rs/` is a side-by-side Tauri 2 + Rust rebuild: the same
+> accounts, characters, control room, GearSwap tools and build hand-off, wrapped in a native
+> desktop app. It shares `launcher.json` with the Python app, so it can be tried without migrating
+> anything. See [launcher-rs/README.md](launcher-rs/README.md). The Python launcher remains the
+> default until the Rust one reaches parity.
 
 > **Project status.** The client is the mature part: the recompiler, renderer, audio, input and
 > addon host are ported from a working native build. The Fanxi launcher, server and database are
@@ -54,12 +60,15 @@ You need:
 
 In the launcher:
 
-1. Create a player account (or sign in).
-2. Create a character.
+1. Create a player account (or sign in). **Accounts → Add account** adds another account for
+   multiboxing.
+2. Create a character. **Characters → New mule** makes as many as you like.
 3. Open **Settings**, point *Game folder* at your FINAL FANTASY XI folder, and press **Build
    game**. The first build translates the game and compiles `host64`; it takes a few minutes.
-4. Press **Play**. The launcher asks the server for a single-use launch token, starts `host64`,
-   and the game signs in through Fanxi's auth gateway.
+4. Press **Play** (or open **Control** and press **Launch** / **Launch all**). The launcher asks
+   the server for a single-use launch token, starts `host64`, and the game signs in through
+   Fanxi's auth gateway. Keep the launcher open: it is the control room for commands, live
+   EXP/hr/DPS and gear.
 
 You start in Port Jeuno. Target the Fanxi Guide and use the action button to start **Pest
 Control**; the Wandering Moogle opens a shop. Say `!zone 100` to visit the West Ronfaure camp,
@@ -76,12 +85,20 @@ the server can run elsewhere and the launcher can point at it in **Settings**.
 `launcher/` is Fanxi's own desktop app. It is plain Python + Tkinter, so it has no Electron, no
 downloaded runtime and no third-party UI framework to audit. It:
 
-- signs in to Fanxi over the HTTP API and keeps the session token in a `0600` file;
-- creates and shows your character;
+- signs in to one or more Fanxi accounts over the HTTP API and keeps each session token in a
+  `0600` file (never a password);
+- creates unlimited characters (mules) on an account and keeps them in a picker;
+- opens a **Control room** that launches several clients, one per account, and shows each one's
+  zone, HP/MP, EXP/hr and DPS;
+- sends in-game commands such as `!zone`, `!merits` and `!heal` to any running client;
+- reads the active gear of each client, detects its live main job, loads that job's default
+  GearSwap library, and can import/edit/save timestamped versions from the **Gear** page, with a
+  launcher-wide **GearSwap** on/off switch for players who do not want auto-swapping;
 - stores the game folder and finds `host64`;
 - builds the client from your own game files (it creates `.venv`, installs `capstone` and
   `pefile`, and streams the build log);
-- asks the server for a one-time launch token and starts `host64` with the right ports;
+- asks the server for a one-time launch token and starts `host64` with the right ports and a
+  per-client control port;
 - shows server status and news, and can package itself as a macOS `.app` or a Linux desktop entry:
 
 ```bash
@@ -89,7 +106,10 @@ python3 launcher/build_app.py             # build/Fanxi Launcher.app (macOS)
 python3 launcher/build_app.py --desktop   # build/Fanxi Launcher.desktop (Linux)
 ```
 
-No passwords are stored by the launcher. The token is the only credential on disk.
+No passwords are stored by the launcher. The token is the only credential on disk. The same app
+is the multibox control panel: saved accounts, unlimited mules, a party launcher, live EXP/hr and
+DPS, a command console, and a Gear/GearSwap window. See
+[docs/control-panel.md](docs/control-panel.md).
 
 ### Our server
 
@@ -115,11 +135,17 @@ move, change zones and talk/attack. Its small world adds:
 - click-to-talk dialogue and the persistent **Pest Control** hunt quest;
 - basic melee combat with `0x028` action packets, HP updates, EXP, gil and level-ups;
 - an 80-slot inventory with gil, Potions and starter swords;
+- a Storage Slip command (`!storage store|grab <job|all>`) reachable from any zone, which moves
+  only gear a slip accepts off the character entirely and puts it back when you need it;
+- a hidden 9999-item locker (`!locker store|grab|list <all|ammo|back|materials|name>`) for JSE
+  capes, ammo, crafting materials and everything else a slip does not accept;
+- working-stock auto-refill: `!stock` keeps a visible stack of ninjutsu tools, pet food and Dawn
+  Mulsum in the inventory, pulling from the hidden locker when they are used;
 - monster death, rewards and respawn.
 
-Servers commands: `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!time`, `!help`. Positions are
-persisted to the database (throttled to a few writes a second at most). See
-[docs/world.md](docs/world.md) for content, packet flow and limits.
+Server commands: `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!time`, `!storage`, `!locker`,
+`!stock`, `!help`. Positions are persisted to the database (throttled to a few writes a second at
+most). See [docs/world.md](docs/world.md) for content, packet flow and limits.
 
 ### Our database
 
@@ -195,7 +221,7 @@ or pass the matching command-line flag.
 | `FANXI_HUFFMAN` | — | Folder holding `compress.dat` |
 | `FANXI_ADMIN_KEY` | empty | Key for `X-Admin-Key` calls; empty means admin accounts only |
 | `FANXI_REGISTRATION` | `1` | Allow new accounts |
-| `FANXI_MAX_CHARACTERS` | `1` | Characters per account |
+| `FANXI_MAX_CHARACTERS` | `0` | Characters per account (`0` = unlimited) |
 | `FANXI_SESSION_DAYS` | `30` | Launcher session lifetime |
 | `FANXI_LOGIN_TOKEN_SECONDS` | `120` | Launch-token lifetime |
 | `FANXI_GAME_SESSION_HOURS` | `12` | In-game session lifetime |
@@ -249,10 +275,13 @@ is done by the launcher (or `python3 tools/setup.py` for the full macOS app bund
 ## Documentation
 
 - [Architecture](docs/architecture.md) — components, data flow, ports, trust boundaries
+- [Retail client data](docs/retail-data.md) — where the data comes from, patching it with PlayOnline, and importing the result
 - [Launcher](docs/launcher.md) — settings, build, troubleshooting
+- [Character design](docs/character-design.md) — in-game model changes, the Design page and preview captures
 - [Server](docs/server.md) — API reference, deployment, admin operations
 - [Database](docs/database.md) — schema, migrations, backup and restore
 - [World](docs/world.md) — NPCs, monsters, combat, inventory, shop and quest
+- [Custom jobs](docs/custom-jobs.md) — adding a job, the DAT boundary and a delivery plan
 - [Protocol](docs/protocol.md) — the auth, lobby and zone subset
 - [LandSandBoat study](docs/landsandboat-study.md) — clean-room research notes and license boundary
 - [Development](docs/development.md) — repository layout, tests, conventions

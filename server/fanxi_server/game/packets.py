@@ -13,24 +13,96 @@ from .cipher import cstr
 # Player actions, from the client's action packet.
 ACTION_TALK = 0x00
 ACTION_ATTACK = 0x02
+ACTION_CAST_MAGIC = 0x03
 ACTION_ATTACK_OFF = 0x04
 ACTION_CHANGE_TARGET = 0x0F
+ACTION_WEAPONSKILL = 0x07
+ACTION_JOBABILITY = 0x09
 
 # 0x028 action categories and result messages.
 ACTION_CATEGORY_BASIC_ATTACK = 1
+ACTION_CATEGORY_SKILL_FINISH = 3    # weapon skill result
+ACTION_CATEGORY_MAGIC_FINISH = 4   # result of a spell
+ACTION_CATEGORY_ABILITY_FINISH = 6  # job ability result
+ACTION_CATEGORY_MAGIC_START = 8    # cast bar + casting animation
+# result.resolution: the client reads 0 as a hit and 1 as a miss (LSB's ActionResolution).
+RESOLUTION_HIT = 0
+RESOLUTION_MISS = 1
 BASIC_ATTACK_ID = 0x306B7461  # "atk0"
 
 MESSAGE_ATTACK_HITS = 1
-MESSAGE_ATTACK_MISSES = 15
-MESSAGE_ATTACK_CRIT = 67
+MESSAGE_MAGIC_DMG = 2
 MESSAGE_DEFEATS_TARGET = 6
+MESSAGE_MAGIC_RECOVERS_HP = 7
+MESSAGE_ATTACK_MISSES = 15
+MESSAGE_SHADOW_ABSORB = 31
+MESSAGE_ATTACK_CRIT = 67
+MESSAGE_MAGIC_NO_EFFECT = 75
+MESSAGE_MAGIC_TELEPORT = 93
+MESSAGE_USES_JOB_ABILITY = 100
+MESSAGE_DAMAGE = 185
+MESSAGE_STATUS_IS = 203
+MESSAGE_STATUS_WEARS_OFF = 206
+MESSAGE_MAGIC_GAIN_EFFECT = 230
+MESSAGE_MAGIC_ENFEEB = 237
+MESSAGE_MAGIC_DRAIN_HP = 227
+MESSAGE_MAGIC_DRAIN_MP = 228
+MESSAGE_MAGIC_STARTS_CASTING = 327
+
+# The four-character code in cmd_arg for a Magic Start, by spell skill.  The client uses
+# it to pick the casting animation and the interrupt code; a spell id there makes the
+# cast look like the wrong school (or not play at all).
+MAGIC_CAST_WHITE = 0x68776163   # "cawh"
+MAGIC_CAST_BLACK = 0x6B626163   # "cabk"
+MAGIC_CAST_NINJUTSU = 0x6A6E6163  # "canj"
+MAGIC_CAST_SONG = 0x6F736163    # "caso"
+MAGIC_CAST_SUMMON = 0x6D736163  # "casm"
+MAGIC_CAST_BLUE = 0x6C626163    # "cabl"
+MAGIC_CAST_GEOMANCY = 0x65676163  # "cage"
+
+# Spell skill ids, the ones the spells table uses.
+SKILL_DIVINE = 32
+SKILL_HEALING = 33
+SKILL_ENHANCING = 34
+SKILL_ENFEEBLING = 35
+SKILL_ELEMENTAL = 36
+SKILL_DARK = 37
+SKILL_SUMMONING = 38
+SKILL_NINJUTSU = 39
+SKILL_SINGING = 40
+SKILL_BLUE = 43
+SKILL_GEOMANCY = 44
+
+
+def magic_cast_arg(skill: int) -> int:
+    """The 4CC a Magic Start carries for a spell of this skill."""
+    skill = int(skill)
+    if skill == SKILL_NINJUTSU:
+        return MAGIC_CAST_NINJUTSU
+    if skill == SKILL_SUMMONING:
+        return MAGIC_CAST_SUMMON
+    if skill in (SKILL_SINGING, 41, 42):
+        return MAGIC_CAST_SONG
+    if skill == SKILL_BLUE:
+        return MAGIC_CAST_BLUE
+    if skill == SKILL_GEOMANCY:
+        return MAGIC_CAST_GEOMANCY
+    if skill in (SKILL_ELEMENTAL, SKILL_DARK):
+        return MAGIC_CAST_BLACK
+    return MAGIC_CAST_WHITE
 
 SEND_POSITION = 0x01
 SEND_STATUS = 0x02
 SEND_HP = 0x04
 SEND_NAME = 0x08
+SEND_MODEL = 0x10
 SEND_SPAWN = SEND_POSITION | SEND_STATUS | SEND_HP | SEND_NAME
+# 0x00D is the player entity: a full spawn must also carry the model section (0x1F).
+SEND_CHAR_SPAWN = SEND_SPAWN | SEND_MODEL
 SEND_DESPAWN = 0x30
+# 0x00D has its own SendFlg bitfield: Despawn is bit 5. The 0x00E mask (0x30) is not
+# the same field, and a player sent with it stays on the client's entity list.
+SEND_PLAYER_DESPAWN = 0x20
 
 DEFAULT_NAME_PREFIX = 0
 
@@ -58,35 +130,97 @@ class BitWriter:
         return bytes(self.data)
 
 
-def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False) -> bytes:
-    """Body of a 0x00E NPC/mob entity update (0x58 total, 0x54 body)."""
-    body = bytearray(0x54)
+def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
+                  equipped: bool = False, name_only: bool = False) -> bytes:
+    """Body of a 0x00E NPC/mob entity update.
+
+    A standard NPC/mob spawn is 0x48 bytes including the sub-message header, so the body is
+    0x44.  Sending the larger "equipped model" shape makes the client read the look block in
+    the wrong place and the entity never renders.
+    """
+    body = bytearray(0x44)
     struct.pack_into("<I", body, 0, int(entity.id))
     struct.pack_into("<H", body, 4, int(entity.targid))
     body[6] = SEND_DESPAWN if despawn else mask
     body[7] = int(getattr(entity, "rot", 0)) & 0xFF
-    # Raw wire order is x, y, z (the client's DAT coordinates).
     struct.pack_into("<f", body, 8, float(entity.x))
     struct.pack_into("<f", body, 12, float(entity.y))
     struct.pack_into("<f", body, 16, float(entity.z))
-    struct.pack_into("<I", body, 20, 0)  # flags0: still
+    # 0x18: "moving".  Left at zero, the client plays the idle animation (which for most
+    # mobs is a look-around) while the server slides them along the ground.
+    struct.pack_into("<H", body, 20, 1 if getattr(entity, "moving", False) else 0)
     struct.pack_into("<H", body, 22, (int(entity.targid) << 1) & 0xFFFF)
-    body[24] = int(getattr(entity, "speed", 50)) & 0xFF
-    body[25] = 40  # animation/base speed
+    body[24] = int(getattr(entity, "speed", 50)) & 0xFF   # 0x1C: how fast it travels
+    # 0x1D animationSpeed drives the walk cycle, not the ground speed.  Tying it to the
+    # (slow) travel speed made every mob waddle along with barely-moving legs.
+    body[25] = 40
     body[26] = 100 if despawn else int(entity.hpp())
     body[27] = 2 if despawn else (int(getattr(entity, "animation", 0)) & 0xFF)
     body[28] = 1 if getattr(entity, "kind", "") == "mob" and entity.alive else 0
     body[29] = 0
-    body[33] = 0x08 if entity.alive else 0  # health flag
+    body[33] = 0x08 if getattr(entity, "kind", "") == "mob" and entity.alive else 0  # health flag
     body[35] = int(getattr(entity, "name_prefix", 0)) & 0xFF
     trigger = bool(getattr(entity, "triggerable", False)) and entity.alive
     body[36] = 0x40 if trigger else 0
     body[37] = 0  # allegiance: neutral
-    body[38] = 0  # animation sub
     body[39] = int(getattr(entity, "namevis", 0)) & 0xFF
     struct.pack_into("<I", body, 40, 0)  # owner
-    struct.pack_into("<HH", body, 44, int(getattr(entity, "size", 0)), int(getattr(entity, "model", 0)))
-    body[48:64] = cstr(entity.name, 16)
+    if name_only:
+        # A name-only update after the equipped look: mask has no look bits, so the
+        # client keeps the appearance while setting the target name.
+        body[6] = SEND_NAME
+        body[48] = 0x01
+        body[49:65] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
+        return bytes(body)
+
+    size = int(getattr(entity, "size", 0)) & 0xFFFF
+    model = int(getattr(entity, "model", 0)) & 0xFFFF
+    if equipped:
+        look = bytes(getattr(entity, "look", b"") or b"")
+        if len(look) >= 20:
+            # Equipped NPC (SubKind 1): SendFlg.Model must be set or the client
+            # ignores the GrapIDTbl data entirely.  Field layout is SubKind at
+            # 0x2C, then GrapIDTbl[9] (look offset 2..20) at 0x2E.
+            body[6] = (body[6] | 0x10) & 0xFF
+            body[44:64] = look[:20]
+            return bytes(body)
+
+    if size == 2 and getattr(entity, "kind", "") == "npc":
+        # door: the client's static door mesh binds to this look/door id.  NPCs only -- a mob
+        # carrying LSB's model_size 2 is a large monster, not a door.
+        # Field-for-field match of a captured LandSandBoat door spawn.  Doors have
+        # no name marker and no trigger flag; the four bytes at 0x30 are the door id.
+        struct.pack_into("<I", body, 20, 1)          # flags0
+        struct.pack_into("<H", body, 22, 0)          # no sub-target
+        body[25] = 50                                # animation speed
+        body[27] = int(getattr(entity, "animation", 0)) or 9  # 9 = closed door
+        body[29] = 3
+        body[30] = 0x10
+        body[33] = 0
+        body[36] = 0                                 # doors are not NPC triggers
+        struct.pack_into("<H", body, 44, 2)
+        struct.pack_into("<H", body, 46, 0)
+        door = int(getattr(entity, "door_id", 0) or 0)
+        if not door:
+            door = int.from_bytes(entity.name.encode("ascii", "replace")[:4].ljust(4, b"\0"), "little")
+        struct.pack_into("<I", body, 48, door)
+    else:
+        render_model = int(getattr(entity, "model", 0) or 0)
+        if render_model:
+            # The client's standard NPC path takes a race/specific model id.  Race
+            # ids: Hume 32/37, Elvaan 42/47, Tarutaru 109, Moogle 82, Goblin 85.
+            struct.pack_into("<I", body, 44, render_model << 16)
+        else:
+            look = bytes(getattr(entity, "look", b"") or b"")
+            look_model = int.from_bytes(look[2:4], "little") if len(look) >= 4 else model
+            struct.pack_into("<I", body, 44, look_model << 16)
+        # Static NPCs/mobs carry a literal name.  The client's NPC path reads a one-byte
+        # name-type marker at 0x34 before the string; without it the client falls back to
+        # the model's DAT name ("NPC").
+        body[48] = 0x01
+        # The client reads the full 16-byte field; cstr() reserves a terminator and would
+        # truncate "Wandering Moogle" to "Wandering Moogl".
+        body[49:65] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
     return bytes(body)
 
 
@@ -98,11 +232,20 @@ def battle_action(actor_id: int, target_id: int, damage: int = 0, *, miss: bool 
                   critical: bool = False, defeated: bool = False, animation: int = 0,
                   message: int | None = None, kind: int = 1,
                   category: int = ACTION_CATEGORY_BASIC_ATTACK,
-                  action_id: int = BASIC_ATTACK_ID, hit_distortion: int = 0) -> bytes:
-    """Body of a 0x028 action packet (one target, one result)."""
+                  action_id: int = BASIC_ATTACK_ID, hit_distortion: int = 0,
+                  info: int | None = None) -> bytes:
+    """Body of a 0x028 action packet (one target, one result).
+
+    ``animation`` is the result's sub_kind: the swing hand, a weapon skill's animation,
+    or -- for a finished spell -- the spell id the client animates from.  ``damage`` is
+    the result's 17-bit value: damage, HP healed, or the status effect id a spell lands.
+    ``info`` is the 5-bit result info; attacks use the defeated/critical flags, while a
+    finished spell carries its recast there.
+    """
     if message is None:
         message = MESSAGE_ATTACK_MISSES if miss else (MESSAGE_ATTACK_CRIT if critical else MESSAGE_ATTACK_HITS)
-    info = (1 if defeated else 0) | (2 if critical else 0)
+    if info is None:
+        info = (1 if defeated else 0) | (2 if critical else 0)
     writer = BitWriter()
     writer.write(actor_id, 32)
     writer.write(1, 6)                 # target count
@@ -112,10 +255,10 @@ def battle_action(actor_id: int, target_id: int, damage: int = 0, *, miss: bool 
     writer.write(0, 32)                # recast
     writer.write(target_id, 32)
     writer.write(1, 4)                 # one result
-    writer.write(1 if miss else 0, 3)  # resolution
+    writer.write(RESOLUTION_MISS if miss else RESOLUTION_HIT, 3)
     writer.write(kind, 2)
     writer.write(animation, 12)
-    writer.write(info, 5)
+    writer.write(info & 0x1F, 5)
     writer.write(hit_distortion, 2)
     writer.write(0, 3)                 # knockback
     writer.write(max(0, int(damage)) & 0x1FFFF, 17)
@@ -124,7 +267,9 @@ def battle_action(actor_id: int, target_id: int, damage: int = 0, *, miss: bool 
     writer.write(0, 1)                 # no additional effect
     writer.write(0, 1)                 # no reaction effect
     bits = writer.bytes()
-    return bytes([min(255, 1 + len(bits))]) + bits
+    # Byte 0x04 of the packet is the packed byte count (LSB's workSize); the packet's own
+    # length is one more than it.  Writing count+1 here made the client drop the action.
+    return bytes([min(255, len(bits))]) + bits
 
 
 def battle_message(sender_id: int, target_id: int, sender_targid: int, target_targid: int,
@@ -152,6 +297,44 @@ def chat_std(name: str, text: str, zone: int, kind: int = 0) -> bytes:
     """Body of a 0x017 chat message. kind 0 is say; 6 is a system line."""
     message = text.encode("ascii", "replace")[:150]
     return struct.pack("<BBH", int(kind) & 0xFF, 0, int(zone) & 0xFFFF) + cstr(name, 15) + message + b"\0"
+
+
+def motion_message(caster_id: int, target_id: int, caster_targid: int, target_targid: int,
+                   emote_id: int, mode: int = 0, param: int = 0) -> bytes:
+    """Body of a 0x05A MOTIONMES: play an emote for the client and write its text line.
+
+    The client does not draw its own outgoing emote, so the server has to echo it back
+    (and send it to every other player in range).  The 52-byte body carries the five
+    Trust ids even though this world has no Trusts; the client always reads the full
+    layout.
+    """
+    body = bytearray(52)
+    struct.pack_into("<IIHHHHHBB", body, 0, int(caster_id) & 0xFFFFFFFF,
+                     int(target_id) & 0xFFFFFFFF, int(caster_targid) & 0xFFFF,
+                     int(target_targid) & 0xFFFF, int(emote_id) & 0xFFFF,
+                     int(param) & 0xFFFF, 0, int(mode) & 0xFF, 0)
+    return bytes(body)
+
+
+def lockstyle_error(item_ids) -> bytes:
+    """Body of a 0x11C: the style-lock items the server refused to apply."""
+    ids = [int(item_id) for item_id in item_ids][:16]
+    body = bytearray(36)
+    body[0] = len(ids)
+    for index, item_id in enumerate(ids):
+        struct.pack_into("<H", body, 4 + index * 2, item_id & 0xFFFF)
+    return bytes(body)
+
+
+def system_message(message_id: int, unique_no: int = 0, act_index: int = 0,
+                   attr: int = 0) -> bytes:
+    """Body of a 0x009 message: draw a line from the client's own system-message DAT.
+
+    Style lock replies use this (Message IDs 267..270), so the player sees the same
+    "Style lock mode enabled." line retail shows without Fanxi shipping the text.
+    """
+    return struct.pack("<IHHB", int(unique_no) & 0xFFFFFFFF, int(act_index) & 0xFFFF,
+                       int(message_id) & 0xFFFF, int(attr) & 0xFF)
 
 
 def shop_open(count: int) -> bytes:
@@ -201,8 +384,49 @@ def item_list(item_id: int, quantity: int, container: int = 0, slot: int = 0, lo
 
 
 def item_same(state: int, container: int, flags: int) -> bytes:
-    """Body of a 0x01D container sync packet."""
+    """Body of a 0x01D container sync packet.
+
+    ``flags`` is the client's complete container-ready mask, not a delta: the client replaces
+    its mask with it.  A state-1 packet must therefore carry every loaded container, or the bags
+    it leaves out draw empty.  ``container`` is informational.
+    """
     return struct.pack("<BB2xI", int(state) & 0xFF, int(container) & 0xFF, int(flags) & 0xFFFFFFFF)
+
+
+def event_num(entity, zone: int, event_id: int, params, mode: int = 8,
+              text_table: int | None = None) -> bytes:
+    """Body of a 0x034 EVENTNUM: start (or restart) an event with eight numbers."""
+    body = bytearray(48)
+    struct.pack_into("<I", body, 0, int(entity.id))
+    for index, value in enumerate(list(params)[:8]):
+        struct.pack_into("<I", body, 4 + index * 4, int(value) & 0xFFFFFFFF)
+    table = int(zone) if text_table is None else int(text_table)
+    struct.pack_into("<HHHHHH", body, 36, int(entity.targid) & 0xFFFF, int(zone) & 0xFFFF,
+                     int(event_id) & 0xFFFF, int(mode) & 0xFFFF, table & 0xFFFF, 0)
+    return bytes(body)
+
+
+def pending_num(values) -> bytes:
+    """Body of a 0x05C event-parameter update (eight numbers)."""
+    body = bytearray(32)
+    for index, value in enumerate(list(values)[:8]):
+        struct.pack_into("<i", body, index * 4, int(value))
+    return bytes(body)
+
+
+def talk_num_work(entity, text_id: int, params=(), show_name: bool = False) -> bytes:
+    """Body of a 0x02A TALKNUMWORK: a formatted message from the client's zone text."""
+    body = bytearray(60)
+    struct.pack_into("<I", body, 0, int(entity.id))
+    for index, value in enumerate(list(params)[:4]):
+        struct.pack_into("<i", body, 4 + index * 4, int(value))
+    struct.pack_into("<HH", body, 20, int(entity.targid) & 0xFFFF, int(text_id) & 0xFFFF)
+    body[24] = 0  # Type
+    body[25] = 0  # Flag
+    if show_name:
+        name = str(entity.name).encode("ascii", "replace")[:31]
+        body[26:26 + len(name)] = name
+    return bytes(body)
 
 
 def item_max() -> bytes:

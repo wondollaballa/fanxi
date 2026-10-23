@@ -93,7 +93,15 @@ class Api:
         route("GET", r"/api/v1/characters")(self.characters)
         route("POST", r"/api/v1/characters")(self.create_character)
         route("PATCH", r"/api/v1/characters/(?P<character_id>\d+)")(self.patch_character)
+        route("PATCH", r"/api/v1/characters/(?P<character_id>\d+)/design")(self.patch_character_design)
         route("POST", r"/api/v1/launch")(self.launch)
+        # server-owned sub-accounts; the main account's token is the only key
+        route("GET", r"/api/v1/accounts/sub")(self.sub_accounts)
+        route("POST", r"/api/v1/accounts/sub")(self.create_sub_account)
+        route("PATCH", r"/api/v1/accounts/sub/(?P<sub_id>\d+)")(self.update_sub_account)
+        route("POST", r"/api/v1/accounts/sub/(?P<sub_id>\d+)/launch")(self.launch_sub)
+        route("POST", r"/api/v1/accounts/sub/(?P<sub_id>\d+)/characters")(self.create_sub_character)
+        route("DELETE", r"/api/v1/accounts/sub/(?P<sub_id>\d+)")(self.delete_sub_account)
         # admin
         route("GET", r"/api/v1/admin/stats")(self.admin_stats)
         route("POST", r"/api/v1/admin/news")(self.admin_news)
@@ -234,6 +242,13 @@ class Api:
         )
         return json_response(200, {"character": character})
 
+    def patch_character_design(self, request: Request) -> Response:
+        assert request.account
+        character = self.service.save_design_for_account(
+            request.account["id"], int(request.params["character_id"]), request.json()
+        )
+        return json_response(200, {"character": character})
+
     def launch(self, request: Request) -> Response:
         assert request.account
         body = request.json()
@@ -244,6 +259,55 @@ class Api:
             except (TypeError, ValueError):
                 raise ApiError(422, "validation_error", "character_id must be a number")
         return json_response(200, self.service.launch(request.account, character_id, request.remote))
+
+    # --- sub-accounts --------------------------------------------------------------------------
+    def sub_accounts(self, request: Request) -> Response:
+        assert request.account
+        return json_response(200, {
+            "subs": self.service.sub_accounts(request.account["id"]),
+            "limit": self.service.max_subs(),
+        })
+
+    def create_sub_account(self, request: Request) -> Response:
+        assert request.account
+        sub = self.service.create_sub_account(request.account["id"], request.json(), request.remote)
+        return json_response(201, {"sub": sub, "limit": self.service.max_subs()})
+
+    def launch_sub(self, request: Request) -> Response:
+        assert request.account
+        body = request.json()
+        character_id = body.get("character_id")
+        if character_id is not None:
+            try:
+                character_id = int(character_id)
+            except (TypeError, ValueError):
+                raise ApiError(422, "validation_error", "character_id must be a number")
+        sub_id = int(request.params["sub_id"])
+        return json_response(200, self.service.launch_sub(
+            request.account["id"], sub_id, character_id, request.remote))
+
+    def update_sub_account(self, request: Request) -> Response:
+        assert request.account
+        body = request.json()
+        if str(body.get("status") or "") != "active":
+            raise ApiError(422, "validation_error", "only status active can be set here")
+        sub = self.service.activate_sub_account(request.account["id"], int(request.params["sub_id"]))
+        return json_response(200, {"sub": sub})
+
+    def create_sub_character(self, request: Request) -> Response:
+        assert request.account
+        body = request.json()
+        source = body.get("character") if isinstance(body.get("character"), dict) else body
+        character = self.service.create_sub_character(
+            request.account["id"], int(request.params["sub_id"]), source)
+        return json_response(201, {"character": character})
+
+    def delete_sub_account(self, request: Request) -> Response:
+        assert request.account
+        purge = (request.arg("purge") or "").lower() in ("1", "true", "yes")
+        result = self.service.suspend_sub_account(
+            request.account["id"], int(request.params["sub_id"]), purge=purge)
+        return json_response(200, {"sub": result})
 
     # --- admin ---------------------------------------------------------------------------------
     def admin_stats(self, request: Request) -> Response:

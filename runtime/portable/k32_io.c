@@ -210,6 +210,9 @@ static void sh_CreateFileA(Guest* g)
     case 5: flags |= PLAT_TRUNCATE; break;               /* TRUNCATE_EXISTING */
     default: gt_set_error(ERROR_INVALID_PARAMETER); RET(INVALID_HANDLE, 7);
     }
+    if (getenv("FANXI_FILE_LOG"))
+        fprintf(stderr, "[file] open %s access=%08x disp=%u%s\n", host, access, disp,
+                (access & GENERIC_WRITE) ? " (write)" : "");
     PlatFile* f = plat_file_open(host, flags);
     if (!f)
     {

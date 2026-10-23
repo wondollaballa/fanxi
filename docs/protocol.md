@@ -62,6 +62,9 @@ Failures use the known result codes:
 | 0x13 | trust token invalid (Fanxi does not issue trust tokens) |
 | 0x14 | launch token invalid, used or expired |
 
+A launch token also carries the character id chosen in the launcher. The lobby lists only that
+character for the session, so a multibox client opens the intended mule.
+
 An `error_message` is shown by the client's sign-in screen/log.
 
 ## 2. Login data (TCP)
@@ -129,11 +132,19 @@ Zone packets are:
 
 On the clear `0x00A` login Fanxi:
 
-1. finds the character by content id in the packet;
-2. finds the prepared `ZoneSession` from the lobby, or an active `game_sessions` row;
-3. loads the position from `characters`;
-4. replies with equipment clear (`0x04F`), appearance (`0x051`), item capacities (`0x01C`) and the
+1. finds the character by content id or database id in the packet;
+2. continues the prepared `ZoneSession` from the lobby or a recent zone change, and checks for an
+   active `game_sessions` row; it never continues a session just because the UDP address matches
+   (the OS recycles local ports);
+3. despawns and releases any other session that still claims the character or the address;
+4. loads the position from `characters`;
+5. replies with equipment clear (`0x04F`), appearance (`0x051`), item capacities (`0x01C`) and the
    260-byte zone login (`0x00A`).
+
+Zone sessions have no TCP connection to watch, so a client that sends nothing for sixty seconds
+is treated as disconnected: its character is despawned from the other clients, its player targid
+is freed and its last position is saved. A zone change gets a thirty-second window and keeps its
+advanced cipher; see [world](world.md#other-players).
 
 When the client sends `0x00C` (game OK), Fanxi sends the rest of the zone state: zone bitmap
 (`0x008`), jobs (`0x01B`), status/HP (`0x037`), stats/EXP (`0x061`), exact HP/MP (`0x0DF`), the
@@ -154,11 +165,12 @@ Implemented client messages:
 | `0x083` | shop buy | charges gil, adds item, replies `0x03F` and inventory |
 | `0x016`, `0x017` | entity request | self `0x00D`/status, or re-sends an NPC/mob spawn |
 | `0x061` | status request | stats and exact HP/MP |
-| `0x05E` | zone line | changes zone if `zone_lines` has the rect |
-| `0x0B5` | chat | `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!time`, `!help` |
+| `0x05E` | zone line | changes zone if `zone_lines` has the rect; `zmrq` is the Mog House exit menu, modes 1–4 naming a city area |
+| `0x0B5` | chat | `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!hp`, `!time`, `!help` |
 | `0x04B` | server message request | sends the MOTD in chunks |
 | `0x05A` | conquest | zeroed standings |
 | `0x03C` | blacklist | empty |
+| `0x0E8` | `/heal` | toggles rest; HP/MP recover on the three-second tick |
 | `0x0E7` | logout/shutdown | saves position, sends `0x00B` |
 
 `0x00F` (CLSTAT) and `0x00D` (NETEND) are ignored; `0x00D` is also the server's player-entity
@@ -179,12 +191,20 @@ status, triggerable flag, model/size and a 16-byte name. `0x00D` is the equivale
 
 ### 4.2 Combat
 
-A player attacks with `C2S 0x01A`, action `0x02`; `0x04` disengages. Each swing sends an S2C
-`0x028` bit-packed battle action with:
+A player attacks with `C2S 0x01A`, action `0x02` (inside 30 yalms); `0x04` asks to disengage.
+The client also sends `0x04` on its own when the target leaves auto-attack reach, so the server
+ignores that first distance-driven packet and keeps the engagement out to 30 yalms. Each swing
+sends an S2C `0x028` bit-packed battle action with:
 
 - actor id and one target id;
 - category `1` (basic attack) and action id `atk0` (`0x306B7461`);
-- hit or miss resolution, critical/defeated flags, animation, damage and message id.
+- hit or miss resolution, critical/defeated flags, sub-kind, value and message id.
+
+For a finished spell the sub-kind is the spell id and the value is the damage, the HP
+healed, or the status effect id the spell lands; the message chooses the line
+(`MAGIC_DMG` 2, `MAGIC_RECOVERS_HP` 7, `MAGIC_GAIN_EFFECT` 230, `MAGIC_ENFEEB` 237,
+`MAGIC_TELEPORT` 93).  A Magic Start uses the school's four-character code as its action
+id (`canj` for ninjutsu, `cawh`, `cabk`, ...) and the spell id as its value.
 
 `0x029` carries the defeat and gil lines; `0x02D` carries EXP and level-up. HP changes update
 `0x00E`, `0x037`, `0x061` and `0x0DF`. See [world.md](world.md) for the full combat loop.
@@ -194,9 +214,19 @@ A player attacks with `C2S 0x01A`, action `0x02`; `0x04` disengages. Each swing 
 - Gil is item id `65535` in container `0`, slot `0`.
 - `0x01C` advertises container capacities.
 - `0x020` carries one item's quantity, id, container, slot and 24-byte attribute block.
-- `0x01D` marks a container (or all containers) loaded.
+- `0x01D` marks containers loaded. Its `Flags` field is the client's complete ready mask, not the
+  set of containers named by this update: the client replaces the mask with the packet's value.
+  Every Fanxi sync therefore carries all 18 container bits, even when only two bags changed.
 - `0x01E` updates only a quantity (used for gil).
 - `0x01F` is a lighter item list, available for future equipment changes.
+- `C2S 0x03A` names a container after the client sorts it. The server merges partial stacks of
+  the same item (and same 24-byte extdata) in that container, then sends `0x020` for every
+  changed slot and one all-bag `0x01D`.
+
+`!storage store|grab` and `!locker store|grab` never expose a destination bag. Store sends an
+`0x020` with item id `0` for each vacated bag slot and one all-bag `0x01D`; the item is then only
+in the server-side `char_storage` or `char_locker` table. Grab sends an `0x020` for each returned
+item and one all-bag `0x01D`.
 
 The Moogle shop uses `0x03E` (open, item count), `0x03C` (price/item/index rows, final flag
 `0x89`), `C2S 0x083` (buy) and `0x03F` (result), followed by an inventory refresh.
@@ -217,8 +247,35 @@ Chat commands:
 !entities                  list live NPCs/monsters and targids
 !heal                      restore HP/MP
 !time <hour>               set Vana'diel hour (0-23, fractions allowed)
+!storage store <job>       move that job's storable gear onto its slips
+!storage grab <job|all>    take it back off the slips
+!locker store|grab <sel>   hidden 9999-item locker (all, ammo, back, materials, name)
+!locker list               list the locker's contents
 !help                      list commands
 ```
+
+### 4.5 Emotes and style lock
+
+An emote is `C2S 0x05D` (16 bytes): target server id, target index, emote id, mode
+(0 both, 1 text, 2 motion) and parameter. Fanxi answers with `S2C 0x05A` (56 bytes: caster and
+target ids/indexes, message id, parameter, mode, then the five Trust slots the client always
+reads). The reply goes to the caster and every session in the zone, which is what draws the
+animation and writes the text line. `/jobemote` is `MesNum 74 + (param - 0x1F)` with the job
+index in the parameter; `/bell` is motion-only with `param - 6`; `/salute` carries the nation and
+`/hurray` the main-hand item id.
+
+Style lock is `C2S 0x053` (0x88 bytes): count, mode, flags, then 16 eight-byte entries
+(item index, equip kind, category, item id). Modes are 0 off, 1 keepalive (sent while zoning
+with the lock on), 2 query, 3 set, 4 enable. Fanxi persists the locked models in the
+`characters.style_*` columns (migration 0085) and replies:
+
+- `0x051` (grap list) and `0x067` (char sync) after off, set or enable, so the client repaints;
+- `0x009` with message 267/268 when the state changes, and 269/270 for a query;
+- `0x11C` with the item ids a set could not lock.
+
+Every later `0x051`, login `0x3C` look block and `0x00D` character update reads the locked
+models while the lock is on, so an equipment change cannot repaint the character (the "blink").
+A job change clears the lock, as in retail.
 
 ## Keys and secrets
 
@@ -231,7 +288,7 @@ never hardcoded.
 
 - `FANXI_LOG_LEVEL=debug` enables lobby/data/zone debug logs.
 - `FANXI_ZONE_DEBUG=1` logs every zone message type received.
-- The launcher writes the client's output to `…/Fanxi/logs/game.log`.
+- The launcher writes each client's output to `…/Fanxi/logs/game-<account>.log`.
 - The server's `audit_log` records `game.login` and `game.token_login`.
 
 ## Known limits
@@ -240,10 +297,19 @@ never hardcoded.
 - No friends list, linkshell, bazaar, auction house, mail, party or chat channels.
 - Client event cutscenes and DAT menus are not implemented; NPC dialogue uses chat and the shop
   uses the dedicated shop packets.
-- Combat is one melee target: no spells, job abilities, weapon skills, ranged attacks, TP moves,
-  skillchains, status effects, raise or enmity list.
+- Combat is one melee target. Spells, weapon skills and the job-ability action (`0x01A` action
+  `0x09`) are implemented. The `0x0AC` Weapon Skills block is filtered to the equipped weapon's
+  skill type and the character's skill value, and `!ws` enforces the same list. The 2025-07-03
+  client builds its Abilities submenu from a saved command-id list rather than the bitmap;
+  host64 rebuilds that list from each `0x0AC` packet, so a restarted client shows the filtered
+  Weapon Skills and its Job Abilities submenu lists the advertised abilities. `!ja` remains a
+  shortcut. The fourth `0x0AC` block carries the current main/support job's trait ids, and the
+  Auto Regen/Auto Refresh traits tick their HP/MP every three seconds. Still missing: ranged
+  attacks, TP moves, skillchains, status effects, raise and an enmity list.
 - Character creation and deletion in the client are acknowledged but not persisted; use the
   launcher.
-- One character per account by default (`FANXI_MAX_CHARACTERS`).
+- Unlimited characters per account by default (`FANXI_MAX_CHARACTERS=0`). Only one
+  character per account can be online at a time; multiboxing uses one account per
+  client. A launch token names the character the lobby should show.
 - The gateway is not a full world server; it is a small original world that lets the client sign
   in, see and talk to NPCs, fight a camp, shop, take a quest and change zones against SQLite.

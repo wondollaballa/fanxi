@@ -951,6 +951,69 @@
         "0x102435d5"
       ],
       "frame_net_clock": "0x10490ba0"
+    },
+    "2025-07-03": {
+      "FFXiMain.dll": {
+        "sha256": "341f33172024cb88aac7ae63fe5a7025c4bc306ef5f2cf5d0bce16497f1b1e70",
+        "meta": "FFXiMain.2025-07-03.meta.json"
+      },
+      "FFXi.dll": {
+        "sha256": "11d960d5fe426b47c08c56fdac9b6904014bf88395134273be754b219c4279af",
+        "meta": "FFXi.2025-07-03.meta.json"
+      },
+      "version": "30250704_0",
+      "addresses": {
+        "chars_ptr": "0x104dd500",
+        "present_site": "0x100035cb",
+        "ability_list": "0x106323a8",
+        "ability_list_commands": "0x160",
+        "ability_list_count": "0x1760"
+      },
+      "crt": {},
+      "hooks": {},
+      "wraps": {
+        "parse_input": "0x10080bd0",
+        "write_line": "0x100765d0",
+        "packet_decrypt": "0x100dd430",
+        "packet_encrypt": "0x100dd300"
+      },
+      "patches": {
+        "login_control": {
+          "0x100fa988": "EB"
+        }
+      },
+      "modern": {},
+      "geometry": {}
+    },
+    "2026-10-05": {
+      "FFXiMain.dll": {
+        "sha256": "042884888eea4fadac183e520f2ae9f8c4fa267860e685048e1880efd358e872",
+        "meta": "FFXiMain.2026-10-05.meta.json"
+      },
+      "FFXi.dll": {
+        "sha256": "760f8245173c85976ddf2b0828f90a11db6a2987e96982efc58df812dff5b2a4",
+        "meta": "FFXi.2026-10-05.meta.json"
+      },
+      "version": "30261006_0",
+      "addresses": {
+        "chars_ptr": "0x104df770",
+        "present_site": "0x100035cb",
+        "ability_list": "0x10667150"
+      },
+      "hooks": {},
+      "wraps": {
+        "parse_input": "0x10080dc0",
+        "write_line": "0x100767c0",
+        "packet_decrypt": "0x100dd6c0",
+        "packet_encrypt": "0x100dd590"
+      },
+      "modern": {},
+      "crt": {},
+      "patches": {
+        "login_control": {
+          "0x100fad68": "EB"
+        }
+      }
     }
   }
 }

@@ -1,0 +1,536 @@
+--[[
+    Fanxi mock GearSwap set library — Summoner (SMN)
+    avatar summoner, blood pacts, perpetuation
+
+    Import : Launcher -> Gear -> Import GearSwap file... -> SMN.lua
+    Wear   : select a set, then "Wear set". Items must be in bags 0-17.
+    Save   : "Save profile" writes JSON under the launcher's gearswap folder.
+
+    This file is a static set library: no includes, no windower/player calls,
+    no rules.  Fanxi's importer runs get_sets() in a Lua 5.1 sandbox and shows
+    every set below.  Each set is a leaf table of slot -> item, because
+    the launcher flattens a table that contains slot keys as one set and stops
+    descending; groups such as sets.idle are left empty on purpose.
+
+    Requested categories:
+      max HP     -> sets.idle.maxhp
+      max PDT    -> sets.idle.pdt   (sets.idle.mdt for magic)
+      TP         -> sets.engaged.tp
+      TP + DT    -> sets.engaged.hybrid
+      Fast Cast  -> sets.precast.FC
+      Magic Acc  -> sets.midcast (Summoning)
+      Weaponskill-> sets.WS.*
+      Abilities  -> sets.JA.*
+      Pet        -> sets.avatar.*
+
+    Gear follows retail names: iLvl 119 reforged AF/relic/empyrean, Nyame,
+    Sakpata's, JSE necks/capes and Odyssey/Limbus accessories, plus a few older
+    all-jobs staples (Rajas Ring, Windbuffet Belt +1, Pole Grip).  The generic
+    pieces were checked against the wiki's per-job access lists.  The item
+    tables below add the job's JSE cape builds, the five Unity items' fixed
+    augments, and Nyame, Sakpata's, Gleti's and Agwu's Rank 30 Odyssey augments.  The import
+    itself does not need the items to exist.
+]]
+
+-- combine() is provided for extending a set without repeating it:
+--   sets.idle.regen = combine(sets.idle.dt, { waist = "Windbuffet Belt +1" })
+local function combine(base, extra)
+    local out = {}
+    for key, value in pairs(base or {}) do out[key] = value end
+    for key, value in pairs(extra or {}) do out[key] = value end
+    return out
+end
+
+-- JSE cape builds. The same base cape is reused with different
+-- Ambuscade augments; GearSwap matches the augment list on equip.
+local capes = {
+    fc = { name = "Campestres's Cape", augments = {"MP+60", "Mag. Acc+20 /Mag. Dmg.+20", "MP+20", '"Fast Cast"+10', "Phys. dmg. taken-10%"} },
+    pdt = { name = "Campestres's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Campestres's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Campestres's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Campestres's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Campestres's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    macc = { name = "Campestres's Cape", augments = {"MND+20", "Mag. Acc+20 /Mag. Dmg.+20", "Mag. Acc.+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mabws = { name = "Campestres's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", "Weapon skill damage +10%", "Phys. dmg. taken-10%"} },
+    pet_mab = { name = "Campestres's Cape", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Mag. Acc+20 /Mag. Dmg.+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
+    pet_tp = { name = "Campestres's Cape", augments = {"Pet: Acc.+20 Pet: R.Acc.+20 Pet: Atk.+20 Pet: R.Atk.+20", "Pet: Attack+10 Pet: Rng.Atk.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
+    pet_dt = { name = "Campestres's Cape", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Pet: Accuracy+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
+}
+
+-- Unity accessories: fixed max-rank Odyssey augments.
+local unity = {
+    collar = { name = "Unmoving Collar +1", augments = {"DEF+30", "HP+200"} },
+    odnowa = { name = "Odnowa Earring +1", augments = {"DEF+30", "Damage taken-3%"} },
+    ring = { name = "Gelatinous Ring +1", augments = {"VIT+15", "HP+100"} },
+    tathlum = { name = "Ghastly Tathlum +1", augments = {"Magic Damage +10", "INT+5"} },
+    loess = { name = "Loess Barbuta +1", augments = {"Enmity+10", "Damage taken-10%", "All Attr.+10"} },
+}
+
+-- Odyssey Rank 30 builds: every Odyssey armour piece and weapon at Rank 30.
+-- Nyame has four paths (A accuracy/TP, B physical WS, C magic, D pet);
+-- Sakpata's, Gleti's and Agwu's each have one Rank 30 row.
+-- Generated from data/odyssey_r30.json by tools/gen_odyssey_r30.py.
+local odyssey = {
+    A = {
+        helm = { name = "Nyame Helm", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+13", "Phys. dmg. limit +5%", "Crit.hit rate+10%"} },
+        mail = { name = "Nyame Mail", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+15", "Phys. dmg. limit +7%", "DEX/AGI+10"} },
+        gauntlets = { name = "Nyame Gauntlets", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+14", "Phys. dmg. limit +5%", "DEX+15"} },
+        flanchard = { name = "Nyame Flanchard", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+13", "Phys. dmg. limit +6%", "Crit.hit rate+13%"} },
+        sollerets = { name = "Nyame Sollerets", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+13", "Phys. dmg. limit +5%", "AGI+15"} },
+    },
+    B = {
+        helm = { name = "Nyame Helm", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +11%", '"Dbl.Atk."+5%', "Acc.+10 Rng. Acc.+10"} },
+        mail = { name = "Nyame Mail", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +13%", '"Double Attack"+7%', "STR/VIT+10"} },
+        gauntlets = { name = "Nyame Gauntlets", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +11%", '"Double Attack"+5%', "VIT+15"} },
+        flanchard = { name = "Nyame Flanchard", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +12%", '"Double Attack"+6%', "STR+15"} },
+        sollerets = { name = "Nyame Sollerets", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +11%", '"Double Attack"+5%', "Acc+13 Rng. Acc+13"} },
+    },
+    C = {
+        helm = { name = "Nyame Helm", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+30", "Magic burst damage II +6", "Mag. Acc.+10"} },
+        mail = { name = "Nyame Mail", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+40", "Magic burst damage II +7", "INT/MND/CHR+10"} },
+        gauntlets = { name = "Nyame Gauntlets", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+30", "Magic burst damage II +5", "MND+15"} },
+        flanchard = { name = "Nyame Flanchard", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+35", "Magic burst damage II +5", "INT+15"} },
+        sollerets = { name = "Nyame Sollerets", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+30", "Magic burst damage II +5", "CHR+15"} },
+    },
+    D = {
+        helm = { name = "Nyame Helm", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: All Attr.+15", "Pet: Damage taken -8%"} },
+        mail = { name = "Nyame Mail", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: DMG+11%", "Pet: Damage taken -10%"} },
+        gauntlets = { name = "Nyame Gauntlets", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: All Attr.+15", "Pet: Damage taken -8%"} },
+        flanchard = { name = "Nyame Flanchard", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: DMG+10%", "Pet: Damage taken -9%"} },
+        sollerets = { name = "Nyame Sollerets", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: All Attr.+15", "Pet: Damage taken -8%"} },
+    },
+    sakpata = {
+        helm = { name = "Sakpata's Helm", augments = {"Attack+30", '"Double Attack" damage +15%', "Accuracy+15 Mag. Acc+15", '"Cure" potency+5%'} },
+        breastplate = { name = "Sakpata's Breastplate", augments = {"Attack+30", "Occ. inc. resist. to stat. ailments+15", "Accuracy+15 Mag. Acc+15", "Crit.hit rate+5%"} },
+        gauntlets = { name = "Sakpata's Gauntlets", augments = {"Attack+30", '"Store TP"+8', "Accuracy+15 Mag. Acc+15", "VIT+5"} },
+        cuisses = { name = "Sakpata's Cuisses", augments = {"Attack+30", "Skillchain dmg.+15%", "Accuracy+15 Mag. Acc+15", "STR+5"} },
+        leggings = { name = "Sakpata's Leggings", augments = {"Attack+30", '"Subtle Blow"+15', "Accuracy+15 Mag. Acc+15", "Chance of successful block +5"} },
+    },
+    gleti = {
+        mask = { name = "Gleti's Mask", augments = {"Attack+30", '"Counter"+10', "Accuracy+15 Mag. Acc+15", '"Regen"+3'} },
+        cuirass = { name = "Gleti's Cuirass", augments = {"Attack+30", '"Double Attack"+10%', "Accuracy+15 Mag. Acc+15", "Occ. inc. resist. to stat. ailments+10"} },
+        gauntlets = { name = "Gleti's Gauntlets", augments = {"Attack+30", '"Store TP"+8', "Accuracy+15 Mag. Acc+15", "DEX+5"} },
+        breeches = { name = "Gleti's Breeches", augments = {"Attack+30", '"Subtle Blow"+15', "Accuracy+15 Mag. Acc+15", '"Triple Attack"+5%'} },
+        boots = { name = "Gleti's Boots", augments = {"Attack+30", "Evasion+15", "Accuracy+15 Mag. Acc+15", "STR+5"} },
+    },
+    agwu = {
+        cap = { name = "Agwu's Cap", augments = {'"Mag.Atk.Bns."+25', "Magic Damage+15", "Accuracy+15 Mag. Acc+15", "Enmity-5"} },
+        robe = { name = "Agwu's Robe", augments = {'"Mag.Atk.Bns."+25', "Enmity-8", "Accuracy+15 Mag. Acc+15", "Magic Damage+10"} },
+        gages = { name = "Agwu's Gages", augments = {'"Mag.Atk.Bns."+25', "Magic burst damage II +6", "Accuracy+15 Mag. Acc+15", "MND+5"} },
+        slops = { name = "Agwu's Slops", augments = {'"Mag.Atk.Bns."+25', "Damage taken-10%", "Accuracy+15 Mag. Acc+15", "INT+5"} },
+        pigaches = { name = "Agwu's Pigaches", augments = {'"Mag.Atk.Bns."+25', '"Drain" and "Aspir" potency+15', "Accuracy+15 Mag. Acc+15", "Spell interruption rate down 10%"} },
+    },
+    weapons = {
+        fists = { name = "Sakpata's Fists", augments = {"DMG:+20", "Attack+45", "Accuracy+15 Mag. Acc+15", "Skillchain dmg.+10%"} },
+        sword = { name = "Sakpata's Sword", augments = {"DMG:+13", "Attack+45", "Accuracy+15 Mag. Acc+15", '"Refresh"+3'} },
+        knife = { name = "Gleti's Knife", augments = {"DMG:+11", "Attack+45", "Accuracy+15 Mag. Acc+15", '"Subtle Blow II"+10'} },
+        crossbow = { name = "Gleti's Crossbow", augments = {"DMG:+9", "Rng. Atk.+45", "Rng. Acc.+15 Mag. Acc.+15", '"Snapshot"+10'} },
+        axe = { name = "Agwu's Axe", augments = {"DMG:+15", "Attack+45", "Accuracy+15 Mag. Acc+15", "Skillchain dmg.+10%"} },
+        claymore = { name = "Agwu's Claymore", augments = {"DMG:+26", "Attack+45", "Accuracy+15 Mag. Acc+15", '"Counter"+10'} },
+        scythe = { name = "Agwu's Scythe", augments = {"DMG:+28", "Attack+45", "Accuracy+15 Mag. Acc+15", "Damage taken-10%"} },
+    },
+}
+
+function get_sets()
+    sets = {}
+
+    -- ===== Odyssey Rank 30 sets =================================
+    sets.Odyssey = {}  -- container: every Odyssey build this job can wear
+    sets.Odyssey.nyame_a = { head = odyssey.A.helm, body = odyssey.A.mail, hands = odyssey.A.gauntlets, legs = odyssey.A.flanchard, feet = odyssey.A.sollerets }
+    sets.Odyssey.nyame_b = { head = odyssey.B.helm, body = odyssey.B.mail, hands = odyssey.B.gauntlets, legs = odyssey.B.flanchard, feet = odyssey.B.sollerets }
+    sets.Odyssey.nyame_c = { head = odyssey.C.helm, body = odyssey.C.mail, hands = odyssey.C.gauntlets, legs = odyssey.C.flanchard, feet = odyssey.C.sollerets }
+    sets.Odyssey.nyame_d = { head = odyssey.D.helm, body = odyssey.D.mail, hands = odyssey.D.gauntlets, legs = odyssey.D.flanchard, feet = odyssey.D.sollerets }
+
+    -- ===== idle =================================================
+    sets.idle = {}  -- container: Fanxi lists the children below
+    -- town / CP / walking around
+    sets.idle.town = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = "Convoker's Horn +4",
+        body = "Convoker's Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Hippomenes Socks +1",
+        neck = "Summoner's Collar +2",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Etiolation Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Chirich Ring",
+        ring2 = "Shneddick Ring",
+        back = "Aptitude Mantle",
+    }
+    -- Refresh sources
+    sets.idle.refresh = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = "Convoker's Horn +4",
+        body = "Convoker's Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Etiolation Earring",
+        ear2 = "Loquac. Earring",
+        ring1 = "Chirich Ring",
+        ring2 = "Stikini Ring +1",
+        back = capes.fc,
+    }
+    -- max physical damage taken
+    sets.idle.pdt = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = unity.collar,
+        waist = "Plat. Mog. Belt",
+        ear1 = "Tuisto Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Defending Ring",
+        ring2 = unity.ring,
+        back = capes.pdt,
+    }
+    -- max magic damage taken
+    sets.idle.mdt = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = unity.collar,
+        waist = "Plat. Mog. Belt",
+        ear1 = "Tuisto Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Defending Ring",
+        ring2 = unity.ring,
+        back = capes.mdt,
+    }
+    -- max HP
+    sets.idle.maxhp = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Summoner's Collar +2",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Tuisto Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Defending Ring",
+        ring2 = unity.ring,
+        back = capes.maxhp,
+    }
+    -- balanced damage taken with job pieces
+    sets.idle.dt = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = "Convoker's Horn +4",
+        body = "Beckoner's Doublet +3",
+        hands = "Glyphic Bracers +4",
+        legs = "Glyphic Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = unity.collar,
+        waist = "Plat. Mog. Belt",
+        ear1 = "Tuisto Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Defending Ring",
+        ring2 = unity.ring,
+        back = capes.dt,
+    }
+    -- movement speed + town
+    sets.idle.movement = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = "Convoker's Horn +4",
+        body = "Convoker's Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Hippomenes Socks +1",
+        neck = "Summoner's Collar +2",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Etiolation Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Shneddick Ring",
+        ring2 = "Chirich Ring",
+        back = "Aptitude Mantle",
+    }
+
+    -- ===== engaged =================================================
+    sets.engaged = {}  -- container: TP variants below
+    -- main TP set
+    sets.engaged.tp = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = "Convoker's Horn +4",
+        body = "Beckoner's Doublet +3",
+        hands = "Glyphic Bracers +4",
+        legs = "Glyphic Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        waist = "Windbuffet Belt +1",
+        ear1 = "Cessance Earring",
+        ear2 = "Dedition Earring",
+        ring1 = "Rajas Ring",
+        ring2 = "Petrov Ring",
+        back = capes.tp,
+    }
+    -- accuracy-first TP
+    sets.engaged.acc = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.A.helm,
+        body = odyssey.A.mail,
+        hands = odyssey.A.gauntlets,
+        legs = odyssey.A.flanchard,
+        feet = odyssey.A.sollerets,
+        neck = "Combatant's Torque",
+        waist = "Windbuffet Belt +1",
+        ear1 = "Telos Earring",
+        ear2 = "Cessance Earring",
+        ring1 = "Rajas Ring",
+        ring2 = "Petrov Ring",
+        back = capes.tp,
+    }
+    -- TP with DT accessories
+    sets.engaged.hybrid = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.A.helm,
+        body = odyssey.A.mail,
+        hands = odyssey.A.gauntlets,
+        legs = odyssey.A.flanchard,
+        feet = odyssey.A.sollerets,
+        neck = unity.collar,
+        waist = "Windbuffet Belt +1",
+        ear1 = "Cessance Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Defending Ring",
+        ring2 = unity.ring,
+        back = capes.tp,
+    }
+
+    -- ===== precast =================================================
+    sets.precast = {}  -- container: fast cast below
+    -- fast cast
+    sets.precast.FC = {
+        ammo = "Staunch Tathlum +1",
+        head = "Convoker's Horn +4",
+        body = "Convoker's Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Orunmila's Torque",
+        waist = "Witful Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Loquac. Earring",
+        ring1 = "Kishar Ring",
+        ring2 = "Rahab Ring",
+        back = capes.fc,
+    }
+
+    -- ===== midcast =================================================
+    sets.midcast = {}  -- container: magic sets below
+    -- summoning Macc
+    sets.midcast["Summoning Magic"] = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Convoker's Horn +4",
+        body = "Glyphic Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        waist = "Eschan Stone",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = capes.macc,
+    }
+
+    -- ===== WS =================================================
+    sets.WS = {}  -- container: weaponskills below
+    sets.WS["Shattersoul"] = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = unity.tathlum,
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sibyl Scarf",
+        waist = "Orpheus's Sash",
+        ear1 = "Friomisi Earring",
+        ear2 = "Moonshade Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Metamorph Ring +1",
+        back = capes.mabws,
+    }
+    sets.WS["Cataclysm"] = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = unity.tathlum,
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Summoner's Collar +2",
+        waist = "Orpheus's Sash",
+        ear1 = "Friomisi Earring",
+        ear2 = "Moonshade Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Metamorph Ring +1",
+        back = capes.mabws,
+    }
+    sets.WS["Omniscience"] = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        ammo = unity.tathlum,
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sibyl Scarf",
+        waist = "Orpheus's Sash",
+        ear1 = "Friomisi Earring",
+        ear2 = "Moonshade Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Metamorph Ring +1",
+        back = capes.mabws,
+    }
+
+    -- ===== JA =================================================
+    sets.JA = {}  -- container: job abilities below
+    sets.JA["Astral Flow"] = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Convoker's Horn +4",
+        body = "Glyphic Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        back = capes.pet_mab,
+    }
+    sets.JA["Astral Conduit"] = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Convoker's Horn +4",
+        body = "Beckoner's Doublet +3",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        back = capes.pet_mab,
+    }
+    sets.JA["Elemental Siphon"] = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Convoker's Horn +4",
+        body = "Convoker's Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        back = capes.pet_mab,
+    }
+    sets.JA["Avatar's Favor"] = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Convoker's Horn +4",
+        body = "Convoker's Doublet +4",
+        hands = "Beckoner's Bracers +3",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        back = capes.pet_mab,
+    }
+    sets.JA["Mana Cede"] = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Convoker's Horn +4",
+        body = "Convoker's Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        back = capes.pet_mab,
+    }
+
+    -- ===== avatar =================================================
+    sets.avatar = {}  -- container: avatar sets below
+    sets.avatar.mab = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Beckoner's Horn +3",
+        body = "Beckoner's Doublet +3",
+        hands = "Beckoner's Bracers +3",
+        legs = "Beckoner's Spats +3",
+        feet = "Beckoner's Pigaches +3",
+        neck = "Summoner's Collar +2",
+        waist = "Incarnation Sash",
+        back = capes.pet_mab,
+    }
+    sets.avatar.acc = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Convoker's Horn +4",
+        body = "Convoker's Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        waist = "Incarnation Sash",
+        back = capes.pet_tp,
+    }
+    sets.avatar.dt = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Glyphic Horn +4",
+        body = "Glyphic Doublet +4",
+        hands = "Glyphic Bracers +4",
+        legs = "Glyphic Spats +4",
+        feet = "Glyphic Pigaches +4",
+        neck = "Summoner's Collar +2",
+        waist = "Incarnation Sash",
+        back = capes.pet_dt,
+    }
+    sets.avatar.perpetuation = {
+        main = "Nirvana",
+        sub = "Pole Grip",
+        head = "Convoker's Horn +4",
+        body = "Convoker's Doublet +4",
+        hands = "Convoker's Bracers +4",
+        legs = "Convoker's Spats +4",
+        feet = "Convoker's Pigaches +4",
+        neck = "Summoner's Collar +2",
+        waist = "Incarnation Sash",
+        ring1 = "Petrov Ring",
+        back = capes.pet_mab,
+    }
+
+end
+
+-- Real GearSwap calls get_sets() on load / job change; Fanxi's importer
+-- calls it once and flattens the resulting sets table.

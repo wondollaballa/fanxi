@@ -34,8 +34,8 @@ The current schema is migrations `0001_initial.sql`, `0002_world_content.sql` an
 |---|---|---|
 | `accounts` | Players and admins | `username` (unique, case-insensitive), `password_hash`, `status`, `role`, `failed_attempts`, `locked_until` |
 | `api_sessions` | Launcher Bearer tokens | `token_hash` (unique SHA-256), `account_id`, `expires_at`, `revoked_at` |
-| `game_sessions` | In-game sessions | `session_hash` (16-byte BLOB, unique), `account_id`, `expires_at` |
-| `login_tokens` | Launcher → host64 hand-off | `token_hash` (unique), `used_at`, `expires_at` |
+| `game_sessions` | In-game sessions | `session_hash` (16-byte BLOB, unique), `account_id`, `character_id` (the launched mule), `expires_at` |
+| `login_tokens` | Launcher → host64 hand-off | `token_hash` (unique), `character_id` (the chosen mule), `used_at`, `expires_at` |
 | `characters` | Adventurers | `account_id`, `char_id` (content id), `name` (unique), stats, zone/position, looks, `hp_current`, `mp_current`, `exp`, `gil`, home point, playtime |
 | `worlds` | World name and advertised ports | `name`, `host`, ports, `status` |
 | `zones` | Zone names and default positions/music | `id`, `name`, `pos_*`, `music_*` |
@@ -50,7 +50,11 @@ The current schema is migrations `0001_initial.sql`, `0002_world_content.sql` an
 | `monster_templates` | Monster templates | `name`, `model`, `level_min/max`, `hp`, combat stats, `aggro`, `roam_radius`, `respawn_seconds` |
 | `monster_spawns` | Monster placements | `template_id`, `zone`, `pos_*`, `rot`, `level`, `respawn_seconds` |
 | `items` | Item catalogue | `item_id`, `name`, `stack`, `usable`, `equip_slot`, `level` |
+| `item_models` | Grap model per visible item (migration 95) | `item_id`, `model`; triggers on `items`/`char_inventory`/`char_equip` keep it applied |
 | `char_inventory` | Character slots | `character_id`, `container`, `slot`, `item_id`, `quantity`; slot 0 / item 65535 is gil |
+| `item_storage` | Storage Slip eligibility | `item_id`, `slip` (1–33) |
+| `char_storage` | Items on a character's slips | `character_id`, `item_id`, `quantity`, `slip`, `stored_at` |
+| `char_locker` | Hidden 9999-item locker | `character_id`, `item_id`, `quantity`, `stored_at` |
 | `quests` | Quest definitions | `quest_key`, `name`, reward, `required_template_id`, `required_kills` |
 | `char_quests` | Quest progress | `character_id`, `quest_id`, `state` (`active`/`complete`), `progress` |
 
@@ -65,6 +69,8 @@ accounts 1──n audit_log
 worlds   1──n (advertised by /status and /launch)
 zones    ── characters.zone / zone_lines.to_zone
 characters 1──n char_inventory
+characters 1──n char_storage
+characters 1──n char_locker
 characters 1──n char_quests ──n quests
 monster_templates 1──n monster_spawns
 world_npcs 1──n npc_lines
@@ -73,7 +79,18 @@ quests   ── monster_templates (required_template_id)
 
 Gil is deliberately stored in the same table as items: container `0`, slot `0`, item id
 `65535`. The client expects that slot; the `characters.gil` column is a denormalized mirror used
-by the HTTP API and reward code. Both are updated together.
+by the HTTP API and reward code. Both are updated together. Containers `8` and `10`–`16` are the
+Mog Wardrobes, and `1`, `5`, `6`, `7` and `9` are the other permanent bags; returned slip items
+go into those containers (inventory first) and the client is kept in step with `0x020`/`0x01D`.
+
+`item_storage` maps an item id to the one Storage Slip that accepts it (1–33). `char_storage` is
+the slip's contents, keyed by character and item: storing deletes the `char_inventory` row and
+inserts here, so the item is not in any client-visible bag. Grabbing reverses that. Migration
+`0065_storage_slips.sql` seeds the item map; `0067_slip_storage.sql` moves anything left in the
+old visible Storage/Locker containers into `char_storage`.
+
+`char_locker` is the hidden general-purpose locker (`!locker`). It has no client container and no
+slip column; `0069_generic_locker.sql` creates it. The server enforces a 9999-quantity cap.
 
 All times are ISO-8601 UTC strings (`2026-10-20T02:34:18.331Z`), written by the server. Sorting
 the text sorts the times.

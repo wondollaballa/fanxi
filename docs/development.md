@@ -15,6 +15,7 @@
 | `launcher/fanxi_launcher/` | `config.py` (settings), `api.py` (HTTP client), `game.py` (find/build/launch), `app.py` (Tk UI), `__main__.py` |
 | `launcher/tests/` | settings, HTTP client, game-folder and command-line tests |
 | `launcher/build_app.py` | macOS `.app` / Linux `.desktop` packaging |
+| `launcher-rs/` | Rust + Tauri 2 launcher preview: `src/` (React), `src-tauri/src/` (Rust core and commands) |
 | `server/fanxi_server/` | `config.py`, `db.py`, `security.py`, `service.py`, `http_api.py`, `cli.py` |
 | `server/fanxi_server/game/` | `cipher.py`, `world.py`, `zone.py`, `gateway.py`, `packets.py`, `entities.py`, `content.py` |
 | `server/tests/` | service, API, packet, world/combat/quest and live-gateway tests |
@@ -56,7 +57,11 @@ applied one.
 
 - NPC instance: `world_npcs` (zone, script, position, model, flags), optional `npc_lines` lines.
 - Monster template: `monster_templates`; placement: `monster_spawns`.
-- Item: `items`; starter inventory and gil are rows in `char_inventory`.
+- Item: `items`; starter inventory and gil are rows in `char_inventory`. A visible item also
+  needs its grap model, or the character equips it invisibly: migration 95's `item_models` table
+  and triggers fill it from `tools/item_models.json`, and `tools/gen_item_models.py` regenerates
+  both after a new gear set is imported. `tools/item_models.py --character <name>` audits what a
+  character owns.
 - Quest: `quests` + `char_quests`.
 
 Behaviour is ordinary Python in `server/fanxi_server/game/content.py`. An NPC script key is matched

@@ -118,6 +118,10 @@ int xi_chat_game_lines(void);
 
 void xi_hooks_init(void);
 void xi_hooks_frame(void);            /* chat lines and commands queued for the game */
+/* The ids in the client's Abilities command list, which 0x0AC rebuilds from the server's
+ * current main/sub job commands (weapon skills first, then job abilities).
+ * Copies at most max, returns the count; 0 until the first 0x0AC has been applied. */
+int xi_ability_commands(uint16_t* out, int max);
 /* The chat input line: text, open state. */
 int xi_chat_input(char* out, size_t n);
 int xi_chat_input_open(void);

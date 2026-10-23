@@ -23,6 +23,8 @@ class ZoneEntity:
     rot: int = 0
     model: int = 50
     size: int = 0
+    door_id: int = 0
+    look: bytes = b""
     name_prefix: int = 0
     namevis: int = 0
     status: int = 0
@@ -33,6 +35,7 @@ class ZoneEntity:
     widescan: bool = True
     script: str = ""
     dialogue: list[str] = field(default_factory=list)
+    hp_index: int = -1
     # mob fields
     template_id: int = 0
     level: int = 1
@@ -56,11 +59,21 @@ class ZoneEntity:
     # live state
     alive: bool = True
     respawn_at: float = 0.0
+    corpse_until: float = 0.0
     engaged_char_id: int | None = None
     next_attack_at: float = 0.0
     last_move_at: float = 0.0
+    roam_target: tuple[float, float] | None = None
+    roam_pause_until: float = 0.0
+    moving: bool = False
+    roam_heading: float = 0.0
+    last_sync_at: float = 0.0
     aggro_announced: bool = False
     dialogue_index: int = 0
+    # Debuffs a player has landed.  The client draws them from the action result; the
+    # server keeps the timer and the numbers the AI reads.
+    status_effects: list[int] = field(default_factory=list)
+    effect_state: dict[int, dict] = field(default_factory=dict)
 
     def hpp(self) -> int:
         if self.hp_max <= 0:
@@ -79,10 +92,16 @@ class ZoneEntity:
         self.mp = self.mp_max
         self.x, self.y, self.z = self.spawn_x, self.spawn_y, self.spawn_z
         self.engaged_char_id = None
+        self.animation = 0
         self.next_attack_at = 0.0
         self.last_move_at = now
+        self.roam_target = None
+        self.moving = False
+        self.roam_pause_until = now + 2.0
         self.aggro_announced = False
         self.respawn_at = 0.0
+        self.status_effects.clear()
+        self.effect_state.clear()
 
 
 def npc_from_row(row: dict, targid: int, dialogue: list[str]) -> ZoneEntity:
@@ -95,11 +114,14 @@ def npc_from_row(row: dict, targid: int, dialogue: list[str]) -> ZoneEntity:
         name=str(row["name"]),
         x=float(row["pos_x"]), y=float(row["pos_y"]), z=float(row["pos_z"]),
         rot=int(row["rot"]), model=int(row["model"]), size=int(row["size"]),
+        door_id=int(row.get("door_id", 0) or 0),
+        look=bytes.fromhex(row.get("look_hex") or ""),
         name_prefix=int(row["name_prefix"]), namevis=int(row["namevis"]),
         status=int(row["status"]), flags=int(row["flags"]), speed=int(row["speed"]),
         animation=int(row["animation"]), triggerable=bool(row["triggerable"]),
         widescan=bool(row["widescan"]), script=str(row["script"] or ""),
         dialogue=list(dialogue or []),
+        hp_index=(int(row["hp_index"]) if row.get("hp_index") is not None else -1),
     )
 
 
@@ -117,7 +139,9 @@ def mob_from_row(row: dict, targid: int, rng: random.Random | None = None) -> Zo
         x=float(row["pos_x"]), y=float(row["pos_y"]), z=float(row["pos_z"]),
         rot=int(row["rot"]), model=int(row["model"]), size=int(row["size"]),
         name_prefix=int(row["name_prefix"]),
-        speed=50, animation=0, triggerable=True, widescan=True,
+        # The client uses this byte to predict a moving entity between position updates;
+        # at 50 (retail's run speed) it outran our walk and snapped back each packet.
+        speed=12, animation=0, triggerable=True, widescan=True,
         template_id=int(row["template_id"]), level=level, hp_max=max(1, hp_max), hp=max(1, hp_max),
         mp_max=int(row["template_mp"] or 0), mp=int(row["template_mp"] or 0),
         attack=int(row["attack"] or 1), defense=int(row["defense"] or 0),

@@ -53,15 +53,43 @@ that project's distribution.
 
 [LandSandBoat/server](https://github.com/LandSandBoat/server) is a GPL-3.0 FINAL FANTASY XI server
 emulator. It was studied read-only to understand zone, entity, combat and content flows. No
-LandSandBoat code, SQL, Lua, YAML, schema, comments or transcribed game text is included in
-Fanxi. The clean-room notes and license boundary are in
+LandSandBoat code, SQL text, Lua, YAML, schema definitions, comments or transcribed game
+dialogue is included in Fanxi. Factual item metadata (item ids, names, equip-slot masks, job
+masks and model ids) was cross-checked against public item databases; see **Game data**. The clean-room notes and license boundary are in
 [docs/landsandboat-study.md](docs/landsandboat-study.md).
+
+## EquipViewer layout
+
+The launcher's EquipViewer grid follows the slot order, 4×4 arrangement and defaults (32 px,
+alpha 230, background alpha 72) of the [EquipViewer addon](https://github.com/Windower/Lua/tree/live/addons/equipviewer)
+by Tako and Rubenator, distributed under the BSD-3-Clause license. No EquipViewer source code is
+included: Fanxi decodes item icons with its own resource reader (`host/addons/res.c`) and draws
+its own React grid.
 
 ## Game data
 
 Fanxi ships no FINAL FANTASY XI data, binaries or assets extracted from the game. The client is
 built on the player's machine from the player's own `FFXiMain.dll`, `FFXi.dll` and `ROM` folder.
 `assets/` contains only Fanxi's own icons and UI art created for this project.
+
+The Storage Slip item ids in `database/migrations/0065_storage_slips.sql` are game data,
+cross-checked against the [BG-Wiki Storage Slip category](https://www.bg-wiki.com/ffxi/Category:Storage_Slip)
+and the public Windower resources slip table (BSD-3-Clause). Only item ids and slip numbers are
+stored; no Windower code is included.
+
+`database/migrations/0066_gearswap_grant.sql` grants the gear named in `gearswap/`. Its item ids,
+equip-slot masks, job masks and model ids are factual game data cross-checked against the FFXI
+Wiki and the public LandSandBoat item tables (`item_basic` / `item_equipment`). The migration SQL
+and the gear names are Fanxi's own; no LandSandBoat SQL text, schema or code is copied.
+
+`database/migrations/0080_item_combat_data.sql` carries factual combat data for every item:
+damage rating, delay, weapon skill type and the (item, modifier, value) triples whose modifier
+ids LandSandBoat names. `server/fanxi_server/game/base_stats.py` carries the numeric per-level
+grade tables behind the base attributes. Both are produced by `tools/import_lsb_item_data.py`
+and `tools/gen_base_stats.py` from LandSandBoat's published tables and datasets, and both hold
+numbers only: item ids, levels and values that come from the game itself. The schema, column
+names, generator code and the code that reads them are Fanxi's own; no LandSandBoat source,
+comments, Lua, or SQL statements are copied.
 
 FINAL FANTASY XI and SQUARE ENIX are trademarks of Square Enix Holdings Co., Ltd. Fanxi is not
 affiliated with or endorsed by Square Enix.

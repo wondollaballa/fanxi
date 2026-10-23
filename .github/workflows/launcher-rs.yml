@@ -1,0 +1,45 @@
+name: launcher-rs
+
+on:
+  push:
+    paths:
+      - "launcher-rs/**"
+      - ".github/workflows/launcher-rs.yml"
+  pull_request:
+    paths:
+      - "launcher-rs/**"
+      - ".github/workflows/launcher-rs.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: macos-latest
+    defaults:
+      run:
+        working-directory: launcher-rs
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: launcher-rs/package-lock.json
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher-rs/src-tauri
+      - name: Install frontend packages
+        run: npm ci
+      - name: Type-check and build frontend
+        run: npm run build
+      - name: Rust formatting
+        run: cargo fmt --manifest-path src-tauri/Cargo.toml --check
+      - name: Rust tests
+        run: cargo test --manifest-path src-tauri/Cargo.toml
+      - name: Tauri compile check
+        run: npx tauri build --debug --no-bundle

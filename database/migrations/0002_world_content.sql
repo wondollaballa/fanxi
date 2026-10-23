@@ -130,3 +130,7 @@ CREATE TABLE IF NOT EXISTS char_quests (
     updated_at   TEXT    NOT NULL,
     PRIMARY KEY (character_id, quest_id)
 );
+
+-- The NPC look block (the 20-byte GrapIDTbl the client draws an NPC with) is read by the
+-- zone loader and written by later migrations; keep the column in the base schema.
+ALTER TABLE world_npcs ADD COLUMN look_hex TEXT NOT NULL DEFAULT '';

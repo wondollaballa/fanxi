@@ -423,6 +423,8 @@ static void DD_Acquire(Guest* g)
     Dev* d = dev(ARG(0));
     if (!d)
         RET(DIERR_INVALIDPARAM, 1);
+    if (getenv("FANXI_INPUT_DEBUG") && d->kind == D_KEYBOARD)
+        fprintf(stderr, "[di] keyboard acquire called\n");
     if (d->acquired)
         RET(S_FALSE, 1);
     d->acquired = 1;
@@ -490,6 +492,13 @@ static void DD_GetDeviceState(Guest* g)
     {
         uint8_t k[256];
         input_keyboard(k);
+        if (getenv("FANXI_INPUT_DEBUG"))
+        {
+            static unsigned calls;
+            if (calls++ % 120 == 0)
+                fprintf(stderr, "[di] keyboard state call %u: num8=%02x num2=%02x up=%02x\n",
+                        calls, k[0x48], k[0x50], k[0xC8]);
+        }
         memset(out, 0, n);
         memcpy(out, k, n < 256 ? n : 256);
     }

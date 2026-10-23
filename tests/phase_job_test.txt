@@ -1,0 +1,36 @@
+# Job changes release the session locks (host/addons/phase.c). Run by tests/phase_job_test.sh.
+# Each 0x01B is the real 0x84-byte block: main job at body 4, support job at body 7.
+frames 2
+lua control function st() local s = xi.phase.status() return tostring(s.job).." "..tostring(s.locked).." "..tostring(#s.lockedSlots).." "..tostring(s.kiting).." "..tostring(s.resting).." focus="..tostring(s.focus) end return st()
+echo --- a repeated job block keeps the locks
+packet_in 1b0000000000000008000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+lua control xi.phase.lock_slots(3) xi.phase.lock(true) xi.phase.kiting(true) xi.phase.resting(true) xi.phase.focus(2) return st()
+packet_in 1b0000000000000008000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+lua control return st()
+echo --- a main job change releases them
+packet_in 1b000000000000000d000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+lua control return st()
+echo --- the support job is a job change too
+lua control xi.phase.lock_slots(3) xi.phase.lock(true) return st()
+packet_in 1b000000000000000d000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+lua control return st()
+echo --- a repeated pair keeps them again
+lua control xi.phase.lock_slots(3) xi.phase.lock(true) return st()
+packet_in 1b000000000000000d000001000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+lua control return st()
+echo --- the launcher plan can see the new job first
+lua control xi.phase.lock_slots(3) xi.phase.lock(true) return st()
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=8, sets={}, rules={}} return st()
+echo --- the same plan keeps a lock taken after it
+lua control xi.phase.lock_slots(3) xi.phase.lock(true) return st()
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=8, sets={}, rules={}} return st()
+echo --- a different character starts unlocked
+lua control xi.phase.lock_slots(3) xi.phase.lock(true) return st()
+lua control xi.phase.set{enabled=true, player=84281096, zone=230, town=1, job=8, sets={}, rules={}} return st()
+echo --- the released state set is worn once the client has settled
+lua control xi.phase.set{enabled=true, player=84281096, zone=230, town=1, job=8, sets={{{1,0,0}}}, names={'idle'}, idle=1, town=1, rules={}} xi.phase.lock(true) return xi.phase.status().locked
+packet_in 1b000000000000000d000004000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+lua control return xi.phase.pending() == nil
+run 2
+lua control local e = xi.phase.pending() return e and #e or 0
+lua control return xi.phase.status().locked, xi.phase.status().job

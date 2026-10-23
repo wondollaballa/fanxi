@@ -1,0 +1,22 @@
+-- Wizard's Rod look (migration 98).
+--
+-- Migration 53 gave every Reforged Mog Bonanza weapon its plain version's model,
+-- read from LandSandBoat's item_equipment MId.  For Wizard's Rod that row is
+-- `wizards_rod` (22042) with MId 845 -- the Kaja Rod / Maxentius rod, a blue
+-- star-headed club.  The weapon's own picture (the Nomad Mog Bonanza page) is a
+-- gold shaft with a blue orb held by three gold claws, so 845 is not its look.
+--
+-- The Bonanza weapons have their own model block, 782-797, and every number in
+-- it is taken except 796:
+--   782 Ice Brand       783 Flametongue     784 Chocobo Knife  785 Air Knife
+--   786 Hebo's Spear    787 Onion Sword     788 Zanmato        789 Yagyu Darkblade
+--   790 Save the Queen  791 Mutsunokami     792 Brave Blade    793 Demonic Axe
+--   794 Poison Axe      795 Final Sickle    797 Pandit's Staff
+-- Wizard's Rod is the one weapon of that set still without a model, and 796 is
+-- also a model of its own in the install (ROM/365/126.DAT; no other model id
+-- resolves to that file), so it takes 796.
+--
+-- item_models gets the same mapping so a re-import of the Reforged rows (or a
+-- clone) cannot put 845 back.
+UPDATE items SET model=796 WHERE item_id=21991; -- Wizard's Rod (Reforged)
+INSERT OR REPLACE INTO item_models (item_id, model) VALUES (21991, 796);

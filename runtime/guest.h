@@ -1,4 +1,4 @@
-﻿/* Guest state and primitives shared by the runtime and every generated function.
+/* Guest state and primitives shared by the runtime and every generated function.
  *
  * Generated code keeps registers and flags in C locals (see REGS_DECL/REGS_LOAD/REGS_STORE) and
  * writes them back to Guest only around calls and returns, so the C compiler can keep them in
@@ -43,10 +43,10 @@ extern RT_HOT_GLOBAL unsigned char* rt_guest_base;
 #define RT_INLINE static inline
 #endif
 
-RT_INLINE uint8_t rd8(uint32_t a) { return *GUEST_PTR(a); }
-RT_INLINE uint16_t rd16(uint32_t a) { uint16_t v; memcpy(&v, GUEST_PTR(a), 2); return v; }
-RT_INLINE uint32_t rd32(uint32_t a) { uint32_t v; memcpy(&v, GUEST_PTR(a), 4); return v; }
-RT_INLINE uint64_t rd64(uint32_t a) { uint64_t v; memcpy(&v, GUEST_PTR(a), 8); return v; }
+RT_INLINE uint8_t rd8(uint32_t a) { return a ? *GUEST_PTR(a) : 0; }
+RT_INLINE uint16_t rd16(uint32_t a) { uint16_t v = 0; if (a) memcpy(&v, GUEST_PTR(a), 2); return v; }
+RT_INLINE uint32_t rd32(uint32_t a) { uint32_t v = 0; if (a) memcpy(&v, GUEST_PTR(a), 4); return v; }
+RT_INLINE uint64_t rd64(uint32_t a) { uint64_t v = 0; if (a) memcpy(&v, GUEST_PTR(a), 8); return v; }
 RT_INLINE void wr8(uint32_t a, uint8_t v) { *GUEST_PTR(a) = v; }
 RT_INLINE void wr16(uint32_t a, uint16_t v) { memcpy(GUEST_PTR(a), &v, 2); }
 RT_INLINE void wr32(uint32_t a, uint32_t v) { memcpy(GUEST_PTR(a), &v, 4); }

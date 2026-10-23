@@ -87,7 +87,7 @@ Base path: `/api/v1`. Requests and responses are JSON unless noted. Errors look 
 | Method | Path | Body / query | Result |
 |---|---|---|---|
 | GET | `/health` | — | `{status, name, version}` |
-| GET | `/status` | — | `{name, version, time, uptime_seconds, online, accounts, characters, registration_open, world, features}` |
+| GET | `/status` | — | `{name, version, time, uptime_seconds, online, accounts, sub_accounts, characters, registration_open, world, features}` |
 | GET | `/news` | `limit` (1–50) | `{news: [...]}` |
 | GET | `/releases` | `platform`, `channel` | `{releases: [...]}` |
 | POST | `/auth/register` | `{username, password, email?}` | `201 {token, expires_at, account}` |
@@ -105,9 +105,22 @@ once.
 | POST | `/auth/logout` | — | `204` |
 | GET | `/me` | — | `{account, characters}` |
 | GET | `/characters` | — | `{characters: [...]}` |
-| POST | `/characters` | `{name, race, face, size, nation, main_job, sub_job?}` | `201 {character}` |
+| POST | `/characters` | `{name, race, face, hair, size, nation, main_job, sub_job?}` | `201 {character}` |
 | PATCH | `/characters/{id}` | `{name}` | `{character}` |
+| PATCH | `/characters/{id}/design` | `{race?, face?, hair?, size?}` | `{character}` |
 | POST | `/launch` | `{character_id?}` | `{login_token, expires_at, account, character, world, client}` |
+| GET | `/accounts/sub` | — | `{subs: [...], limit}` |
+| POST | `/accounts/sub` | `{character?: {...}}` | `201 {sub, limit}` |
+| POST | `/accounts/sub/{id}/launch` | `{character_id?}` | same shape as `/launch` |
+| POST | `/accounts/sub/{id}/characters` | `{name?, race?, ...}` | `201 {character}` |
+| DELETE | `/accounts/sub/{id}` | `purge=1` query | suspend, or purge |
+
+Sub-accounts are server-owned. A main account creates up to `FANXI_MAX_SUBS` (default 5) of
+them; each is created with exactly one character. They have no password and no API session, and
+the main's Bearer token is the only key: `POST /accounts/sub/{id}/launch` checks `parent_id` and
+mints a normal single-use game launch token for the sub. Another account cannot list, launch or
+delete them (the answer is `404`), and a sub cannot sign in on its own. Without `purge=1`,
+`DELETE` suspends the sub and keeps its character; `purge=1` deletes both and frees the slot.
 
 `client` is ready for `host64`:
 
@@ -127,7 +140,11 @@ Character fields:
 
 - `name`: 3–15 ASCII letters, unique.
 - `race`: 1–8 (Hume M/F, Elvaan M/F, Tarutaru M/F, Mithra, Galka).
-- `face`: 1–8, `size`: 0–2, `nation`: 0–2 (San d'Oria, Bastok, Windurst).
+- `face`: 1–8, `hair`: 0 (A) or 1 (B), `size`: 0–2, `nation`: 0–2 (San d'Oria, Bastok,
+  Windurst).  Face 2, Hair A is the client look byte `2`; the API returns both fields plus a
+  `variant` 1–48 and a labelled `design` object.
+- `PATCH /characters/{id}/design` changes one character's appearance and repaints its live zone
+  session immediately.  The body may name only the fields that change.
 - `main_job`: 1–22, `sub_job`: 0–22.
 
 Character responses also include `hp`, `mp`, `hp_current`, `mp_current`, `exp`, `exp_next` and
@@ -180,7 +197,7 @@ Everything is environment-driven. The command line for `run` can override the ma
 | `FANXI_HUFFMAN` | — | Folder containing `compress.dat` (wins over game dir) |
 | `FANXI_ADMIN_KEY` | empty | If empty, only `role = admin` accounts can use admin endpoints |
 | `FANXI_REGISTRATION` | `1` | `0` closes registration (also `settings.registration_open`) |
-| `FANXI_MAX_CHARACTERS` | `1` | Per account |
+| `FANXI_MAX_CHARACTERS` | `0` | Per account; `0` means unlimited |
 | `FANXI_SESSION_DAYS` | `30` | Launcher token lifetime |
 | `FANXI_LOGIN_TOKEN_SECONDS` | `120` | Launch token lifetime |
 | `FANXI_GAME_SESSION_HOURS` | `12` | Game session lifetime |

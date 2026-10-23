@@ -23,12 +23,14 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <stdatomic.h>
 
 #include "build.h"
 #include "gthread.h"
 #include "gwin.h"
 #include "addons.h"
 #include "host.h"
+#include "phase.h"
 #include "plat.h"
 
 #if defined(FFXI_WRAP_PARSE_INPUT)
@@ -327,13 +329,25 @@ static int text_in(int mode, uint32_t text, int* mode_out, uint32_t* out)
 #if defined(FFXI_WRAP_WRITE_LINE)
 static void wrap_write_line(Guest* g)
 {
+    int mode = (int)rt_arg(g, 0), mode_mod = mode;
+    uint32_t text = rt_arg(g, 1), buf = 0;
+    char probe[256];
+    guest_str(text, probe, sizeof probe);
+    const char* p = probe;
+    while (*p == ' ')
+        ++p;
+    /* Fanxi sends /! commands as say lines so the server sees them; keep that
+     * command echo out of the chat log. */
+    if (*p == '!' || strstr(probe, " : !") != NULL)
+    {
+        rt_return(g, 0, 0);
+        return;
+    }
     if (chat_add_hooked())
     {
         rt_orig_write_line(g); /* chat_add raises text_in for the line */
         return;
     }
-    int mode = (int)rt_arg(g, 0), mode_mod = mode;
-    uint32_t text = rt_arg(g, 1), buf = 0;
     switch (text_in(mode, text, &mode_mod, &buf))
     {
     case LINE_BLOCKED:
@@ -474,11 +488,15 @@ static void set_size(uint8_t* p, size_t padded)
     p[0] = (uint8_t)h, p[1] = (uint8_t)(h >> 8);
 }
 
-static void queue_packet(int outgoing, const uint8_t* p, size_t n, int handled)
+/* The phase engine's held packet: an action that must go out one buffer after the precast
+ * equips, with the midcast equips right behind it (phase.c). */
+static Inject* g_next[2];
+
+static void queue_list(Inject** head, int outgoing, const uint8_t* p, size_t n, int handled)
 {
     if (n < 4 || n > 0x1FC)
         return;
-    Inject** tail = &g_inject[outgoing];
+    Inject** tail = head;
     unsigned queued = 0;
     while (*tail)
         tail = &(*tail)->next, ++queued;
@@ -497,6 +515,11 @@ static void queue_packet(int outgoing, const uint8_t* p, size_t n, int handled)
     memcpy(in->data, p, n);
     set_size(in->data, padded);
     *tail = in;
+}
+
+static void queue_packet(int outgoing, const uint8_t* p, size_t n, int handled)
+{
+    queue_list(&g_inject[outgoing], outgoing, p, n, handled);
 }
 
 void xi_packet_inject(int outgoing, const uint8_t* p, size_t n)
@@ -564,6 +587,40 @@ void xi_packet_inject_handled(int outgoing, const uint8_t* p, size_t n)
         queue_packet(outgoing, out, w, 1);
 }
 
+/* The whole list into the buffer at o, stamped with its sequence number; the rest stays queued. */
+static size_t drain_list(int outgoing, Inject** head, uint8_t* out, size_t o, size_t cap, uint16_t seq,
+                         const uint8_t* chunk, size_t chunk_size)
+{
+    Inject* list = *head;
+    *head = NULL;
+    ++g_handling;
+    while (list)
+    {
+        Inject* in = list;
+        if (o + in->size > cap)
+            break; /* the rest wait for the next buffer */
+        in->data[2] = (uint8_t)seq, in->data[3] = (uint8_t)(seq >> 8);
+        size_t w = in->size;
+        if (in->handled)
+            memcpy(out + o, in->data, w);
+        else
+            w = one_packet(outgoing, in->data, in->size, chunk, chunk_size, 1, out + o, cap - o);
+        o += w;
+        list = in->next;
+        free(in);
+    }
+    --g_handling;
+    if (list) /* what didn't fit goes first next time */
+    {
+        Inject** tail = &list;
+        while (*tail)
+            tail = &(*tail)->next;
+        *tail = *head;
+        *head = list;
+    }
+    return o;
+}
+
 /* The buffer (header + packets) through the addons into out; its new size. */
 static size_t process(int outgoing, const uint8_t* buf, size_t size, uint8_t* out, size_t cap)
 {
@@ -576,6 +633,9 @@ static size_t process(int outgoing, const uint8_t* buf, size_t size, uint8_t* ou
     size_t o = 0x1C, off = 0x1C;
     uint16_t seq = 0;
     uint64_t now = rt_monotonic_ns() / 1000000ull;
+    /* what the phase engine held out of the previous buffer: one buffer behind its precast */
+    Inject* held = g_next[outgoing];
+    g_next[outgoing] = NULL;
     while (off + 4 <= size)
     {
         const uint8_t* p = buf + off;
@@ -584,6 +644,60 @@ static size_t process(int outgoing, const uint8_t* buf, size_t size, uint8_t* ou
             break;
         uint16_t id = (uint16_t)((p[0] | p[1] << 8) & 0x1FF);
         seq = (uint16_t)(p[2] | p[3] << 8);
+        if (outgoing)
+        {
+            /* The phase engine holds the player's action out of its buffer: the precast equips
+             * go now, the action and the midcast equips with the next buffer (phase.c). */
+            if (id == 0x01A && n >= 14)
+            {
+                PhasePlan plan;
+                uint16_t category = (uint16_t)(p[10] | p[11] << 8);
+                uint16_t action = (uint16_t)(p[12] | p[13] << 8);
+                if (xi_phase_action(category, action, &plan))
+                {
+                    for (int i = 0; i < plan.pre_n; ++i)
+                    {
+                        uint8_t eq[8] = { 0x50, 4, 0, 0, plan.pre[i].slot, plan.pre[i].kind, plan.pre[i].bag, 0 };
+                        xi_packet_inject_handled(1, eq, sizeof eq);
+                    }
+                    /* A held action goes one buffer later, behind the gear; an engage or
+                     * disengage rides along with its set in this one. */
+                    if (plan.hold)
+                    {
+                        queue_list(&g_next[outgoing], outgoing, p, n, 0);
+                        for (int i = 0; i < plan.mid_n; ++i)
+                        {
+                            uint8_t eq[8] = { 0x50, 4, 0, 0, plan.mid[i].slot, plan.mid[i].kind, plan.mid[i].bag, 0 };
+                            queue_list(&g_next[outgoing], outgoing, eq, sizeof eq, 0);
+                        }
+                        off += n;
+                        continue;
+                    }
+                }
+            }
+        }
+        else
+        {
+            PhasePlan plan;
+            int restore = 0;
+            /* The player's own 0x00D carries the server's animation (1 while the weapon is
+             * drawn). It is the engagement signal that does not wait for /attack off. */
+            if (id == 0x00D)
+                xi_phase_player_animation(p, n);
+            if (id == 0x028 && xi_phase_result(p, n, &plan))
+                restore = plan.restore_n;
+            else
+            {
+                int have = 0;
+                xi_phase_restore_if_stale(&plan, &have);
+                restore = have ? plan.restore_n : 0;
+            }
+            for (int i = 0; i < restore; ++i)
+            {
+                uint8_t eq[8] = { 0x50, 4, 0, 0, plan.restore[i].slot, plan.restore[i].kind, plan.restore[i].bag, 0 };
+                xi_packet_inject_handled(1, eq, sizeof eq);
+            }
+        }
         size_t w = one_packet(outgoing, p, n, buf + 0x1C, size - 0x1C, 0, out + o, cap - o);
         if (w)
         {
@@ -600,35 +714,24 @@ static size_t process(int outgoing, const uint8_t* buf, size_t size, uint8_t* ou
         memcpy(out + o, buf + off, size - off);
         o += size - off;
     }
-    /* the addons' own packets, with the buffer's last sequence number; those injected meanwhile wait
-     * for the next buffer */
-    Inject* list = g_inject[outgoing];
-    g_inject[outgoing] = NULL;
-    ++g_handling;
-    while (list)
+    /* What the phase engine held from the previous buffer goes first (the action, then its
+     * midcast equips), then the addons' own packets, all with this buffer's last sequence number:
+     * the server drops an action whose sequence number is outside the window it has seen.  A
+     * buffer with no packets of its own has no number to give them, so they wait for one. */
+    if (outgoing && held)
     {
-        Inject* in = list;
-        if (o + in->size > cap)
-            break; /* the rest wait for the next buffer */
-        in->data[2] = (uint8_t)seq, in->data[3] = (uint8_t)(seq >> 8);
-        size_t w = in->size;
-        if (in->handled)
-            memcpy(out + o, in->data, w);
-        else
-            w = one_packet(outgoing, in->data, in->size, buf + 0x1C, size - 0x1C, 1, out + o, cap - o);
-        o += w;
-        list = in->next;
-        free(in);
+        if (seq)
+            o = drain_list(outgoing, &held, out, o, cap, seq, buf + 0x1C, size - 0x1C);
+        if (held) /* no room, or no sequence number yet: ahead of anything queued since */
+        {
+            Inject** tail = &held;
+            while (*tail)
+                tail = &(*tail)->next;
+            *tail = g_next[outgoing];
+            g_next[outgoing] = held;
+        }
     }
-    --g_handling;
-    if (list) /* what didn't fit goes first next time */
-    {
-        Inject** tail = &list;
-        while (*tail)
-            tail = &(*tail)->next;
-        *tail = g_inject[outgoing];
-        g_inject[outgoing] = list;
-    }
+    o = drain_list(outgoing, &g_inject[outgoing], out, o, cap, seq, buf + 0x1C, size - 0x1C);
     return o;
 }
 
@@ -639,7 +742,7 @@ size_t xi_packets_process(int outgoing, const uint8_t* buf, size_t size, uint8_t
 
 static int packets_wanted(int outgoing)
 {
-    return xi_addon_count() || g_inject[outgoing];
+    return xi_addon_count() || g_inject[outgoing] || g_next[outgoing];
 }
 
 /* With no addon to see them, packets still leave their last copy per id: an addon loaded later
@@ -679,6 +782,127 @@ static void tap(const uint8_t* buf, size_t size)
     }
 }
 
+static int pkt_debug(void)
+{
+    const char* e = getenv("FANXI_PACKET_DEBUG");
+    return e && *e && *e != '0';
+}
+
+/* FANXI_DUMP_HUFF=path: the client's own Huffman table, for the server to speak its compression. */
+static void dump_huff(uint32_t table)
+{
+    static int done;
+    const char* path = getenv("FANXI_DUMP_HUFF");
+    if (done || !path || !*path || !table || !xi_mapped(table, 0x2000))
+        return;
+    done = 1;
+    FILE* f = fopen(path, "wb");
+    if (!f)
+        return;
+    fwrite(GUEST_PTR(table), 1, 0x2000, f);
+    if (xi_mapped(table - 0x1000, 0x2000))
+        fwrite(GUEST_PTR(table - 0x1000), 1, 0x2000, f);
+    fclose(f);
+    xi_log("huffman table %08x dumped to %s (root %08x)", table, path, rd32(table));
+}
+
+/* The client's ability menu is not built from the 0x0AC command bitmap: it keeps a separate
+ * list of command ids at [ability_list + commands] (count at +count).  That list is loaded
+ * from the profile (aix.dat) or built once, so a server that narrows 0x0AC still sees every
+ * weapon skill the list was saved with.  Rebuild it from each 0x0AC packet: the set bits, in
+ * order, are exactly the commands the server advertises (weapon skills, then job abilities).
+ * The decrypted packet is copied on the network thread; the list is written on the game
+ * thread by xi_hooks_frame, so a menu open never sees a half-written list. */
+#if defined(FFXI_ABILITY_LIST) && defined(FFXI_ABILITY_LIST_COMMANDS) && defined(FFXI_ABILITY_LIST_COUNT)
+static uint8_t g_command_bits[224];
+static atomic_int g_command_pending;
+
+static void note_command_data(uint32_t pkt, size_t n)
+{
+    if (n < 0x1C + 4)
+        return;
+    uint32_t end = pkt + (uint32_t)n, p = pkt + 0x1C;
+    for (int guard = 0; guard < 64 && p + 4 <= end; ++guard)
+    {
+        uint32_t w = rd16(p), op = w & 0x1FF, units = (w >> 9) & 0x7F;
+        if (!units)
+            break;
+        if (op == 0x0AC && units >= 57 && p + 4 + 224 <= end && xi_mapped(p + 4, 224))
+        {
+            memcpy(g_command_bits, GUEST_PTR(p + 4), sizeof g_command_bits);
+            atomic_store_explicit(&g_command_pending, 1, memory_order_release);
+        }
+        p += units * 4;
+    }
+}
+
+static void apply_command_data(void)
+{
+    if (!atomic_exchange_explicit(&g_command_pending, 0, memory_order_acquire))
+        return;
+    uint32_t list = rd32(FFXI_ABILITY_LIST);
+    if (!list || !xi_mapped(list, FFXI_ABILITY_LIST_COUNT + 4))
+    {
+        atomic_store_explicit(&g_command_pending, 1, memory_order_release);
+        return;
+    }
+    uint32_t count = 0;
+    for (uint32_t id = 1; id < 1024; ++id)
+    {
+        if (!(g_command_bits[id >> 3] & (1u << (id & 7))))
+            continue;
+        wr16(list + FFXI_ABILITY_LIST_COMMANDS + count * 2, (uint16_t)id);
+        ++count;
+    }
+    /* The fourth 0x0AC block is the known-bit range 0x600..0x6FF.  The Abilities
+     * menu's "Job Traits" page is built from this list, not from the bitmap, and the
+     * list ids for traits are 0x600 + trait id (the same encoding HasTrait uses).  Not
+     * adding them here is why the server's trait bits never reached the menu. */
+    uint32_t trait_count = 0;
+    for (uint32_t trait_id = 1; trait_id < 256 && count < 0xB00; ++trait_id)
+    {
+        uint32_t id = 0x600 + trait_id;
+        if (!(g_command_bits[id >> 3] & (1u << (id & 7))))
+            continue;
+        wr16(list + FFXI_ABILITY_LIST_COMMANDS + count * 2, (uint16_t)id);
+        ++count;
+        ++trait_count;
+    }
+    wr32(list + FFXI_ABILITY_LIST_COUNT, count);
+    /* keep no stale ids after the new end: the profile saves the whole buffer */
+    for (uint32_t off = count * 2; off < 0xB00; off += 4)
+        wr32(list + FFXI_ABILITY_LIST_COMMANDS + off, 0);
+    xi_log("command list rebuilt from 0x0AC: %u entries (%u job traits)", count,
+           trait_count);
+}
+#endif
+
+int xi_ability_commands(uint16_t* out, int max)
+{
+#if defined(FFXI_ABILITY_LIST) && defined(FFXI_ABILITY_LIST_COMMANDS) && defined(FFXI_ABILITY_LIST_COUNT)
+    if (!out || max <= 0)
+        return 0;
+    uint32_t list = rd32(FFXI_ABILITY_LIST);
+    if (!list || !xi_mapped(list, FFXI_ABILITY_LIST_COUNT + 4))
+        return 0;
+    uint32_t count = rd32(list + FFXI_ABILITY_LIST_COUNT);
+    if (count > 0xB00)
+        count = 0xB00;
+    int n = 0;
+    for (uint32_t i = 0; i < count && n < max; ++i)
+    {
+        uint16_t id = rd16(list + FFXI_ABILITY_LIST_COMMANDS + i * 2);
+        if (id)
+            out[n++] = id;
+    }
+    return n;
+#else
+    (void)out;
+    (void)max;
+    return 0;
+#endif
+}
+
 #if defined(FFXI_WRAP_PACKET_DECRYPT)
 static void wrap_packet_decrypt(Guest* g)
 {
@@ -689,8 +913,36 @@ static void wrap_packet_decrypt(Guest* g)
         xi_log("packet decrypt runs on thread %llu", (unsigned long long)thread);
     }
     uint32_t out = rt_arg(g, 0), capacity = rt_arg(g, 1);
+    uint32_t in = rt_arg(g, 4), size = rt_arg(g, 5);
+    dump_huff(rt_arg(g, 3));
     rt_orig_packet_decrypt(g);
     int32_t n = (int32_t)g->eax;
+#if defined(FFXI_ABILITY_LIST) && defined(FFXI_ABILITY_LIST_COMMANDS) && defined(FFXI_ABILITY_LIST_COUNT)
+    if (n > 0x1C && (uint32_t)n <= capacity && xi_mapped(out, (uint32_t)n))
+        note_command_data(out, (size_t)n);
+#endif
+    if (pkt_debug())
+    {
+        static unsigned seen;
+        if (seen++ < 24)
+            xi_log("packet decrypt: in %u (cap %u) -> %d%s", size, capacity, n,
+                   size >= 0x1C ? " (header follows)" : "");
+        if (size >= 0x1C && xi_mapped(in, 0x1C))
+            xi_log("  header %04x %04x %08x %08x", rd16(in), rd16(in + 2), rd32(in + 4), rd32(in + 8));
+        if (n > 0x1C && xi_mapped(out, (uint32_t)n))
+        {
+            uint32_t p = out + 0x1C;
+            for (int i = 0; i < 8 && xi_mapped(p, 4); ++i)
+            {
+                uint32_t w = rd16(p);
+                uint32_t units = (w >> 9) & 0x7F;
+                xi_log("  sub %03x units %u sync %u", w & 0x1FF, units, rd16(p + 2));
+                if (!units)
+                    break;
+                p += units * 4;
+            }
+        }
+    }
     if (n <= 0x1C || (uint32_t)n > capacity || !xi_mapped(out, (uint32_t)n))
         return;
     if (g_ntaps)
@@ -711,6 +963,13 @@ static void wrap_packet_decrypt(Guest* g)
 static void wrap_packet_encrypt(Guest* g)
 {
     uint32_t in = rt_arg(g, 3), size = rt_arg(g, 4);
+    if (pkt_debug() && size >= 0x1C && xi_mapped(in, 0x1C))
+    {
+        static unsigned seen;
+        if (seen++ < 16)
+            xi_log("packet encrypt: in %u header %04x %04x %08x %08x", size, rd16(in), rd16(in + 2),
+                   rd32(in + 4), rd32(in + 8));
+    }
     if (!packets_wanted(1) || size < 0x1C || size > sizeof g_pbuf[1] || !xi_mapped(in, size))
     {
         if (size >= 0x1C && size <= sizeof g_pbuf[1] && xi_mapped(in, size))
@@ -778,6 +1037,9 @@ void xi_hooks_init(void)
 
 void xi_hooks_frame(void)
 {
+#if defined(FFXI_ABILITY_LIST) && defined(FFXI_ABILITY_LIST_COMMANDS) && defined(FFXI_ABILITY_LIST_COUNT)
+    apply_command_data();
+#endif
     /* what is queued now, in order; what that queues runs next frame. Lines to write wait for the
      * chat log (they stay first, in order). */
     Queued* list = g_q_head;

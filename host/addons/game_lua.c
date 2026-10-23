@@ -25,7 +25,8 @@
  *   player       player(field [, sub])  set_player(field, value [, sub])
  *                job_level(job)  master_level(job)  master_flags()  login_status()
  *                key_item(id)  key_item_seen(id)  spell_known(id)  has_spell_data()
- *                ability_known(bit)  has_ability_data()  pet() -> mpp, tp, index
+ *                ability_known(bit)  has_ability_data()  ability_commands() -> [action ids]
+ *                pet() -> mpp, tp, index
  *   target       target(field [, sub])  set_target(...)  target_window(field [, sub])  set_target_window(...)
  *                set_target_index(i): target entity i as the game does (a guest call)
  *   inventory    inventory(field [, sub])  set_inventory(...)  item(c, slot, field [, sub])  set_item(...)
@@ -42,6 +43,7 @@
 #include "lua.h"
 
 #include "game.h"
+#include "host.h"
 #include "xi.h"
 
 int xi_game_open(lua_State* L);
@@ -432,6 +434,21 @@ static int l_has_ability_data(lua_State* L)
     return 1;
 }
 
+/* The client's Abilities command list: the server's 0x0AC bits, as action ids (weapon skills
+ * 1..255, job abilities 0x200..0x3FF). Empty until the first 0x0AC is applied. */
+static int l_ability_commands(lua_State* L)
+{
+    uint16_t ids[0xB00];
+    int n = xi_ability_commands(ids, (int)(sizeof ids / sizeof ids[0]));
+    lua_createtable(L, n, 0);
+    for (int i = 0; i < n; ++i)
+    {
+        lua_pushinteger(L, ids[i]);
+        lua_rawseti(L, -2, i + 1);
+    }
+    return 1;
+}
+
 static int l_pet(lua_State* L)
 {
     uint32_t mpp, tp, idx;
@@ -559,6 +576,7 @@ int xi_game_open(lua_State* L)
         {"has_spell_data", l_has_spell_data},
         {"ability_known", l_ability_known},
         {"has_ability_data", l_has_ability_data},
+        {"ability_commands", l_ability_commands},
         {"pet", l_pet},
         {"target", l_target},
         {"set_target", l_set_target},

@@ -8,6 +8,7 @@ from . import APP_NAME, __version__
 from .api import FanxiApi
 from .config import LauncherConfig, config_path, data_dir
 from .game import find_game_dir, find_host64, repo_root
+from .gear import defaults_dir
 
 
 def main(argv=None) -> int:
@@ -42,6 +43,7 @@ def main(argv=None) -> int:
         print("game:      %s" % (game or "not found"))
         host64 = find_host64(config)
         print("host64:    %s" % (host64 or "not built"))
+        print("gearswap:  %s" % (defaults_dir() or "not found"))
         print("server:    %s" % config.api_url)
         try:
             health = FanxiApi(config.api_url).health()

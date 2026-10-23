@@ -15,17 +15,23 @@ BUILDS = {
     0x6a995428: '2026-09-03',
     0x694e5965: '2025-12-26',
     0x69144fb9: '2025-11-12',
+    0x686656b3: '2025-07-03',
     # FFXi.dll
     0x6a7297e3: '2026-08-22',
     0x6a995417: '2026-09-03',
     0x694e5955: '2025-12-26',
     0x69144fa8: '2025-11-12',
+    0x686656a1: '2025-07-03',
+    0x6ac37846: '2026-10-05',  # FFXiMain.dll
+    0x6ac37836: '2026-10-05',  # FFXi.dll
 }
 
 # NOT_CODE: false function starts (data records decoded as code, or aligned starts inside a real
 # instruction). REDECODE: the real decode points those false starts were hiding.
 # SWITCHES: switches whose case count cannot be read from a guard in their own function.
 VERDICTS = {
+    ('ffximain', '2025-07-03'): {'NOT_CODE': [], 'REDECODE': [], 'SWITCHES': {}},
+    ('ffxi', '2025-07-03'): {'NOT_CODE': [], 'REDECODE': [], 'SWITCHES': {}},
     # 2025-11-12: a private-server install; no earlier build's images to carry from, so the
     # verdicts start empty and come from this build's own gate reports.
     ('ffximain', '2025-11-12'): {
@@ -93,6 +99,17 @@ VERDICTS = {
         'SWITCHES': {0x100063fc: 21, 0x10006fe1: 11, 0x102208dd: 9, 0x102a5888: 4, 0x102b92a9: 6},
     },
     ('ffxi', '2025-12-26'): {'NOT_CODE': [0x100067d0], 'REDECODE': [0x100067c8], 'SWITCHES': {}},
+    # Carried over from 2025-07-03 by tools/newbuild.py carry; re-checked by the discovery pass.
+    ('ffximain', '2026-10-05'): {
+        'NOT_CODE': [],
+        'REDECODE': [],
+        'SWITCHES': {},
+    },
+    ('ffxi', '2026-10-05'): {
+        'NOT_CODE': [],
+        'REDECODE': [],
+        'SWITCHES': {},
+    },
 }
 
 

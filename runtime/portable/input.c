@@ -5,6 +5,8 @@
  * DirectInput's mouse is. Gamepads are SDL gamepads, presented in the layout an Xbox controller
  * has under DirectInput (the one FFXI's gamepad configuration is written around). */
 #include <SDL3/SDL.h>
+#include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "input.h"
@@ -146,6 +148,9 @@ void input_sdl_event(const void* ev)
     {
         uint8_t k = dik_of(e->key.scancode);
         uint8_t v = e->type == SDL_EVENT_KEY_DOWN ? 0x80 : 0;
+        if (getenv("FANXI_INPUT_DEBUG"))
+            fprintf(stderr, "[input] scancode %d keycode %d dik %02x %s repeat %d\n",
+                    (int)e->key.scancode, (int)e->key.key, k, v ? "down" : "up", e->key.repeat);
         if (k && (g_keys[k] != v)) /* auto-repeat is not a DirectInput event */
         {
             g_keys[k] = v;

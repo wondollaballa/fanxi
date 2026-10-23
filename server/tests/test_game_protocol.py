@@ -96,9 +96,9 @@ class GatewayTest(unittest.TestCase):
                            "login_token": "nope", "version": [2, 2, 0]})
         self.assertEqual(reply["result"], 0x14)
 
-    def _signed_in(self):
+    def _signed_in(self, character_id=None):
         reply = self.auth({"command": 16, "username": "tester", "password": "",
-                           "login_token": self.service.launch(self.account, None)["login_token"],
+                           "login_token": self.service.launch(self.account, character_id)["login_token"],
                            "version": [2, 2, 0]})
         self.assertEqual(reply["result"], 1)
         return bytes(v & 0xFF for v in reply["session_hash"])
@@ -125,6 +125,20 @@ class GatewayTest(unittest.TestCase):
         self.assertEqual(data[8], 0x0B)
         cid = struct.unpack_from("<I", data, 28)[0]
         self.assertEqual(cid, self.character["char_id"])
+
+    def test_lobby_shows_only_the_launched_mule(self):
+        mule = self.service.create_character(self.account["id"], {
+            "name": "Mule", "race": 1, "face": 1, "size": 1, "nation": 0, "main_job": 1,
+        })
+        session_hash = self._signed_in(mule["id"])
+        data = self._lobby(session_hash, 0x1F)
+        self.assertEqual(data[8], 0x20)
+        self.assertEqual(struct.unpack_from("<I", data, 28)[0], 1)
+        # 28-byte lobby header + 4-byte count, then the 140-byte character record
+        self.assertEqual(data[44:48], b"Mule")
+        data = self._lobby(session_hash, 0x07, b"")
+        self.assertEqual(data[8], 0x0B)
+        self.assertEqual(struct.unpack_from("<I", data, 28)[0], mule["char_id"])
 
     def test_data_connection_and_zone_login(self):
         session_hash = self._signed_in()

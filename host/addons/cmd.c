@@ -235,6 +235,9 @@ void xi_cmd_frame(void)
     if (!booted)
     {
         booted = 1;
+        /* The client's own command table has /goodbye and /farewell but not /bye, which
+         * players type just as often.  Scripts load after this, so they can override it. */
+        xi_alias_set("/bye", "/goodbye");
         xi_exec_script("boot", XI_KIND_XI);
         xi_exec_script("default", XI_KIND_ASHITA);
         xi_exec_script("init", XI_KIND_WINDOWER);
@@ -534,6 +537,13 @@ int xi_command(const char* in, int mode, int injected)
     if (line[0] == '/' && line[1] == '/')
     {
         chatf("unknown command: %.200s", line);
+        return 1;
+    }
+    /* Fanxi's chat commands: /!cmd is sent to the server as a say line.  The game's
+     * own slash parser does not know "!cmd", so hand it the line without the slash. */
+    if (line[0] == '/' && line[1] == '!')
+    {
+        xi_chat_queue_game(mode, line + 1);
         return 1;
     }
     /* text leaving for the game (chat, or its own commands): addons may change or block it */

@@ -29,3 +29,7 @@ __pycache__/
 # Jython compiles the discovery scripts next to themselves
 *$py.class
 .DS_Store
+
+# Character previews captured from the user's own game client, not distributable
+# (tools/capture_character_previews.py writes them for the launcher's Design page)
+launcher-rs/public/design/

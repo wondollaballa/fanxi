@@ -698,6 +698,8 @@ static void pump(void)
             if (!w)
                 break;
             int on = e.type == SDL_EVENT_WINDOW_FOCUS_GAINED;
+            if (getenv("FANXI_INPUT_DEBUG"))
+                fprintf(stderr, "[user32] focus %s hwnd %08x\n", on ? "gained" : "lost", w->hwnd);
             post(w->tid, w->hwnd, WM_ACTIVATEAPP, (uint32_t)on, 0);
             post(w->tid, w->hwnd, WM_ACTIVATE, on ? 1u : 0u, 0);
             post(w->tid, w->hwnd, on ? WM_SETFOCUS : WM_KILLFOCUS, 0, 0);
@@ -1167,6 +1169,13 @@ static void sh_CallNextHookEx(Guest* g) { RET(0, 4); }
 
 static void sh_GetKeyboardState(Guest* g)
 {
+    if (getenv("FANXI_INPUT_DEBUG"))
+    {
+        static unsigned calls;
+        if (calls++ % 120 == 0)
+            fprintf(stderr, "[user32] GetKeyboardState call %u: num8=%02x up=%02x focus=%08x\n",
+                    calls, g_keys[0x68], g_keys[0x26], g_focus);
+    }
     memcpy(ARGP(0), g_keys, 256);
     RET(1, 1);
 }

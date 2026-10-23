@@ -282,6 +282,20 @@ static void load(const char* path)
     free(text);
 }
 
+static void key_path(RegKey* k, char* out, size_t n)
+{
+    char parts[8][256];
+    int depth = 0;
+    for (RegKey* c = k; c && depth < 8; c = c->parent)
+        snprintf(parts[depth++], sizeof parts[0], "%s", c->name);
+    out[0] = 0;
+    for (int i = depth - 1; i >= 0; --i)
+    {
+        size_t used = strlen(out);
+        snprintf(out + used, n > used ? n - used : 0, "%s%s", i == depth - 1 ? "" : "\\", parts[i]);
+    }
+}
+
 static void save_key(FILE* f, RegKey* k, const char* path)
 {
     if (k->values)
@@ -391,7 +405,22 @@ static void sh_RegQueryValueExA(Guest* g)
         RET(ERROR_INVALID_HANDLE, 6);
     RegValue* v = value(k, ARG(1) ? ARGS(1) : NULL, 0);
     if (!v)
+    {
+        if (getenv("FANXI_REG_LOG"))
+        {
+            char path[512];
+            key_path(k, path, sizeof path);
+            fprintf(stderr, "[reg] miss %s :: %s\n", path, ARG(1) ? ARGS(1) : "(default)");
+        }
         RET(ERROR_FILE_NOT_FOUND, 6);
+    }
+    if (getenv("FANXI_REG_LOG"))
+    {
+        char path[512];
+        key_path(k, path, sizeof path);
+        fprintf(stderr, "[reg] get %s :: %s type=%u size=%u\n", path,
+                ARG(1) ? ARGS(1) : "(default)", v->type, v->size);
+    }
     if (type_p)
         wr32(type_p, v->type);
     uint32_t r = ERROR_SUCCESS;
@@ -413,6 +442,14 @@ static void sh_RegSetValueExA(Guest* g)
     if (!k)
         RET(ERROR_INVALID_HANDLE, 6);
     set_value(k, ARG(1) ? ARGS(1) : NULL, ARG(3), GUEST_PTR(ARG(4)), ARG(5));
+    if (getenv("FANXI_REG_LOG"))
+    {
+        /* Where the game puts each setting, for when one does not survive a restart. */
+        char path[512];
+        key_path(k, path, sizeof path);
+        fprintf(stderr, "[reg] set %s :: %s type=%u size=%u\n", path,
+                ARG(1) ? ARGS(1) : "(default)", ARG(3), ARG(5));
+    }
     save();
     RET(ERROR_SUCCESS, 6);
 }

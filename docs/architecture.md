@@ -58,7 +58,7 @@ The FINAL FANTASY XI-facing side. Four listeners:
 | zone | `54230/udp` | the zone packet format, Blowfish + Huffman |
 | search | `54002/udp` | advertised in the lobby; reserved |
 
-The gateway is a small world: one character per account by default, zone-in, movement,
+The gateway is a small world: unlimited characters per account (one online at a time), zone-in, movement,
 zone changes, chat commands, NPCs, monsters, basic melee combat, inventory, a shop and a hunt
 quest. It is a real subset of the client protocol, not a full retail simulation. The design and
 limits are in [world.md](world.md); the LandSandBoat research notes are in

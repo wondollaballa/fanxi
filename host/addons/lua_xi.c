@@ -1050,6 +1050,8 @@ static void sub(lua_State* L, const char* name, const luaL_Reg* fns)
     lua_setfield(L, -2, name);
 }
 
+void xi_phase_open(lua_State* L);
+
 void xi_lua_open(lua_State* L, Addon* a)
 {
     lua_pushlightuserdata(L, a);
@@ -1060,6 +1062,7 @@ void xi_lua_open(lua_State* L, Addon* a)
     sub(L, "chat", CHAT);
     sub(L, "ui", UI);
     sub(L, "packets", PACKETS);
+    xi_phase_open(L), lua_setfield(L, -2, "phase"); /* phase.c */
     sub(L, "input", INPUT_FNS);
     sub(L, "addons", ADDONS);
     sub(L, "fs", FS);

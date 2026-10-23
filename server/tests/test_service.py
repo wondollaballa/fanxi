@@ -3,12 +3,15 @@ from __future__ import annotations
 
 import tempfile
 import unittest
+from dataclasses import replace
 from pathlib import Path
 
 from support import make_service
 
+from fanxi_server.game import base_stats
+
 from fanxi_server.security import hash_password
-from fanxi_server.service import ApiError
+from fanxi_server.service import ApiError, FanxiService
 
 
 class ServiceTest(unittest.TestCase):
@@ -67,16 +70,26 @@ class ServiceTest(unittest.TestCase):
         with self.assertRaises(ApiError):
             self.service.authenticate(result.token)
 
-    def test_character_creation_and_limit(self):
+    def test_character_creation_and_unlimited_mules(self):
         account = self.register().account
         character = self.service.create_character(account["id"], {
             "name": "Fanxi", "race": 1, "face": 1, "size": 1, "nation": 0, "main_job": 1,
         })
         self.assertEqual(character["name"], "Fanxi")
-        self.assertEqual(character["zone"], 246)
+        self.assertEqual(character["zone"], 230)
+        for name in ("Muleone", "Muletwo", "Mulethree"):
+            created = self.service.create_character(account["id"], {"name": name, "race": 1})
+            self.assertEqual(created["name"], name)
+        self.assertEqual(len(self.service.list_characters(account["id"])), 4)
+
+    def test_character_limit_when_configured(self):
+        limited = FanxiService(replace(self.config, max_characters=1), self.db)
+        account = self.register().account
+        limited.create_character(account["id"], {"name": "Onlyone", "race": 1})
         with self.assertRaises(ApiError) as ctx:
-            self.service.create_character(account["id"], {"name": "Second", "race": 1})
+            limited.create_character(account["id"], {"name": "Second", "race": 1})
         self.assertEqual(ctx.exception.status, 409)
+        self.assertEqual(ctx.exception.code, "character_limit")
 
     def test_character_name_validation(self):
         account = self.register().account
@@ -86,12 +99,14 @@ class ServiceTest(unittest.TestCase):
 
     def test_launch_token_is_single_use(self):
         result = self.register()
-        self.service.create_character(result.account["id"], {"name": "Fanxi", "race": 1})
-        launch = self.service.launch(result.account, None, ip="127.0.0.1")
+        character = self.service.create_character(result.account["id"], {"name": "Fanxi", "race": 1})
+        character_id = character["id"]
+        launch = self.service.launch(result.account, character_id, ip="127.0.0.1")
         self.assertTrue(launch["login_token"])
         account, session_hash = self.service.game_login({"login_token": launch["login_token"]}, "127.0.0.1")
         self.assertEqual(account["username"], "tester")
         self.assertEqual(len(session_hash), 16)
+        self.assertEqual(self.service.game_session_character(session_hash), character_id)
         self.assertEqual(self.service.online_count(), 1)
         with self.assertRaises(ApiError) as ctx:
             self.service.game_login({"login_token": launch["login_token"]}, "127.0.0.1")
@@ -142,7 +157,9 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(updated["main_level"], 2)
         self.assertEqual(updated["exp"], 20)
         self.assertEqual(updated["gil"], 1025)
-        self.assertEqual(updated["hp"], 1520)
+        # Max HP follows the retail grade tables, not a flat +20 per level.
+        self.assertEqual(updated["hp"], base_stats.base_hp(1, 1, 2))
+        self.assertEqual(updated["mp"], base_stats.base_mp(1, 1, 2))
 
     def test_quest_rewards_once(self):
         account = self.register().account

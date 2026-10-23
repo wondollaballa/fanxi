@@ -109,6 +109,29 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(self.call("POST", "/api/v1/auth/logout", token=token).status, 204)
         self.assertEqual(self.call("GET", "/api/v1/me", token=token).status, 401)
 
+    def test_character_design_patch(self):
+        token = self.register()["token"]
+        character = json.loads(self.call(
+            "POST", "/api/v1/characters",
+            {"name": "Designer", "race": 1, "face": 2, "hair": 0, "size": 1},
+            token=token).payload)["character"]
+        self.assertEqual(character["variant"], 8)
+        response = self.call(
+            "PATCH", "/api/v1/characters/%d/design" % character["id"],
+            {"race": 7, "face": 5, "hair": 1, "size": 2}, token=token)
+        self.assertEqual(response.status, 200, response.payload)
+        updated = json.loads(response.payload)["character"]
+        self.assertEqual((updated["race"], updated["face"], updated["hair"], updated["size"]),
+                         (7, 5, 1, 2))
+        self.assertEqual(updated["variant"], 30)
+        self.assertEqual(updated["design"]["label"], "Mithra, Face 5, Hair B, Large")
+
+        bad = self.call(
+            "PATCH", "/api/v1/characters/%d/design" % character["id"],
+            {"face": 9}, token=token)
+        self.assertEqual(bad.status, 422)
+        self.assertEqual(json.loads(bad.payload)["error"]["code"], "validation_error")
+
     def test_character_rename(self):
         token = self.register()["token"]
         character = json.loads(self.call("POST", "/api/v1/characters",

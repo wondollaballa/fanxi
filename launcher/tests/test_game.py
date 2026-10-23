@@ -69,7 +69,8 @@ class GameTest(unittest.TestCase):
 
     def test_build_needed(self):
         config = LauncherConfig(host64=str(self.root / "missing"))
-        self.assertTrue(GameManager(config).build_needed())
+        with mock.patch("fanxi_launcher.game.find_host64", return_value=None):
+            self.assertTrue(GameManager(config).build_needed())
 
     def test_humanize_progress(self):
         self.assertEqual(_humanize("@phase compile"), "— compile —")
