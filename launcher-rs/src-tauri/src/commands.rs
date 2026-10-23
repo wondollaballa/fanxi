@@ -690,7 +690,9 @@ async fn launch_sub_with_config(
     character_id: Option<i64>,
 ) -> AppResult<InstanceView> {
     if config.token.is_empty() {
-        return Err(AppError::Validation("sign in to the main account first".to_string()));
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
     }
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     let data = api.launch_sub(&config.token, sub_id, character_id).await?;
@@ -749,7 +751,9 @@ pub async fn launch_all(state: State<'_, AppState>) -> AppResult<LaunchAllResult
 pub async fn team(state: State<'_, AppState>) -> AppResult<TeamView> {
     let config = state.config.lock().await.clone();
     if config.token.is_empty() {
-        return Err(AppError::Validation("sign in to the main account first".to_string()));
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
     }
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     let value = api.sub_accounts(&config.token).await?;
@@ -770,7 +774,9 @@ pub async fn create_sub(
 ) -> AppResult<TeamMutation> {
     let config = state.config.lock().await.clone();
     if config.token.is_empty() {
-        return Err(AppError::Validation("sign in to the main account first".to_string()));
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
     }
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     let value = api.create_sub(&config.token, character).await?;
@@ -784,7 +790,9 @@ pub async fn create_sub(
 pub async fn activate_sub(state: State<'_, AppState>, sub_id: i64) -> AppResult<Value> {
     let config = state.config.lock().await.clone();
     if config.token.is_empty() {
-        return Err(AppError::Validation("sign in to the main account first".to_string()));
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
     }
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     api.activate_sub(&config.token, sub_id).await
@@ -798,7 +806,9 @@ pub async fn create_sub_character(
 ) -> AppResult<Value> {
     let config = state.config.lock().await.clone();
     if config.token.is_empty() {
-        return Err(AppError::Validation("sign in to the main account first".to_string()));
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
     }
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     api.create_sub_character(&config.token, sub_id, data).await
@@ -818,7 +828,9 @@ pub async fn launch_sub(
 pub async fn launch_team(state: State<'_, AppState>) -> AppResult<LaunchAllResult> {
     let config = state.config.lock().await.clone();
     if config.token.is_empty() {
-        return Err(AppError::Validation("sign in to the main account first".to_string()));
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
     }
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     let team = api.sub_accounts(&config.token).await?;
@@ -860,9 +872,7 @@ pub async fn launch_team(state: State<'_, AppState>) -> AppResult<LaunchAllResul
             .and_then(Value::as_str)
             .unwrap_or("sub")
             .to_string();
-        let character_id = sub
-            .pointer("/character/id")
-            .and_then(value_i64);
+        let character_id = sub.pointer("/character/id").and_then(value_i64);
         let running = {
             let instances = state.instances.lock().await;
             instances.running_for(&username).is_some()
@@ -883,14 +893,12 @@ pub async fn launch_team(state: State<'_, AppState>) -> AppResult<LaunchAllResul
 }
 
 #[tauri::command]
-pub async fn delete_sub(
-    state: State<'_, AppState>,
-    sub_id: i64,
-    purge: bool,
-) -> AppResult<Value> {
+pub async fn delete_sub(state: State<'_, AppState>, sub_id: i64, purge: bool) -> AppResult<Value> {
     let config = state.config.lock().await.clone();
     if config.token.is_empty() {
-        return Err(AppError::Validation("sign in to the main account first".to_string()));
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
     }
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     api.delete_sub(&config.token, sub_id, purge).await
