@@ -21,7 +21,7 @@ repository and already data-driven:
 | Layer | Where | State |
 |---|---|---|
 | Job HP/MP/attributes | `server/fanxi_server/game/base_stats.py` | per-job grades, generated |
-| Skill caps | `server/fanxi_server/game/skills.py` + `data/skills.yaml` | per-job ranks |
+| Skill caps | `server/fanxi_server/game/skills.py` + `data/skills.json` | per-job ranks |
 | Job abilities | `job_abilities` (migration `0074`) | ids, gates, recast, animation |
 | Job traits | `server/fanxi_server/game/traits_data.py` | ids, gates, modifiers |
 | Spells and weapon skills | `spells`, `weapon_skills` | full rows |

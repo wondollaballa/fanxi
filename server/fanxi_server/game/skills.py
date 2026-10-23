@@ -1,16 +1,21 @@
 """Skill ids, per-job ranks and the retail caps each rank reaches at every level.
 
-The table is LandSandBoat's data/skills.yaml (skill ranks per job, and the cap per rank
-per level, referenced from ffo.jp).  Reading it means a Ninja no longer shows Great Sword
-424 just because 424 is the A+ cap -- every skill gets the value its own job rank earns.
+The table is LandSandBoat's skills.yaml (skill ranks per job, and the cap per rank per level,
+referenced from ffo.jp), converted to data/skills.json so the server and its tests need no YAML
+parser.  Reading it means a Ninja no longer shows Great Sword 424 just because 424 is the A+ cap
+-- every skill gets the value its own job rank earns.
 """
 from __future__ import annotations
 
+import json
 import logging
 from functools import lru_cache
 from pathlib import Path
 
 log = logging.getLogger("fanxi.skills")
+
+# The level 99 A+ cap: what a skill reaches when the table cannot say better.
+SKILL_CAP = 424
 
 # Skill ids the client's 0x062 block actually has names for.  Ids 13-21 and 46-47 are
 # gaps in its table; filling those made the skills menu show blank rows carrying 424.
@@ -41,21 +46,19 @@ JOB_KEYS = {
     16: "blu", 17: "cor", 18: "pup", 19: "dnc", 20: "sch", 21: "geo", 22: "run",
 }
 
-_DATA = Path(__file__).resolve().parents[3] / "data" / "skills.yaml"
+_DATA = Path(__file__).resolve().parents[3] / "data" / "skills.json"
 
 
 @lru_cache(maxsize=1)
 def _table():
-    """(ranks, caps) from data/skills.yaml, or (None, None) when it is unavailable."""
+    """(ranks, caps) from data/skills.json, or (None, None) when it is unavailable."""
     try:
-        import yaml
-        with _DATA.open("r", encoding="utf-8") as handle:
-            doc = yaml.safe_load(handle)["skills"]
+        doc = json.loads(_DATA.read_text(encoding="utf-8"))["skills"]
         ranks = doc["ranks"]
         caps = {int(level): {str(rank): int(value) for rank, value in row.items()}
                 for level, row in doc["caps"].items()}
         return ranks, caps
-    except Exception as exc:  # missing file or no yaml: fall back to a flat A+ cap
+    except Exception as exc:  # missing file or bad JSON: fall back to a flat A+ cap
         log.warning("skill table unavailable (%s); every skill uses the A+ cap", exc)
         return None, None
 
