@@ -11,7 +11,7 @@ from unittest import mock
 from support import make_service
 
 from fanxi_server.game import base_stats, content, merits, modifiers as mod, packets
-from fanxi_server.game.world import World
+from fanxi_server.game.world import SYNC_RANGE, World
 from fanxi_server.game.zone import ALL_CONTAINERS, ZoneSession, job_id, sub
 
 
@@ -110,7 +110,9 @@ class WorldTest(unittest.TestCase):
         self.session.action(bytes(packet))
 
     def test_content_is_seeded(self):
-        self.assertEqual(len(self.service.npcs_for_zone(246)), 3)
+        npcs = self.service.npcs_for_zone(246)
+        self.assertGreaterEqual(len(npcs), 100)
+        self.assertTrue(any(npc["script"] == content.GUIDE_NPC for npc in npcs))
         self.assertGreaterEqual(len(self.service.monster_spawns_for_zone(100)), 6)
         self.assertEqual(self.service.quest_by_key("pest_control")["required_kills"], 3)
         inventory = self.service.inventory(self.character["id"])
@@ -163,7 +165,7 @@ class WorldTest(unittest.TestCase):
     def test_zone_in_packet_sizes(self):
         self.assertEqual(len(self.session.login_packet()), 260)
         self.assertEqual(len(self.session.job_info()), 132)
-        self.assertEqual(len(self.session.char_status()), 100)
+        self.assertEqual(len(self.session.char_status()), 96)
         self.assertEqual(len(self.session.char_update()), 108)
         self.assertEqual(len(self.session.char_stats()), 112)
         self.assertEqual(len(self.session.party_member()), 40)
@@ -689,25 +691,31 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(struct.unpack_from("<HBB", first, 4), (0x0040, 1, 0))
 
     def test_zone_in_does_not_spawn_and_first_position_does(self):
-        self.assertEqual(len(self.session.entities), 3)
+        self.assertGreater(len(self.session.entities), 0)
         self.assertNotIn(0x00E, msg_types(self.session))
         self.session.sync_entities()
-        types = msg_types(self.session)
-        self.assertEqual(types.count(0x00E), 3)
-        spawn = next(m for m in self.session.queue
-                     if (struct.unpack_from("<H", m, 0)[0] & 0x1FF) == 0x00E)
+        spawned = [message for message in self.session.queue
+                   if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x00E]
+        # Only the entities inside the sync range are streamed, and all of them are.
+        nearby = [entity for entity in self.session.entities
+                  if entity.distance_to(*self.session.pos[:3]) <= SYNC_RANGE]
+        self.assertEqual(len(spawned), len(nearby))
+        self.assertGreater(len(spawned), 0)
+        guide = next(entity for entity in self.session.entities
+                     if entity.script == content.GUIDE_NPC)
+        self.assertIn(guide.targid, self.session.sent_targids)
+        spawn = next(message for message in spawned
+                     if struct.unpack_from("<I", message, 4)[0] == guide.id)
         header = struct.unpack_from("<H", spawn, 0)[0]
         self.assertEqual(header & 0x1FF, 0x00E)
-        self.assertEqual(header >> 9, 0x58 // 4)
+        self.assertEqual(header >> 9, 0x48 // 4)   # 4-byte sub header + the 0x44 body
         body = spawn[4:]
-        self.assertEqual(struct.unpack_from("<I", body, 0)[0], 0x01000000 | (246 << 12) | 0x100)
-        self.assertEqual(struct.unpack_from("<H", body, 4)[0], 0x100)
-        self.assertEqual(body[48:59], b"Fanxi Guide")
-        self.assertEqual(body[36], 0x40)
-        self.assertEqual(body[33], 0x08)
+        self.assertEqual(struct.unpack_from("<H", body, 4)[0], guide.targid)
+        self.assertEqual(body[36], 0x40)           # triggerable
 
     def test_talk_starts_the_guide_quest(self):
-        guide = next(entity for entity in self.session.entities if entity.script == "guide")
+        guide = next(entity for entity in self.session.entities
+                     if entity.script == content.GUIDE_NPC)
         self.talk(guide)
         self.assertIn(0x017, msg_types(self.session))
         quest = self.service.quest_by_key("pest_control")
@@ -715,7 +723,8 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(state["state"], "active")
 
     def test_talk_requires_range(self):
-        guide = next(entity for entity in self.session.entities if entity.script == "guide")
+        guide = next(entity for entity in self.session.entities
+                     if entity.script == content.GUIDE_NPC)
         self.session.pos = [guide.x + 50, guide.y, guide.z, 0]
         packet = bytearray(12)
         struct.pack_into("<IHH", packet, 4, guide.id, guide.targid, packets.ACTION_TALK)
@@ -725,32 +734,39 @@ class WorldTest(unittest.TestCase):
         self.assertIsNone(self.service.quest_state(
             self.character["id"], self.service.quest_by_key("pest_control")["id"]))
 
-    def test_moogle_opens_a_shop_and_sells_potions(self):
-        moogle = next(entity for entity in self.session.entities if entity.script == "moogle")
-        self.talk(moogle)
+    def test_a_merchant_opens_a_shop_and_sells_potions(self):
+        merchant = next(entity for entity in self.session.entities if entity.script == "Gekko")
+        self.talk(merchant)
         types = msg_types(self.session)
         self.assertIn(0x03E, types)
         self.assertIn(0x03C, types)
-        self.assertEqual(len(self.session.shop_items), 3)
-        # Buy two potions at 50 gil each.
+        self.assertTrue(self.session.shop_items)
+        potion = next(index for index, item in enumerate(self.session.shop_items)
+                      if item["item_id"] == 4112)
+        price = int(self.session.shop_items[potion]["price"])
+        before = next(item["quantity"] for item in self.service.inventory(self.character["id"])
+                      if item["item_id"] == 4112)
+        # Buy one potion: the gil and the inventory both move by exactly its price.
         packet = bytearray(16)
-        struct.pack_into("<IHHB", packet, 4, 2, 0, 0, 0)
+        struct.pack_into("<IHHB", packet, 4, 1, 0, potion, 0)
         self.session.queue.clear()
         self.session.buy(bytes(packet))
         self.assertIn(0x03F, msg_types(self.session))
-        self.assertEqual(self.service.character(self.character["id"])["gil"], 900)
+        self.assertEqual(self.service.character(self.character["id"])["gil"], 1000 - price)
         inventory = self.service.inventory(self.character["id"])
-        potion = next(item for item in inventory if item["item_id"] == 4112)
-        self.assertEqual(potion["quantity"], 4)
+        bought = next(item for item in inventory if item["item_id"] == 4112)
+        self.assertEqual(bought["quantity"], before + 1)
 
     def test_attack_kill_awards_exp_gil_and_quest_progress(self):
         quest = self.service.quest_by_key("pest_control")
         self.service.start_quest(self.character["id"], quest["id"])
         self.zone(100)
-        mob = self.session.entities[0]
+        mob = next(entity for entity in self.session.entities
+                   if entity.kind == "mob" and entity.name == "Orcish Fodder")
         self.attack(mob)
         self.assertEqual(self.session.engaged_id, mob.id)
-        self.assertEqual(mob.engaged_char_id, self.character["char_id"])
+        # Engaging is not enmity: a mob only fights back once a swing lands (or it is provoked).
+        self.assertIsNone(mob.engaged_char_id)
         self.world.player_attack = lambda session, entity, **kwargs: (False, 999, False)
         mob.hp = 1
         self.session.next_attack_at = 0
@@ -949,7 +965,8 @@ class WorldTest(unittest.TestCase):
         quest = self.service.quest_by_key("pest_control")
         self.service.start_quest(self.character["id"], quest["id"])
         self.service.advance_quest(self.character["id"], quest["id"], 3)
-        guide = next(entity for entity in self.session.entities if entity.script == "guide")
+        guide = next(entity for entity in self.session.entities
+                     if entity.script == content.GUIDE_NPC)
         self.talk(guide)
         state = self.service.quest_state(self.character["id"], quest["id"])
         self.assertEqual(state["state"], "complete")

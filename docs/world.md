@@ -80,21 +80,20 @@ drew the same character after a multi-box relog.
 
 | NPC | Zone | Script | What it does |
 |---|---|---|---|
-| Fanxi Guide | Port Jeuno (246) | `guide` | starts, tracks and completes **Pest Control** |
-| Wandering Moogle | Port Jeuno | `moogle` | opens a shop |
-| Chocobo Stablehand | Port Jeuno | `stablehand` | ambient dialogue |
+| Cumetouflaix | Port Jeuno (246) | `Cumetouflaix` | starts, tracks and completes **Pest Control** |
+| Gekko | Port Jeuno | `Gekko` | opens a shop |
+| the imported NPCs | every zone | the NPC's own name | retail dialogue events, shops and Home Points |
 
 Talking is `C2S 0x01A` with action id `0x00` and the NPC's targid. Fanxi checks the target is an
 NPC and that the player is within 6 yalms, then calls the script.
 
 **Pest Control** is stored in `quests` and `char_quests`:
 
-1. Talk to the Fanxi Guide. The quest becomes `active`.
-2. Go to West Ronfaure with `!zone 100`; `!pos -150 -62 250` puts you at the first Orcish
-   Grunt camp.
-3. Defeat three Orcish Grunts. Each kill increments `char_quests.progress`.
-4. Return to the Guide. The server marks the quest `complete`, adds 300 gil and two Potions, and
-   refuses to pay a second time.
+1. Talk to Cumetouflaix, the NPC nearest the Port Jeuno arrival point. The quest becomes `active`.
+2. Go to West Ronfaure with `!zone 100`; `!pos -376 -50 311` puts you at an Orcish Fodder camp.
+3. Defeat three Orcish Fodder. Each kill increments `char_quests.progress`.
+4. Return to Cumetouflaix. The server marks the quest `complete`, adds 300 gil and two Potions,
+   and refuses to pay a second time.
 
 Dialogue is sent as `0x017` chat lines rather than a client event. FINAL FANTASY XI event bodies
 and menus live in the client's DAT files; a server can choose an event id but cannot author its
@@ -150,12 +149,15 @@ door.
 
 ## Monsters and combat
 
-West Ronfaure has two camps:
+West Ronfaure carries the imported spawn table — 480 spawns across 37 templates, from level-1
+Wild Rabbits to the 94–95 Notorious Monster Lancing Lamorak. The quest targets the Orcish Fodder
+that camp around the zone:
 
 | Monster | Model | Level | HP | Behaviour |
 |---|---:|---:|---:|---|
-| Orcish Grunt | 612 | 3–4 | 80 | aggro, roam |
-| Lambton Worm | 2027 | 2–3 | 45 | roam |
+| Orcish Fodder | imported | 3–7 | imported | aggro, roam |
+| Orcish Grappler | imported | 3–8 | imported | aggro, roam |
+| Wild Rabbit | imported | 1 | imported | roam |
 
 The gateway tick runs on the UDP receive timeout (about every 250 ms). Monster logic is simple and
 deliberate:

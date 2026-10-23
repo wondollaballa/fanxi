@@ -56,15 +56,14 @@ The data and zone ports share `54230` on TCP and UDP, as the client expects.
 
 ## The world
 
-The zone gateway hosts a small original world. Its design, packet flow and limits are in
+The zone gateway hosts the imported world. Its design, packet flow and limits are in
 [world.md](world.md). In short:
 
-- **Port Jeuno (246):** the Fanxi Guide (quest), the Wandering Moogle (shop), the Chocobo
-  Stablehand (dialogue);
-- **West Ronfaure (100):** three Orcish Grunts and three Lambton Worms, with roam, aggro, combat,
-  EXP/gil and respawn;
-- **Quest:** Pest Control — defeat three Orcish Grunts and return to the Guide for 300 gil and two
-  Potions;
+- **Port Jeuno (246):** 126 NPCs imported from the retail zone data — Cumetouflaix (the quest
+  giver), the merchants Challoux, Gekko, Kindlix, Leyla and Pyropox, and the Home Points;
+- **West Ronfaure (100):** the imported spawn table, with roam, aggro, combat, EXP/gil and respawn;
+- **Quest:** Pest Control — defeat three Orcish Fodder and return to Cumetouflaix for 300 gil and
+  two Potions;
 - **Inventory:** 1,000 starter gil, two Potions and an Onion Sword, stored in SQLite.
 
 NPCs and monsters are sent only after the client's first position (`0x015`), not during zone-in.

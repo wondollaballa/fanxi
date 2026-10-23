@@ -2,7 +2,7 @@
 
 This is the clean-room equivalent of a scripted content system: the database stores where an NPC
 stands and which script it uses, while the behaviour lives in ordinary Python functions here.
-It is intentionally tiny — three city NPCs and one hunt quest — but the shape is the same one a
+It is intentionally tiny — one quest giver and one hunt quest — but the shape is the same one a
 larger world grows into.
 """
 from __future__ import annotations
@@ -13,6 +13,9 @@ import re
 log = logging.getLogger("fanxi.content")
 
 GUIDE_QUEST = "pest_control"
+# The quest giver is a real Port Jeuno NPC rather than a hand-made one: the content import
+# replaces the whole zone, so the guide role follows the NPC nearest the arrival point.
+GUIDE_NPC = "Cumetouflaix"
 
 # What an NPC with no shop or script of its own says.  Never a placeholder.
 GENERIC_LINES = (
@@ -135,15 +138,15 @@ def npc_talk(session, entity) -> None:
         _say(session, entity, "The gate swings open toward West Ronfaure.")
         session.change_zone(100)
         return
-    if entity.script == "guide":
+    if entity.script == GUIDE_NPC:
         quest = service.quest_by_key(GUIDE_QUEST)
         if quest is None:
-            _say(session, entity, "The Fanxi Guide has nothing to say yet.")
+            _say(session, entity, "There is nothing to ask of you yet.")
             return
         state = service.quest_state(character["id"], quest["id"])
         if state is None:
             service.start_quest(character["id"], quest["id"])
-            _say(session, entity, "You look capable. Orcish Grunts are troubling the west road.")
+            _say(session, entity, "You look capable. Orcish Fodder are troubling the west road.")
             _say(session, entity, "Go to West Ronfaure with !zone 100 and defeat three of them. Return to me after.")
             session.say("Quest started: %s." % quest["name"])
             return
@@ -153,7 +156,7 @@ def npc_talk(session, entity) -> None:
         progress = int(state.get("progress", 0))
         required = int(quest["required_kills"])
         if progress < required:
-            _say(session, entity, "You have defeated %d of %d Orcish Grunts. Keep at it." % (progress, required))
+            _say(session, entity, "You have defeated %d of %d Orcish Fodder. Keep at it." % (progress, required))
             return
         service.complete_quest(character["id"], quest["id"])
         _say(session, entity, "You did it. Take this for your trouble.")
@@ -190,4 +193,4 @@ def mob_killed(session, entity) -> None:
     progress, required = int(updated.get("progress", 0)), int(quest["required_kills"])
     session.say("Quest: %s (%d/%d)." % (quest["name"], min(progress, required), required))
     if progress >= required:
-        session.say("Return to the Fanxi Guide in Port Jeuno to claim your reward.")
+        session.say("Return to %s in Port Jeuno to claim your reward." % GUIDE_NPC)

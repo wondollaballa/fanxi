@@ -70,10 +70,10 @@ In the launcher:
    Fanxi's auth gateway. Keep the launcher open: it is the control room for commands, live
    EXP/hr/DPS and gear.
 
-You start in Port Jeuno. Target the Fanxi Guide and use the action button to start **Pest
-Control**; the Wandering Moogle opens a shop. Say `!zone 100` to visit the West Ronfaure camp,
-fight three Orcish Grunts, then return to the Guide. `!entities`, `!heal`, `!where` and `!help`
-are available in chat.
+You start in Port Jeuno. Cumetouflaix, the NPC beside the arrival point, starts **Pest
+Control**; the port's merchants (Gekko sells Potions) open shops. Say `!zone 100` to visit the
+West Ronfaure camp, fight three Orcish Fodder, then return to Cumetouflaix. `!entities`, `!heal`,
+`!where` and `!help` are available in chat.
 
 The launcher's default server is `http://127.0.0.1:8080`. Everything can live on one machine, or
 the server can run elsewhere and the launcher can point at it in **Settings**.
@@ -130,8 +130,8 @@ it is used.
 The zone gateway implements the packets needed to sign in, stand in a zone, see the character,
 move, change zones and talk/attack. Its small world adds:
 
-- three original NPCs in Port Jeuno (`!zone 246`), including the Fanxi Guide and a Moogle shop;
-- six roaming/aggro monsters in West Ronfaure (`!zone 100`);
+- 126 imported NPCs in Port Jeuno (`!zone 246`), including the quest giver and five merchants;
+- the imported West Ronfaure spawn table (`!zone 100`);
 - click-to-talk dialogue and the persistent **Pest Control** hunt quest;
 - basic melee combat with `0x028` action packets, HP updates, EXP, gil and level-ups;
 - an 80-slot inventory with gil, Potions and starter swords;

@@ -53,7 +53,9 @@ class EntityPacketTest(unittest.TestCase):
     def test_spawn_layout(self):
         entity = self.entity()
         body = packets.entity_update(entity)
-        self.assertEqual(len(body), 0x54)
+        # A standard NPC/mob spawn is 0x48 bytes including the sub-message header, so the body
+        # is 0x44; the larger "equipped model" shape (0x54) pushes the look block out of place.
+        self.assertEqual(len(body), 0x44)
         self.assertEqual(struct.unpack_from("<I", body, 0)[0], entity.id)
         self.assertEqual(struct.unpack_from("<H", body, 4)[0], entity.targid)
         self.assertEqual(body[6], packets.SEND_SPAWN)
@@ -65,8 +67,9 @@ class EntityPacketTest(unittest.TestCase):
         self.assertEqual(body[28], 1)       # mob status
         self.assertEqual(body[33], 0x08)    # alive
         self.assertEqual(body[36], 0x40)    # triggerable
-        self.assertEqual(struct.unpack_from("<HH", body, 44), (0, 612))
-        self.assertEqual(body[48:60], b"Orcish Grunt")
+        self.assertEqual(struct.unpack_from("<I", body, 44)[0], 612 << 16)
+        self.assertEqual(body[48], 0x01)    # literal-name marker
+        self.assertEqual(body[49:61], b"Orcish Grunt")
 
     def test_despawn_and_hp_layout(self):
         entity = self.entity(hp=0, alive=False)
