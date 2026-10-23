@@ -8,8 +8,13 @@ out/
 *.DAT
 *.unpacked.*
 
-# Fanxi's own runtime data: database, TLS keys, launcher settings and logs
-data/
+# Fanxi's own runtime data: database, TLS keys, launcher settings and logs.  The three source
+# datasets the server reads are tracked, so a fresh clone has them for the tests and generators.
+data/*
+!data/skills.yaml
+!data/limbus_r30.json
+!data/odyssey_r30.json
+tools/data/
 *.db
 *.db-wal
 *.db-shm

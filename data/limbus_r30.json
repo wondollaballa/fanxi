@@ -1,0 +1,584 @@
+{
+ "rank": 30,
+ "tier": "Su5",
+ "source": [
+  "https://www.bg-wiki.com/ffxi/Justice_Armor_Set",
+  "https://www.bg-wiki.com/ffxi/Hope_Armor_Set",
+  "https://www.bg-wiki.com/ffxi/Trust_Armor_Set",
+  "https://www.bg-wiki.com/ffxi/Bravery_Attire_Set",
+  "https://www.bg-wiki.com/ffxi/Mercy_Armor_Set"
+ ],
+ "job_bit": {
+  "WAR": 1,
+  "MNK": 2,
+  "WHM": 3,
+  "BLM": 4,
+  "RDM": 5,
+  "THF": 6,
+  "PLD": 7,
+  "DRK": 8,
+  "BST": 9,
+  "BRD": 10,
+  "RNG": 11,
+  "SAM": 12,
+  "NIN": 13,
+  "DRG": 14,
+  "SMN": 15,
+  "BLU": 16,
+  "COR": 17,
+  "PUP": 18,
+  "DNC": 19,
+  "SCH": 20,
+  "GEO": 21,
+  "RUN": 22
+ },
+ "families": {
+  "justice": {
+   "set": "Duty Armor Set",
+   "base": "Justice Armor Set",
+   "chain": [
+    "Justice Armor Set",
+    "Magnificent Armor Set",
+    "Duty Armor Set"
+   ],
+   "su": 5,
+   "jobs": [
+    "MNK",
+    "THF",
+    "BST",
+    "PUP",
+    "DNC"
+   ],
+   "pieces": {
+    "head": {
+     "name": "Duty Crown",
+     "slot": "head",
+     "stats": [
+      "DEF:144 HP+119 STR+36 DEX+39 VIT+35 AGI+30 INT+22 MND+28 CHR+28",
+      "Accuracy+42 Attack+42 Magic Accuracy+42 Evasion+90 Magic Evasion+115 \"Magic Def. Bonus\"+5 Haste+6%",
+      "\"Double Attack\"+5% \"Subtle Blow\"+5 Damage taken-5%",
+      "Pet: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42 Critical hit rate+8%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Store TP\"+7",
+      "\"Triple Attack\"+4%",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24167,
+     "bundle": null
+    },
+    "body": {
+     "name": "Duty Cyclas",
+     "slot": "body",
+     "stats": [
+      "DEF:174 HP+141 STR+42 DEX+45 VIT+44 AGI+33 INT+29 MND+35 CHR+35",
+      "Accuracy+42 Attack+42 Magic Accuracy+42 Evasion+95 Magic Evasion+126 \"Magic Def. Bonus\"+9 Haste+4%",
+      "\"Double Attack\"+7% \"Subtle Blow\"+7 Damage taken-7%",
+      "Pet: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42 Damage dealt +8%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Store TP\"+8",
+      "\"Triple Attack\"+5%",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24170,
+     "bundle": null
+    },
+    "hands": {
+     "name": "Duty Gauntlets",
+     "slot": "hands",
+     "stats": [
+      "DEF:132 HP+107 STR+23 DEX+53 VIT+48 AGI+22 INT+17 MND+39 CHR+33",
+      "Accuracy+42 Attack+42 Magic Accuracy+42 Evasion+85 Magic Evasion+100 \"Magic Def. Bonus\"+5 Haste+4%",
+      "\"Double Attack\"+3% \"Subtle Blow\"+3 Damage taken-3%",
+      "Pet: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42 \"Subtle Blow\"+8",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Store TP\"+6",
+      "\"Triple Attack\"+3%",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24173,
+     "bundle": null
+    },
+    "legs": {
+     "name": "Duty Flanchard",
+     "slot": "legs",
+     "stats": [
+      "DEF:156 HP+130 STR+52 VIT+42 AGI+39 INT+33 MND+29 CHR+26",
+      "Accuracy+42 Attack+42 Magic Accuracy+42 Evasion+84 Magic Evasion+131 \"Magic Def. Bonus\"+8 Haste+6%",
+      "\"Double Attack\"+6% \"Subtle Blow\"+6 Damage taken-6%",
+      "Pet: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42 \"Double Attack\"+8%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Store TP\"+7",
+      "\"Triple Attack\"+4%",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24176,
+     "bundle": null
+    },
+    "feet": {
+     "name": "Duty Sollerets",
+     "slot": "feet",
+     "stats": [
+      "DEF:114 HP+96 STR+31 DEX+40 VIT+31 AGI+40 MND+21 CHR+35",
+      "Accuracy+42 Attack+42 Magic Accuracy+42 Evasion+118 Magic Evasion+131 \"Magic Def. Bonus\"+8 Haste+3%",
+      "\"Double Attack\"+4% \"Subtle Blow\"+4 Damage taken-4%",
+      "Pet: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42 Summoned Pet: Lv.+1",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Store TP\"+6",
+      "\"Triple Attack\"+3%",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24179,
+     "bundle": null
+    }
+   }
+  },
+  "hope": {
+   "set": "Revelation Armor Set",
+   "base": "Hope Armor Set",
+   "chain": [
+    "Hope Armor Set",
+    "Perfection Armor Set",
+    "Revelation Armor Set"
+   ],
+   "su": 5,
+   "jobs": [
+    "WAR",
+    "BRD",
+    "NIN"
+   ],
+   "pieces": {
+    "head": {
+     "name": "Revelation Masque",
+     "slot": "head",
+     "stats": [
+      "DEF:155 HP+107 STR+41 DEX+38 VIT+29 AGI+33 INT+31 MND+20 CHR+29",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+109 Magic Evasion+89 \"Magic Def. Bonus\"+7 Haste+6%",
+      "\"Store TP\"+6 Critical hit rate +6% Damage taken -6%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Ranged Accuracy+30 Mag. Acc+30",
+      "\"Double Attack\"+7%",
+      "Physical Damage Limit+6%"
+     ],
+     "item_id": 24122,
+     "bundle": null
+    },
+    "body": {
+     "name": "Revelation Plate.",
+     "slot": "body",
+     "stats": [
+      "DEF:185 HP+130 STR+47 DEX+45 VIT+37 AGI+37 INT+39 MND+28 CHR+37",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+123 Magic Evasion+100 \"Magic Def. Bonus\"+7 Haste+4%",
+      "\"Store TP\"+8 Critical hit rate +8% Damage taken -8%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Ranged Accuracy+30 Mag. Acc+30",
+      "\"Double Attack\"+8%",
+      "Physical Damage Limit+7%"
+     ],
+     "item_id": 24125,
+     "bundle": null
+    },
+    "hands": {
+     "name": "Revelation Gaunt.",
+     "slot": "hands",
+     "stats": [
+      "DEF:143 HP+96 STR+28 DEX+52 VIT+41 AGI+25 INT+26 MND+32 CHR+34",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+93 Magic Evasion+73 \"Magic Def. Bonus\"+4 Haste+4%",
+      "\"Store TP\"+4 Critical hit rate +4% Damage taken -4%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Ranged Accuracy+30 Mag. Acc+30",
+      "\"Double Attack\"+6%",
+      "Physical Damage Limit+5%"
+     ],
+     "item_id": 24128,
+     "bundle": null
+    },
+    "legs": {
+     "name": "Revelation Brais",
+     "slot": "legs",
+     "stats": [
+      "DEF:167 HP+119 STR+57 VIT+35 AGI+34 INT+43 MND+22 CHR+28",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+119 Magic Evasion+110 \"Magic Def. Bonus\"+6 Haste+9%",
+      "\"Store TP\"+7 Critical hit rate +7% Damage taken -7%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Ranged Accuracy+30 Mag. Acc+30",
+      "\"Double Attack\"+7%",
+      "Physical Damage Limit+6%"
+     ],
+     "item_id": 24131,
+     "bundle": null
+    },
+    "feet": {
+     "name": "Revelation Sab.",
+     "slot": "feet",
+     "stats": [
+      "DEF:125 HP+84 STR+36 DEX+40 VIT+26 AGI+43 MND+14 CHR+37",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+140 Magic Evasion+110 \"Magic Def. Bonus\"+6 Haste+3%",
+      "\"Store TP\"+5 Critical hit rate +5% Damage taken -5%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Ranged Accuracy+30 Mag. Acc+30",
+      "\"Double Attack\"+6%",
+      "Physical Damage Limit+5%"
+     ],
+     "item_id": 24134,
+     "bundle": null
+    }
+   }
+  },
+  "trust": {
+   "set": "Sworn Armor Set",
+   "base": "Trust Armor Set",
+   "chain": [
+    "Trust Armor Set",
+    "Prestige Armor Set",
+    "Sworn Armor Set"
+   ],
+   "su": 5,
+   "jobs": [
+    "WHM",
+    "RDM",
+    "PLD",
+    "DRK",
+    "BLU",
+    "RUN"
+   ],
+   "pieces": {
+    "head": {
+     "name": "Sworn Crown",
+     "slot": "head",
+     "stats": [
+      "DEF:161 HP+141 MP+121 STR+36 DEX+29 VIT+49 AGI+26 INT+26 MND+34 CHR+24",
+      "Attack+42 Accuracy+42 Magic Accuracy+42 \"Magic Atk. Bonus\"+35 Magic Damage+32 Evasion+82 Magic Evasion+137 \"Magic Def. Bonus\"+6 Haste+5%",
+      "\"Fast Cast\"+7% Sword enhancement spell damage+8 Damage taken-7%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Triple Attack\"+6%",
+      "\"Phalanx\" received +4"
+     ],
+     "item_id": 24137,
+     "bundle": null
+    },
+    "body": {
+     "name": "Sworn Platemail",
+     "slot": "body",
+     "stats": [
+      "DEF:191 HP+187 MP+106 STR+45 DEX+34 VIT+51 AGI+30 INT+31 MND+39 CHR+29",
+      "Attack+42 Accuracy+42 Magic Accuracy+42 \"Magic Atk. Bonus\"+35 Magic Damage+32 Evasion+87 Magic Evasion+142 \"Magic Def. Bonus\"+8 Haste+3%",
+      "\"Fast Cast\"+9% Sword enhancement spell damage +10 Damage taken-9%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Triple Attack\"+8%",
+      "\"Phalanx\" received +6"
+     ],
+     "item_id": 24140,
+     "bundle": null
+    },
+    "hands": {
+     "name": "Sworn Gauntlets",
+     "slot": "hands",
+     "stats": [
+      "DEF:149 HP+96 MP+76 STR+27 DEX+44 VIT+55 INT+21 MND+44 CHR+29",
+      "Accuracy+42 Attack+42 Magic Accuracy+42 \"Magic Atk. Bonus\"+35 Magic Damage+32 Evasion+68 Magic Evasion+100 \"Magic Def. Bonus\"+5 Haste+5%",
+      "\"Fast Cast\"+5% Sword enhancement spell damage +7 Damage taken-5%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Triple Attack\"+7%",
+      "\"Phalanx\" received +5"
+     ],
+     "item_id": 24143,
+     "bundle": null
+    },
+    "legs": {
+     "name": "Sworn Brais",
+     "slot": "legs",
+     "stats": [
+      "DEF:173 HP+164 MP+91 STR+51 VIT+43 AGI+28 INT+39 MND+32 CHR+20",
+      "Accuracy+42 Attack+42 Magic Accuracy+42 \"Magic Atk. Bonus\"+35 Magic Damage+32 Evasion+73 Magic Evasion+169 \"Magic Def. Bonus\"+7 Haste+5%",
+      "\"Fast Cast\"+8% Sword enhancement spell damage+9 Damage taken-8%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Triple Attack\"+6%",
+      "\"Phalanx\" received +4"
+     ],
+     "item_id": 24146,
+     "bundle": null
+    },
+    "feet": {
+     "name": "Sworn Sabatons",
+     "slot": "feet",
+     "stats": [
+      "DEF:131 HP+119 MP+62 STR+32 DEX+29 VIT+39 AGI+40 MND+30 CHR+35",
+      "Accuracy+42 Attack+42 Magic Accuracy+42 \"Magic Atk. Bonus\"+35 Magic Damage+32 Evasion+101 Magic Evasion+169 \"Magic Def. Bonus\"+6 Haste+3%",
+      "\"Fast Cast\"+6% Sword enhancement spell damage+7 Damage taken-6%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Mag. Acc+30",
+      "\"Triple Attack\"+7%",
+      "\"Phalanx\" received +5"
+     ],
+     "item_id": 24149,
+     "bundle": null
+    }
+   }
+  },
+  "bravery": {
+   "set": "Indomitable Attire Set",
+   "base": "Bravery Attire Set",
+   "chain": [
+    "Bravery Attire Set",
+    "Intrepid Attire Set",
+    "Indomitable Attire Set"
+   ],
+   "su": 5,
+   "jobs": [
+    "BLM",
+    "SMN",
+    "SCH",
+    "GEO"
+   ],
+   "pieces": {
+    "head": {
+     "name": "Indom. Petasos",
+     "slot": "head",
+     "stats": [
+      "DEF:135 HP+84 MP+106 STR+27 DEX+25 VIT+28 AGI+18 INT+38 MND+31 CHR+30",
+      "Magic Accuracy+42 \"Magic Atk. Bonus\"+40 Magic Damage+22 Evasion+79 Magic Evasion+94 \"Magic Def. Bonus\"+9 Enmity-6 Haste+6%",
+      "\"Fast Cast\"+6% Damage taken-4%",
+      "Avatar: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42 Enmity+8",
+      ":"
+     ],
+     "augments": [
+      "Mag. Acc+30",
+      "\"Magic Atk. Bonus\"+28",
+      "\"Blood Pact\" damage+10",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24152,
+     "bundle": null
+    },
+    "body": {
+     "name": "Indomitable Coat",
+     "slot": "body",
+     "stats": [
+      "DEF:165 HP+107 MP+91 STR+34 DEX+31 VIT+36 AGI+33 INT+52 MND+42 CHR+40",
+      "Magic Accuracy+42 \"Magic Atk. Bonus\"+40 Magic Damage+22 Evasion+87 Magic Evasion+110 \"Magic Def. Bonus\"+10 Enmity-10 Haste+3%",
+      "\"Fast Cast\"+10% Damage taken-6%",
+      "Avatar: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42 Critical hit rate+8%",
+      ":"
+     ],
+     "augments": [
+      "Mag. Acc+30",
+      "\"Magic Atk. Bonus\"+32",
+      "\"Blood Pact\" damage+12",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24155,
+     "bundle": null
+    },
+    "hands": {
+     "name": "Indom. Gloves",
+     "slot": "hands",
+     "stats": [
+      "DEF:123 HP+73 MP+62 STR+15 DEX+39 VIT+40 AGI+19 INT+38 MND+45 CHR+30",
+      "Magic Accuracy+42 \"Magic Atk. Bonus\"+40 Magic Damage+22 Evasion+68 Magic Evasion+88 \"Magic Def. Bonus\"+7 Enmity-4 Haste+3%",
+      "\"Fast Cast\"+4% Damage taken-2%",
+      "Avatar: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42 \"Double Attack\"+8%",
+      ":"
+     ],
+     "augments": [
+      "Mag. Acc+30",
+      "\"Magic Atk. Bonus\"+30",
+      "\"Blood Pact\" damage+11",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24158,
+     "bundle": null
+    },
+    "legs": {
+     "name": "Indom. Tonban",
+     "slot": "legs",
+     "stats": [
+      "DEF:147 HP+96 MP+76 STR+44 VIT+25 AGI+30 INT+54 MND+37 CHR+30",
+      "Magic Accuracy+42 \"Magic Atk. Bonus\"+40 Magic Damage+22 Evasion+68 Magic Evasion+126 \"Magic Def. Bonus\"+9 Enmity-8 Haste+5%",
+      "\"Fast Cast\"+8% \"Avatar's Favor\" effect +1 Damage taken-5%",
+      "Pet: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42",
+      ":"
+     ],
+     "augments": [
+      "Mag. Acc+30",
+      "\"Magic Atk. Bonus\"+28",
+      "\"Blood Pact\" damage+10",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24161,
+     "bundle": null
+    },
+    "feet": {
+     "name": "Indom. Sabots",
+     "slot": "feet",
+     "stats": [
+      "DEF:105 HP+62 MP+47 STR+22 DEX+26 VIT+25 AGI+43 INT+35 MND+31 CHR+44",
+      "Magic Accuracy+42 \"Magic Atk. Bonus\"+40 Magic Damage+22 Evasion+95 Magic Evasion+126 \"Magic Def. Bonus\"+9 Enmity-4 Haste+3%",
+      "\"Fast Cast\"+4% Damage taken-3%",
+      "Avatar: Accuracy+42 Ranged Accuracy+42 Magic Accuracy+42 Lv+1",
+      ":"
+     ],
+     "augments": [
+      "Mag. Acc+30",
+      "\"Magic Atk. Bonus\"+30",
+      "\"Blood Pact\" damage+11",
+      "Pet: Accuracy+30 Mag. Acc+30"
+     ],
+     "item_id": 24164,
+     "bundle": null
+    }
+   }
+  },
+  "mercy": {
+   "set": "Clemency Armor Set",
+   "base": "Mercy Armor Set",
+   "chain": [
+    "Mercy Armor Set",
+    "Grace Armor Set",
+    "Clemency Armor Set"
+   ],
+   "su": 5,
+   "jobs": [
+    "RNG",
+    "SAM",
+    "DRG",
+    "COR"
+   ],
+   "pieces": {
+    "head": {
+     "name": "Clemen. Somen",
+     "slot": "head",
+     "stats": [
+      "DEF:157 HP+96 STR+34 DEX+41 VIT+27 AGI+40 INT+22 MND+22 CHR+23",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+79 Magic Evasion+105 \"Magic Def. Bonus\"+6 Haste+6%",
+      "Physical damage limit +6% Critical hit rate +6% Damage taken -6%",
+      "Wyvern: HP+18% Accuracy+42 Magic Accuracy+42",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Rng. Acc.+30 Mag. Acc.+30",
+      "Enmity-8",
+      "\"Quadruple Attack\"+4%",
+      "Pet: Accuracy+30 Mag. Acc.+30"
+     ],
+     "item_id": 24182,
+     "bundle": null
+    },
+    "body": {
+     "name": "Clemen. Hara.",
+     "slot": "body",
+     "stats": [
+      "DEF:187 HP+119 STR+42 DEX+52 VIT+35 AGI+50 INT+29 MND+28 CHR+29",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+102 Magic Evasion+115 \"Magic Def. Bonus\"+8 Haste+3%",
+      "Physical damage limit +8% Critical hit rate +8% Damage taken -8%",
+      "Wyvern: Accuracy+42 Magic Accuracy+42 Damage taken -8%",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Rng. Acc.+30 Mag. Acc.+30",
+      "Enmity-10",
+      "\"Quadruple Attack\"+6%",
+      "Pet: Accuracy+30 Mag. Acc.+30"
+     ],
+     "item_id": 24185,
+     "bundle": null
+    },
+    "hands": {
+     "name": "Clemency Kote",
+     "slot": "hands",
+     "stats": [
+      "DEF:145 HP+84 STR+30 DEX+57 VIT+41 AGI+30 INT+21 MND+35 CHR+27",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+68 Magic Evasion+88 \"Magic Def. Bonus\"+5 Haste+3%",
+      "Physical damage limit +4% Critical hit rate +4% Damage taken -4%",
+      "Wyvern: Accuracy+42 Magic Accuracy+42 \"Subtle Blow\"+8",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Rng. Acc.+30 Mag. Acc.+30",
+      "Enmity-9",
+      "\"Quadruple Attack\"+5%",
+      "Pet: Accuracy+30 Mag. Acc.+30"
+     ],
+     "item_id": 24188,
+     "bundle": null
+    },
+    "legs": {
+     "name": "Clem. Haidate",
+     "slot": "legs",
+     "stats": [
+      "DEF:169 HP+107 STR+47 VIT+27 AGI+51 INT+37 MND+23 CHR+18",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+68 Magic Evasion+137 \"Magic Def. Bonus\"+7 Haste+5%",
+      "Physical damage limit +7% Critical hit rate +7% Damage taken -7%",
+      "Wyvern: Accuracy+42 Magic Accuracy+42 \"Regen\"+8",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Rng. Acc.+30 Mag. Acc.+30",
+      "Enmity-8",
+      "\"Quadruple Attack\"+4%",
+      "Pet: Accuracy+30 Mag. Acc.+30"
+     ],
+     "item_id": 24191,
+     "bundle": null
+    },
+    "feet": {
+     "name": "Clem. Sune-Ate",
+     "slot": "feet",
+     "stats": [
+      "DEF:127 HP+73 STR+30 DEX+42 VIT+21 AGI+63 MND+19 CHR+35",
+      "Accuracy+42 Attack+42 Ranged Accuracy+42 Ranged Attack+42 Magic Accuracy+42 Evasion+98 Magic Evasion+137 \"Magic Def. Bonus\"+6 Haste+3%",
+      "Physical damage limit +5% Critical hit rate +5% Damage taken -5%",
+      "Wyvern: Accuracy+42 Magic Accuracy+42 Lv+1",
+      ":"
+     ],
+     "augments": [
+      "Accuracy+30 Rng. Acc.+30 Mag. Acc.+30",
+      "Enmity-9",
+      "\"Quadruple Attack\"+5%",
+      "Pet: Accuracy+30 Mag. Acc.+30"
+     ],
+     "item_id": 24194,
+     "bundle": null
+    }
+   }
+  }
+ }
+}

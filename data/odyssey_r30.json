@@ -1,0 +1,636 @@
+{
+  "rank": 30,
+  "source": "https://www.bg-wiki.com/ffxi/Odyssey (Rank 30 augment rows)",
+  "job_bit": {
+    "WAR": 1,
+    "MNK": 2,
+    "WHM": 3,
+    "BLM": 4,
+    "RDM": 5,
+    "THF": 6,
+    "PLD": 7,
+    "DRK": 8,
+    "BST": 9,
+    "BRD": 10,
+    "RNG": 11,
+    "SAM": 12,
+    "NIN": 13,
+    "DRG": 14,
+    "SMN": 15,
+    "BLU": 16,
+    "COR": 17,
+    "PUP": 18,
+    "DNC": 19,
+    "SCH": 20,
+    "GEO": 21,
+    "RUN": 22
+  },
+  "sets": {
+    "nyame": {
+      "set": "Nyame Armor Set",
+      "jobs": [
+        "WAR",
+        "MNK",
+        "WHM",
+        "BLM",
+        "RDM",
+        "THF",
+        "PLD",
+        "DRK",
+        "BST",
+        "BRD",
+        "RNG",
+        "SAM",
+        "NIN",
+        "DRG",
+        "SMN",
+        "BLU",
+        "COR",
+        "PUP",
+        "DNC",
+        "SCH",
+        "GEO",
+        "RUN"
+      ],
+      "model": 470,
+      "source": "Bumba (Sheol Gaol)",
+      "pieces": {
+        "helm": {
+          "item_id": 23761,
+          "name": "Nyame Helm",
+          "slot": "head",
+          "augments": {
+            "A": [
+              "Acc/Rng. Acc./M. Acc.+30",
+              "Store TP+13",
+              "Phys. dmg. limit +5%",
+              "Crit.hit rate+10%"
+            ],
+            "B": [
+              "Attack+35 Rng. Atk.+35",
+              "Weapon skill dmg +11%",
+              "\"Dbl.Atk.\"+5%",
+              "Acc.+10 Rng. Acc.+10"
+            ],
+            "C": [
+              "\"Mag.Atk.Bns.\"+35",
+              "Magic Damage+30",
+              "Magic burst damage II +6",
+              "Mag. Acc.+10"
+            ],
+            "D": [
+              "Acc+30 Mag. Acc.+30",
+              "Pet: Acc./Mag. Acc.+30",
+              "Pet: All Attr.+15",
+              "Pet: Damage taken -8%"
+            ]
+          },
+          "bundles": {
+            "A": 438,
+            "B": 443,
+            "C": 448,
+            "D": 453
+          }
+        },
+        "mail": {
+          "item_id": 23768,
+          "name": "Nyame Mail",
+          "slot": "body",
+          "augments": {
+            "A": [
+              "Acc/Rng. Acc./M. Acc.+30",
+              "Store TP+15",
+              "Phys. dmg. limit +7%",
+              "DEX/AGI+10"
+            ],
+            "B": [
+              "Attack+35 Rng. Atk.+35",
+              "Weapon skill dmg +13%",
+              "\"Double Attack\"+7%",
+              "STR/VIT+10"
+            ],
+            "C": [
+              "\"Mag.Atk.Bns.\"+35",
+              "Magic Damage+40",
+              "Magic burst damage II +7",
+              "INT/MND/CHR+10"
+            ],
+            "D": [
+              "Acc+30 Mag. Acc.+30",
+              "Pet: Acc./Mag. Acc.+30",
+              "Pet: DMG+11%",
+              "Pet: Damage taken -10%"
+            ]
+          },
+          "bundles": {
+            "A": 439,
+            "B": 444,
+            "C": 449,
+            "D": 454
+          }
+        },
+        "gauntlets": {
+          "item_id": 23775,
+          "name": "Nyame Gauntlets",
+          "slot": "hands",
+          "augments": {
+            "A": [
+              "Acc/Rng. Acc./M. Acc.+30",
+              "Store TP+14",
+              "Phys. dmg. limit +5%",
+              "DEX+15"
+            ],
+            "B": [
+              "Attack+35 Rng. Atk.+35",
+              "Weapon skill dmg +11%",
+              "\"Double Attack\"+5%",
+              "VIT+15"
+            ],
+            "C": [
+              "\"Mag.Atk.Bns.\"+35",
+              "Magic Damage+30",
+              "Magic burst damage II +5",
+              "MND+15"
+            ],
+            "D": [
+              "Acc+30 Mag. Acc.+30",
+              "Pet: Acc./Mag. Acc.+30",
+              "Pet: All Attr.+15",
+              "Pet: Damage taken -8%"
+            ]
+          },
+          "bundles": {
+            "A": 440,
+            "B": 445,
+            "C": 450,
+            "D": 455
+          }
+        },
+        "flanchard": {
+          "item_id": 23782,
+          "name": "Nyame Flanchard",
+          "slot": "legs",
+          "augments": {
+            "A": [
+              "Acc/Rng. Acc./M. Acc.+30",
+              "Store TP+13",
+              "Phys. dmg. limit +6%",
+              "Crit.hit rate+13%"
+            ],
+            "B": [
+              "Attack+35 Rng. Atk.+35",
+              "Weapon skill dmg +12%",
+              "\"Double Attack\"+6%",
+              "STR+15"
+            ],
+            "C": [
+              "\"Mag.Atk.Bns.\"+35",
+              "Magic Damage+35",
+              "Magic burst damage II +5",
+              "INT+15"
+            ],
+            "D": [
+              "Acc+30 Mag. Acc.+30",
+              "Pet: Acc./Mag. Acc.+30",
+              "Pet: DMG+10%",
+              "Pet: Damage taken -9%"
+            ]
+          },
+          "bundles": {
+            "A": 441,
+            "B": 446,
+            "C": 451,
+            "D": 456
+          }
+        },
+        "sollerets": {
+          "item_id": 23789,
+          "name": "Nyame Sollerets",
+          "slot": "feet",
+          "augments": {
+            "A": [
+              "Acc/Rng. Acc./M. Acc.+30",
+              "Store TP+13",
+              "Phys. dmg. limit +5%",
+              "AGI+15"
+            ],
+            "B": [
+              "Attack+35 Rng. Atk.+35",
+              "Weapon skill dmg +11%",
+              "\"Double Attack\"+5%",
+              "Acc+13 Rng. Acc+13"
+            ],
+            "C": [
+              "\"Mag.Atk.Bns.\"+35",
+              "Magic Damage+30",
+              "Magic burst damage II +5",
+              "CHR+15"
+            ],
+            "D": [
+              "Acc+30 Mag. Acc.+30",
+              "Pet: Acc./Mag. Acc.+30",
+              "Pet: All Attr.+15",
+              "Pet: Damage taken -8%"
+            ]
+          },
+          "bundles": {
+            "A": 442,
+            "B": 447,
+            "C": 452,
+            "D": 457
+          }
+        }
+      }
+    },
+    "sakpata": {
+      "set": "Sakpata's Armor Set",
+      "jobs": [
+        "WAR",
+        "PLD",
+        "DRK"
+      ],
+      "model": 466,
+      "source": "Kalunga (Sheol Gaol)",
+      "pieces": {
+        "helm": {
+          "item_id": 23757,
+          "name": "Sakpata's Helm",
+          "slot": "head",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Double Attack\" damage +15%",
+              "Accuracy+15 Mag. Acc+15",
+              "\"Cure\" potency+5%"
+            ]
+          },
+          "bundle": 418
+        },
+        "breastplate": {
+          "item_id": 23764,
+          "name": "Sakpata's Breastplate",
+          "slot": "body",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "Occ. inc. resist. to stat. ailments+15",
+              "Accuracy+15 Mag. Acc+15",
+              "Crit.hit rate+5%"
+            ]
+          },
+          "bundle": 419
+        },
+        "gauntlets": {
+          "item_id": 23771,
+          "name": "Sakpata's Gauntlets",
+          "slot": "hands",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Store TP\"+8",
+              "Accuracy+15 Mag. Acc+15",
+              "VIT+5"
+            ]
+          },
+          "bundle": 420
+        },
+        "cuisses": {
+          "item_id": 23778,
+          "name": "Sakpata's Cuisses",
+          "slot": "legs",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "Skillchain dmg.+15%",
+              "Accuracy+15 Mag. Acc+15",
+              "STR+5"
+            ]
+          },
+          "bundle": 421
+        },
+        "leggings": {
+          "item_id": 23785,
+          "name": "Sakpata's Leggings",
+          "slot": "feet",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Subtle Blow\"+15",
+              "Accuracy+15 Mag. Acc+15",
+              "Chance of successful block +5"
+            ]
+          },
+          "bundle": 422
+        }
+      }
+    },
+    "gleti": {
+      "set": "Gleti's Armor Set",
+      "jobs": [
+        "THF",
+        "BST",
+        "DRG",
+        "BLU",
+        "DNC"
+      ],
+      "model": 0,
+      "source": "Ngai (Sheol Gaol)",
+      "pieces": {
+        "mask": {
+          "item_id": 23756,
+          "name": "Gleti's Mask",
+          "slot": "head",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Counter\"+10",
+              "Accuracy+15 Mag. Acc+15",
+              "\"Regen\"+3"
+            ]
+          },
+          "bundle": 413
+        },
+        "cuirass": {
+          "item_id": 23763,
+          "name": "Gleti's Cuirass",
+          "slot": "body",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Double Attack\"+10%",
+              "Accuracy+15 Mag. Acc+15",
+              "Occ. inc. resist. to stat. ailments+10"
+            ]
+          },
+          "bundle": 414
+        },
+        "gauntlets": {
+          "item_id": 23770,
+          "name": "Gleti's Gauntlets",
+          "slot": "hands",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Store TP\"+8",
+              "Accuracy+15 Mag. Acc+15",
+              "DEX+5"
+            ]
+          },
+          "bundle": 415
+        },
+        "breeches": {
+          "item_id": 23777,
+          "name": "Gleti's Breeches",
+          "slot": "legs",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Subtle Blow\"+15",
+              "Accuracy+15 Mag. Acc+15",
+              "\"Triple Attack\"+5%"
+            ]
+          },
+          "bundle": 416
+        },
+        "boots": {
+          "item_id": 23784,
+          "name": "Gleti's Boots",
+          "slot": "feet",
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "Evasion+15",
+              "Accuracy+15 Mag. Acc+15",
+              "STR+5"
+            ]
+          },
+          "bundle": 417
+        }
+      }
+    },
+    "agwu": {
+      "set": "Agwu's Attire Set",
+      "jobs": [
+        "BLM",
+        "SCH",
+        "GEO",
+        "RUN"
+      ],
+      "model": 0,
+      "source": "Ongo (Sheol Gaol)",
+      "pieces": {
+        "cap": {
+          "item_id": 23759,
+          "name": "Agwu's Cap",
+          "slot": "head",
+          "augments": {
+            "R30": [
+              "\"Mag.Atk.Bns.\"+25",
+              "Magic Damage+15",
+              "Accuracy+15 Mag. Acc+15",
+              "Enmity-5"
+            ]
+          },
+          "bundle": 428
+        },
+        "robe": {
+          "item_id": 23766,
+          "name": "Agwu's Robe",
+          "slot": "body",
+          "augments": {
+            "R30": [
+              "\"Mag.Atk.Bns.\"+25",
+              "Enmity-8",
+              "Accuracy+15 Mag. Acc+15",
+              "Magic Damage+10"
+            ]
+          },
+          "bundle": 429
+        },
+        "gages": {
+          "item_id": 23773,
+          "name": "Agwu's Gages",
+          "slot": "hands",
+          "augments": {
+            "R30": [
+              "\"Mag.Atk.Bns.\"+25",
+              "Magic burst damage II +6",
+              "Accuracy+15 Mag. Acc+15",
+              "MND+5"
+            ]
+          },
+          "bundle": 430
+        },
+        "slops": {
+          "item_id": 23780,
+          "name": "Agwu's Slops",
+          "slot": "legs",
+          "augments": {
+            "R30": [
+              "\"Mag.Atk.Bns.\"+25",
+              "Damage taken-10%",
+              "Accuracy+15 Mag. Acc+15",
+              "INT+5"
+            ]
+          },
+          "bundle": 431
+        },
+        "pigaches": {
+          "item_id": 23787,
+          "name": "Agwu's Pigaches",
+          "slot": "feet",
+          "augments": {
+            "R30": [
+              "\"Mag.Atk.Bns.\"+25",
+              "\"Drain\" and \"Aspir\" potency+15",
+              "Accuracy+15 Mag. Acc+15",
+              "Spell interruption rate down 10%"
+            ]
+          },
+          "bundle": 432
+        }
+      }
+    }
+  },
+  "weapons": {
+    "fists": {
+      "item_id": 21527,
+      "name": "Sakpata's Fists",
+      "slot": "main",
+      "slot_mask": 1,
+      "jobs": [
+        "MNK",
+        "PUP"
+      ],
+      "weapon": "Hand-to-Hand",
+      "source": "Kalunga",
+      "augments": [
+        "DMG:+20",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc+15",
+        "Skillchain dmg.+10%"
+      ],
+      "bundle": 393
+    },
+    "sword": {
+      "item_id": 21637,
+      "name": "Sakpata's Sword",
+      "slot": "main",
+      "slot_mask": 3,
+      "jobs": [
+        "RDM",
+        "PLD",
+        "BLU"
+      ],
+      "weapon": "Sword",
+      "source": "Kalunga",
+      "augments": [
+        "DMG:+13",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc+15",
+        "\"Refresh\"+3"
+      ],
+      "bundle": 395
+    },
+    "knife": {
+      "item_id": 21567,
+      "name": "Gleti's Knife",
+      "slot": "main",
+      "slot_mask": 3,
+      "jobs": [
+        "RDM",
+        "THF",
+        "BRD",
+        "RNG",
+        "NIN",
+        "COR",
+        "DNC"
+      ],
+      "weapon": "Dagger",
+      "source": "Ngai",
+      "augments": [
+        "DMG:+11",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc+15",
+        "\"Subtle Blow II\"+10"
+      ],
+      "bundle": 394
+    },
+    "crossbow": {
+      "item_id": 22150,
+      "name": "Gleti's Crossbow",
+      "slot": "range",
+      "slot_mask": 4,
+      "jobs": [
+        "RNG"
+      ],
+      "weapon": "Crossbow",
+      "source": "Ngai",
+      "augments": [
+        "DMG:+9",
+        "Rng. Atk.+45",
+        "Rng. Acc.+15 Mag. Acc.+15",
+        "\"Snapshot\"+10"
+      ],
+      "bundle": 406
+    },
+    "axe": {
+      "item_id": 21724,
+      "name": "Agwu's Axe",
+      "slot": "main",
+      "slot_mask": 3,
+      "jobs": [
+        "BST"
+      ],
+      "weapon": "Axe",
+      "source": "Ongo",
+      "augments": [
+        "DMG:+15",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc+15",
+        "Skillchain dmg.+10%"
+      ],
+      "bundle": 398
+    },
+    "claymore": {
+      "item_id": 21675,
+      "name": "Agwu's Claymore",
+      "slot": "main",
+      "slot_mask": 1,
+      "jobs": [
+        "WAR",
+        "PLD",
+        "DRK",
+        "RUN"
+      ],
+      "weapon": "Great Sword",
+      "source": "Ongo",
+      "augments": [
+        "DMG:+26",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc+15",
+        "\"Counter\"+10"
+      ],
+      "bundle": 396
+    },
+    "scythe": {
+      "item_id": 21832,
+      "name": "Agwu's Scythe",
+      "slot": "main",
+      "slot_mask": 1,
+      "jobs": [
+        "DRK"
+      ],
+      "weapon": "Scythe",
+      "source": "Ongo",
+      "augments": [
+        "DMG:+28",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc+15",
+        "Damage taken-10%"
+      ],
+      "bundle": 400
+    }
+  },
+  "bundle_source": "LandSandBoat Exdata::AugmentBundle table (scripts/data/augments.lua), matched to each Rank 30 row; verified against Assassin's Gorget +2 (bundle 204)"
+}
