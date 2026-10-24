@@ -1,0 +1,3490 @@
+{
+ "format": "fanxi-weapon-skills/1",
+ "source": "LandSandBoat scripts/actions/weaponskills (Adoulin branch) and the BG-wiki Prime weapon-skill pages",
+ "weapon_skills": {
+  "1": {
+   "ftp": [
+    1.0,
+    2.4,
+    3.4
+   ],
+   "hits": 3,
+   "id": 1,
+   "multi_hit_ftp": true,
+   "name": "Combo",
+   "skill": 1,
+   "wsc": {
+    "dex": 0.3,
+    "str": 0.3
+   }
+  },
+  "10": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 2,
+   "id": 10,
+   "name": "Final Heaven",
+   "skill": 1,
+   "wsc": {
+    "vit": 0.8
+   }
+  },
+  "100": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 100,
+   "name": "Spinning Scythe",
+   "skill": 7,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "101": {
+   "crit_varies": [
+    0.3,
+    0.63,
+    0.96
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 101,
+   "name": "Vorpal Scythe",
+   "skill": 7,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "102": {
+   "ftp": [
+    0.875,
+    0.875,
+    0.875
+   ],
+   "hits": 4,
+   "id": 102,
+   "name": "Guillotine",
+   "skill": 7,
+   "wsc": {
+    "mnd": 0.5,
+    "str": 0.3
+   }
+  },
+  "103": {
+   "ftp": [
+    2.0,
+    4.0,
+    7.0
+   ],
+   "hits": 2,
+   "id": 103,
+   "name": "Cross Reaper",
+   "skill": 7,
+   "wsc": {
+    "mnd": 0.6,
+    "str": 0.6
+   }
+  },
+  "104": {
+   "ftp": [
+    1.375,
+    2.75,
+    4.75
+   ],
+   "hits": 1,
+   "id": 104,
+   "name": "Spiral Hell",
+   "skill": 7,
+   "wsc": {
+    "int": 0.5,
+    "str": 0.5
+   }
+  },
+  "105": {
+   "ftp": [
+    2.75,
+    2.75,
+    2.75
+   ],
+   "hits": 1,
+   "id": 105,
+   "name": "Catastrophe",
+   "skill": 7,
+   "wsc": {
+    "agi": 0.0,
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "106": {
+   "ftp": [
+    0.5,
+    3.25,
+    6.0
+   ],
+   "hits": 4,
+   "id": 106,
+   "name": "Insurgency",
+   "skill": 7,
+   "wsc": {
+    "int": 0.2,
+    "str": 0.2
+   }
+  },
+  "107": {
+   "ftp": [
+    3.5,
+    3.5,
+    3.5
+   ],
+   "id": 107,
+   "magic": true,
+   "name": "Infernal Scythe",
+   "skill": 7,
+   "wsc": {
+    "int": 0.7,
+    "str": 0.3
+   }
+  },
+  "108": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 108,
+   "ignored_defense": [
+    0.125,
+    0.375,
+    0.625
+   ],
+   "name": "Quietus",
+   "skill": 7,
+   "wsc": {
+    "mnd": 0.6,
+    "str": 0.6
+   }
+  },
+  "109": {
+   "ftp": [
+    0.75,
+    1.25,
+    2.0
+   ],
+   "hits": 4,
+   "id": 109,
+   "multi_hit_ftp": true,
+   "name": "Entropy",
+   "skill": 7,
+   "wsc": {
+    "int": 0.7
+   }
+  },
+  "11": {
+   "attack_varies": [
+    2.5,
+    2.5,
+    2.5
+   ],
+   "crit_varies": [
+    0.2,
+    0.4,
+    0.8
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 2,
+   "id": 11,
+   "multi_hit_ftp": true,
+   "name": "Ascetics Fury",
+   "skill": 1,
+   "wsc": {
+    "str": 0.5,
+    "vit": 0.5
+   }
+  },
+  "110": {
+   "ftp": [
+    3.0,
+    6.0,
+    9.0
+   ],
+   "id": 110,
+   "name": "Origin",
+   "skill": 7,
+   "wsc": {
+    "int": 0.6,
+    "str": 0.6
+   }
+  },
+  "112": {
+   "ftp": [
+    1.0,
+    1.5,
+    2.0
+   ],
+   "hits": 2,
+   "id": 112,
+   "name": "Double Thrust",
+   "skill": 8,
+   "wsc": {
+    "dex": 0.3,
+    "str": 0.3
+   }
+  },
+  "113": {
+   "ftp": [
+    1.5,
+    2.0,
+    2.5
+   ],
+   "id": 113,
+   "magic": true,
+   "name": "Thunder Thrust",
+   "skill": 8,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "114": {
+   "ftp": [
+    1.0,
+    2.0,
+    3.0
+   ],
+   "id": 114,
+   "magic": true,
+   "name": "Raiden Thrust",
+   "skill": 8,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "115": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 115,
+   "name": "Leg Sweep",
+   "skill": 8,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "116": {
+   "attack_varies": [
+    0.875,
+    0.875,
+    0.875
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 5,
+   "id": 116,
+   "name": "Penta Thrust",
+   "skill": 8,
+   "wsc": {
+    "dex": 0.2,
+    "str": 0.2
+   }
+  },
+  "117": {
+   "crit_varies": [
+    0.3,
+    0.6,
+    0.9
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 117,
+   "name": "Vorpal Thrust",
+   "skill": 8,
+   "wsc": {
+    "agi": 0.5,
+    "str": 0.5
+   }
+  },
+  "118": {
+   "crit_varies": [
+    0.1,
+    0.3,
+    0.5
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 3,
+   "id": 118,
+   "name": "Skewer",
+   "skill": 8,
+   "wsc": {
+    "str": 0.5
+   }
+  },
+  "119": {
+   "ftp": [
+    1.75,
+    1.75,
+    1.75
+   ],
+   "hits": 1,
+   "id": 119,
+   "ignored_defense": [
+    0.5,
+    0.75,
+    1.0
+   ],
+   "name": "Wheeling Thrust",
+   "skill": 8,
+   "wsc": {
+    "str": 0.8
+   }
+  },
+  "12": {
+   "crit_varies": [
+    0.1,
+    0.22,
+    0.36
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 6,
+   "id": 12,
+   "name": "Stringing Pummel",
+   "skill": 1,
+   "wsc": {
+    "str": 0.32,
+    "vit": 0.32
+   }
+  },
+  "120": {
+   "ftp": [
+    1.0,
+    3.0,
+    5.5
+   ],
+   "hits": 2,
+   "id": 120,
+   "name": "Impulse Drive",
+   "skill": 8,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "121": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 121,
+   "name": "Geirskogul",
+   "skill": 8,
+   "wsc": {
+    "agi": 0.0,
+    "dex": 0.8
+   }
+  },
+  "122": {
+   "attack_varies": [
+    0.8125,
+    0.8125,
+    0.8125
+   ],
+   "crit_varies": [
+    0.1,
+    0.25,
+    0.4
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 4,
+   "id": 122,
+   "name": "Drakesbane",
+   "skill": 8,
+   "wsc": {
+    "str": 0.5
+   }
+  },
+  "123": {
+   "ftp": [
+    3.0,
+    3.7,
+    4.5
+   ],
+   "hits": 1,
+   "id": 123,
+   "name": "Sonic Thrust",
+   "skill": 8,
+   "wsc": {
+    "dex": 0.4,
+    "str": 0.4
+   }
+  },
+  "124": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 124,
+   "ignored_defense": [
+    0.15,
+    0.35,
+    0.5
+   ],
+   "name": "Camlanns Torment",
+   "skill": 8,
+   "wsc": {
+    "str": 0.6,
+    "vit": 0.6
+   }
+  },
+  "125": {
+   "ftp": [
+    0.75,
+    1.25,
+    1.75
+   ],
+   "hits": 4,
+   "id": 125,
+   "multi_hit_ftp": true,
+   "name": "Stardiver",
+   "skill": 8,
+   "wsc": {
+    "str": 0.7
+   }
+  },
+  "126": {
+   "ftp": [
+    2.17,
+    5.36,
+    8.55
+   ],
+   "hits": 2,
+   "id": 126,
+   "name": "Diarmuid",
+   "skill": 8,
+   "wsc": {
+    "str": 0.55,
+    "vit": 0.55
+   }
+  },
+  "128": {
+   "crit_varies": [
+    0.3,
+    0.63,
+    0.96
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 128,
+   "name": "Blade Rin",
+   "skill": 9,
+   "wsc": {
+    "dex": 0.6,
+    "str": 0.6
+   }
+  },
+  "129": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 2,
+   "id": 129,
+   "name": "Blade Retsu",
+   "skill": 9,
+   "wsc": {
+    "dex": 0.6,
+    "str": 0.2
+   }
+  },
+  "13": {
+   "ftp": [
+    1.7,
+    2.8,
+    4.5
+   ],
+   "hits": 3,
+   "id": 13,
+   "multi_hit_ftp": true,
+   "name": "Tornado Kick",
+   "skill": 1,
+   "wsc": {
+    "str": 0.4,
+    "vit": 0.4
+   }
+  },
+  "130": {
+   "ftp": [
+    0.5,
+    1.5,
+    2.25
+   ],
+   "hits": 1,
+   "hybrid": true,
+   "id": 130,
+   "name": "Blade Teki",
+   "skill": 9,
+   "wsc": {
+    "int": 0.3,
+    "str": 0.3
+   }
+  },
+  "131": {
+   "ftp": [
+    0.5,
+    1.5,
+    2.5
+   ],
+   "hits": 1,
+   "hybrid": true,
+   "id": 131,
+   "name": "Blade To",
+   "skill": 9,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "132": {
+   "ftp": [
+    0.5,
+    1.5,
+    2.25
+   ],
+   "hits": 2,
+   "hybrid": true,
+   "id": 132,
+   "name": "Blade Chi",
+   "skill": 9,
+   "wsc": {
+    "int": 0.3,
+    "str": 0.3
+   }
+  },
+  "133": {
+   "ftp": [
+    1.0,
+    3.0,
+    5.0
+   ],
+   "id": 133,
+   "magic": true,
+   "name": "Blade Ei",
+   "skill": 9,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "134": {
+   "crit_varies": [
+    0.1,
+    0.2,
+    0.4
+   ],
+   "ftp": [
+    1.375,
+    1.375,
+    1.375
+   ],
+   "hits": 3,
+   "id": 134,
+   "multi_hit_ftp": true,
+   "name": "Blade Jin",
+   "skill": 9,
+   "wsc": {
+    "dex": 0.3,
+    "str": 0.3
+   }
+  },
+  "135": {
+   "ftp": [
+    4.5,
+    11.5,
+    15.35
+   ],
+   "hits": 1,
+   "id": 135,
+   "name": "Blade Ten",
+   "skill": 9,
+   "wsc": {
+    "dex": 0.3,
+    "str": 0.3
+   }
+  },
+  "136": {
+   "ftp": [
+    1.25,
+    1.25,
+    1.25
+   ],
+   "hits": 5,
+   "id": 136,
+   "multi_hit_ftp": true,
+   "name": "Blade Ku",
+   "skill": 9,
+   "wsc": {
+    "dex": 0.3,
+    "str": 0.3
+   }
+  },
+  "137": {
+   "ftp": [
+    5.0,
+    5.0,
+    5.0
+   ],
+   "hits": 1,
+   "id": 137,
+   "name": "Blade Metsu",
+   "skill": 9,
+   "wsc": {
+    "dex": 0.8
+   }
+  },
+  "138": {
+   "attack_varies": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 138,
+   "ignored_defense": [
+    0.25,
+    0.25,
+    0.25
+   ],
+   "name": "Blade Kamu",
+   "skill": 9,
+   "wsc": {
+    "int": 0.6,
+    "str": 0.6
+   }
+  },
+  "139": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "id": 139,
+   "magic": true,
+   "name": "Blade Yu",
+   "skill": 9,
+   "wsc": {
+    "dex": 0.4,
+    "int": 0.4
+   }
+  },
+  "14": {
+   "crit_varies": [
+    0.1,
+    0.25,
+    0.45
+   ],
+   "ftp": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "hits": 4,
+   "id": 14,
+   "multi_hit_ftp": true,
+   "name": "Victory Smite",
+   "skill": 1,
+   "wsc": {
+    "str": 0.8
+   }
+  },
+  "140": {
+   "crit_varies": [
+    0.15,
+    0.3,
+    0.6
+   ],
+   "ftp": [
+    5.0,
+    5.0,
+    5.0
+   ],
+   "hits": 1,
+   "id": 140,
+   "name": "Blade Hi",
+   "skill": 9,
+   "wsc": {
+    "agi": 0.8
+   }
+  },
+  "141": {
+   "attack_varies": [
+    1.0,
+    2.0,
+    3.0
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 5,
+   "id": 141,
+   "multi_hit_ftp": true,
+   "name": "Blade Shun",
+   "skill": 9,
+   "wsc": {
+    "dex": 0.7
+   }
+  },
+  "142": {
+   "ftp": [
+    4.0,
+    11.3575,
+    18.715
+   ],
+   "hits": 4,
+   "id": 142,
+   "multi_hit_ftp": true,
+   "name": "Zesho Meppo",
+   "skill": 9,
+   "wsc": {
+    "agi": 0.25,
+    "dex": 0.25
+   }
+  },
+  "144": {
+   "ftp": [
+    1.0,
+    1.5,
+    2.0
+   ],
+   "hits": 2,
+   "id": 144,
+   "name": "Tachi Enpi",
+   "skill": 10,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "145": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 145,
+   "name": "Tachi Hobaku",
+   "skill": 10,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "146": {
+   "ftp": [
+    0.5,
+    1.5,
+    2.5
+   ],
+   "hits": 1,
+   "hybrid": true,
+   "id": 146,
+   "name": "Tachi Goten",
+   "skill": 10,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "147": {
+   "ftp": [
+    0.5,
+    1.5,
+    2.5
+   ],
+   "hits": 1,
+   "hybrid": true,
+   "id": 147,
+   "name": "Tachi Kagero",
+   "skill": 10,
+   "wsc": {
+    "str": 0.75
+   }
+  },
+  "148": {
+   "ftp": [
+    0.5,
+    1.5,
+    2.5
+   ],
+   "hits": 2,
+   "hybrid": true,
+   "id": 148,
+   "name": "Tachi Jinpu",
+   "skill": 10,
+   "wsc": {
+    "str": 0.3
+   }
+  },
+  "149": {
+   "ftp": [
+    0.5,
+    1.5,
+    2.5
+   ],
+   "hits": 1,
+   "hybrid": true,
+   "id": 149,
+   "name": "Tachi Koki",
+   "skill": 10,
+   "wsc": {
+    "mnd": 0.5,
+    "str": 0.3
+   }
+  },
+  "15": {
+   "attack_varies": [
+    1.05,
+    1.05,
+    1.05
+   ],
+   "ftp": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "hits": 5,
+   "id": 15,
+   "multi_hit_ftp": true,
+   "name": "Shijin Spiral",
+   "skill": 1,
+   "wsc": {
+    "dex": 0.7
+   }
+  },
+  "150": {
+   "attack_varies": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "ftp": [
+    1.5625,
+    2.6875,
+    4.125
+   ],
+   "hits": 1,
+   "id": 150,
+   "name": "Tachi Yukikaze",
+   "skill": 10,
+   "wsc": {
+    "str": 0.75
+   }
+  },
+  "151": {
+   "attack_varies": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "ftp": [
+    1.5625,
+    2.6875,
+    4.125
+   ],
+   "hits": 1,
+   "id": 151,
+   "name": "Tachi Gekko",
+   "skill": 10,
+   "wsc": {
+    "str": 0.75
+   }
+  },
+  "152": {
+   "attack_varies": [
+    1.65,
+    1.65,
+    1.65
+   ],
+   "ftp": [
+    1.5625,
+    2.6875,
+    4.125
+   ],
+   "hits": 1,
+   "id": 152,
+   "name": "Tachi Kasha",
+   "skill": 10,
+   "wsc": {
+    "str": 0.75
+   }
+  },
+  "153": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 153,
+   "name": "Tachi Kaiten",
+   "skill": 10,
+   "wsc": {
+    "str": 0.8
+   }
+  },
+  "154": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 3,
+   "id": 154,
+   "name": "Tachi Rana",
+   "skill": 10,
+   "wsc": {
+    "str": 0.5
+   }
+  },
+  "155": {
+   "ftp": [
+    2.625,
+    2.625,
+    2.625
+   ],
+   "hits": 1,
+   "id": 155,
+   "name": "Tachi Ageha",
+   "skill": 10,
+   "wsc": {
+    "chr": 0.6,
+    "str": 0.4
+   }
+  },
+  "156": {
+   "attack_varies": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ftp": [
+    3.75,
+    5.75,
+    8.0
+   ],
+   "hits": 1,
+   "id": 156,
+   "name": "Tachi Fudo",
+   "skill": 10,
+   "wsc": {
+    "str": 0.8
+   }
+  },
+  "157": {
+   "attack_varies": [
+    1.375,
+    1.375,
+    1.375
+   ],
+   "ftp": [
+    1.375,
+    2.1875,
+    2.6875
+   ],
+   "hits": 2,
+   "id": 157,
+   "name": "Tachi Shoha",
+   "skill": 10,
+   "wsc": {
+    "str": 0.7
+   }
+  },
+  "158": {
+   "ftp": [
+    1.0,
+    1.5,
+    2.0
+   ],
+   "hits": 2,
+   "id": 158,
+   "name": "Tachi Suikawari",
+   "skill": 10,
+   "wsc": {
+    "str": 0.8
+   }
+  },
+  "159": {
+   "ftp": [
+    3.66,
+    7.33,
+    11.0
+   ],
+   "id": 159,
+   "name": "Tachi: Mumei",
+   "skill": 10,
+   "wsc": {
+    "dex": 0.5,
+    "str": 0.5
+   }
+  },
+  "16": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 16,
+   "name": "Wasp Sting",
+   "skill": 2,
+   "wsc": {
+    "dex": 1.0
+   }
+  },
+  "160": {
+   "ftp": [
+    1.625,
+    3.0,
+    4.625
+   ],
+   "id": 160,
+   "magic": true,
+   "name": "Shining Strike",
+   "skill": 11,
+   "wsc": {
+    "mnd": 0.4,
+    "str": 0.4
+   }
+  },
+  "161": {
+   "ftp": [
+    2.125,
+    3.625,
+    6.125
+   ],
+   "id": 161,
+   "magic": true,
+   "name": "Seraph Strike",
+   "skill": 11,
+   "wsc": {
+    "mnd": 0.4,
+    "str": 0.4
+   }
+  },
+  "162": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 162,
+   "name": "Brainshaker",
+   "skill": 11,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "165": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 165,
+   "name": "Skullbreaker",
+   "skill": 11,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "166": {
+   "attack_varies": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "crit_varies": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 166,
+   "name": "True Strike",
+   "skill": 11,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "167": {
+   "ftp": [
+    3.5,
+    8.75,
+    11.75
+   ],
+   "hits": 1,
+   "id": 167,
+   "name": "Judgment",
+   "skill": 11,
+   "wsc": {
+    "mnd": 0.5,
+    "str": 0.5
+   }
+  },
+  "168": {
+   "crit_varies": [
+    0.05,
+    0.1,
+    0.25
+   ],
+   "ftp": [
+    1.125,
+    1.125,
+    1.125
+   ],
+   "hits": 6,
+   "id": 168,
+   "multi_hit_ftp": true,
+   "name": "Hexa Strike",
+   "skill": 11,
+   "wsc": {
+    "mnd": 0.3,
+    "str": 0.3
+   }
+  },
+  "169": {
+   "ftp": [
+    3.0,
+    7.2,
+    9.6
+   ],
+   "hits": 2,
+   "id": 169,
+   "name": "Black Halo",
+   "skill": 11,
+   "wsc": {
+    "mnd": 0.7,
+    "str": 0.3
+   }
+  },
+  "17": {
+   "attack_varies": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 17,
+   "name": "Viper Bite",
+   "skill": 2,
+   "wsc": {
+    "dex": 1.0
+   }
+  },
+  "170": {
+   "ftp": [
+    4.25,
+    4.25,
+    4.25
+   ],
+   "hits": 1,
+   "id": 170,
+   "name": "Randgrith",
+   "skill": 11,
+   "wsc": {
+    "mnd": 0.4,
+    "str": 0.4
+   }
+  },
+  "171": {
+   "ftp": [
+    2.5,
+    4.0,
+    7.0
+   ],
+   "hits": 1,
+   "id": 171,
+   "name": "Mystic Boon",
+   "skill": 11,
+   "wsc": {
+    "mnd": 0.7,
+    "str": 0.3
+   }
+  },
+  "172": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "id": 172,
+   "magic": true,
+   "name": "Flash Nova",
+   "skill": 11,
+   "wsc": {
+    "mnd": 0.5,
+    "str": 0.5
+   }
+  },
+  "174": {
+   "ftp": [
+    0.9,
+    0.9,
+    0.9
+   ],
+   "hits": 7,
+   "id": 174,
+   "multi_hit_ftp": true,
+   "name": "Realmrazer",
+   "skill": 11,
+   "wsc": {
+    "mnd": 0.7
+   }
+  },
+  "175": {
+   "attack_varies": [
+    1.5,
+    3.6,
+    4.7
+   ],
+   "ftp": [
+    2.8,
+    2.8,
+    2.8
+   ],
+   "hits": 1,
+   "id": 175,
+   "name": "Exudation",
+   "skill": 0,
+   "wsc": {
+    "int": 0.5,
+    "mnd": 0.5
+   }
+  },
+  "176": {
+   "ftp": [
+    1.0,
+    1.25,
+    2.25
+   ],
+   "hits": 1,
+   "id": 176,
+   "name": "Heavy Swing",
+   "skill": 12,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "177": {
+   "ftp": [
+    1.0,
+    2.0,
+    2.5
+   ],
+   "id": 177,
+   "magic": true,
+   "name": "Rock Crusher",
+   "skill": 12,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "178": {
+   "ftp": [
+    1.0,
+    2.3125,
+    3.625
+   ],
+   "id": 178,
+   "magic": true,
+   "name": "Earth Crusher",
+   "skill": 12,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "179": {
+   "ftp": [
+    1.0,
+    2.0,
+    2.5
+   ],
+   "id": 179,
+   "magic": true,
+   "name": "Starburst",
+   "skill": 12,
+   "wsc": {
+    "mnd": 0.4,
+    "str": 0.4
+   }
+  },
+  "18": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 18,
+   "name": "Shadowstitch",
+   "skill": 2,
+   "wsc": {
+    "chr": 1.0
+   }
+  },
+  "180": {
+   "ftp": [
+    1.0,
+    2.5,
+    4.0
+   ],
+   "id": 180,
+   "magic": true,
+   "name": "Sunburst",
+   "skill": 12,
+   "wsc": {
+    "mnd": 0.4,
+    "str": 0.4
+   }
+  },
+  "181": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 181,
+   "name": "Shell Crusher",
+   "skill": 12,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "182": {
+   "ftp": [
+    1.0,
+    3.0,
+    5.0
+   ],
+   "hits": 1,
+   "id": 182,
+   "name": "Full Swing",
+   "skill": 12,
+   "wsc": {
+    "str": 0.5
+   }
+  },
+  "183": {
+   "ftp": [
+    1.0,
+    1.5,
+    2.0
+   ],
+   "hits": 1,
+   "id": 183,
+   "name": "Spirit Taker",
+   "skill": 12,
+   "wsc": {
+    "int": 0.5,
+    "mnd": 0.5
+   }
+  },
+  "184": {
+   "attack_varies": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "ftp": [
+    2.0,
+    2.5,
+    3.0
+   ],
+   "hits": 1,
+   "id": 184,
+   "name": "Retribution",
+   "skill": 12,
+   "wsc": {
+    "mnd": 0.5,
+    "str": 0.3
+   }
+  },
+  "185": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 185,
+   "name": "Gate of Tartarus",
+   "skill": 12,
+   "wsc": {
+    "chr": 0.8
+   }
+  },
+  "186": {
+   "ftp": [
+    1.75,
+    1.75,
+    1.75
+   ],
+   "id": 186,
+   "magic": true,
+   "name": "Vidohunir",
+   "skill": 12,
+   "wsc": {
+    "int": 0.8
+   }
+  },
+  "187": {
+   "ftp": [
+    2.25,
+    2.25,
+    2.25
+   ],
+   "id": 187,
+   "magic": true,
+   "name": "Garland of Bliss",
+   "skill": 12,
+   "wsc": {
+    "mnd": 0.7,
+    "str": 0.3
+   }
+  },
+  "188": {
+   "ftp": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "id": 188,
+   "magic": true,
+   "name": "Omniscience",
+   "skill": 12,
+   "wsc": {
+    "mnd": 0.8
+   }
+  },
+  "189": {
+   "ftp": [
+    2.75,
+    4.0,
+    5.0
+   ],
+   "id": 189,
+   "magic": true,
+   "name": "Cataclysm",
+   "skill": 12,
+   "wsc": {
+    "int": 0.3,
+    "mnd": 0.0,
+    "str": 0.3
+   }
+  },
+  "19": {
+   "ftp": [
+    1.0,
+    2.0,
+    3.0
+   ],
+   "id": 19,
+   "magic": true,
+   "name": "Gust Slash",
+   "skill": 2,
+   "wsc": {
+    "dex": 0.4,
+    "int": 0.4
+   }
+  },
+  "191": {
+   "ftp": [
+    1.375,
+    1.375,
+    1.375
+   ],
+   "hits": 3,
+   "id": 191,
+   "name": "Shattersoul",
+   "skill": 12,
+   "wsc": {
+    "int": 0.7
+   }
+  },
+  "192": {
+   "ftp": [
+    0.5,
+    0.75,
+    1.0
+   ],
+   "hits": 1,
+   "hybrid": true,
+   "id": 192,
+   "name": "Flaming Arrow",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.5,
+    "str": 0.2
+   }
+  },
+  "193": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 193,
+   "ignored_defense": [
+    0.0,
+    0.35,
+    0.5
+   ],
+   "name": "Piercing Arrow",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.5,
+    "str": 0.2
+   }
+  },
+  "194": {
+   "crit_varies": [
+    0.1,
+    0.3,
+    0.5
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 194,
+   "name": "Dulling Arrow",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.5,
+    "str": 0.2
+   }
+  },
+  "196": {
+   "ftp": [
+    5.0,
+    5.0,
+    5.0
+   ],
+   "hits": 1,
+   "id": 196,
+   "name": "Sidewinder",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.5,
+    "str": 0.2
+   }
+  },
+  "197": {
+   "ftp": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "hits": 1,
+   "id": 197,
+   "name": "Blast Arrow",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.5,
+    "str": 0.2
+   }
+  },
+  "198": {
+   "crit_varies": [
+    0.1,
+    0.3,
+    0.5
+   ],
+   "ftp": [
+    3.5,
+    3.5,
+    3.5
+   ],
+   "hits": 1,
+   "id": 198,
+   "name": "Arching Arrow",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.5,
+    "str": 0.2
+   }
+  },
+  "199": {
+   "attack_varies": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "ftp": [
+    1.5,
+    2.5,
+    5.0
+   ],
+   "hits": 1,
+   "id": 199,
+   "name": "Empyreal Arrow",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.5,
+    "str": 0.2
+   }
+  },
+  "2": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 2,
+   "id": 2,
+   "multi_hit_ftp": true,
+   "name": "Shoulder Tackle",
+   "skill": 1,
+   "wsc": {
+    "vit": 1.0
+   }
+  },
+  "20": {
+   "ftp": [
+    1.0,
+    2.375,
+    3.75
+   ],
+   "id": 20,
+   "magic": true,
+   "name": "Cyclone",
+   "skill": 2,
+   "wsc": {
+    "dex": 0.4,
+    "int": 0.4
+   }
+  },
+  "200": {
+   "ftp": [
+    2.75,
+    2.75,
+    2.75
+   ],
+   "hits": 1,
+   "id": 200,
+   "name": "Namas Arrow",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.4,
+    "str": 0.4
+   }
+  },
+  "201": {
+   "ftp": [
+    3.0,
+    4.25,
+    7.0
+   ],
+   "hits": 2,
+   "id": 201,
+   "name": "Refulgent Arrow",
+   "skill": 25,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "202": {
+   "crit_varies": [
+    0.15,
+    0.2,
+    0.25
+   ],
+   "ftp": [
+    1.75,
+    1.75,
+    1.75
+   ],
+   "hits": 3,
+   "id": 202,
+   "multi_hit_ftp": true,
+   "name": "Jishnus Radiance",
+   "skill": 25,
+   "wsc": {
+    "dex": 0.8
+   }
+  },
+  "203": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 203,
+   "ignored_defense": [
+    0.15,
+    0.35,
+    0.5
+   ],
+   "name": "Apex Arrow",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "204": {
+   "ftp": [
+    2.75,
+    5.5,
+    8.25
+   ],
+   "id": 204,
+   "name": "Sarv",
+   "skill": 25,
+   "wsc": {
+    "agi": 0.65,
+    "str": 0.65
+   }
+  },
+  "208": {
+   "ftp": [
+    0.5,
+    1.55,
+    2.1
+   ],
+   "hits": 1,
+   "hybrid": true,
+   "id": 208,
+   "name": "Hot Shot",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "209": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 209,
+   "ignored_defense": [
+    0.0,
+    0.35,
+    0.5
+   ],
+   "name": "Split Shot",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "210": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 210,
+   "name": "Sniper Shot",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "212": {
+   "ftp": [
+    5.0,
+    5.0,
+    5.0
+   ],
+   "hits": 1,
+   "id": 212,
+   "name": "Slug Shot",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "213": {
+   "ftp": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "hits": 1,
+   "id": 213,
+   "name": "Blast Shot",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "214": {
+   "crit_varies": [
+    0.1,
+    0.3,
+    0.5
+   ],
+   "ftp": [
+    3.5,
+    3.5,
+    3.5
+   ],
+   "hits": 1,
+   "id": 214,
+   "name": "Heavy Shot",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "215": {
+   "attack_varies": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "ftp": [
+    1.5,
+    2.5,
+    5.0
+   ],
+   "hits": 1,
+   "id": 215,
+   "name": "Detonator",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "216": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 216,
+   "name": "Coronach",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.4,
+    "dex": 0.4
+   }
+  },
+  "217": {
+   "ftp": [
+    3.8906,
+    6.3906,
+    9.3906
+   ],
+   "id": 217,
+   "magic": true,
+   "name": "Trueflight",
+   "skill": 26,
+   "wsc": {
+    "agi": 1.0
+   }
+  },
+  "218": {
+   "ftp": [
+    4.0,
+    6.7,
+    10.0
+   ],
+   "id": 218,
+   "magic": true,
+   "name": "Leaden Salute",
+   "skill": 26,
+   "wsc": {
+    "agi": 1.0
+   }
+  },
+  "219": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 219,
+   "name": "Numbing Shot",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.8
+   }
+  },
+  "220": {
+   "ftp": [
+    5.5,
+    5.5,
+    5.5
+   ],
+   "id": 220,
+   "magic": true,
+   "name": "Wildfire",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.6
+   }
+  },
+  "221": {
+   "ftp": [
+    2.0,
+    3.0,
+    4.0
+   ],
+   "hits": 2,
+   "id": 221,
+   "multi_hit_ftp": true,
+   "name": "Last Stand",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "222": {
+   "ftp": [
+    2.5,
+    5.0,
+    7.5
+   ],
+   "id": 222,
+   "name": "Terminus",
+   "skill": 26,
+   "wsc": {
+    "agi": 0.7,
+    "dex": 0.7
+   }
+  },
+  "224": {
+   "ftp": [
+    1.1875,
+    1.1875,
+    1.1875
+   ],
+   "hits": 4,
+   "id": 224,
+   "multi_hit_ftp": true,
+   "name": "Exenterator",
+   "skill": 2,
+   "wsc": {
+    "agi": 0.7
+   }
+  },
+  "225": {
+   "crit_varies": [
+    0.15,
+    0.3,
+    0.6
+   ],
+   "ftp": [
+    1.6328125,
+    1.6328125,
+    1.6328125
+   ],
+   "hits": 3,
+   "id": 225,
+   "multi_hit_ftp": true,
+   "name": "Chant Du Cygne",
+   "skill": 3,
+   "wsc": {
+    "dex": 0.8
+   }
+  },
+  "226": {
+   "attack_varies": [
+    0.8,
+    0.9171875,
+    1.05
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 5,
+   "id": 226,
+   "multi_hit_ftp": true,
+   "name": "Requiescat",
+   "skill": 3,
+   "wsc": {
+    "mnd": 0.7
+   }
+  },
+  "227": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 227,
+   "name": "Knights of Rotund",
+   "skill": 3
+  },
+  "228": {
+   "ftp": [
+    1.0,
+    2.0,
+    3.0
+   ],
+   "hits": 2,
+   "id": 228,
+   "name": "Final Paradise",
+   "skill": 1,
+   "wsc": {
+    "vit": 0.8
+   }
+  },
+  "23": {
+   "ftp": [
+    1.1875,
+    1.1875,
+    1.1875
+   ],
+   "hits": 5,
+   "id": 23,
+   "multi_hit_ftp": true,
+   "name": "Dancing Edge",
+   "skill": 2,
+   "wsc": {
+    "chr": 0.4,
+    "dex": 0.4
+   }
+  },
+  "231": {
+   "ftp": [
+    3.128,
+    7.273,
+    11.414
+   ],
+   "hits": 2,
+   "id": 231,
+   "name": "Maru Kala",
+   "skill": 1,
+   "wsc": {
+    "dex": 0.4175,
+    "str": 0.4175
+   }
+  },
+  "232": {
+   "ftp": [
+    5.7578125,
+    14.515625,
+    23.27734375
+   ],
+   "hits": 4,
+   "id": 232,
+   "name": "Ruthless Stroke",
+   "skill": 2,
+   "wsc": {
+    "agi": 0.2,
+    "dex": 0.2
+   }
+  },
+  "233": {
+   "ftp": [
+    6.6,
+    13.35,
+    20.1
+   ],
+   "id": 233,
+   "name": "Imperator",
+   "skill": 3,
+   "wsc": {
+    "dex": 0.27,
+    "mnd": 0.27
+   }
+  },
+  "235": {
+   "ftp": [
+    3.95,
+    7.89,
+    11.84
+   ],
+   "id": 235,
+   "name": "Oshala",
+   "skill": 12,
+   "wsc": {
+    "int": 0.45,
+    "mnd": 0.45
+   }
+  },
+  "238": {
+   "ftp": [
+    4.5,
+    6.0,
+    7.5
+   ],
+   "id": 238,
+   "magic": true,
+   "name": "Uriel Blade",
+   "skill": 3,
+   "wsc": {
+    "mnd": 0.32,
+    "str": 0.32
+   }
+  },
+  "239": {
+   "ftp": [
+    3.0,
+    4.5,
+    6.0
+   ],
+   "hits": 1,
+   "id": 239,
+   "name": "Glory Slash",
+   "skill": 3,
+   "wsc": {
+    "str": 0.3
+   }
+  },
+  "24": {
+   "ftp": [
+    4.5,
+    6.8,
+    8.5
+   ],
+   "hits": 2,
+   "id": 24,
+   "name": "Shark Bite",
+   "skill": 2,
+   "wsc": {
+    "agi": 0.4,
+    "dex": 0.4
+   }
+  },
+  "25": {
+   "crit_varies": [
+    0.1,
+    0.24,
+    0.48
+   ],
+   "ftp": [
+    1.25,
+    1.25,
+    1.25
+   ],
+   "hits": 5,
+   "id": 25,
+   "multi_hit_ftp": true,
+   "name": "Evisceration",
+   "skill": 2,
+   "wsc": {
+    "dex": 0.5
+   }
+  },
+  "26": {
+   "ftp": [
+    5.0,
+    5.0,
+    5.0
+   ],
+   "hits": 1,
+   "id": 26,
+   "name": "Mercy Stroke",
+   "skill": 2,
+   "wsc": {
+    "str": 0.8
+   }
+  },
+  "27": {
+   "attack_varies": [
+    1.75,
+    1.75,
+    1.75
+   ],
+   "ftp": [
+    4.0,
+    6.09,
+    8.5
+   ],
+   "hits": 1,
+   "id": 27,
+   "name": "Mandalic Stab",
+   "skill": 2,
+   "wsc": {
+    "dex": 0.6
+   }
+  },
+  "28": {
+   "ftp": [
+    5.0,
+    5.0,
+    5.0
+   ],
+   "hits": 2,
+   "id": 28,
+   "name": "Mordant Rime",
+   "skill": 2,
+   "wsc": {
+    "chr": 0.7,
+    "dex": 0.3
+   }
+  },
+  "29": {
+   "ftp": [
+    1.75,
+    1.75,
+    1.75
+   ],
+   "hits": 4,
+   "id": 29,
+   "multi_hit_ftp": true,
+   "name": "Pyrrhic Kleos",
+   "skill": 2,
+   "wsc": {
+    "dex": 0.4,
+    "str": 0.4
+   }
+  },
+  "3": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 2,
+   "id": 3,
+   "ignored_defense": [
+    0.0,
+    0.375,
+    0.75
+   ],
+   "multi_hit_ftp": true,
+   "name": "One Inch Punch",
+   "skill": 1,
+   "wsc": {
+    "vit": 1.0
+   }
+  },
+  "30": {
+   "ftp": [
+    2.0,
+    3.0,
+    4.5
+   ],
+   "id": 30,
+   "magic": true,
+   "name": "Aeolian Edge",
+   "skill": 2,
+   "wsc": {
+    "dex": 0.4,
+    "int": 0.4
+   }
+  },
+  "31": {
+   "ftp": [
+    5.0,
+    10.19,
+    13.0
+   ],
+   "hits": 1,
+   "id": 31,
+   "name": "Rudras Storm",
+   "skill": 2,
+   "wsc": {
+    "dex": 0.8
+   }
+  },
+  "32": {
+   "ftp": [
+    1.0,
+    3.0,
+    5.0
+   ],
+   "hits": 2,
+   "id": 32,
+   "name": "Fast Blade",
+   "skill": 3,
+   "wsc": {
+    "dex": 0.4,
+    "str": 0.4
+   }
+  },
+  "33": {
+   "ftp": [
+    1.0,
+    2.1,
+    3.4
+   ],
+   "id": 33,
+   "magic": true,
+   "name": "Burning Blade",
+   "skill": 3,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "34": {
+   "ftp": [
+    1.0,
+    2.38,
+    3.75
+   ],
+   "id": 34,
+   "magic": true,
+   "name": "Red Lotus Blade",
+   "skill": 3,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "35": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 35,
+   "name": "Flat Blade",
+   "skill": 3,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "36": {
+   "ftp": [
+    1.125,
+    2.222,
+    3.523
+   ],
+   "hits": 1,
+   "id": 36,
+   "magic": true,
+   "name": "Shining Blade",
+   "skill": 3,
+   "wsc": {
+    "mnd": 0.4,
+    "str": 0.4
+   }
+  },
+  "37": {
+   "ftp": [
+    1.125,
+    2.625,
+    4.125
+   ],
+   "id": 37,
+   "magic": true,
+   "name": "Seraph Blade",
+   "skill": 3,
+   "wsc": {
+    "mnd": 0.4,
+    "str": 0.4
+   }
+  },
+  "38": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 38,
+   "name": "Circle Blade",
+   "skill": 3,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "39": {
+   "ftp": [
+    0.125,
+    0.5,
+    1.0
+   ],
+   "id": 39,
+   "name": "Spirits Within",
+   "skill": 3
+  },
+  "4": {
+   "crit_varies": [
+    0.3,
+    0.63,
+    0.96
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 2,
+   "id": 4,
+   "multi_hit_ftp": true,
+   "name": "Backhand Blow",
+   "skill": 1,
+   "wsc": {
+    "dex": 0.5,
+    "str": 0.5
+   }
+  },
+  "40": {
+   "crit_varies": [
+    0.15,
+    0.3,
+    0.5
+   ],
+   "ftp": [
+    1.375,
+    1.375,
+    1.375
+   ],
+   "hits": 4,
+   "id": 40,
+   "multi_hit_ftp": true,
+   "name": "Vorpal Blade",
+   "skill": 3,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "41": {
+   "ftp": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "hits": 3,
+   "id": 41,
+   "multi_hit_ftp": true,
+   "name": "Swift Blade",
+   "skill": 3,
+   "wsc": {
+    "mnd": 0.5,
+    "str": 0.5
+   }
+  },
+  "42": {
+   "ftp": [
+    4.0,
+    10.3,
+    13.6
+   ],
+   "hits": 2,
+   "id": 42,
+   "name": "Savage Blade",
+   "skill": 3,
+   "wsc": {
+    "mnd": 0.5,
+    "str": 0.5
+   }
+  },
+  "43": {
+   "ftp": [
+    5.0,
+    5.0,
+    5.0
+   ],
+   "hits": 1,
+   "id": 43,
+   "name": "Knights of Round",
+   "skill": 3,
+   "wsc": {
+    "mnd": 0.4,
+    "str": 0.4
+   }
+  },
+  "44": {
+   "ftp": [
+    4.0,
+    4.0,
+    4.0
+   ],
+   "hits": 3,
+   "id": 44,
+   "name": "Death Blossom",
+   "skill": 3,
+   "wsc": {
+    "mnd": 0.5,
+    "str": 0.3
+   }
+  },
+  "45": {
+   "ftp": [
+    1.0,
+    1.5,
+    2.0
+   ],
+   "hits": 2,
+   "id": 45,
+   "name": "Atonement",
+   "skill": 3,
+   "wsc": {
+    "str": 0.4,
+    "vit": 0.5
+   }
+  },
+  "46": {
+   "ftp": [
+    3.796875,
+    9.390625,
+    12.1875
+   ],
+   "hits": 2,
+   "id": 46,
+   "name": "Expiacion",
+   "skill": 3,
+   "wsc": {
+    "dex": 0.2,
+    "int": 0.3,
+    "str": 0.3
+   }
+  },
+  "47": {
+   "ftp": [
+    2.75,
+    2.75,
+    2.75
+   ],
+   "id": 47,
+   "magic": true,
+   "name": "Sanguine Blade",
+   "skill": 3,
+   "wsc": {
+    "mnd": 0.5,
+    "str": 0.3
+   }
+  },
+  "48": {
+   "ftp": [
+    1.5,
+    2.5,
+    3.5
+   ],
+   "hits": 1,
+   "id": 48,
+   "name": "Hard Slash",
+   "skill": 4,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "49": {
+   "crit_varies": [
+    0.5,
+    0.75,
+    1.0
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 49,
+   "name": "Power Slash",
+   "skill": 4,
+   "wsc": {
+    "str": 0.6,
+    "vit": 0.6
+   }
+  },
+  "5": {
+   "ftp": [
+    1.0,
+    2.1875,
+    3.75
+   ],
+   "hits": 5,
+   "id": 5,
+   "multi_hit_ftp": true,
+   "name": "Raging Fists",
+   "skill": 1,
+   "wsc": {
+    "dex": 0.3,
+    "str": 0.3
+   }
+  },
+  "50": {
+   "ftp": [
+    1.5,
+    3.25,
+    5.0
+   ],
+   "id": 50,
+   "magic": true,
+   "name": "Frostbite",
+   "skill": 4,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "51": {
+   "ftp": [
+    1.5,
+    3.5,
+    6.0
+   ],
+   "id": 51,
+   "magic": true,
+   "name": "Freezebite",
+   "skill": 4,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "52": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 52,
+   "name": "Shockwave",
+   "skill": 4,
+   "wsc": {
+    "mnd": 0.3,
+    "str": 0.3
+   }
+  },
+  "53": {
+   "ftp": [
+    1.0,
+    2.25,
+    4.0
+   ],
+   "hits": 1,
+   "id": 53,
+   "name": "Crescent Moon",
+   "skill": 4,
+   "wsc": {
+    "str": 0.8
+   }
+  },
+  "54": {
+   "ftp": [
+    1.5,
+    3.5,
+    6.5
+   ],
+   "hits": 2,
+   "id": 54,
+   "name": "Sickle Moon",
+   "skill": 4,
+   "wsc": {
+    "agi": 0.4,
+    "str": 0.4
+   }
+  },
+  "55": {
+   "attack_varies": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "ftp": [
+    2.5,
+    5.0,
+    7.5
+   ],
+   "hits": 1,
+   "id": 55,
+   "name": "Spinning Slash",
+   "skill": 4,
+   "wsc": {
+    "int": 0.3,
+    "str": 0.3
+   }
+  },
+  "56": {
+   "attack_varies": [
+    1.75,
+    1.75,
+    1.75
+   ],
+   "ftp": [
+    1.5,
+    3.0,
+    5.0
+   ],
+   "hits": 1,
+   "id": 56,
+   "name": "Ground Strike",
+   "skill": 4,
+   "wsc": {
+    "int": 0.5,
+    "str": 0.5
+   }
+  },
+  "57": {
+   "ftp": [
+    3.0,
+    3.0,
+    3.0
+   ],
+   "hits": 1,
+   "id": 57,
+   "name": "Scourge",
+   "skill": 4,
+   "wsc": {
+    "chr": 0.0,
+    "mnd": 0.0,
+    "str": 0.4,
+    "vit": 0.4
+   }
+  },
+  "58": {
+   "ftp": [
+    3.5,
+    3.5,
+    3.5
+   ],
+   "id": 58,
+   "magic": true,
+   "name": "Herculean Slash",
+   "skill": 4,
+   "wsc": {
+    "vit": 0.8
+   }
+  },
+  "59": {
+   "ftp": [
+    4.75,
+    7.5,
+    9.75
+   ],
+   "hits": 1,
+   "id": 59,
+   "name": "Torcleaver",
+   "skill": 4,
+   "wsc": {
+    "vit": 0.8
+   }
+  },
+  "6": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 2,
+   "id": 6,
+   "multi_hit_ftp": true,
+   "name": "Spinning Attack",
+   "skill": 1,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "60": {
+   "attack_varies": [
+    0.85,
+    0.85,
+    0.85
+   ],
+   "ftp": [
+    0.71875,
+    1.5,
+    2.25
+   ],
+   "hits": 5,
+   "id": 60,
+   "multi_hit_ftp": true,
+   "name": "Resolution",
+   "skill": 4,
+   "wsc": {
+    "str": 0.7
+   }
+  },
+  "61": {
+   "attack_varies": [
+    1.25,
+    1.25,
+    1.25
+   ],
+   "ftp": [
+    2.25,
+    4.5,
+    6.75
+   ],
+   "hits": 2,
+   "id": 61,
+   "name": "Dimidiation",
+   "skill": 4,
+   "wsc": {
+    "dex": 0.8
+   }
+  },
+  "62": {
+   "ftp": [
+    3.3,
+    6.6,
+    9.9
+   ],
+   "id": 62,
+   "name": "Fimbulvetr",
+   "skill": 4,
+   "wsc": {
+    "str": 0.6,
+    "vit": 0.6
+   }
+  },
+  "64": {
+   "ftp": [
+    1.0,
+    3.0,
+    6.0
+   ],
+   "hits": 2,
+   "id": 64,
+   "name": "Raging Axe",
+   "skill": 5,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "65": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 65,
+   "name": "Smash Axe",
+   "skill": 5,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "66": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 66,
+   "name": "Gale Axe",
+   "skill": 5,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "67": {
+   "ftp": [
+    1.5,
+    3.0,
+    5.5
+   ],
+   "hits": 1,
+   "id": 67,
+   "name": "Avalanche Axe",
+   "skill": 5,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "68": {
+   "ftp": [
+    2.0,
+    4.0,
+    6.5
+   ],
+   "hits": 1,
+   "id": 68,
+   "name": "Spinning Axe",
+   "skill": 5,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "69": {
+   "crit_varies": [
+    0.1,
+    0.2,
+    0.4
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 5,
+   "id": 69,
+   "multi_hit_ftp": true,
+   "name": "Rampage",
+   "skill": 5,
+   "wsc": {
+    "str": 0.5
+   }
+  },
+  "7": {
+   "attack_varies": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "ftp": [
+    2.05,
+    3.55,
+    5.75
+   ],
+   "hits": 2,
+   "id": 7,
+   "multi_hit_ftp": true,
+   "name": "Howling Fist",
+   "skill": 1,
+   "wsc": {
+    "str": 0.2,
+    "vit": 0.5
+   }
+  },
+  "70": {
+   "ftp": [
+    2.5625,
+    6.46875,
+    10.375
+   ],
+   "hits": 1,
+   "id": 70,
+   "name": "Calamity",
+   "skill": 5,
+   "wsc": {
+    "str": 0.5,
+    "vit": 0.5
+   }
+  },
+  "71": {
+   "ftp": [
+    4.0,
+    10.3,
+    13.6
+   ],
+   "hits": 1,
+   "id": 71,
+   "name": "Mistral Axe",
+   "skill": 5,
+   "wsc": {
+    "str": 0.5
+   }
+  },
+  "72": {
+   "ftp": [
+    1.75,
+    1.75,
+    1.75
+   ],
+   "hits": 3,
+   "id": 72,
+   "multi_hit_ftp": true,
+   "name": "Decimation",
+   "skill": 5,
+   "wsc": {
+    "str": 0.5
+   }
+  },
+  "73": {
+   "ftp": [
+    2.75,
+    2.75,
+    2.75
+   ],
+   "hits": 1,
+   "id": 73,
+   "name": "Onslaught",
+   "skill": 5,
+   "wsc": {
+    "dex": 0.8
+   }
+  },
+  "74": {
+   "ftp": [
+    3.0625,
+    4.6875,
+    7.5625
+   ],
+   "id": 74,
+   "magic": true,
+   "name": "Primal Rend",
+   "skill": 5,
+   "wsc": {
+    "chr": 0.6,
+    "dex": 0.3
+   }
+  },
+  "75": {
+   "attack_varies": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "ftp": [
+    4.5,
+    4.5,
+    4.5
+   ],
+   "hits": 1,
+   "id": 75,
+   "name": "Bora Axe",
+   "skill": 5,
+   "wsc": {
+    "dex": 1.0
+   }
+  },
+  "76": {
+   "ftp": [
+    3.75,
+    5.5,
+    8.5
+   ],
+   "id": 76,
+   "magic": true,
+   "name": "Cloudsplitter",
+   "skill": 5,
+   "wsc": {
+    "mnd": 0.4,
+    "str": 0.4
+   }
+  },
+  "77": {
+   "attack_varies": [
+    1.1,
+    1.1,
+    1.1
+   ],
+   "ftp": [
+    1.08,
+    1.08,
+    1.08
+   ],
+   "hits": 4,
+   "id": 77,
+   "multi_hit_ftp": true,
+   "name": "Ruinator",
+   "skill": 5,
+   "wsc": {
+    "str": 0.7
+   }
+  },
+  "78": {
+   "ftp": [
+    1.5,
+    7.0,
+    12.5
+   ],
+   "hits": 5,
+   "id": 78,
+   "name": "Blitz",
+   "skill": 5,
+   "wsc": {
+    "dex": 0.32,
+    "str": 0.32
+   }
+  },
+  "8": {
+   "ftp": [
+    1.7,
+    3.0,
+    5.0
+   ],
+   "hits": 2,
+   "id": 8,
+   "multi_hit_ftp": true,
+   "name": "Dragon Kick",
+   "skill": 1,
+   "wsc": {
+    "str": 0.5,
+    "vit": 0.5
+   }
+  },
+  "80": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 80,
+   "name": "Shield Break",
+   "skill": 6,
+   "wsc": {
+    "str": 0.6,
+    "vit": 0.6
+   }
+  },
+  "81": {
+   "attack_varies": [
+    1.0,
+    2.0,
+    3.5
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 81,
+   "name": "Iron Tempest",
+   "skill": 6,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "82": {
+   "attack_varies": [
+    1.0,
+    2.0,
+    3.5
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 2,
+   "id": 82,
+   "name": "Sturmwind",
+   "skill": 6,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "83": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 83,
+   "name": "Armor Break",
+   "skill": 6,
+   "wsc": {
+    "str": 0.6,
+    "vit": 0.6
+   }
+  },
+  "84": {
+   "crit_varies": [
+    0.5,
+    0.75,
+    1.0
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 84,
+   "name": "Keen Edge",
+   "skill": 6,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "85": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 85,
+   "name": "Weapon Break",
+   "skill": 6,
+   "wsc": {
+    "str": 0.6,
+    "vit": 0.6
+   }
+  },
+  "86": {
+   "crit_varies": [
+    0.15,
+    0.3,
+    0.5
+   ],
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 3,
+   "id": 86,
+   "name": "Raging Rush",
+   "skill": 6,
+   "wsc": {
+    "str": 0.5
+   }
+  },
+  "87": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 87,
+   "name": "Full Break",
+   "skill": 6,
+   "wsc": {
+    "str": 0.5,
+    "vit": 0.5
+   }
+  },
+  "88": {
+   "attack_varies": [
+    1.5,
+    1.5,
+    1.5
+   ],
+   "ftp": [
+    1.5,
+    2.5,
+    4.0
+   ],
+   "hits": 1,
+   "id": 88,
+   "name": "Steel Cyclone",
+   "skill": 6,
+   "wsc": {
+    "str": 0.6,
+    "vit": 0.6
+   }
+  },
+  "89": {
+   "ftp": [
+    2.75,
+    2.75,
+    2.75
+   ],
+   "hits": 1,
+   "id": 89,
+   "name": "Metatron Torment",
+   "skill": 6,
+   "wsc": {
+    "str": 0.8
+   }
+  },
+  "9": {
+   "ftp": [
+    1.25,
+    1.25,
+    1.25
+   ],
+   "hits": 8,
+   "id": 9,
+   "multi_hit_ftp": true,
+   "name": "Asuran Fists",
+   "skill": 1,
+   "wsc": {
+    "str": 0.15,
+    "vit": 0.15
+   }
+  },
+  "90": {
+   "ftp": [
+    1.0,
+    3.0,
+    5.0
+   ],
+   "hits": 3,
+   "id": 90,
+   "name": "Kings Justice",
+   "skill": 6,
+   "wsc": {
+    "str": 0.5
+   }
+  },
+  "91": {
+   "ftp": [
+    2.75,
+    2.75,
+    2.75
+   ],
+   "hits": 1,
+   "id": 91,
+   "name": "Fell Cleave",
+   "skill": 6,
+   "wsc": {
+    "str": 0.6
+   }
+  },
+  "92": {
+   "crit_varies": [
+    0.2,
+    0.4,
+    0.7
+   ],
+   "ftp": [
+    2.0,
+    2.0,
+    2.0
+   ],
+   "hits": 2,
+   "id": 92,
+   "name": "Ukkos Fury",
+   "skill": 6,
+   "wsc": {
+    "str": 0.8
+   }
+  },
+  "93": {
+   "ftp": [
+    1.0,
+    3.5,
+    6.5
+   ],
+   "hits": 4,
+   "id": 93,
+   "name": "Upheaval",
+   "skill": 6,
+   "wsc": {
+    "vit": 0.7
+   }
+  },
+  "94": {
+   "ftp": [
+    3.05,
+    9.15,
+    15.25
+   ],
+   "id": 94,
+   "name": "Disaster",
+   "skill": 6,
+   "wsc": {
+    "str": 0.6,
+    "vit": 0.6
+   }
+  },
+  "96": {
+   "ftp": [
+    1.0,
+    2.5,
+    4.0
+   ],
+   "hits": 1,
+   "id": 96,
+   "name": "Slice",
+   "skill": 7,
+   "wsc": {
+    "str": 1.0
+   }
+  },
+  "97": {
+   "ftp": [
+    1.0,
+    3.54,
+    6.07
+   ],
+   "id": 97,
+   "magic": true,
+   "name": "Dark Harvest",
+   "skill": 7,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "98": {
+   "ftp": [
+    1.0,
+    4.17,
+    8.6
+   ],
+   "id": 98,
+   "magic": true,
+   "name": "Shadow of Death",
+   "skill": 7,
+   "wsc": {
+    "int": 0.4,
+    "str": 0.4
+   }
+  },
+  "99": {
+   "ftp": [
+    1.0,
+    1.0,
+    1.0
+   ],
+   "hits": 1,
+   "id": 99,
+   "name": "Nightmare Scythe",
+   "skill": 7,
+   "wsc": {
+    "mnd": 0.6,
+    "str": 0.6
+   }
+  }
+ }
+}

@@ -1,10 +1,12 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import type {
   Bootstrap,
   BuildEvent,
   Character,
   ConfigView,
+  HudPatch,
+  HudState,
   InstanceView,
   Page,
   SessionView,
@@ -13,6 +15,7 @@ import type {
 } from "./types";
 import { backend, LauncherError } from "./lib/api";
 import { JOB_ABBRS } from "./lib/format";
+import { buildTenants, resolveTenant } from "./lib/tenant";
 import {
   loadPhaseConfig,
   loadPhaseEnabled,
@@ -27,7 +30,10 @@ import { DesignPage } from "./components/DesignPage";
 import { AccountsPage } from "./components/AccountsPage";
 import { TeamPage } from "./components/TeamPage";
 import { ControlPage } from "./components/ControlPage";
+import { WarpsPage } from "./components/WarpsPage";
 import { GearPage } from "./components/GearPage";
+import { DataPage } from "./components/DataPage";
+import { TenantBar } from "./components/TenantBar";
 import { SettingsPage } from "./components/SettingsPage";
 import { NewsPage } from "./components/NewsPage";
 import { ConfirmDialog, Toast } from "./components/ui";
@@ -62,6 +68,8 @@ const PAGES: Page[] = [
   "accounts",
   "team",
   "control",
+  "warps",
+  "data",
   "gear",
   "news",
   "settings",
@@ -90,7 +98,10 @@ export default function App() {
   const [toast, setToast] = useState<ToastState | null>(null);
   const [fatal, setFatal] = useState("");
   const [confirmStopAll, setConfirmStopAll] = useState(false);
-  const [gearPort, setGearPort] = useState<number | null>(null);
+  /** The global tenant bar's character. `null` while the saved choice is unknown or stale. */
+  const [tenantCharacterId, setTenantCharacterId] = useState<number | null>(null);
+  /** The saved tenant is read once, after the launcher config arrives. */
+  const tenantSeeded = useRef(false);
   /** The master GearSwap switch. Every client follows it; the Gear page and Settings toggle the
    * same setting, and it is off until someone asks for automatic swapping. */
   const [gearSwapOn, setGearSwapOn] = useState(loadPhaseEnabled);
@@ -386,7 +397,48 @@ export default function App() {
     null;
   const running = instances.filter((instance) => instance.alive);
 
+  // The tenant is the character the whole launcher is looking at. It is one of the main
+  // account's characters or a sub-account box, and it is independent of `activeCharacter`
+  // (which only decides who Play starts on the main account).
+  const tenants = useMemo(() => buildTenants(session, team), [session, team]);
+  const tenant = useMemo(
+    () => resolveTenant(tenants, tenantCharacterId, activeCharacter?.id ?? null),
+    [tenants, tenantCharacterId, activeCharacter],
+  );
+
+  const chooseTenant = useCallback(
+    (characterId: number, quiet = false) => {
+      setTenantCharacterId(characterId);
+      void backend.selectTenant(characterId).catch((error) => {
+        if (!quiet) notify(messageOf(error), "error");
+      });
+    },
+    [notify],
+  );
+
+  // Read the saved tenant once the launcher config is in. Later bootstraps (a refresh, a
+  // settings save) must not overwrite a choice the user just made.
+  useEffect(() => {
+    if (tenantSeeded.current || !boot) return;
+    tenantSeeded.current = true;
+    if (boot.config.tenantCharacterId != null) {
+      setTenantCharacterId(boot.config.tenantCharacterId);
+    }
+  }, [boot]);
+
+  // A stored tenant can disappear when its box is purged or the player signs into a different
+  // account. Once the team roster is known, fall back to the active character and persist that.
+  useEffect(() => {
+    if (!session || !team || tenants.length === 0) return;
+    const exists =
+      tenantCharacterId !== null &&
+      tenants.some((entry) => Number(entry.character.id) === Number(tenantCharacterId));
+    if (exists) return;
+    chooseTenant(activeCharacter?.id ?? tenants[0].character.id, true);
+  }, [session, team, tenants, tenantCharacterId, activeCharacter, chooseTenant]);
+
   async function afterAuth(next: SessionView) {
+    setTenantCharacterId(null);
     setSession(next);
     setAddAccount(false);
     setReloginUsername(null);
@@ -404,6 +456,7 @@ export default function App() {
     setBusy("logout");
     try {
       const next = await backend.logout();
+      setTenantCharacterId(null);
       setAddAccount(false);
       setReloginUsername(null);
       await refreshAll();
@@ -420,6 +473,7 @@ export default function App() {
     setBusy(`switch-${username}`);
     try {
       const next = await backend.switchAccount(username);
+      setTenantCharacterId(null);
       setSession(next);
       const nextConfig = await backend.getConfig();
       setBoot((current) => (current ? { ...current, config: nextConfig } : current));
@@ -435,6 +489,9 @@ export default function App() {
     setBusy(`forget-${username}`);
     try {
       await backend.forgetAccount(username);
+      if (session?.account.username.toLowerCase() === username.toLowerCase()) {
+        setTenantCharacterId(null);
+      }
       await refreshAll();
       notify(`Removed @${username}`, "info");
     } catch (error) {
@@ -459,6 +516,11 @@ export default function App() {
     setSession(next);
     const nextConfig = await backend.getConfig();
     setBoot((current) => (current ? { ...current, config: nextConfig } : current));
+    // A box character is not in the main session's character list. Refresh the team so the
+    // tenant bar and the Design form immediately show the saved appearance.
+    if (!next.characters.some((character) => Number(character.id) === Number(characterId))) {
+      await loadTeam();
+    }
     notify("Character design saved", "success");
   }
 
@@ -495,6 +557,19 @@ export default function App() {
       return;
     }
     await launch(session.account.username, character.id);
+  }
+
+  /** Play the tenant in the bar, whether it lives on the main account or on a box. */
+  async function playTenant() {
+    if (!tenant) {
+      setPage("team");
+      return;
+    }
+    if (tenant.kind === "sub" && tenant.sub) {
+      await launchSub(tenant.sub);
+      return;
+    }
+    await launch(tenant.account, tenant.character.id);
   }
 
   async function launchAll() {
@@ -667,6 +742,17 @@ export default function App() {
     }
   }
 
+  async function sendHud(port: number, patch: HudPatch): Promise<HudState> {
+    try {
+      const next = await backend.sendHud(port, patch);
+      await refreshInstances();
+      return next;
+    } catch (error) {
+      notify(messageOf(error), "error");
+      throw error;
+    }
+  }
+
   async function saveSettings(input: {
     apiUrl: string;
     gameDir: string;
@@ -733,10 +819,11 @@ export default function App() {
         session={session}
         config={boot.config}
         publicView={boot.public}
-        character={activeCharacter}
+        character={tenant?.character ?? null}
+        tenant={tenant}
         instances={instances}
         playBusy={busy?.startsWith("launch-") ?? false}
-        onPlay={() => void play()}
+        onPlay={() => void playTenant()}
         onControl={() => setPage("control")}
         onCharacters={() => setPage("characters")}
         onNews={() => setPage("news")}
@@ -754,19 +841,18 @@ export default function App() {
         onPlay={(character) => void play(character)}
         playBusy={busy?.startsWith("launch-") ?? false}
         onControl={() => setPage("control")}
-        onDesign={async (characterId) => {
-          await selectCharacter(characterId);
+        onDesign={(characterId) => {
+          chooseTenant(characterId);
           setPage("design");
         }}
       />
     ),
     design: (
       <DesignPage
-        session={session}
-        config={boot.config}
+        tenant={tenant}
         instances={instances}
         onSave={saveCharacterDesign}
-        onCharacters={() => setPage("characters")}
+        onTeam={() => setPage("team")}
       />
     ),
     accounts: (
@@ -792,6 +878,7 @@ export default function App() {
         session={session}
         team={team}
         activeCharacter={activeCharacter}
+        tenant={tenant}
         instances={instances}
         loading={teamLoading}
         error={teamError}
@@ -803,6 +890,7 @@ export default function App() {
         onCreateCharacter={createSubCharacter}
         onLaunchSub={launchSub}
         onLaunchTeam={launchTeam}
+        onViewTenant={(characterId) => chooseTenant(characterId)}
         onControl={() => setPage("control")}
       />
     ),
@@ -817,21 +905,56 @@ export default function App() {
         onStopAll={() => setConfirmStopAll(true)}
         onCommand={sendCommand}
         onChat={sendChat}
+        onHud={sendHud}
         onGear={(port) => {
-          setGearPort(port);
+          const target = instances.find((instance) => instance.port === port);
+          const known = target
+            ? tenants.find(
+                (entry) => Number(entry.character.id) === Number(target.character.id),
+              ) ?? null
+            : null;
+          if (target && !known) {
+            notify(
+              `@${target.account} is not a team tenant — switch to it in Accounts to view its gear.`,
+              "info",
+            );
+            return;
+          }
+          if (known) chooseTenant(Number(known.character.id));
           setPage("gear");
         }}
         onRefresh={refreshInstances}
         onAccounts={() => setPage("accounts")}
+        onWarps={() => setPage("warps")}
         busy={busy}
+      />
+    ),
+    warps: (
+      <WarpsPage
+        session={session}
+        tenant={tenant}
+        team={team}
+        instances={instances}
+        notify={notify}
+        onControl={() => setPage("control")}
+        onCharacters={() => setPage("characters")}
+        onTeam={() => setPage("team")}
+      />
+    ),
+    data: (
+      <DataPage
+        character={tenant?.character ?? null}
+        instances={instances}
+        notify={notify}
       />
     ),
     gear: (
       <GearPage
         instances={instances}
+        tenant={tenant}
         onControl={() => setPage("control")}
+        onTeam={() => setPage("team")}
         notify={notify}
-        initialPort={gearPort}
         phaseOn={gearSwapOn}
         onTogglePhase={() => setGearSwap(!gearSwapOnRef.current)}
       />
@@ -868,6 +991,14 @@ export default function App() {
         onSignOut={() => void signOut()}
       />
       <main className="main-pane">
+        <TenantBar
+          tenants={tenants}
+          tenant={tenant}
+          instances={instances}
+          loading={teamLoading}
+          onSelect={(characterId) => chooseTenant(characterId)}
+          onTeam={() => setPage("team")}
+        />
         {!boot.public.status && (
           <div className="offline-banner">
             Server offline — start the Fanxi server or change its address in Settings.

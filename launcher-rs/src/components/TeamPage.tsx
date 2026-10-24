@@ -1,6 +1,7 @@
 import { useState } from "react";
 import {
   Crown,
+  Eye,
   Gamepad2,
   Plus,
   Play,
@@ -12,7 +13,14 @@ import {
   UserRound,
   UsersRound,
 } from "lucide-react";
-import type { Character, InstanceView, SessionView, SubAccount, TeamView } from "../types";
+import type {
+  Character,
+  InstanceView,
+  SessionView,
+  SubAccount,
+  TeamView,
+  Tenant,
+} from "../types";
 import { JOBS, jobName } from "../lib/format";
 import {
   Badge,
@@ -31,6 +39,7 @@ export function TeamPage({
   session,
   team,
   activeCharacter,
+  tenant,
   instances,
   loading,
   error,
@@ -42,11 +51,13 @@ export function TeamPage({
   onCreateCharacter,
   onLaunchSub,
   onLaunchTeam,
+  onViewTenant,
   onControl,
 }: {
   session: SessionView;
   team: TeamView | null;
   activeCharacter: Character | null;
+  tenant: Tenant | null;
   instances: InstanceView[];
   loading: boolean;
   error: string;
@@ -58,6 +69,7 @@ export function TeamPage({
   onCreateCharacter: (sub: SubAccount) => Promise<void>;
   onLaunchSub: (sub: SubAccount) => Promise<void>;
   onLaunchTeam: () => Promise<void>;
+  onViewTenant: (characterId: number) => void;
   onControl: () => void;
 }) {
   const [adding, setAdding] = useState(false);
@@ -131,6 +143,12 @@ export function TeamPage({
               <Badge tone="accent" dot>
                 Main account
               </Badge>
+              {tenant?.kind === "main" &&
+                tenant.character.id === activeCharacter?.id && (
+                  <Badge tone="accent" dot>
+                    Viewing
+                  </Badge>
+                )}
               {mainRunning && (
                 <Badge tone="success" dot>
                   In game
@@ -249,23 +267,30 @@ export function TeamPage({
               >
                 <div className="team-slot-top">
                   <span className="team-slot-label">Box {index + 2}</span>
-                  {suspended ? (
-                    <Badge tone="warning" dot>
-                      Suspended
-                    </Badge>
-                  ) : running ? (
-                    <Badge tone="success" dot>
-                      In game
-                    </Badge>
-                  ) : character ? (
-                    <Badge tone="neutral" dot>
-                      Ready
-                    </Badge>
-                  ) : (
-                    <Badge tone="danger" dot>
-                      No character
-                    </Badge>
-                  )}
+                  <span className="team-slot-badges">
+                    {tenant?.sub?.id === sub.id && (
+                      <Badge tone="accent" dot>
+                        Viewing
+                      </Badge>
+                    )}
+                    {suspended ? (
+                      <Badge tone="warning" dot>
+                        Suspended
+                      </Badge>
+                    ) : running ? (
+                      <Badge tone="success" dot>
+                        In game
+                      </Badge>
+                    ) : character ? (
+                      <Badge tone="neutral" dot>
+                        Ready
+                      </Badge>
+                    ) : (
+                      <Badge tone="danger" dot>
+                        No character
+                      </Badge>
+                    )}
+                  </span>
                 </div>
                 <div className="team-identity">
                   <div className="avatar">
@@ -290,6 +315,16 @@ export function TeamPage({
                   )}
                 </div>
                 <div className="team-card-actions">
+                  {character && tenant?.sub?.id !== sub.id && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={<Eye size={13} />}
+                      onClick={() => onViewTenant(Number(character.id))}
+                    >
+                      View
+                    </Button>
+                  )}
                   {!suspended && character && !running && (
                     <Button
                       size="sm"

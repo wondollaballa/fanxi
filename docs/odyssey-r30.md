@@ -86,7 +86,13 @@ data and matched to the Rank 30 rows above by content. The method is
 validated end to end by Assassin's Gorget +2: its bundle 204 decodes to
 DEX/AGI+15, Evasion+25, Triple Attack+4% — exactly its known R25 row.
 
-Nyame gets one copy per path: the original piece carries Path A and
-migration `0077_odyssey_bundles.sql` adds Path B/C/D copies, each with
-its own bundle, so all four tooltips are distinct. `!augment <index>
-<item>` rewrites a copy; `!augment <A-D> <item>` looks the index up.
+Those rows are also the stat source: `FanxiService.equipped_mods()` reads the
+equipped copy's block and `augment_stats` applies the row for the path the
+block names (Nyame A-D included), so Attack, Store TP, Double/Triple Attack
+and the rest reach combat rather than only the tooltip.
+
+Nyame is one Rare piece, not four: it carries Path A, and migration 103
+removed the Path B/C/D duplicates so the character stays within retail's
+one-copy limit. `!augment <index> <item>` rewrites that copy to any bundle;
+`!augment <A-D> <item>` looks the index up, so switching paths is a chat
+command rather than a wardrobe row.

@@ -135,6 +135,49 @@ class SubAccountTest(unittest.TestCase):
         again = self.call("POST", "/api/v1/accounts/sub/%d/characters" % sub["id"], token=token)
         self.assertEqual(again.status, 409)
 
+    def test_main_token_manages_box_character_data(self):
+        token = self.register("family")["token"]
+        sub = json.loads(self.create_sub(token, {"name": "Databox"}).payload)["sub"]
+        base = "/api/v1/characters/%d" % sub["character"]["id"]
+
+        snapshot = self.call("GET", base + "/data", token=token)
+        self.assertEqual(snapshot.status, 200, snapshot.payload)
+        self.assertEqual(json.loads(snapshot.payload)["character"]["name"], "Databox")
+
+        ranked = self.call("POST", base + "/mastery-rank", {"rank": 5}, token=token)
+        self.assertEqual(ranked.status, 200, ranked.payload)
+        self.assertEqual(json.loads(ranked.payload)["mastery_rank"], 5)
+        self.assertEqual(self.service.character(sub["character"]["id"])["mastery_rank"], 5)
+
+        other = self.register("notfamily")["token"]
+        self.assertEqual(self.call("GET", base + "/data", token=other).status, 404)
+        self.assertEqual(self.call("POST", base + "/mastery-rank", {"rank": 9},
+                                   token=other).status, 404)
+
+    def test_main_token_manages_box_character_design(self):
+        token = self.register("family")["token"]
+        sub = json.loads(self.create_sub(token, {"name": "Designbox"}).payload)["sub"]
+        character_id = sub["character"]["id"]
+        path = "/api/v1/characters/%d/design" % character_id
+
+        saved = self.call("PATCH", path,
+                          {"race": 2, "face": 3, "hair": 1, "size": 2}, token=token)
+        self.assertEqual(saved.status, 200, saved.payload)
+        character = json.loads(saved.payload)["character"]
+        self.assertEqual(
+            (character["race"], character["face"], character["hair"], character["size"]),
+            (2, 3, 1, 2),
+        )
+        row = self.service.character(character_id)
+        self.assertEqual((row["race"], row["face"], row["hair"], row["size"]), (2, 3, 1, 2))
+
+        other = self.register("notfamily")["token"]
+        denied = self.call("PATCH", path,
+                           {"race": 1, "face": 1, "hair": 0, "size": 1}, token=other)
+        self.assertEqual(denied.status, 404)
+        unchanged = self.service.character(character_id)
+        self.assertEqual(unchanged["race"], 2)
+
 
 if __name__ == "__main__":
     unittest.main()

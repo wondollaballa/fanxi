@@ -1,7 +1,9 @@
 import {
+  Database,
   Gamepad2,
   Home,
   LogOut,
+  MapPin,
   Newspaper,
   Palette,
   Settings,
@@ -21,6 +23,8 @@ const NAV: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: "accounts", label: "Accounts", icon: Users },
   { page: "team", label: "Team", icon: UsersRound },
   { page: "control", label: "Control room", icon: Gamepad2 },
+  { page: "warps", label: "Warps", icon: MapPin },
+  { page: "data", label: "Data", icon: Database },
   { page: "gear", label: "Gear / GearSwap", icon: Shirt },
   { page: "news", label: "News", icon: Newspaper },
   { page: "settings", label: "Settings", icon: Settings },

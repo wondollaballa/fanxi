@@ -198,6 +198,19 @@ int res_item_icon(uint32_t id, ResIcon* out);
 /* "General", "Usable", "Weapon", "Armor", "Automaton", "Gil", "Maze", "Monstrosity", "Instinct" */
 const char* res_item_kind_name(int kind);
 
+/* The menu icon (a spell/ability list icon) `id` as top-down RGBA8, 32x32. The menu DAT keeps the
+ * spell and ability icons in one sprite sheet ("magi") over 32x32 DXT3 images; this returns the
+ * icon's own image (the sheet's last drawable part), or 0 when the game has no art for that id.
+ * Free the result with free(). */
+int res_menu_icon_rgba(uint32_t id, uint8_t** rgba, int* width, int* height);
+
+/* A trust alter ego's portrait as 48x48 RGBA, keyed by its spell index (896..1019). The atlas is
+ * built from the BGWiki trust cards; free the result with free(). */
+int res_trust_face_rgba(uint32_t spell, uint8_t** rgba, int* width, int* height);
+/* A skillchain element badge (1 Transfixion .. 14 Darkness) as 48x48 RGBA; free with free(). */
+int res_sc_icon_rgba(uint32_t id, uint8_t** rgba, int* width, int* height);
+void res_trust_faces_shutdown(void);
+
 /* --- spells and abilities (file 81: mgc_ and comm chunks) ------------------------------------ */
 
 typedef struct ResSpell

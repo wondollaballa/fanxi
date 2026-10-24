@@ -129,7 +129,7 @@ function get_sets()
     -- ===== JA =====
     sets.JA["Clarion Call"] = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Fili Hongreline +3",
         hands = "Brioso Cuffs +4",
@@ -140,7 +140,7 @@ function get_sets()
     }
     sets.JA.Marcato = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Brioso Justaucorps +4",
         hands = "Brioso Cuffs +4",
@@ -151,7 +151,7 @@ function get_sets()
     }
     sets.JA.Nightingale = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Brioso Justaucorps +4",
         hands = "Bihu Cuffs +4",
@@ -162,7 +162,7 @@ function get_sets()
     }
     sets.JA.Pianissimo = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Brioso Justaucorps +4",
         hands = "Brioso Cuffs +4",
@@ -173,7 +173,7 @@ function get_sets()
     }
     sets.JA["Soul Voice"] = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Bihu Justaucorps +4",
         hands = "Brioso Cuffs +4",
@@ -184,7 +184,7 @@ function get_sets()
     }
     sets.JA.Troubadour = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Bihu Justaucorps +4",
         hands = "Brioso Cuffs +4",
@@ -296,7 +296,7 @@ function get_sets()
     -- ===== engaged =====
     sets.engaged.acc = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Aurgelmir Orb +1",
         head = "Nyame Helm",
         body = "Nyame Mail",
@@ -313,7 +313,7 @@ function get_sets()
     }
     sets.engaged.hybrid = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Aurgelmir Orb +1",
         head = "Nyame Helm",
         body = "Nyame Mail",
@@ -330,7 +330,7 @@ function get_sets()
     }
     sets.engaged.tp = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Aurgelmir Orb +1",
         head = "Brioso Roundlet +4",
         body = limbus.revelation.tp.body,
@@ -365,7 +365,7 @@ function get_sets()
     -- ===== idle =====
     sets.idle.dt = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Brioso Roundlet +4",
         body = "Fili Hongreline +3",
@@ -382,7 +382,7 @@ function get_sets()
     }
     sets.idle.maxhp = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Nyame Helm",
         body = "Nyame Mail",
@@ -399,7 +399,7 @@ function get_sets()
     }
     sets.idle.mdt = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Nyame Helm",
         body = "Nyame Mail",
@@ -416,7 +416,7 @@ function get_sets()
     }
     sets.idle.movement = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Brioso Roundlet +4",
         body = "Brioso Justaucorps +4",
@@ -433,7 +433,7 @@ function get_sets()
     }
     sets.idle.pdt = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Nyame Helm",
         body = "Nyame Mail",
@@ -450,7 +450,7 @@ function get_sets()
     }
     sets.idle.refresh = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Brioso Roundlet +4",
         body = "Brioso Justaucorps +4",
@@ -467,7 +467,7 @@ function get_sets()
     }
     sets.idle.town = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Brioso Roundlet +4",
         body = "Brioso Justaucorps +4",
@@ -486,7 +486,7 @@ function get_sets()
     -- ===== midcast =====
     sets.midcast.Singing = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Pemphredo Tathlum",
         head = "Brioso Roundlet +4",
         body = "Bihu Justaucorps +4",
@@ -503,7 +503,7 @@ function get_sets()
     }
     sets.midcast["Singing Duration"] = {
         main = "Carnwenhan",
-        range = "Daurdabla",
+        range = "Loughnashade",
         ammo = "Pemphredo Tathlum",
         head = "Brioso Roundlet +4",
         body = "Bihu Justaucorps +4",

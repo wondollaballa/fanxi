@@ -1,7 +1,8 @@
 """Ambuscade JSE cape augments.
 
 Job-specific capes (``Artio's Mantle`` for Beastmaster, ``Andartia's Mantle`` for
-Ninja, ``Ankou's Mantle`` for Dark Knight) are standard five-slot augments: every
+Ninja, ``Ankou's Mantle`` for Dark Knight, ``Taranus's Cape`` for Black Mage) are
+standard five-slot augments: every
 slot is a 16-bit word holding an 11-bit augment id and a 5-bit augment value.  The
 client turns the pair into a line of text with a fixed per-id rule:
 ``shown = (value + offset) * multiplier``.  ``TABLE`` is the slice of the
@@ -295,11 +296,79 @@ DRK_BUILDS = {
     ],
 }
 
+# Black Mage's nine Taranus's Cape builds, in the same order as gearswap/BLM.lua.
+BLM_BUILDS = {
+    "tp": [
+        "DEX+20",
+        "Accuracy+20 Attack+20",
+        "Accuracy+10",
+        '"Store TP"+10',
+        "Phys. dmg. taken-10%",
+    ],
+    "pdt": [
+        "HP+60",
+        "Eva.+20 /Mag. Eva.+20",
+        "Evasion+10",
+        "Enmity-10",
+        "Phys. dmg. taken-10%",
+    ],
+    "mdt": [
+        "HP+60",
+        "Eva.+20 /Mag. Eva.+20",
+        "Mag. Evasion+10",
+        "Enmity-10",
+        "Magic dmg. taken-10%",
+    ],
+    "maxhp": [
+        "HP+60",
+        "Eva.+20 /Mag. Eva.+20",
+        "HP+20",
+        "Enmity-10",
+        "Damage taken-5%",
+    ],
+    "dt": [
+        "HP+60",
+        "Eva.+20 /Mag. Eva.+20",
+        "Evasion+10",
+        "Enmity-10",
+        "Damage taken-5%",
+    ],
+    "fcmp": [
+        "MP+60",
+        "Mag. Acc+20 /Mag. Dmg.+20",
+        "MP+20",
+        '"Fast Cast"+10',
+        "Phys. dmg. taken-10%",
+    ],
+    "macc": [
+        "INT+20",
+        "Mag. Acc+20 /Mag. Dmg.+20",
+        "Mag. Acc.+10",
+        "Enmity-10",
+        "Phys. dmg. taken-10%",
+    ],
+    "nuke": [
+        "INT+20",
+        "Mag. Acc+20 /Mag. Dmg.+20",
+        "INT+10",
+        '"Mag.Atk.Bns."+10',
+        "Phys. dmg. taken-10%",
+    ],
+    "mabws": [
+        "INT+20",
+        "Mag. Acc+20 /Mag. Dmg.+20",
+        "INT+10",
+        "Weapon skill damage +10%",
+        "Phys. dmg. taken-10%",
+    ],
+}
+
 # Job -> the one cape item all of its builds are copies of.
 JOBS = {
     "BST": {"cape_id": 26254, "cape_name": "Artio's Mantle", "builds": BST_BUILDS},
     "NIN": {"cape_id": 26258, "cape_name": "Andartia's Mantle", "builds": NIN_BUILDS},
     "DRK": {"cape_id": 26253, "cape_name": "Ankou's Mantle", "builds": DRK_BUILDS},
+    "BLM": {"cape_id": 26249, "cape_name": "Taranus's Cape", "builds": BLM_BUILDS},
 }
 
 # The Beastmaster cape is the original default.
@@ -364,6 +433,16 @@ def decode(extra: bytes | None) -> list[dict] | None:
         word = struct.unpack_from("<H", raw, 2 + slot * 2)[0]
         slots.append({"id": word & 0x7FF, "value": word >> 11})
     return slots
+
+
+def slot_text(slot: dict) -> str:
+    """The tooltip text one decoded slot stands for.
+
+    The stat sheet feeds this back through :mod:`augment_stats`, so the slot ids and
+    the parser cannot drift apart: a slot describes itself with the same table the
+    ``!cape`` command prints.
+    """
+    return _text(int(slot.get("id") or 0), int(slot.get("value") or 0))
 
 
 def describe(extra: bytes | None) -> str:

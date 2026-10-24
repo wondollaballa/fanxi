@@ -145,6 +145,7 @@ export const SLOT_LABELS: Record<string, string> = {
   main: "Main",
   sub: "Sub",
   range: "Range",
+  ranged: "Range",
   ammo: "Ammo",
   head: "Head",
   body: "Body",

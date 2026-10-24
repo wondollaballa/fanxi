@@ -1,6 +1,8 @@
 {
  "rank": 30,
  "tier": "Su5",
+ "rp": 55800,
+ "rp_curve": 1,
  "source": [
   "https://www.bg-wiki.com/ffxi/Justice_Armor_Set",
   "https://www.bg-wiki.com/ffxi/Hope_Armor_Set",
@@ -67,7 +69,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24167,
-     "bundle": null
+     "bundle": 477
     },
     "body": {
      "name": "Duty Cyclas",
@@ -86,7 +88,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24170,
-     "bundle": null
+     "bundle": 478
     },
     "hands": {
      "name": "Duty Gauntlets",
@@ -105,7 +107,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24173,
-     "bundle": null
+     "bundle": 479
     },
     "legs": {
      "name": "Duty Flanchard",
@@ -124,7 +126,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24176,
-     "bundle": null
+     "bundle": 480
     },
     "feet": {
      "name": "Duty Sollerets",
@@ -143,7 +145,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24179,
-     "bundle": null
+     "bundle": 481
     }
    }
   },
@@ -177,7 +179,7 @@
       "Physical Damage Limit+6%"
      ],
      "item_id": 24122,
-     "bundle": null
+     "bundle": 472
     },
     "body": {
      "name": "Revelation Plate.",
@@ -194,7 +196,7 @@
       "Physical Damage Limit+7%"
      ],
      "item_id": 24125,
-     "bundle": null
+     "bundle": 473
     },
     "hands": {
      "name": "Revelation Gaunt.",
@@ -211,7 +213,7 @@
       "Physical Damage Limit+5%"
      ],
      "item_id": 24128,
-     "bundle": null
+     "bundle": 474
     },
     "legs": {
      "name": "Revelation Brais",
@@ -228,7 +230,7 @@
       "Physical Damage Limit+6%"
      ],
      "item_id": 24131,
-     "bundle": null
+     "bundle": 475
     },
     "feet": {
      "name": "Revelation Sab.",
@@ -245,7 +247,7 @@
       "Physical Damage Limit+5%"
      ],
      "item_id": 24134,
-     "bundle": null
+     "bundle": 476
     }
    }
   },
@@ -282,7 +284,7 @@
       "\"Phalanx\" received +4"
      ],
      "item_id": 24137,
-     "bundle": null
+     "bundle": 487
     },
     "body": {
      "name": "Sworn Platemail",
@@ -299,7 +301,7 @@
       "\"Phalanx\" received +6"
      ],
      "item_id": 24140,
-     "bundle": null
+     "bundle": 488
     },
     "hands": {
      "name": "Sworn Gauntlets",
@@ -316,7 +318,7 @@
       "\"Phalanx\" received +5"
      ],
      "item_id": 24143,
-     "bundle": null
+     "bundle": 489
     },
     "legs": {
      "name": "Sworn Brais",
@@ -333,7 +335,7 @@
       "\"Phalanx\" received +4"
      ],
      "item_id": 24146,
-     "bundle": null
+     "bundle": 490
     },
     "feet": {
      "name": "Sworn Sabatons",
@@ -350,7 +352,7 @@
       "\"Phalanx\" received +5"
      ],
      "item_id": 24149,
-     "bundle": null
+     "bundle": 491
     }
    }
   },
@@ -387,7 +389,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24152,
-     "bundle": null
+     "bundle": 482
     },
     "body": {
      "name": "Indomitable Coat",
@@ -406,7 +408,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24155,
-     "bundle": null
+     "bundle": 483
     },
     "hands": {
      "name": "Indom. Gloves",
@@ -425,7 +427,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24158,
-     "bundle": null
+     "bundle": 484
     },
     "legs": {
      "name": "Indom. Tonban",
@@ -444,7 +446,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24161,
-     "bundle": null
+     "bundle": 485
     },
     "feet": {
      "name": "Indom. Sabots",
@@ -463,7 +465,7 @@
       "Pet: Accuracy+30 Mag. Acc+30"
      ],
      "item_id": 24164,
-     "bundle": null
+     "bundle": 486
     }
    }
   },
@@ -500,7 +502,7 @@
       "Pet: Accuracy+30 Mag. Acc.+30"
      ],
      "item_id": 24182,
-     "bundle": null
+     "bundle": 492
     },
     "body": {
      "name": "Clemen. Hara.",
@@ -519,7 +521,7 @@
       "Pet: Accuracy+30 Mag. Acc.+30"
      ],
      "item_id": 24185,
-     "bundle": null
+     "bundle": 493
     },
     "hands": {
      "name": "Clemency Kote",
@@ -538,7 +540,7 @@
       "Pet: Accuracy+30 Mag. Acc.+30"
      ],
      "item_id": 24188,
-     "bundle": null
+     "bundle": 494
     },
     "legs": {
      "name": "Clem. Haidate",
@@ -557,7 +559,7 @@
       "Pet: Accuracy+30 Mag. Acc.+30"
      ],
      "item_id": 24191,
-     "bundle": null
+     "bundle": 495
     },
     "feet": {
      "name": "Clem. Sune-Ate",
@@ -576,7 +578,7 @@
       "Pet: Accuracy+30 Mag. Acc.+30"
      ],
      "item_id": 24194,
-     "bundle": null
+     "bundle": 496
     }
    }
   }

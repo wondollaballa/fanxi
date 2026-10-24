@@ -61,6 +61,10 @@ pub struct LauncherConfig {
     pub api_insecure: bool,
     pub auto_login: bool,
     pub last_page: String,
+    /// The character the launcher's tenant bar has selected. It may belong to the main
+    /// account or to one of its sub-account boxes, so it is separate from `character_id`
+    /// (which is only the main account's active character).
+    pub tenant_character_id: Option<i64>,
     pub accounts: Vec<AccountEntry>,
     #[serde(flatten)]
     pub extra: BTreeMap<String, Value>,
@@ -80,6 +84,7 @@ impl Default for LauncherConfig {
             api_insecure: env_flag("FANXI_API_INSECURE"),
             auto_login: true,
             last_page: "home".to_string(),
+            tenant_character_id: None,
             accounts: Vec::new(),
             extra: BTreeMap::new(),
         }
@@ -320,6 +325,7 @@ pub struct ConfigView {
     pub api_url: String,
     pub username: String,
     pub character_id: Option<i64>,
+    pub tenant_character_id: Option<i64>,
     pub game_dir: String,
     pub host64: String,
     pub repo_root: String,
@@ -336,6 +342,7 @@ impl From<&LauncherConfig> for ConfigView {
             api_url: config.api_url.clone(),
             username: config.username.clone(),
             character_id: config.character_id,
+            tenant_character_id: config.tenant_character_id,
             game_dir: config.game_dir.clone(),
             host64: config.host64.clone(),
             repo_root: config.repo_root.clone(),
@@ -549,5 +556,17 @@ mod tests {
         let json = serde_json::to_string(&view).unwrap();
         assert!(!json.contains("secret"));
         assert!(view.signed_in);
+    }
+
+    #[test]
+    fn tenant_character_is_kept_separate_from_the_active_character() {
+        let mut config = temp_config();
+        config.character_id = Some(3);
+        config.tenant_character_id = Some(9);
+        let view = ConfigView::from(&config);
+        assert_eq!(view.character_id, Some(3));
+        assert_eq!(view.tenant_character_id, Some(9));
+        let json = serde_json::to_value(&view).unwrap();
+        assert_eq!(json["tenantCharacterId"], 9);
     }
 }

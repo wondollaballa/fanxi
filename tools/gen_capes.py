@@ -19,6 +19,7 @@ MIGRATIONS = {
     "BST": ROOT / "database/migrations/0078_bst_capes.sql",
     "NIN": ROOT / "database/migrations/0082_nin_capes.sql",
     "DRK": ROOT / "database/migrations/0088_drk_capes.sql",
+    "BLM": ROOT / "database/migrations/0101_blm_capes.sql",
 }
 DOC = ROOT / "docs/capes.md"
 
@@ -30,6 +31,7 @@ ORDER = {
             "ws_agi", "ws_dex", "ws_str"],
     "DRK": ["tp", "pdt", "mdt", "maxhp", "dt", "fc", "macc", "ws_str", "ws_int",
             "enmity"],
+    "BLM": ["tp", "pdt", "mdt", "maxhp", "dt", "fcmp", "macc", "nuke", "mabws"],
 }
 
 # Beastmaster: the bag copy at slot 80 and eight explicit free bag slots (the same
@@ -43,9 +45,15 @@ NIN_WHERE = "AND (extra IS NULL OR length(extra) = 0)"
 
 # Dark Knight: the wardrobe copy at slot 21 is unaugmented; the other nine go into
 # the first free wardrobe-3 slots.  The cape's job is read from its item name, so
-# the same !cape command works for all three jobs.
+# the same !cape command works for all four jobs.
 DRK_WHERE = "AND (extra IS NULL OR length(extra) = 0)"
 DRK_SLOTS = [(11, slot) for slot in range(1, 10)]
+
+# Black Mage: the wardrobe copy is the same one the default-library grant left
+# unaugmented.  The inventory and the first five wardrobes are full, so the eight
+# new copies take the free slots at the end of wardrobe 6 (container 14).
+BLM_WHERE = "AND (extra IS NULL OR length(extra) = 0)"
+BLM_SLOTS = [(14, slot) for slot in range(66, 74)]
 
 
 def _header(job: str) -> list[str]:
@@ -81,6 +89,8 @@ def _word(number: int) -> str:
 def sql(job: str = "BST") -> str:
     if job == "DRK":
         return _drk_sql()
+    if job == "BLM":
+        return _blm_sql()
     entry = capes.JOBS[job]
     order = ORDER[job]
     lines = _header(job)
@@ -162,6 +172,37 @@ def _drk_sql() -> str:
     return "\n".join(lines)
 
 
+def _blm_sql() -> str:
+    """Black Mage's nine Taranus's Cape builds (migration 101)."""
+    entry = capes.JOBS["BLM"]
+    order = ORDER["BLM"]
+    lines = [
+        "-- Ambuscade JSE cape augments (migration 101).",
+        "--",
+        "-- Black Mage capes: Taranus's Cape (item 26249), nine builds.  The",
+        "-- format is the same standard five-slot block as the Beastmaster,",
+        "-- Ninja and Dark Knight migrations: kind 0x02, subkind 0x03, five",
+        "-- little-endian words of {id:11, value:5}, then twelve zero bytes.",
+        "-- The existing wardrobe copy becomes the tp build; the other eight",
+        "-- are new copies in wardrobe 6 slots 66-73 (the inventory and the",
+        "-- earlier wardrobes are full).  The client reads the job from the",
+        "-- item name, so !cape <build> <item> can rewrite any of them.",
+        "",
+        "UPDATE char_inventory SET extra = X'%s'"
+        % capes.encode(order[0], "BLM").hex().upper(),
+        " WHERE character_id = 1 AND item_id = %d %s;"
+        % (entry["cape_id"], BLM_WHERE),
+        "",
+    ]
+    for build, (container, slot) in zip(order[1:], BLM_SLOTS):
+        lines.append(
+            "INSERT OR IGNORE INTO char_inventory (character_id, container, slot, item_id, quantity, extra)"
+            " SELECT 1, %d, %d, %d, 1, X'%s' WHERE EXISTS (SELECT 1 FROM characters WHERE id = 1);  -- %s"
+            % (container, slot, entry["cape_id"], capes.encode(build, "BLM").hex().upper(), build))
+    lines.append("")
+    return "\n".join(lines)
+
+
 def _build_table(job: str) -> list[str]:
     out = ["| Build | Augments | Block |", "| --- | --- | --- |"]
     for build in ORDER[job]:
@@ -177,7 +218,8 @@ def doc() -> str:
         "",
         "Every job's Ambuscade cape (`Artio's Mantle` for Beastmaster, item 26254;",
         "`Andartia's Mantle` for Ninja, item 26258; `Ankou's Mantle` for Dark Knight,",
-        "item 26253) is augmented with five standard augment slots.  The block is",
+        "item 26253; `Taranus's Cape` for Black Mage, item 26249) is augmented with",
+        "five standard augment slots.  The block is",
         "",
         "```",
         "02 03  <slot 0> <slot 1> <slot 2> <slot 3> <slot 4>  00 * 12",
@@ -206,6 +248,12 @@ def doc() -> str:
     out += _build_table("DRK")
     out += [
         "",
+        "## Black Mage (Taranus's Cape)",
+        "",
+    ]
+    out += _build_table("BLM")
+    out += [
+        "",
         "## Slots",
         "",
         "All nine Beastmaster builds are copies of item 26254, so the client shows",
@@ -220,9 +268,19 @@ def doc() -> str:
         "already existed is the `tp` build; the other nine were placed in wardrobe 3",
         "slots 1-9 by `0088_drk_capes.sql`.",
         "",
+        "All nine Black Mage builds are copies of item 26249.  The wardrobe copy that",
+        "already existed is the `tp` build; the other eight were placed in wardrobe 6",
+        "slots 66-73 by `0101_blm_capes.sql`.",
+        "",
         "`!cape <build> <item>` re-encodes a cape in place (it reads the item's job from",
         "the cape name), and `!cape list` prints the builds.  `tools/gen_capes.py --check`",
         "keeps this page and the migrations in step with `server/fanxi_server/game/capes.py`.",
+        "",
+        "The five-slot block is read back into the stat sheet: `FanxiService.equipped_mods()`",
+        "passes each equipped cape's block through `augment_stats`, which renders the slots",
+        "with the same table `!cape` prints and adds their modifiers, so a `tp` cape's",
+        "DEX+20 / Accuracy+30 / Attack+20 / Store TP+10 / Phys. dmg. taken-10% counts in",
+        "combat.",
         "",
     ]
     return "\n".join(out)
@@ -231,7 +289,8 @@ def doc() -> str:
 def main(argv: list[str]) -> int:
     check = "--check" in argv
     pairs = [(MIGRATIONS["BST"], sql("BST")), (MIGRATIONS["NIN"], sql("NIN")),
-             (MIGRATIONS["DRK"], sql("DRK")), (DOC, doc())]
+             (MIGRATIONS["DRK"], sql("DRK")), (MIGRATIONS["BLM"], sql("BLM")),
+             (DOC, doc())]
     rc = 0
     for path, want in pairs:
         if check:

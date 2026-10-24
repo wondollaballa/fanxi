@@ -3,7 +3,7 @@
  *
  * Build (from the repo root):
  *   cc -std=c11 -O2 -Ihost/addons -Iruntime -Iruntime/portable -Ithird_party/luajit/src tests/res_test.c \
- *      host/addons/res.c host/addons/res_lua.c runtime/portable/vfs.c runtime/portable/plat_posix.c \
+ *      host/addons/res.c host/addons/res_lua.c host/addons/trust_faces.c host/addons/sc_icons.c runtime/portable/vfs.c runtime/portable/plat_posix.c \
  *      build/third_party/luajit.a -lm -lpthread -o build/res_test
  * Run:
  *   build/res_test ["<FINAL FANTASY XI folder>" [<resources_data folder>]]
@@ -154,6 +154,10 @@ static const char* const g_script =
     "expect('item icon 4096 dib 8bpp', dib ~= nil and bpp == 8 and #dib == 40 + 1024 + 1024)\n"
     "local p2, w3, h3 = res.status_icon_rgba(1)\n"
     "expect('status icon 1 32x32 rgba', p2 ~= nil and w3 == 32 and h3 == 32)\n"
+    "local p3, w4, h4 = res.menu_icon_rgba(86)\n"
+    "expect('menu icon 86 32x32 rgba', p3 ~= nil and w4 == 32 and h4 == 32 and #p3 == 32 * 32 * 4)\n"
+    "do local r5, w5, h5 = res.trust_face_rgba(898); expect('trust face 898 48x48 rgba', r5 ~= nil and w5 == 48 and h5 == 48 and #r5 == 48 * 48 * 4) end\n"
+    "do local r6, w6, h6 = res.sc_icon_rgba(1); expect('skillchain icon 1 48x48 rgba', r6 ~= nil and w6 == 48 and h6 == 48 and #r6 == 48 * 48 * 4) end\n"
     "expect('to_utf8 element icon', res.to_utf8('\\239\\031+10') == 'Fire+10')\n"
     "expect('to_utf8 FFXI latin', res.to_utf8('Fu\\133Rs') == 'Fu\\226\\128\\153s')\n"
     "expect('to_utf8 auto-translate', res.to_utf8('\\253\\002\\002\\001\\001\\253') == '{Nice to meet you.}')\n"

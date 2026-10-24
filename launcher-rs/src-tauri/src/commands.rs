@@ -488,6 +488,132 @@ pub async fn save_character_design(
 }
 
 #[tauri::command]
+pub async fn character_data(state: State<'_, AppState>, character_id: i64) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.character_data(&config.token, character_id).await
+}
+
+#[tauri::command]
+pub async fn character_data_action(
+    state: State<'_, AppState>,
+    character_id: i64,
+    action: String,
+    payload: Option<Value>,
+) -> AppResult<Value> {
+    const ACTIONS: [&str; 9] = [
+        "merits",
+        "job-points",
+        "mastery-rank",
+        "gil",
+        "home-points",
+        "key-items",
+        "currencies",
+        "armory",
+        "progress",
+    ];
+    if !ACTIONS.contains(&action.as_str()) {
+        return Err(AppError::Validation(format!(
+            "unknown Data page action: {action}"
+        )));
+    }
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.character_action(
+        &config.token,
+        character_id,
+        &action,
+        payload.unwrap_or_else(|| json!({})),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn search_armory(
+    state: State<'_, AppState>,
+    character_id: i64,
+    query: String,
+    kind: Option<String>,
+) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.search_armory(&config.token, character_id, &query, kind.as_deref())
+        .await
+}
+
+#[tauri::command]
+pub async fn character_warps(
+    state: State<'_, AppState>,
+    character_id: i64,
+) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.character_warps(&config.token, character_id).await
+}
+
+#[tauri::command]
+pub async fn character_warp_mark(
+    state: State<'_, AppState>,
+    character_id: i64,
+    payload: Option<Value>,
+) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.mark_character_warp(
+        &config.token,
+        character_id,
+        payload.unwrap_or_else(|| json!({})),
+    )
+    .await
+}
+
+#[tauri::command]
+pub async fn character_warp_rename(
+    state: State<'_, AppState>,
+    character_id: i64,
+    slot: i64,
+    alias: Option<String>,
+) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.rename_character_warp(&config.token, character_id, slot, alias)
+        .await
+}
+
+#[tauri::command]
+pub async fn character_warp_delete(
+    state: State<'_, AppState>,
+    character_id: i64,
+    slot: i64,
+) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.delete_character_warp(&config.token, character_id, slot)
+        .await
+}
+
+#[tauri::command]
 pub async fn select_character(
     state: State<'_, AppState>,
     character_id: i64,
@@ -505,6 +631,19 @@ pub async fn set_last_page(state: State<'_, AppState>, page: String) -> AppResul
     config.last_page = page;
     config.save()?;
     Ok(())
+}
+
+/// Remember the tenant bar's character in `launcher.json`, beside the active character and the
+/// last page. The tenant may live on a sub-account, so this never touches `character_id`.
+#[tauri::command]
+pub async fn select_tenant(
+    state: State<'_, AppState>,
+    character_id: Option<i64>,
+) -> AppResult<ConfigView> {
+    let mut config = state.config.lock().await;
+    config.tenant_character_id = character_id;
+    config.save()?;
+    Ok(ConfigView::from(&*config))
 }
 
 #[tauri::command]
@@ -930,6 +1069,19 @@ pub async fn send_command(state: State<'_, AppState>, port: u16, line: String) -
     }
     let client = { state.instances.lock().await.control_for(port)? };
     client.command(&line).await
+}
+
+/// Change the in-game ability/spell HUD (the control addon's `hud` command). The payload is
+/// passed through so the Control room can toggle, re-layout or start edit mode in one call.
+#[tauri::command]
+pub async fn send_hud(state: State<'_, AppState>, port: u16, patch: Value) -> AppResult<Value> {
+    if !patch.is_object() {
+        return Err(AppError::Validation(
+            "the hud patch must be an object".to_string(),
+        ));
+    }
+    let client = { state.instances.lock().await.control_for(port)? };
+    client.hud(patch).await
 }
 
 #[tauri::command]

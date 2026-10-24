@@ -144,7 +144,7 @@ function get_sets()
     sets.idle = {}  -- container: Fanxi lists the children below
     -- town / CP / walking around
     sets.idle.town = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = "Spaekona's Petasos +4",
@@ -162,7 +162,7 @@ function get_sets()
     }
     -- Refresh sources
     sets.idle.refresh = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = "Spaekona's Petasos +4",
@@ -180,7 +180,7 @@ function get_sets()
     }
     -- max physical damage taken
     sets.idle.pdt = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = odyssey.C.helm,
@@ -198,7 +198,7 @@ function get_sets()
     }
     -- max magic damage taken
     sets.idle.mdt = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = odyssey.C.helm,
@@ -216,7 +216,7 @@ function get_sets()
     }
     -- max HP
     sets.idle.maxhp = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = odyssey.C.helm,
@@ -234,7 +234,7 @@ function get_sets()
     }
     -- balanced damage taken with job pieces
     sets.idle.dt = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = "Spaekona's Petasos +4",
@@ -252,7 +252,7 @@ function get_sets()
     }
     -- movement speed + town
     sets.idle.movement = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = "Spaekona's Petasos +4",
@@ -273,7 +273,7 @@ function get_sets()
     sets.engaged = {}  -- container: TP variants below
     -- main TP set
     sets.engaged.tp = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = "Spaekona's Petasos +4",
@@ -291,7 +291,7 @@ function get_sets()
     }
     -- accuracy-first TP
     sets.engaged.acc = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = odyssey.A.helm,
@@ -309,7 +309,7 @@ function get_sets()
     }
     -- TP with DT accessories
     sets.engaged.hybrid = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = odyssey.A.helm,
@@ -349,7 +349,7 @@ function get_sets()
     sets.midcast = {}  -- container: magic sets below
     -- enfeebling Macc
     sets.midcast["Enfeebling Magic"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Pemphredo Tathlum",
         head = odyssey.C.helm,
@@ -367,7 +367,7 @@ function get_sets()
     }
     -- elemental MAB
     sets.midcast["Elemental Magic"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = unity.tathlum,
         head = odyssey.C.helm,
@@ -385,7 +385,7 @@ function get_sets()
     }
     -- elemental Macc
     sets.midcast["Elemental Magic Macc"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Pemphredo Tathlum",
         head = odyssey.C.helm,
@@ -403,7 +403,7 @@ function get_sets()
     }
     -- drain/aspir Macc
     sets.midcast["Dark Magic"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Pemphredo Tathlum",
         head = odyssey.C.helm,
@@ -423,7 +423,7 @@ function get_sets()
     -- ===== WS =================================================
     sets.WS = {}  -- container: weaponskills below
     sets.WS["Vidohunir"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = unity.tathlum,
         head = odyssey.C.helm,
@@ -440,7 +440,7 @@ function get_sets()
         back = capes.mabws,
     }
     sets.WS["Cataclysm"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = unity.tathlum,
         head = odyssey.C.helm,
@@ -457,7 +457,7 @@ function get_sets()
         back = capes.mabws,
     }
     sets.WS["Shattersoul"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = unity.tathlum,
         head = odyssey.C.helm,
@@ -474,7 +474,7 @@ function get_sets()
         back = capes.mabws,
     }
     sets.WS["Omniscience"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = unity.tathlum,
         head = odyssey.C.helm,
@@ -494,7 +494,7 @@ function get_sets()
     -- ===== JA =================================================
     sets.JA = {}  -- container: job abilities below
     sets.JA["Manafont"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         head = "Spaekona's Petasos +4",
         body = "Archmage's Coat +4",
@@ -505,7 +505,7 @@ function get_sets()
         back = capes.fcmp,
     }
     sets.JA["Elemental Seal"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         head = "Archmage's Petasos +4",
         body = "Spaekona's Coat +4",
@@ -516,7 +516,7 @@ function get_sets()
         back = capes.fcmp,
     }
     sets.JA["Mana Wall"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         head = "Spaekona's Petasos +4",
         body = "Spaekona's Coat +4",
@@ -527,7 +527,7 @@ function get_sets()
         back = capes.fcmp,
     }
     sets.JA["Burst Affinity"] = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         head = "Spaekona's Petasos +4",
         body = "Spaekona's Coat +4",

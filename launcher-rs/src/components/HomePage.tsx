@@ -10,7 +10,14 @@ import {
   Wifi,
   WifiOff,
 } from "lucide-react";
-import type { ConfigView, Character, InstanceView, PublicView, SessionView } from "../types";
+import type {
+  ConfigView,
+  Character,
+  InstanceView,
+  PublicView,
+  SessionView,
+  Tenant,
+} from "../types";
 import {
   characterJob,
   formatDuration,
@@ -29,6 +36,7 @@ export function HomePage({
   config,
   publicView,
   character,
+  tenant,
   instances,
   playBusy,
   onPlay,
@@ -42,6 +50,7 @@ export function HomePage({
   config: ConfigView;
   publicView: PublicView;
   character: Character | null;
+  tenant: Tenant | null;
   instances: InstanceView[];
   playBusy: boolean;
   onPlay: () => void;
@@ -87,7 +96,9 @@ export function HomePage({
       <div className="home-grid">
         <Card className="character-hero" accent>
           <div className="card-topline">
-            <span className="eyebrow">Your character</span>
+            <span className="eyebrow">
+              {tenant?.kind === "sub" ? `Box character · @${tenant.account}` : "Your character"}
+            </span>
             {thisCharacterRunning && <Badge tone="success" dot>In game</Badge>}
           </div>
           {shown ? (
@@ -173,9 +184,19 @@ export function HomePage({
                 </div>
               </div>
               <div className="hero-foot">
-                {session.characters.length} character{session.characters.length === 1 ? "" : "s"} on
-                this account · {config.accounts.length} saved account
-                {config.accounts.length === 1 ? "" : "s"}
+                {tenant?.kind === "sub" ? (
+                  <>
+                    Box @{tenant.account} · {tenant.label} on the team · {config.accounts.length}{" "}
+                    saved account{config.accounts.length === 1 ? "" : "s"}
+                  </>
+                ) : (
+                  <>
+                    {session.characters.length} character
+                    {session.characters.length === 1 ? "" : "s"} on this account ·{" "}
+                    {config.accounts.length} saved account
+                    {config.accounts.length === 1 ? "" : "s"}
+                  </>
+                )}
               </div>
             </>
           ) : (

@@ -71,10 +71,34 @@ class EntityPacketTest(unittest.TestCase):
         self.assertEqual(body[48], 0x01)    # literal-name marker
         self.assertEqual(body[49:61], b"Orcish Grunt")
 
+    def test_trust_spawn_flags_and_master_packet(self):
+        look = bytes.fromhex("0000b80b" + "00" * 16)
+        entity = self.entity(
+            kind="trust", targid=0x700, name="Shantotto", model=3000,
+            look=look, hp=3170, hp_max=3170, triggerable=False,
+            owner_char_id=1, trust_spell=896)
+        body = packets.entity_update(entity)
+        self.assertEqual(body[36] & 0x45, 0x45)   # Trust + PetNew + Pet
+        self.assertEqual(body[37], 1)              # player allegiance
+        self.assertEqual(struct.unpack_from("<I", body, 44)[0], 3000 << 16)
+        # Spawnables (targid >= 0x700) carry their name at 0x38, not the static 0x35.
+        self.assertEqual(body[52:61], b"Shantotto")
+        self.assertEqual(body[48:52], bytes(4))
+
+        set_name = packets.entity_set_name(entity, 0x400)
+        self.assertEqual(len(set_name), 0x14)
+        self.assertEqual(set_name[0:2], b"\x03\x05")
+        self.assertEqual(struct.unpack_from("<H", set_name, 2)[0], 0x700)
+        self.assertEqual(struct.unpack_from("<I", set_name, 4)[0], entity.id)
+        self.assertEqual(struct.unpack_from("<H", set_name, 8)[0], 0x400)
+        self.assertEqual(set_name[12], 0x04)
+
     def test_despawn_and_hp_layout(self):
         entity = self.entity(hp=0, alive=False)
         body = packets.entity_update(entity, packets.SEND_HP)
-        self.assertEqual(body[6], packets.SEND_HP)
+        # ClaimStatus (0x02) rides on every non-despawn update so the client keeps the
+        # owner it reads for the claim; the HP mask is still part of the byte.
+        self.assertEqual(body[6], packets.SEND_HP | 0x02)
         self.assertEqual(body[26], 0)
         self.assertEqual(body[33], 0)
         dead = packets.entity_despawn(entity)
@@ -93,6 +117,26 @@ def decode_battle(body):
         "distortion": read(2), "knockback": read(3), "damage": read(17), "message": read(10),
     })
     return result
+
+
+def decode_battle_results(body):
+    """Every result of the single target, in packet order."""
+    read = read_bits(body)
+    for _ in range(32 + 6 + 4 + 4 + 32 + 32 + 32):
+        read(1)
+    results = []
+    for _ in range(read(4)):
+        entry = {
+            "resolution": read(3), "kind": read(2), "animation": read(12), "info": read(5),
+            "distortion": read(2), "knockback": read(3), "damage": read(17),
+            "message": read(10), "modifier": read(31), "add_effect": read(1),
+        }
+        if entry["add_effect"]:
+            entry.update(add_kind=read(6), add_info=read(4), add_value=read(17),
+                         add_message=read(10))
+        entry["reaction"] = read(1)
+        results.append(entry)
+    return results
 
 
 class BattlePacketTest(unittest.TestCase):
@@ -117,6 +161,43 @@ class BattlePacketTest(unittest.TestCase):
         self.assertEqual(decoded["resolution"], 1)
         self.assertEqual(decoded["damage"], 0)
         self.assertEqual(decoded["message"], packets.MESSAGE_ATTACK_MISSES)
+
+    def test_a_dual_wield_round_packs_both_hands_in_order(self):
+        body = packets.battle_action(1, 2, results=[
+            {"damage": 120, "animation": 0},
+            {"damage": 80, "animation": 1, "critical": True},
+        ])
+        self.assertEqual(decode_battle(body)["results"], 2)
+        first, second = decode_battle_results(body)
+        self.assertEqual((first["animation"], first["damage"]), (0, 120))
+        self.assertEqual(first["message"], packets.MESSAGE_ATTACK_HITS)
+        self.assertEqual((second["animation"], second["damage"]), (1, 80))
+        self.assertEqual(second["message"], packets.MESSAGE_ATTACK_CRIT)
+        # The byte count at 0x04 covers the whole round, and the body is one byte longer.
+        self.assertEqual(body[0], len(body) - 1)
+
+    def test_a_full_eight_hit_round_fits_the_packet(self):
+        results = [{"damage": 10 + index, "animation": index // 4} for index in range(8)]
+        body = packets.battle_action(1, 2, results=results)
+        decoded = decode_battle_results(body)
+        self.assertEqual(len(decoded), 8)
+        self.assertEqual([entry["animation"] for entry in decoded], [0] * 4 + [1] * 4)
+        self.assertEqual(body[0], len(body) - 1)
+
+    def test_skillchain_additional_effect_block_roundtrips(self):
+        body = packets.battle_action(1, 2, results=[{
+            "damage": 1000, "animation": 160, "message": packets.MESSAGE_DAMAGE,
+            # Fusion proc 6, 600 resonance damage, message 287 + 6.
+            "add_effect": 6, "add_value": 600, "add_message": 293,
+        }])
+        result = decode_battle_results(body)[0]
+        self.assertEqual(result["add_effect"], 1)
+        self.assertEqual(result["add_kind"], 6)
+        self.assertEqual(result["add_info"], 0)
+        self.assertEqual(result["add_value"], 600)
+        self.assertEqual(result["add_message"], 293)
+        self.assertEqual(result["reaction"], 0)
+        self.assertEqual(body[0], len(body) - 1)
 
     def test_battle_messages(self):
         msg = packets.battle_message(1, 2, 0x400, 0x200, 565, 0, 565)

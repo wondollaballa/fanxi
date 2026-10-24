@@ -142,5 +142,176 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(json.loads(renamed.payload)["character"]["name"], "Renamed")
 
 
+    def test_character_progress_page(self):
+        token = self.register()["token"]
+        character = json.loads(self.call(
+            "POST", "/api/v1/characters",
+            {"name": "Progress", "race": 1, "face": 1, "size": 1, "nation": 0},
+            token=token).payload)["character"]
+        base = "/api/v1/characters/%d" % character["id"]
+        for body in (
+            {"op": "rank", "nation": 1, "rank": 7, "points": 99},
+            {"op": "mog-garden", "rank": 4},
+            {"op": "fame", "all": True},
+            {"op": "jobs", "all": True, "level": 99},
+            {"op": "master-level", "all": True, "level": 50},
+            {"op": "exemplar", "points": 50000},
+            {"op": "crafts", "max_all": True},
+            {"op": "trusts"},
+        ):
+            response = self.call("POST", base + "/progress", body, token=token)
+            self.assertEqual(response.status, 200, (body, response.payload))
+        data = json.loads(self.call("GET", base + "/data", token=token).payload)
+        self.assertEqual(data["ranks"]["bastok"], 7)
+        self.assertEqual(data["ranks"]["points"], 99)
+        self.assertEqual(data["jobs"][0]["level"], 99)
+        self.assertEqual(data["jobs"][0]["master_level"], 50)
+        self.assertEqual(data["exemplar"]["points"], 50000)
+        self.assertEqual(data["crafts"][0]["value"], 100)
+        self.assertTrue(all(entry["value"] == 255 for entry in data["fame"]))
+
+        # The Armory puts an augmentable piece in the bag; the RP card then caps a path.
+        # Nyame Helm is an endgame purchase, so give the character a wallet first.
+        self.assertEqual(self.call("POST", base + "/gil", {"top_off": True},
+                                   token=token).status, 200)
+        added = self.call("POST", base + "/armory", {"item_id": 23761}, token=token)
+        self.assertEqual(added.status, 201, added.payload)
+        data = json.loads(self.call("GET", base + "/data", token=token).payload)
+        item = data["augments"][0]
+        capped = self.call("POST", base + "/progress", {
+            "op": "augment", "container": item["container"],
+            "slot": item["slot"], "path": "D",
+        }, token=token)
+        self.assertEqual(capped.status, 200, capped.payload)
+        current = json.loads(capped.payload)["augments"][0]["current"]
+        self.assertEqual((current["path"], current["rank"]), ("D", 30))
+
+    def test_armory_full_catalogue_and_purchases(self):
+        self.assertGreater(
+            int(self.db.one("SELECT COUNT(*) AS n FROM items WHERE equip_slot != ''")["n"]),
+            15000,
+        )
+        token = self.register()["token"]
+        character = json.loads(self.call(
+            "POST", "/api/v1/characters",
+            {"name": "Catalogue", "race": 1, "face": 1, "size": 1, "nation": 0},
+            token=token).payload)["character"]
+        base = "/api/v1/characters/%d" % character["id"]
+
+        # A piece the hand-curated catalogue never had.  It is in LSB's equipment
+        # table, so the migration and the typeahead must find it.
+        found = json.loads(self.call(
+            "GET", base + "/items/search", token=token,
+            query={"q": ["Hexed Haubert"], "kind": ["armor"]}).payload)["items"]
+        self.assertEqual(found[0]["name"], "Hexed Haubert")
+        self.assertEqual(found[0]["item_id"], 10240)
+        self.assertEqual(found[0]["equip_slot"], "body")
+        self.assertGreater(found[0]["price"], 0)
+        self.assertFalse(found[0]["exclusive"])
+
+        # Exact names sort before the other Nyame pieces.
+        nyame = json.loads(self.call(
+            "GET", base + "/items/search", token=token,
+            query={"q": ["nyame helm"]}).payload)["items"]
+        self.assertEqual(nyame[0]["name"], "Nyame Helm")
+        self.assertEqual((nyame[0]["rare"], nyame[0]["ex"], nyame[0]["exclusive"]),
+                         (1, 1, True))
+
+        # A non-Rare/non-Ex item can be bought again; the price comes off the wallet.
+        bronze = json.loads(self.call(
+            "GET", base + "/items/search", token=token,
+            query={"q": ["Bronze Sword"], "kind": ["weapon"]}).payload)["items"][0]
+        price = bronze["price"]
+        self.assertGreater(price, 0)
+        gil = json.loads(self.call("POST", base + "/gil", {"top_off": True},
+                                   token=token).payload)["gil"]
+        first = self.call("POST", base + "/armory", {"item_id": 16535}, token=token)
+        self.assertEqual(first.status, 201, first.payload)
+        body = json.loads(first.payload)
+        self.assertEqual(body["item"]["price"], price)
+        self.assertEqual(body["data"]["gil"], gil - price)
+        self.assertEqual(body["data"]["purchases"][0]["price"], price)
+        second = self.call("POST", base + "/armory", {"item_id": 16535}, token=token)
+        self.assertEqual(second.status, 201, second.payload)
+        self.assertEqual(json.loads(second.payload)["data"]["gil"], gil - 2 * price)
+
+        # Ex alone is one per character, even though it is not Rare.
+        mantle = self.call("POST", base + "/armory", {"item_id": 26258}, token=token)
+        self.assertEqual(mantle.status, 201, mantle.payload)
+        again = self.call("POST", base + "/armory", {"item_id": 26258}, token=token)
+        self.assertEqual(again.status, 409)
+        self.assertEqual(json.loads(again.payload)["error"]["code"], "already_owned")
+
+        # A fresh character with the starter wallet cannot afford an i119 purchase.
+        other = json.loads(self.call(
+            "POST", "/api/v1/characters",
+            {"name": "Broke", "race": 1, "face": 1, "size": 1, "nation": 0},
+            token=token).payload)["character"]
+        poor = self.call("POST", "/api/v1/characters/%d/armory" % other["id"],
+                         {"item_id": 23761}, token=token)
+        self.assertEqual(poor.status, 422)
+        self.assertEqual(json.loads(poor.payload)["error"]["code"], "insufficient_gil")
+
+    def test_character_data_page(self):
+        token = self.register()["token"]
+        character = json.loads(self.call(
+            "POST", "/api/v1/characters",
+            {"name": "Data", "race": 1, "face": 1, "size": 1, "nation": 0},
+            token=token).payload)["character"]
+        base = "/api/v1/characters/%d" % character["id"]
+
+        data = json.loads(self.call("GET", base + "/data", token=token).payload)
+        self.assertEqual(data["merits"]["points"], data["merits"]["cap"])
+        self.assertEqual(data["mastery_rank"], 0)
+        self.assertEqual(data["job_points"]["jobs"], 22)
+        self.assertTrue(data["job_points"]["all_capped"])
+        self.assertEqual(data["home_points"]["registered"], 0)
+        self.assertTrue(data["key_items"]["all_granted"])
+
+        merits = json.loads(self.call("POST", base + "/merits", {"top_off": True},
+                                      token=token).payload)
+        self.assertEqual(merits["merits"]["points"], merits["merits"]["cap"])
+
+        mastery = json.loads(self.call("POST", base + "/mastery-rank", {"rank": 6},
+                                       token=token).payload)
+        self.assertEqual(mastery["mastery_rank"], 6)
+        self.assertEqual(self.service.character(character["id"])["mastery_rank"], 6)
+        self.assertEqual(self.call("POST", base + "/mastery-rank", {"rank": 11},
+                                   token=token).status, 422)
+
+        gil = json.loads(self.call("POST", base + "/gil", {"top_off": True},
+                                   token=token).payload)
+        self.assertEqual(gil["gil"], gil["gil_max"])
+
+        home = json.loads(self.call("POST", base + "/home-points",
+                                    token=token).payload)["home_points"]
+        self.assertEqual(home["registered"], home["total"])
+
+        currency = json.loads(self.call(
+            "POST", base + "/currencies",
+            {"name": "Sparks of Eminence", "amount": 250}, token=token).payload)
+        self.assertEqual(currency["currencies"][0]["amount"], 250)
+
+        found = json.loads(self.call(
+            "GET", base + "/items/search", token=token,
+            query={"q": ["Adoulin Ring +1"], "kind": ["accessory"]}).payload)["items"]
+        self.assertEqual(len(found), 1)
+        self.assertFalse(found[0]["owned"])
+        item_id = found[0]["item_id"]
+        added = self.call("POST", base + "/armory", {"item_id": item_id}, token=token)
+        self.assertEqual(added.status, 201, added.payload)
+        purchase = json.loads(added.payload)["data"]["purchases"][0]
+        self.assertEqual(purchase["item_id"], item_id)
+        self.assertTrue(purchase["owned"])
+        again = self.call("POST", base + "/armory", {"item_id": item_id}, token=token)
+        self.assertEqual(again.status, 409)
+        self.assertEqual(json.loads(again.payload)["error"]["code"], "already_owned")
+
+        other = json.loads(self.call(
+            "POST", "/api/v1/auth/register",
+            {"username": "other", "password": "password123"}).payload)["token"]
+        self.assertEqual(self.call("GET", base + "/data", token=other).status, 404)
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -9,9 +9,11 @@
 -- Item ids, slots, job masks and stat lines are factual game data from
 -- BG Wiki (the set pages and each item page's ffxidb link).  The
 -- 24-byte block is LandSandBoat's Exdata::AugmentBundle with rank 30 /
--- tier 3, the shape migration 75 wrote for Odyssey; the per-item
--- augment bundle index is not known yet, so it stays 0 and !r30 is
--- the in-game view of the rows (docs/limbus-r30.md).
+-- tier 3 and the piece's own augment bundle index; Limbus uses RP curve
+-- B, whose rank-30 total is 55,800.  The bundle indices are the client's
+-- own table (LandSandBoat's xi.data.augments.bundles, parsed from the
+-- MNC2 data); they were matched to the Rank 30 rows in
+-- docs/limbus-r30.md by content.
 --
 -- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
 
@@ -103,7 +105,31 @@ INSERT OR IGNORE INTO char_inventory (character_id, container, slot, item_id, qu
 SELECT w.character_id, f.container, f.slot, w.item_id, 1
 FROM want w JOIN free f ON f.character_id = w.character_id AND f.rn = w.rn;
 
--- Rank 30 augment block (rank 30, tier 3, bundle index 0).
-UPDATE char_inventory SET extra = X'038300000000F80100000000000000000000000000000000'
-WHERE character_id IN (1, 2)
-  AND item_id IN (24122, 24125, 24128, 24131, 24134, 24137, 24140, 24143, 24146, 24149, 24152, 24155, 24158, 24161, 24164, 24167, 24170, 24173, 24176, 24179, 24182, 24185, 24188, 24191, 24194);
+-- Rank 30 augment block for every copy: rank 30, tier 3, 55,800 RP
+-- (curve B), and the piece's own bundle index.  Updating by item id
+-- covers both main characters and any later copy of the suit.
+UPDATE char_inventory SET extra = X'03830000E067FB05D8010000000000000000000000000000' WHERE item_id = 24122;
+UPDATE char_inventory SET extra = X'03830000E067FB05D9010000000000000000000000000000' WHERE item_id = 24125;
+UPDATE char_inventory SET extra = X'03830000E067FB05DA010000000000000000000000000000' WHERE item_id = 24128;
+UPDATE char_inventory SET extra = X'03830000E067FB05DB010000000000000000000000000000' WHERE item_id = 24131;
+UPDATE char_inventory SET extra = X'03830000E067FB05DC010000000000000000000000000000' WHERE item_id = 24134;
+UPDATE char_inventory SET extra = X'03830000E067FB05E7010000000000000000000000000000' WHERE item_id = 24137;
+UPDATE char_inventory SET extra = X'03830000E067FB05E8010000000000000000000000000000' WHERE item_id = 24140;
+UPDATE char_inventory SET extra = X'03830000E067FB05E9010000000000000000000000000000' WHERE item_id = 24143;
+UPDATE char_inventory SET extra = X'03830000E067FB05EA010000000000000000000000000000' WHERE item_id = 24146;
+UPDATE char_inventory SET extra = X'03830000E067FB05EB010000000000000000000000000000' WHERE item_id = 24149;
+UPDATE char_inventory SET extra = X'03830000E067FB05E2010000000000000000000000000000' WHERE item_id = 24152;
+UPDATE char_inventory SET extra = X'03830000E067FB05E3010000000000000000000000000000' WHERE item_id = 24155;
+UPDATE char_inventory SET extra = X'03830000E067FB05E4010000000000000000000000000000' WHERE item_id = 24158;
+UPDATE char_inventory SET extra = X'03830000E067FB05E5010000000000000000000000000000' WHERE item_id = 24161;
+UPDATE char_inventory SET extra = X'03830000E067FB05E6010000000000000000000000000000' WHERE item_id = 24164;
+UPDATE char_inventory SET extra = X'03830000E067FB05DD010000000000000000000000000000' WHERE item_id = 24167;
+UPDATE char_inventory SET extra = X'03830000E067FB05DE010000000000000000000000000000' WHERE item_id = 24170;
+UPDATE char_inventory SET extra = X'03830000E067FB05DF010000000000000000000000000000' WHERE item_id = 24173;
+UPDATE char_inventory SET extra = X'03830000E067FB05E0010000000000000000000000000000' WHERE item_id = 24176;
+UPDATE char_inventory SET extra = X'03830000E067FB05E1010000000000000000000000000000' WHERE item_id = 24179;
+UPDATE char_inventory SET extra = X'03830000E067FB05EC010000000000000000000000000000' WHERE item_id = 24182;
+UPDATE char_inventory SET extra = X'03830000E067FB05ED010000000000000000000000000000' WHERE item_id = 24185;
+UPDATE char_inventory SET extra = X'03830000E067FB05EE010000000000000000000000000000' WHERE item_id = 24188;
+UPDATE char_inventory SET extra = X'03830000E067FB05EF010000000000000000000000000000' WHERE item_id = 24191;
+UPDATE char_inventory SET extra = X'03830000E067FB05F0010000000000000000000000000000' WHERE item_id = 24194;

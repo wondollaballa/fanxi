@@ -52,6 +52,8 @@ export interface ConfigView {
   apiUrl: string;
   username: string;
   characterId: number | null;
+  /** The character selected in the global tenant bar; may be a sub-account box. */
+  tenantCharacterId: number | null;
   gameDir: string;
   host64: string;
   repoRoot: string;
@@ -172,6 +174,82 @@ export interface Kpi {
   level?: number;
 }
 
+/** The four in-game HUD windows, each with its own layout and grouping. */
+export type HudTypeKey = "abilities" | "spells" | "trusts" | "weapon_skills";
+export type HudLayout = "grid" | "list" | "bar";
+export type HudLabelMode = "always" | "hover" | "off";
+
+export interface HudTypeState {
+  layout: HudLayout;
+  columns: number;
+  size: number;
+  labels: HudLabelMode;
+  /** Label font size in px (7-12). The game scales it down further on very small tiles. */
+  font: number;
+  /** One group per page with a folder tab strip. */
+  tabs: boolean;
+  /** type, skill, element, job, none or custom. */
+  group: string;
+  /** Custom group names, in display order. */
+  groups: string[];
+  /** Item key (s123, a513, t896, w32) -> custom group name. */
+  assign: Record<string, string>;
+}
+
+export interface HudItem {
+  key: string;
+  name: string;
+  short: string;
+}
+
+/** The in-game combat HUD state reported by the control addon. */
+export interface HudState {
+  show_abilities: boolean;
+  show_spells: boolean;
+  show_trusts: boolean;
+  show_weapon_skills: boolean;
+  /** The Battle Info and Party Info hubs drawn beside the action HUD. */
+  show_battle_info: boolean;
+  show_party_info: boolean;
+  edit: boolean;
+  opacity: number;
+  /** Hide left-side windows while the game's own menu is open. */
+  menu_hide: boolean;
+  types: Record<HudTypeKey, HudTypeState>;
+  /** Counts for the four lists. */
+  abilities: number;
+  spells: number;
+  trusts: number;
+  weapon_skills: number;
+  items: Record<HudTypeKey, HudItem[]>;
+  character: string;
+}
+
+/** A partial HUD update. `type` names the tab the layout fields apply to. */
+export interface HudPatch {
+  show_abilities?: boolean;
+  show_spells?: boolean;
+  show_trusts?: boolean;
+  show_weapon_skills?: boolean;
+  show_battle_info?: boolean;
+  show_party_info?: boolean;
+  edit?: boolean;
+  opacity?: number;
+  menu_hide?: boolean;
+  reset_positions?: boolean;
+  type?: HudTypeKey;
+  layout?: HudLayout;
+  columns?: number;
+  size?: number;
+  labels?: HudLabelMode;
+  font?: number;
+  tabs?: boolean;
+  group?: string;
+  custom_groups?: string[];
+  assign_key?: string;
+  assign_group?: string | null;
+}
+
 export interface GearSlot {
   id?: number;
   bag?: number;
@@ -190,6 +268,8 @@ export interface Metrics {
   state?: ControlState;
   kpi?: Kpi;
   gear?: GearData;
+  /** The in-game ability/spell overlay switches, from the control addon's hud command. */
+  hud?: HudState | null;
   [key: string]: unknown;
 }
 
@@ -303,6 +383,21 @@ export interface TeamMutation {
   limit: number;
 }
 
+/**
+ * One character the launcher can scope its character pages to. The main account's characters
+ * and every sub-account box use the same shape so the global tenant bar does not care which
+ * account owns the character.
+ */
+export interface Tenant {
+  character: Character;
+  /** The account that owns the character (the main account or a box username). */
+  account: string;
+  kind: "main" | "sub";
+  /** Short role label for the tenant bar: "Main" or "Box 2". */
+  label: string;
+  sub: SubAccount | null;
+}
+
 export interface FollowStatus {
   enabled: boolean;
   leader: string | null;
@@ -329,6 +424,184 @@ export interface BuildResult {
   tail: string[];
 }
 
+/** One row of the Armory's purchase history.  `owned` is recomputed from every permanent
+ * bag, storage and the locker each time the snapshot is read. */
+export interface ArmoryPurchase {
+  id: number;
+  item_id: number;
+  name: string;
+  quantity: number;
+  price: number;
+  equip_slot: string;
+  rare: number;
+  ex: number;
+  owned: boolean;
+  created_at: string;
+}
+
+export interface ArmoryItem {
+  item_id: number;
+  name: string;
+  equip_slot: string;
+  level: number;
+  item_level: number;
+  jobs: number;
+  rare: number;
+  ex: number;
+  stack: number;
+  skill: number;
+  price: number;
+  base_sell: number;
+  description: string;
+  owned: boolean;
+  /** Rare or Ex: the Armory will not sell a second copy to the same character. */
+  exclusive: boolean;
+}
+
+export interface CharacterRanks {
+  nation: number;
+  sandoria: number;
+  bastok: number;
+  windurst: number;
+  points: number;
+  rank_max: number;
+  mog_garden_rank: number;
+  mog_garden_max: number;
+}
+
+export interface JobProgress {
+  job: number;
+  level: number;
+  master_level: number;
+}
+
+export interface CraftSkill {
+  skill_id: number;
+  name: string;
+  value: number;
+}
+
+export interface FameEntry {
+  city: string;
+  value: number;
+}
+
+export interface AugmentPath {
+  key: string;
+  label: string;
+  bundle: number;
+  rank: number;
+  tier: number;
+  rp: number;
+  curve: number;
+  augments: string[];
+}
+
+export interface AugmentItem {
+  container: number;
+  slot: number;
+  item_id: number;
+  name: string;
+  slot_name: string;
+  set: string;
+  kind: string;
+  quantity: number;
+  current: {
+    path: string;
+    rank: number;
+    tier: number;
+    rp: number;
+    curve: number;
+    index: number;
+  } | null;
+  paths: AugmentPath[];
+}
+
+export interface TrustSummary {
+  spells: number;
+  key_items: string;
+  summoning: boolean;
+}
+
+/** The Data page snapshot, as the server sends it (snake_case fields). */
+export interface CharacterData {
+  character: {
+    id: number;
+    name: string;
+    main_job: number;
+    main_level: number;
+    gil: number;
+    mastery_rank: number;
+  };
+  merits: { points: number; cap: number };
+  job_points: {
+    all_capped: boolean;
+    jobs: number;
+    current: number;
+    capacity: number;
+    spent: number;
+  };
+  mastery_rank: number;
+  mastery_rank_max: number;
+  gil: number;
+  gil_max: number;
+  home_points: { registered: number; total: number };
+  survival_guides: { total: number; all_available: boolean };
+  key_items: { tables: number; all_granted: boolean };
+  currencies: { name: string; amount: number; updated_at: string }[];
+  currency_catalog: string[];
+  purchases: ArmoryPurchase[];
+  ranks: CharacterRanks;
+  fame: FameEntry[];
+  fame_max: number;
+  jobs: JobProgress[];
+  exemplar: { points: number; next: number };
+  crafts: CraftSkill[];
+  craft_max: number;
+  trusts: TrustSummary;
+  augments: AugmentItem[];
+}
+
+export interface ArmoryAddResult {
+  item: { item_id: number; name: string; quantity: number; price: number; purchased: boolean };
+  data: CharacterData;
+}
+
+/** One saved place from `/!warp mark`, numbered 1-1000. */
+export interface WarpPoint {
+  slot: number;
+  alias: string;
+  zone: number;
+  zone_name: string;
+  x: number;
+  y: number;
+  z: number;
+  rot: number;
+  created_at: string;
+  updated_at: string;
+}
+
+/** The Warps page snapshot. */
+export interface WarpList {
+  character: {
+    id: number;
+    name: string;
+    zone: number;
+    zone_name: string;
+    position: { x: number; y: number; z: number; rot: number };
+  };
+  warps: WarpPoint[];
+  limit: number;
+  next_slot: number | null;
+}
+
+/** Mark, rename and delete all return the refreshed list plus the row they touched. */
+export interface WarpMutation {
+  data: WarpList;
+  warp?: WarpPoint;
+  deleted?: WarpPoint;
+}
+
 export type Page =
   | "home"
   | "characters"
@@ -336,6 +609,8 @@ export type Page =
   | "accounts"
   | "team"
   | "control"
+  | "warps"
+  | "data"
   | "gear"
   | "news"
   | "settings";
@@ -347,6 +622,8 @@ export interface JobSpell {
   name: string;
   skill: string;
   level: number;
+  /** Spell-override groups the host puts this spell in (enfeebles_macc, helix_magic, ...). */
+  categories?: string[];
 }
 
 /** An ability the current main/sub job pair can use, from the client's ability menu. */

@@ -6,6 +6,8 @@ HTTP server and the game sockets can use it without sharing a connection.
 """
 from __future__ import annotations
 
+import json
+import math
 import secrets
 import sqlite3
 import time
@@ -16,7 +18,7 @@ from datetime import datetime, timedelta
 from . import __version__
 from .config import Config
 from .db import Database
-from .game import design as character_design
+from .game import augment_gear, augment_stats, design as character_design
 from .security import (
     ValidationError,
     expired,
@@ -76,6 +78,83 @@ STORAGE_DESTINATIONS = (0, 8, 10, 11, 12, 13, 14, 15, 16, 1, 9, 5, 6, 7)
 # uses: they are permanent, visible in the equipment window, and can hold worn gear.
 WARDROBE_CONTAINERS = (8, 10, 11, 12, 13, 14, 15, 16)
 WORKING_STOCK_IDS = frozenset(item_id for item_id, _target in WORKING_STOCK)
+
+# The Data page: values the launcher assigns instead of waiting for gameplay to derive.
+GIL_MAX = 2_147_483_647
+MASTERY_RANK_MAX = 10
+KEY_ITEM_TABLES = 7
+JOB_POINT_CAPACITY = 30000
+JOB_POINT_CURRENT = 500
+JOB_POINT_SPENT = 2100
+JOB_COUNT = 22
+# The item slots the Armory offers: weapons and ammo use the hand/range slots, armour the
+# five body slots, and accessories the seven jewellery slots.
+ARMORY_SLOTS = {
+    "weapon": ("main", "sub", "ranged", "range"),
+    "armor": ("head", "body", "hands", "legs", "feet"),
+    "accessory": ("neck", "waist", "ear1", "ear2", "ring1", "ring2", "back"),
+    "ammo": ("ammo",),
+}
+
+
+def _like_escape(text: str) -> str:
+    """Escape a user's typeahead text for a SQL LIKE ... ESCAPE '\\' clause."""
+    return text.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
+# Suggested names for the currency card.  Any name the player types is accepted and kept;
+# this list is only the picker the UI shows first.  Gil, merits and limit points have
+# their own columns and are deliberately not duplicated here.
+RANK_MAX = 10
+MOG_GARDEN_MAX = 10
+FAME_MAX = 255
+EXEMPLAR_PER_LEVEL = 30000
+CRAFT_MAX = 100
+# /!warp: each character has slots 1-1000.  The number is the target the chat command
+# takes, the alias is the friendly name the Warps page edits and the chat command also
+# accepts.  Aliases are printable ASCII because the client's chat line is ASCII.
+WARP_SLOT_MAX = 1000
+WARP_ALIAS_MAX = 40
+WARP_PAGE_SIZE = 8
+# The client's skill ids 48-57, which is the part of 0x062's crafting block the
+# skill menu draws.  58/59 (Rid/Dig) are server-only and stay zero.
+CRAFT_SKILLS = (
+    (48, "Fishing"),
+    (49, "Woodworking"),
+    (50, "Smithing"),
+    (51, "Goldsmithing"),
+    (52, "Clothcraft"),
+    (53, "Leathercraft"),
+    (54, "Bonecraft"),
+    (55, "Alchemy"),
+    (56, "Cooking"),
+    (57, "Synergy"),
+)
+FAME_CITIES = (
+    "San d'Oria", "Bastok", "Windurst", "Jeuno", "Norg", "Kazham",
+    "Selbina", "Mhaura", "Rabao", "Tavnazia", "Adoulin",
+)
+
+CURRENCY_CATALOG = (
+    "Sparks of Eminence",
+    "Unity Accolades",
+    "Gallimaufry",
+    "Segments",
+    "Mog Pell",
+    "Bayld",
+    "Cruor",
+    "Resistance Credits",
+    "Imperial Standing",
+    "Allied Notes",
+    "Conquest Points",
+    "Assault Points",
+    "Zeni",
+    "Jettons",
+    "Therion Ichor",
+    "Potpourri",
+    "Mweya Plasm",
+    "Hallmarks",
+)
 
 
 def exp_for_level(level: int) -> int:
@@ -489,6 +568,7 @@ class FanxiService:
             "exp": row.get("exp", 0),
             "exp_next": exp_for_level(row["main_level"]),
             "gil": row.get("gil", 0),
+            "mastery_rank": int(row.get("mastery_rank") or 0),
             "zone": row["zone"],
             "position": {"x": row["pos_x"], "y": row["pos_y"], "z": row["pos_z"], "rot": row["rot"]},
             "created_at": row["created_at"],
@@ -502,6 +582,670 @@ class FanxiService:
     def max_characters(self) -> int:
         """The per-account character cap; 0 means "as many as the player wants"."""
         return max(0, int(self.config.max_characters))
+
+    # --- /!warp --------------------------------------------------------------------------------
+    # A warp is a saved zone position with a number and an optional alias.  The chat command
+    # owns the rows; the Warps page reads and edits the same ones.  Keeping this here (not in
+    # the zone session) means a list survives a relog and the launcher can edit it offline.
+    @staticmethod
+    def _clean_warp_alias(alias) -> str:
+        text = " ".join(str(alias or "").split())
+        if len(text) > WARP_ALIAS_MAX:
+            raise ApiError(422, "validation_error",
+                           "a warp alias is at most %d characters" % WARP_ALIAS_MAX)
+        if any(not 32 <= ord(ch) <= 126 for ch in text):
+            raise ApiError(422, "validation_error",
+                           "a warp alias uses letters, numbers and standard punctuation only")
+        return text
+
+    @staticmethod
+    def _next_warp_slot(slots) -> int | None:
+        used = {int(slot) for slot in slots}
+        if not used:
+            return 1
+        # Auto-increment: one past the highest existing slot, so a mark in a new place
+        # does not rename an older camp.  Deleting the top number makes that number
+        # available again; a hole in the middle stays a hole until the range fills.
+        highest = max(used)
+        if highest < WARP_SLOT_MAX:
+            return highest + 1
+        for slot in range(1, WARP_SLOT_MAX + 1):
+            if slot not in used:
+                return slot
+        return None
+
+    @staticmethod
+    def _warp_from_row(row) -> dict:
+        data = dict(row)
+        return {
+            "slot": int(data["slot"]),
+            "alias": str(data.get("alias") or ""),
+            "zone": int(data["zone"]),
+            "zone_name": str(data.get("zone_name") or "Zone %d" % int(data["zone"])),
+            "x": float(data["x"]),
+            "y": float(data["y"]),
+            "z": float(data["z"]),
+            "rot": int(data["rot"]),
+            "created_at": data["created_at"],
+            "updated_at": data["updated_at"],
+        }
+
+    _WARP_SELECT = (
+        "SELECT w.slot, w.alias, w.zone, "
+        "COALESCE(z.name, 'Zone ' || w.zone) AS zone_name, "
+        "w.x, w.y, w.z, w.rot, w.created_at, w.updated_at "
+        "FROM char_warps w LEFT JOIN zones z ON z.id = w.zone "
+    )
+
+    def warps_for_character(self, character_id: int) -> list[dict]:
+        rows = self.db.all(
+            self._WARP_SELECT + "WHERE w.character_id = ? ORDER BY w.slot",
+            (int(character_id),))
+        return [self._warp_from_row(row) for row in rows]
+
+    def warp_payload(self, character_id: int) -> dict:
+        """The Warps page's one-round-trip snapshot."""
+        character = self.character(int(character_id))
+        zone = int(character.get("zone") or 0)
+        zone_name = self.db.scalar(
+            "SELECT name FROM zones WHERE id = ?", (zone,), None) or "Zone %d" % zone
+        warps = self.warps_for_character(int(character_id))
+        return {
+            "character": {
+                "id": int(character["id"]),
+                "name": character["name"],
+                "zone": zone,
+                "zone_name": zone_name,
+                "position": {
+                    "x": float(character.get("pos_x") or 0.0),
+                    "y": float(character.get("pos_y") or 0.0),
+                    "z": float(character.get("pos_z") or 0.0),
+                    "rot": int(character.get("rot") or 0),
+                },
+            },
+            "warps": warps,
+            "limit": WARP_SLOT_MAX,
+            "next_slot": self._next_warp_slot([warp["slot"] for warp in warps]),
+        }
+
+    def warp(self, character_id: int, slot: int) -> dict:
+        row = self.db.one(
+            self._WARP_SELECT + "WHERE w.character_id = ? AND w.slot = ?",
+            (int(character_id), int(slot)))
+        if row is None:
+            raise ApiError(404, "not_found", "that warp does not exist")
+        return self._warp_from_row(row)
+
+    def find_warps(self, character_id: int, reference) -> list[dict]:
+        """Warps matching a slot number, exact alias, or alias prefix (case-insensitive)."""
+        text = " ".join(str(reference or "").split())
+        if not text:
+            return []
+        warps = self.warps_for_character(int(character_id))
+        if text.lstrip("#").isdigit():
+            wanted = int(text.lstrip("#"))
+            return [warp for warp in warps if warp["slot"] == wanted]
+        folded = text.casefold()
+        exact = [warp for warp in warps if warp["alias"] and warp["alias"].casefold() == folded]
+        if exact:
+            return exact
+        return [warp for warp in warps
+                if warp["alias"] and warp["alias"].casefold().startswith(folded)]
+
+    def mark_warp(self, character_id: int, alias=None, zone=None, pos=None) -> dict:
+        character = self.character(int(character_id))
+        alias = self._clean_warp_alias(alias)
+        if zone is None:
+            zone = int(character.get("zone") or 0)
+        if pos is None:
+            pos = [character.get("pos_x") or 0.0, character.get("pos_y") or 0.0,
+                   character.get("pos_z") or 0.0, character.get("rot") or 0]
+        try:
+            zone = int(zone)
+            x, y, z = (float(pos[0]), float(pos[1]), float(pos[2]))
+            rot = int(pos[3]) & 0xFF if len(pos) > 3 else 0
+        except (TypeError, ValueError, IndexError):
+            raise ApiError(422, "validation_error", "the warp position is not valid")
+        if zone <= 0:
+            raise ApiError(422, "validation_error", "the warp zone is not valid")
+        if not all(math.isfinite(value) for value in (x, y, z)):
+            raise ApiError(422, "validation_error", "the warp position is not finite")
+        stamp = now_iso()
+        with self.db.transaction() as conn:
+            occupied = [int(row["slot"]) for row in conn.execute(
+                "SELECT slot FROM char_warps WHERE character_id = ?", (int(character_id),))]
+            slot = self._next_warp_slot(occupied)
+            if slot is None:
+                raise ApiError(409, "warp_limit",
+                               "all %d warp slots are used; delete one first" % WARP_SLOT_MAX)
+            if alias:
+                clash = conn.execute(
+                    "SELECT slot FROM char_warps WHERE character_id = ? "
+                    "AND slot <> ? AND lower(alias) = lower(?)",
+                    (int(character_id), slot, alias)).fetchone()
+                if clash is not None:
+                    raise ApiError(409, "alias_taken",
+                                   "warp %d already uses that alias" % int(clash["slot"]))
+            try:
+                conn.execute(
+                    "INSERT INTO char_warps (character_id, slot, alias, zone, x, y, z, rot, "
+                    "created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    (int(character_id), slot, alias, zone, x, y, z, rot, stamp, stamp))
+            except sqlite3.IntegrityError:
+                raise ApiError(409, "alias_taken", "another warp already uses that alias")
+        return self.warp(int(character_id), slot)
+
+    def rename_warp(self, character_id: int, slot: int, alias=None) -> dict:
+        alias = self._clean_warp_alias(alias)
+        self.warp(int(character_id), int(slot))  # 404 before touching a missing row
+        if alias:
+            clash = self.db.one(
+                "SELECT slot FROM char_warps WHERE character_id = ? AND slot <> ? "
+                "AND lower(alias) = lower(?)",
+                (int(character_id), int(slot), alias))
+            if clash is not None:
+                raise ApiError(409, "alias_taken",
+                               "warp %d already uses that alias" % int(clash["slot"]))
+        try:
+            self.db.execute(
+                "UPDATE char_warps SET alias = ?, updated_at = ? "
+                "WHERE character_id = ? AND slot = ?",
+                (alias, now_iso(), int(character_id), int(slot)))
+        except sqlite3.IntegrityError:
+            raise ApiError(409, "alias_taken", "another warp already uses that alias")
+        return self.warp(int(character_id), int(slot))
+
+    def delete_warp(self, character_id: int, slot: int) -> dict:
+        existing = self.warp(int(character_id), int(slot))
+        self.db.execute(
+            "DELETE FROM char_warps WHERE character_id = ? AND slot = ?",
+            (int(character_id), int(slot)))
+        return existing
+
+    def account_family_ids(self, account_id: int) -> set[int]:
+        """A main account plus the sub-accounts it owns (or a sub's whole family)."""
+        row = self.db.one("SELECT id, kind, parent_id FROM accounts WHERE id = ?",
+                          (int(account_id),))
+        if row is None:
+            return set()
+        row = dict(row)
+        root = int(row["parent_id"]) if row.get("kind") == "sub" and row.get("parent_id") \
+            else int(row["id"])
+        rows = self.db.all(
+            "SELECT id FROM accounts WHERE id = ? OR (parent_id = ? AND kind = 'sub')",
+            (root, root))
+        ids = {int(item["id"]) for item in rows}
+        ids.add(root)
+        return ids
+
+    def account_can_manage_character(self, account_id: int, character_id: int) -> bool:
+        try:
+            row = self.character(int(character_id))
+        except ApiError:
+            return False
+        return int(row["account_id"]) in self.account_family_ids(int(account_id))
+
+    # --- character data page -------------------------------------------------------------------
+    def character_data(self, character_id: int) -> dict:
+        """Everything the launcher's Data page reads in one round trip.
+
+        Job points and key items are not stored per character in this build: the zone
+        session hands every job the same 500/30000/2100 JP block and every character the
+        seven permanent key-item tables.  The snapshot says so instead of pretending the
+        page can move them.
+        """
+        character = self.character(int(character_id))
+        merits = self.merits_for_character(int(character_id))
+        merit_cap = min(255, 127 + max(0, int(merits.get(0x0044, 0))))
+        total_home_points = self.db.one(
+            "SELECT COUNT(DISTINCT hp_index) AS n FROM home_points")["n"]
+        total_guides = self.db.one("SELECT COUNT(*) AS n FROM survival_guides")["n"]
+        purchases = [dict(r) for r in self.db.all(
+            "SELECT p.id, p.item_id, p.quantity, p.price, p.created_at, "
+            "COALESCE(i.name, 'Item ' || p.item_id) AS name, "
+            "COALESCE(i.equip_slot, '') AS equip_slot, COALESCE(i.rare, 0) AS rare, "
+            "COALESCE(i.ex, 0) AS ex "
+            "FROM char_purchases p LEFT JOIN items i ON i.item_id = p.item_id "
+            "WHERE p.character_id = ? ORDER BY p.id DESC LIMIT 100",
+            (int(character_id),))]
+        owned = self.owned_item_ids(character_id, [int(row["item_id"]) for row in purchases])
+        for row in purchases:
+            row["owned"] = int(row["item_id"]) in owned
+        currencies = [dict(r) for r in self.db.all(
+            "SELECT name, amount, updated_at FROM char_currency WHERE character_id = ? "
+            "ORDER BY name COLLATE NOCASE", (int(character_id),))]
+        return {
+            "character": {
+                "id": int(character["id"]),
+                "name": character["name"],
+                "main_job": int(character["main_job"]),
+                "main_level": int(character["main_level"]),
+                "gil": int(character.get("gil") or 0),
+                "mastery_rank": int(character.get("mastery_rank") or 0),
+            },
+            "merits": {"points": int(character.get("merit_points") or 0), "cap": int(merit_cap)},
+            "job_points": {
+                "all_capped": True,
+                "jobs": JOB_COUNT,
+                "current": JOB_POINT_CURRENT,
+                "capacity": JOB_POINT_CAPACITY,
+                "spent": JOB_POINT_SPENT,
+            },
+            "mastery_rank": int(character.get("mastery_rank") or 0),
+            "mastery_rank_max": MASTERY_RANK_MAX,
+            "gil": int(character.get("gil") or 0),
+            "gil_max": GIL_MAX,
+            "home_points": {
+                # The registry is keyed by the client menu index.  A few legacy rows use
+                # the event index (idx), which is not a Home Point the menu draws, so the
+                # count is intersected with the rows the menu actually has.
+                "registered": int(self.db.one(
+                    "SELECT COUNT(*) AS n FROM char_home_points "
+                    "WHERE character_id = ? AND hp_index IN "
+                    "(SELECT hp_index FROM home_points)",
+                    (int(character_id),))["n"]),
+                "total": int(total_home_points),
+            },
+            "survival_guides": {"total": int(total_guides), "all_available": True},
+            "key_items": {"tables": KEY_ITEM_TABLES, "all_granted": True},
+            "ranks": {
+                "nation": int(character.get("nation") or 0),
+                "sandoria": int(character.get("rank_sandoria") or 1),
+                "bastok": int(character.get("rank_bastok") or 1),
+                "windurst": int(character.get("rank_windurst") or 1),
+                "points": int(character.get("rank_points") or 0),
+                "rank_max": RANK_MAX,
+                "mog_garden_rank": int(character.get("mog_garden_rank") or 0),
+                "mog_garden_max": MOG_GARDEN_MAX,
+            },
+            "fame": self.fame_for_character(int(character_id)),
+            "fame_max": FAME_MAX,
+            "jobs": self.character_jobs_progress(int(character_id)),
+            "exemplar": {
+                "points": int(character.get("exemplar_points") or 0),
+                "next": EXEMPLAR_PER_LEVEL,
+            },
+            "crafts": self.crafts_for_character(int(character_id)),
+            "craft_max": CRAFT_MAX,
+            "trusts": self.trust_summary(),
+            "augments": augment_gear.inventory_items(self, int(character_id)),
+            "currencies": currencies,
+            "currency_catalog": list(CURRENCY_CATALOG),
+            "purchases": purchases,
+        }
+
+    def set_mastery_rank(self, character_id: int, rank: int) -> int:
+        try:
+            rank = int(rank)
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "mastery rank must be a number")
+        if not 0 <= rank <= MASTERY_RANK_MAX:
+            raise ApiError(422, "validation_error",
+                           "mastery rank must be between 0 and %d" % MASTERY_RANK_MAX)
+        self.db.execute(
+            "UPDATE characters SET mastery_rank = ?, updated_at = ? WHERE id = ?",
+            (rank, now_iso(), int(character_id)))
+        return rank
+
+    def top_off_merits(self, character_id: int) -> int:
+        """Set the unspent merit pool to the character's current cap."""
+        merits = self.merits_for_character(int(character_id))
+        cap = min(255, 127 + max(0, int(merits.get(0x0044, 0))))
+        self.set_merit_points(int(character_id), cap)
+        return cap
+
+    def top_off_gil(self, character_id: int) -> int:
+        self.set_gil(int(character_id), GIL_MAX)
+        return GIL_MAX
+
+    def register_all_home_points(self, character_id: int) -> int:
+        """Register every Home Point the client's menu knows about."""
+        indexes = [int(row["hp_index"]) for row in self.db.all(
+            "SELECT DISTINCT hp_index FROM home_points ORDER BY hp_index")]
+        stamp = now_iso()
+        with self.db.transaction() as conn:
+            conn.executemany(
+                "INSERT OR IGNORE INTO char_home_points (character_id, hp_index, registered_at) "
+                "VALUES (?, ?, ?)",
+                [(int(character_id), index, stamp) for index in indexes])
+        return len(indexes)
+
+    def add_currency(self, character_id: int, name: str, amount: int) -> dict:
+        name = " ".join(str(name).split()).strip()
+        if not name:
+            raise ApiError(422, "validation_error", "currency name is required")
+        if len(name) > 48:
+            raise ApiError(422, "validation_error", "currency name is at most 48 characters")
+        try:
+            amount = int(amount)
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "amount must be a number")
+        if amount == 0:
+            raise ApiError(422, "validation_error", "amount must not be zero")
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT amount FROM char_currency WHERE character_id = ? AND name = ?",
+                (int(character_id), name)).fetchone()
+            total = max(0, min(GIL_MAX, int(row["amount"] if row else 0) + amount))
+            if row is None:
+                conn.execute(
+                    "INSERT INTO char_currency (character_id, name, amount, updated_at) "
+                    "VALUES (?, ?, ?, ?)",
+                    (int(character_id), name, total, now_iso()))
+            else:
+                conn.execute(
+                    "UPDATE char_currency SET amount = ?, updated_at = ? "
+                    "WHERE character_id = ? AND name = ?",
+                    (total, now_iso(), int(character_id), name))
+        return {"name": name, "amount": total}
+
+    def owned_item_ids(self, character_id: int, item_ids) -> set[int]:
+        """The subset of ``item_ids`` held in a permanent bag, storage or the locker."""
+        ids = sorted({int(item) for item in item_ids if int(item) > 0})[:400]
+        if not ids:
+            return set()
+        marks = ",".join("?" for _ in ids)
+        rows = self.db.all(
+            "SELECT DISTINCT item_id FROM ("
+            "  SELECT item_id FROM char_inventory WHERE character_id = ? AND quantity > 0"
+            "  UNION SELECT item_id FROM char_storage WHERE character_id = ? AND quantity > 0"
+            "  UNION SELECT item_id FROM char_locker WHERE character_id = ? AND quantity > 0"
+            ") WHERE item_id IN (%s)" % marks,
+            (int(character_id), int(character_id), int(character_id), *ids))
+        return {int(row["item_id"]) for row in rows}
+
+    def search_items(self, character_id: int, query: str, kind: str | None = None,
+                     limit: int = 40) -> list[dict]:
+        """Armoury search: equippable items by name, narrowed to a paperdoll kind.
+
+        The catalogue now holds every named equipment item the client knows, so this
+        is also the typeahead the Data page queries on each keystroke.  Exact names
+        come first, then names that start with the query, then every other substring
+        match; within a group the higher-level piece wins.
+        """
+        slots = ARMORY_SLOTS.get(str(kind or "").strip().lower())
+        where = ["equip_slot != ''"]
+        args: list = []
+        if slots:
+            where.append("equip_slot IN (%s)" % ",".join("?" for _ in slots))
+            args.extend(slots)
+        text = " ".join(str(query or "").split()).strip()
+        order_args: list = []
+        order = "level DESC, name COLLATE NOCASE"
+        if text:
+            where.append("name LIKE ? ESCAPE '\\'")
+            args.append("%" + _like_escape(text) + "%")
+            order = ("CASE WHEN name = ? COLLATE NOCASE THEN 0 "
+                     "WHEN name LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END, "
+                     "level DESC, name COLLATE NOCASE")
+            order_args = [text, _like_escape(text) + "%"]
+        if not text and not slots:
+            return []
+        try:
+            limit = max(1, min(100, int(limit)))
+        except (TypeError, ValueError):
+            limit = 40
+        rows = [dict(row) for row in self.db.all(
+            "SELECT item_id, name, equip_slot, level, item_level, jobs, rare, ex, "
+            "stack, skill, price, base_sell, description "
+            "FROM items WHERE " + " AND ".join(where) +
+            " ORDER BY " + order + " LIMIT ?", (*args, *order_args, limit))]
+        owned = self.owned_item_ids(character_id, [int(row["item_id"]) for row in rows])
+        for row in rows:
+            item_id = int(row["item_id"])
+            row["owned"] = item_id in owned
+            row["exclusive"] = bool(int(row.get("rare") or 0) or int(row.get("ex") or 0))
+        return rows
+
+    def armory_add(self, character_id: int, item_id: int, quantity: int = 1) -> dict:
+        """Buy one catalogue item for a character.
+
+        Rare and Ex pieces are one-per-character in the Armory even though the
+        general grant helper only enforces Rare: retail's Ex flag means the item
+        cannot be traded, and the Armory should not hand out a second copy by
+        accident.  The price is charged before the inventory insert and refunded if
+        the insert fails, so a full bag never costs the character gil.
+        """
+        item = self.item(int(item_id))
+        if item is None:
+            raise ApiError(404, "not_found", "no item with that id")
+        if str(item.get("equip_slot") or "") not in {
+                slot for slots in ARMORY_SLOTS.values() for slot in slots}:
+            raise ApiError(422, "validation_error",
+                           "%s is not armour, an accessory, ammo or a weapon" % item["name"])
+        try:
+            quantity = max(1, min(99, int(quantity)))
+        except (TypeError, ValueError):
+            quantity = 1
+        unique = bool(int(item.get("rare") or 0) or int(item.get("ex") or 0))
+        if unique:
+            if quantity != 1:
+                raise ApiError(422, "rare_item",
+                               "only one copy of a Rare or Ex item can be obtained at a time")
+            if self.owns_item(int(character_id), int(item_id)):
+                raise ApiError(409, "already_owned",
+                               "the character already possesses %s" % item["name"])
+        price = max(0, int(item.get("price") or 0)) * quantity
+        character = self.character(int(character_id))
+        gil = int(character.get("gil") or 0)
+        if price > gil:
+            raise ApiError(
+                422, "insufficient_gil",
+                "%s costs %s gil; the character has %s" % (item["name"], f"{price:,}",
+                                                           f"{gil:,}"))
+        charged = False
+        if price:
+            self.set_gil(int(character_id), gil - price)
+            charged = True
+        try:
+            added = self.add_item(int(character_id), int(item_id), quantity,
+                                  one_per_character=True)
+        except Exception:
+            if charged:
+                try:
+                    self.set_gil(int(character_id), gil)
+                except Exception:
+                    log.exception(
+                        "%s could not refund a failed Armory purchase of item %d",
+                        character_id, int(item_id))
+            raise
+        try:
+            self.db.execute(
+                "INSERT INTO char_purchases (character_id, item_id, quantity, price, created_at) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (int(character_id), int(item_id), quantity, price, now_iso()))
+        except Exception:
+            # The item is in the bag and the gil is spent; a missing history row is
+            # not worth rolling either back.  Log it and keep the purchase.
+            log.exception("%s could not record the Armory purchase of item %d",
+                          character_id, int(item_id))
+        return {"item_id": int(item_id), "name": added["name"], "quantity": quantity,
+                "price": price, "purchased": True}
+
+    # --- ranks, fame, jobs, exemplar and crafts ------------------------------------------------
+    def character_jobs_progress(self, character_id: int) -> list[dict]:
+        """All 22 jobs, with the rows this build has and zeroes for the rest."""
+        rows = {int(row["job"]): (int(row["level"]), int(row["master_level"]))
+                for row in self.db.all(
+                    "SELECT job, level, master_level FROM character_jobs WHERE character_id = ?",
+                    (int(character_id),))}
+        return [{"job": job,
+                 "level": rows.get(job, (0, 0))[0],
+                 "master_level": rows.get(job, (0, 0))[1]}
+                for job in range(1, 23)]
+
+    def set_all_jobs(self, character_id: int, level: int = 99,
+                     master_level: int | None = None) -> int:
+        """Unlock every job at *level* (and optionally set its Master Level)."""
+        try:
+            level = max(1, min(99, int(level)))
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "level must be a number")
+        master = None
+        if master_level is not None:
+            try:
+                master = max(0, min(50, int(master_level)))
+            except (TypeError, ValueError):
+                raise ApiError(422, "validation_error", "master level must be a number")
+        with self.db.transaction() as conn:
+            for job in range(1, 23):
+                if master is None:
+                    conn.execute(
+                        "INSERT INTO character_jobs (character_id, job, level, master_level) "
+                        "VALUES (?, ?, ?, 0) ON CONFLICT(character_id, job) "
+                        "DO UPDATE SET level = excluded.level",
+                        (int(character_id), job, level))
+                else:
+                    conn.execute(
+                        "INSERT INTO character_jobs (character_id, job, level, master_level) "
+                        "VALUES (?, ?, ?, ?) ON CONFLICT(character_id, job) "
+                        "DO UPDATE SET level = excluded.level, master_level = excluded.master_level",
+                        (int(character_id), job, level, master))
+            conn.execute("UPDATE characters SET main_level = ?, updated_at = ? WHERE id = ?",
+                         (level, now_iso(), int(character_id)))
+        return level
+
+    def set_job_master_level(self, character_id: int, job: int, level: int) -> int:
+        try:
+            job, level = int(job), max(0, min(50, int(level)))
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "job and master level must be numbers")
+        if not 1 <= job <= 22:
+            raise ApiError(422, "validation_error", "job must be 1..22")
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO character_jobs (character_id, job, level, master_level) "
+                "VALUES (?, ?, 99, ?) ON CONFLICT(character_id, job) "
+                "DO UPDATE SET master_level = excluded.master_level",
+                (int(character_id), job, level))
+        return level
+
+    def set_all_master_levels(self, character_id: int, level: int) -> int:
+        try:
+            level = max(0, min(50, int(level)))
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "master level must be a number")
+        with self.db.transaction() as conn:
+            for job in range(1, 23):
+                conn.execute(
+                    "INSERT INTO character_jobs (character_id, job, level, master_level) "
+                    "VALUES (?, ?, 99, ?) ON CONFLICT(character_id, job) "
+                    "DO UPDATE SET master_level = excluded.master_level",
+                    (int(character_id), job, level))
+            conn.execute("UPDATE characters SET main_level = 99, updated_at = ? WHERE id = ?",
+                         (now_iso(), int(character_id)))
+        return level
+
+    def set_exemplar_points(self, character_id: int, points: int) -> int:
+        try:
+            points = max(0, min(GIL_MAX, int(points)))
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "points must be a number")
+        self.db.execute("UPDATE characters SET exemplar_points = ?, updated_at = ? WHERE id = ?",
+                        (points, now_iso(), int(character_id)))
+        return points
+
+    def set_mission_rank(self, character_id: int, nation: int, rank: int,
+                         points: int | None = None) -> dict:
+        columns = {0: "rank_sandoria", 1: "rank_bastok", 2: "rank_windurst"}
+        try:
+            nation, rank = int(nation), int(rank)
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "nation and rank must be numbers")
+        if nation not in columns:
+            raise ApiError(422, "validation_error", "nation must be 0, 1 or 2")
+        if not 1 <= rank <= RANK_MAX:
+            raise ApiError(422, "validation_error", "rank must be 1..%d" % RANK_MAX)
+        values = [rank]
+        statement = "UPDATE characters SET %s = ?, updated_at = ? WHERE id = ?" % columns[nation]
+        values += [now_iso(), int(character_id)]
+        if points is not None:
+            try:
+                points = max(0, min(65535, int(points)))
+            except (TypeError, ValueError):
+                raise ApiError(422, "validation_error", "points must be a number")
+            statement = ("UPDATE characters SET %s = ?, rank_points = ?, updated_at = ? "
+                         "WHERE id = ?") % columns[nation]
+            values = [rank, points, now_iso(), int(character_id)]
+        self.db.execute(statement, tuple(values))
+        return {"nation": nation, "rank": rank}
+
+    def set_mog_garden_rank(self, character_id: int, rank: int) -> int:
+        try:
+            rank = max(0, min(MOG_GARDEN_MAX, int(rank)))
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "rank must be a number")
+        self.db.execute("UPDATE characters SET mog_garden_rank = ?, updated_at = ? WHERE id = ?",
+                        (rank, now_iso(), int(character_id)))
+        return rank
+
+    def fame_for_character(self, character_id: int) -> list[dict]:
+        values = {str(row["city"]): int(row["value"]) for row in self.db.all(
+            "SELECT city, value FROM char_fame WHERE character_id = ?", (int(character_id),))}
+        return [{"city": city, "value": values.get(city, 0)} for city in FAME_CITIES]
+
+    def set_fame(self, character_id: int, city: str, value: int) -> dict:
+        city = str(city or "").strip()
+        if city not in FAME_CITIES:
+            raise ApiError(422, "validation_error", "unknown city")
+        try:
+            value = max(0, min(FAME_MAX, int(value)))
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "value must be a number")
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT INTO char_fame (character_id, city, value) VALUES (?, ?, ?) "
+                "ON CONFLICT(character_id, city) DO UPDATE SET value = excluded.value",
+                (int(character_id), city, value))
+        return {"city": city, "value": value}
+
+    def max_fame(self, character_id: int) -> list[dict]:
+        with self.db.transaction() as conn:
+            for city in FAME_CITIES:
+                conn.execute(
+                    "INSERT INTO char_fame (character_id, city, value) VALUES (?, ?, ?) "
+                    "ON CONFLICT(character_id, city) DO UPDATE SET value = excluded.value",
+                    (int(character_id), city, FAME_MAX))
+        return self.fame_for_character(character_id)
+
+    def crafts_for_character(self, character_id: int) -> list[dict]:
+        values = {int(row["skill_id"]): int(row["value"]) for row in self.db.all(
+            "SELECT skill_id, value FROM char_craft WHERE character_id = ?",
+            (int(character_id),))}
+        return [{"skill_id": skill_id, "name": name, "value": values.get(skill_id, 0)}
+                for skill_id, name in CRAFT_SKILLS]
+
+    def set_craft_skills(self, character_id: int, values: dict) -> list[dict]:
+        known = {skill_id for skill_id, _name in CRAFT_SKILLS}
+        cleaned: dict[int, int] = {}
+        for key, value in (values or {}).items():
+            try:
+                skill_id, value = int(key), max(0, min(CRAFT_MAX, int(value)))
+            except (TypeError, ValueError):
+                continue
+            if skill_id in known:
+                cleaned[skill_id] = value
+        if not cleaned:
+            raise ApiError(422, "validation_error", "no known crafting skills in the request")
+        with self.db.transaction() as conn:
+            for skill_id, value in cleaned.items():
+                conn.execute(
+                    "INSERT INTO char_craft (character_id, skill_id, value) VALUES (?, ?, ?) "
+                    "ON CONFLICT(character_id, skill_id) DO UPDATE SET value = excluded.value",
+                    (int(character_id), skill_id, value))
+        return self.crafts_for_character(character_id)
+
+    def max_crafts(self, character_id: int) -> list[dict]:
+        return self.set_craft_skills(
+            character_id, {skill_id: CRAFT_MAX for skill_id, _name in CRAFT_SKILLS})
+
+    def trust_summary(self) -> dict:
+        row = self.db.one("SELECT COUNT(*) AS n FROM trusts")
+        return {
+            "spells": int(row["n"]),
+            "key_items": "all",
+            "summoning": True,
+        }
 
     def _character_fields(self, data: dict) -> dict:
         try:
@@ -694,6 +1438,13 @@ class FanxiService:
             "exp": row.get("exp", 0),
             "exp_next": exp_for_level(row["main_level"]),
             "gil": row.get("gil", 0),
+            "mastery_rank": int(row.get("mastery_rank") or 0),
+            "rank_sandoria": int(row.get("rank_sandoria") or 1),
+            "rank_bastok": int(row.get("rank_bastok") or 1),
+            "rank_windurst": int(row.get("rank_windurst") or 1),
+            "rank_points": int(row.get("rank_points") or 0),
+            "mog_garden_rank": int(row.get("mog_garden_rank") or 0),
+            "exemplar_points": int(row.get("exemplar_points") or 0),
             "merit_points": int(row.get("merit_points") or 0),
             "limit_points": int(row.get("limit_points") or 0),
             "merit_mode": int(row.get("merit_mode") if row.get("merit_mode") is not None else 1),
@@ -898,6 +1649,7 @@ class FanxiService:
             "COALESCE(i.equip_slot, '') AS equip_slot, COALESCE(i.level, 1) AS level, "
             "COALESCE(i.model, 0) AS model, COALESCE(i.slot_mask, 0) AS slot_mask, "
             "COALESCE(i.jobs, 0) AS jobs, COALESCE(i.skill, 0) AS skill, "
+            "COALESCE(i.rare, 0) AS rare, COALESCE(i.ex, 0) AS ex, "
             "COALESCE(st.slip, 0) AS storage_slip, "
             "COALESCE(ci.extra, X'') AS extra "
             "FROM char_inventory ci LEFT JOIN items i ON i.item_id = ci.item_id "
@@ -973,18 +1725,33 @@ class FanxiService:
         return {int(row["skill_id"]): int(row["amount"]) for row in rows}
 
     def equipped_mods(self, character_id: int) -> dict[int, int]:
-        """Modifier id -> total from every equipped item.
+        """Modifier id -> total from every equipped item, augments included.
 
         This is where an outfit's Attack, Defense, STR and -- the reason it exists -- its
-        physical/magic damage taken comes from.  ``item_mods`` holds every item's
-        modifiers; augmentation that is stored only as client extdata does not appear
-        here, because the server cannot read those numbers back yet.
+        physical/magic damage taken comes from.  ``item_mods`` holds every item's base
+        modifiers; the per-copy augmentation lives in the item's 24-byte client extdata
+        block, so each equipped row is joined back to its inventory copy and run through
+        :mod:`augment_stats`.  That is what makes a Rank 30 set's ``"Double Attack"+7%``
+        rows reach the attack round, and a cape's five-slot build reach the stat sheet.
         """
         rows = self.db.all(
             "SELECT m.mod_id, SUM(m.value) AS value FROM char_equip e "
             "JOIN item_mods m ON m.item_id = e.item_id "
             "WHERE e.character_id = ? GROUP BY m.mod_id", (int(character_id),))
-        return {int(row["mod_id"]): int(row["value"]) for row in rows}
+        mods = {int(row["mod_id"]): int(row["value"]) for row in rows}
+        equipped = self.db.all(
+            "SELECT e.item_id, COALESCE(i.extra, X'') AS extra FROM char_equip e "
+            "LEFT JOIN char_inventory i ON i.character_id = e.character_id "
+            "AND i.container = e.container AND i.slot = e.slot "
+            "WHERE e.character_id = ?", (int(character_id),))
+        for row in equipped:
+            try:
+                augment_stats.add_item_mods(mods, int(row["item_id"]), row["extra"])
+            except (KeyError, TypeError, ValueError):
+                # A malformed block must never stop the outfit from loading.
+                logging.getLogger("fanxi.stats").debug(
+                    "augments unreadable for item %s", row["item_id"], exc_info=True)
+        return mods
 
     def equipped_weapons(self, character_id: int) -> dict[int, dict]:
         """Equip kind -> weapon data (skill, damage, delay, item-level skill, shield size).
@@ -1047,6 +1814,11 @@ class FanxiService:
         row = self.db.one("SELECT * FROM spells WHERE id = ?", (int(spell_id),))
         return dict(row) if row else None
 
+    def trust(self, spell_id: int) -> dict | None:
+        """The alter ego a Trust spell calls, or None for an ordinary spell."""
+        row = self.db.one("SELECT * FROM trusts WHERE spell_id = ?", (int(spell_id),))
+        return dict(row) if row else None
+
     def hunt_menu(self, zone: int, key: int) -> int | None:
         row = self.db.one("SELECT value FROM hunt_registries WHERE zone = ? AND key = ?",
                           (int(zone), int(key)))
@@ -1080,13 +1852,31 @@ class FanxiService:
         must be at or below the character's value.  Relic/empyrean/aeonic and other
         quested skills carry skill_level 0; Fanxi has no quest-unlock tracking, so they
         are offered once the weapon skill itself is mastered (350+, the level-99 band).
+        A negative skill_level marks a skill that only an equipped item grants (the
+        Prime weapons' "Adds weapon skill" line), so the normal gate skips those rows;
+        ``equipped_weapon_skill_grants`` supplies them per outfit.
         """
         rows = self.db.all(
-            "SELECT id FROM weapon_skills WHERE skill = ? AND "
+            "SELECT id FROM weapon_skills WHERE skill = ? AND skill_level >= 0 AND "
             "((skill_level > 0 AND skill_level <= ?) OR (skill_level = 0 AND ? >= 350)) "
             "ORDER BY skill_level, id",
             (int(skill_id), int(max_skill), int(max_skill)))
         return [int(row["id"]) for row in rows]
+
+    def equipped_weapon_skill_grants(self, character_id: int) -> set[int]:
+        """Weapon skill ids the equipped items add with item_mods 355.
+
+        This is retail's ADDS_WEAPONSKILL: a Prime weapon (and the relic/mythic/empyrean
+        weapons that carry the same line) lets the character use that one skill while it
+        is worn.  The caller filters these against the weapon_skills rows so only the
+        item-granted skills enter the advertised menu.
+        """
+        rows = self.db.all(
+            "SELECT DISTINCT m.value AS ws_id FROM char_equip e "
+            "JOIN item_mods m ON m.item_id = e.item_id "
+            "WHERE e.character_id = ? AND m.mod_id = 355",
+            (int(character_id),))
+        return {int(row["ws_id"]) for row in rows}
 
     def weaponskill_by_name(self, name: str) -> dict | None:
         row = self.db.one("SELECT id, name, skill, skill_level, element, animation "
@@ -1199,6 +1989,21 @@ class FanxiService:
     def item(self, item_id: int) -> dict | None:
         row = self.db.one("SELECT * FROM items WHERE item_id = ?", (int(item_id),))
         return dict(row) if row else None
+
+    def food_effect(self, item_id: int) -> dict | None:
+        """The duration, modifiers and eating animation for an edible item, or None."""
+        row = self.db.one(
+            "SELECT item_id, duration, mods, animation FROM food_effects WHERE item_id = ?",
+            (int(item_id),))
+        if row is None:
+            return None
+        try:
+            mods = {int(key): int(value)
+                    for key, value in json.loads(row["mods"]).items()}
+        except (TypeError, ValueError):
+            mods = {}
+        return {"item_id": int(row["item_id"]), "duration": int(row["duration"]),
+                "mods": mods, "animation": int(row["animation"] or 0)}
 
     def save_vitals(self, character_id: int, hp: int, mp: int) -> None:
         self.db.execute(
@@ -1790,6 +2595,14 @@ class FanxiService:
             "WHERE cl.character_id = ? ORDER BY COALESCE(i.name, 'Item'), cl.item_id",
             (int(character_id),))]
 
+    def inventory_slot(self, character_id: int, container: int, slot: int) -> dict | None:
+        """The item in one exact bag slot, or None when the slot is empty."""
+        row = self.db.one(
+            "SELECT container, slot, item_id, quantity FROM char_inventory "
+            "WHERE character_id = ? AND container = ? AND slot = ?",
+            (int(character_id), int(container), int(slot)))
+        return dict(row) if row is not None else None
+
     def consume_inventory_item(self, character_id: int, item_id: int,
                                quantity: int = 1) -> dict | None:
         """Take a consumable from the normal inventory; return its new slot state."""
@@ -1816,6 +2629,37 @@ class FanxiService:
                     (int(character_id), int(row["slot"])))
             return {"item_id": int(item_id), "container": 0, "slot": int(row["slot"]),
                     "quantity": left}
+
+    def consume_inventory_slot(self, character_id: int, container: int, slot: int,
+                               quantity: int = 1) -> dict | None:
+        """Take a consumable from one exact bag slot; return the slot's new state.
+
+        The client's 0x037 names the container and the slot, not the item id, so this is
+        the only way to consume the stack the player actually clicked.  ``quantity`` in
+        the result is what is left (0 when the slot emptied).
+        """
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT item_id, quantity FROM char_inventory "
+                "WHERE character_id = ? AND container = ? AND slot = ?",
+                (int(character_id), int(container), int(slot))).fetchone()
+            if row is None:
+                return None
+            have = int(row["quantity"])
+            take = min(max(1, int(quantity)), have)
+            left = have - take
+            if left > 0:
+                conn.execute(
+                    "UPDATE char_inventory SET quantity = ? "
+                    "WHERE character_id = ? AND container = ? AND slot = ?",
+                    (left, int(character_id), int(container), int(slot)))
+            else:
+                conn.execute(
+                    "DELETE FROM char_inventory "
+                    "WHERE character_id = ? AND container = ? AND slot = ?",
+                    (int(character_id), int(container), int(slot)))
+            return {"item_id": int(row["item_id"]), "container": int(container),
+                    "slot": int(slot), "quantity": left}
 
     def refill_working_stock(self, character_id: int) -> list[dict]:
         """Top up the visible consumables from the hidden locker.
@@ -1947,12 +2791,47 @@ class FanxiService:
             )
         return amount
 
-    def add_item(self, character_id: int, item_id: int, quantity: int = 1) -> dict:
+    @staticmethod
+    def _owns_item(conn, character_id: int, item_id: int) -> bool:
+        row = conn.execute(
+            "SELECT EXISTS (SELECT 1 FROM char_inventory "
+            "               WHERE character_id = ? AND item_id = ? AND quantity > 0) "
+            "    OR EXISTS (SELECT 1 FROM char_storage "
+            "               WHERE character_id = ? AND item_id = ? AND quantity > 0) "
+            "    OR EXISTS (SELECT 1 FROM char_locker "
+            "               WHERE character_id = ? AND item_id = ? AND quantity > 0) AS owned",
+            (int(character_id), int(item_id), int(character_id), int(item_id),
+             int(character_id), int(item_id))).fetchone()
+        return bool(row["owned"]) if row else False
+
+    def owns_item(self, character_id: int, item_id: int) -> bool:
+        """Whether a character holds an item in any permanent bag, storage or the locker.
+
+        Retail's Rare check searches every container, not just the inventory; a Rare
+        piece on a storage slip still stops the character from obtaining another.
+        """
+        with self.db.connection() as conn:
+            return self._owns_item(conn, character_id, item_id)
+
+    def add_item(self, character_id: int, item_id: int, quantity: int = 1,
+                 one_per_character: bool = False) -> dict:
         if quantity <= 0:
             raise ApiError(422, "validation_error", "quantity must be positive")
         item = self.item(item_id)
+        rare = bool(item and int(item.get("rare") or 0))
+        # The Armory treats Ex as one-per-character too; a normal grant does not,
+        # because the augmented job capes are Ex and several builds share an id.
+        unique = rare or bool(one_per_character and item and int(item.get("ex") or 0))
+        if unique and quantity > 1:
+            raise ApiError(422, "rare_item",
+                           "only one copy of this item can be obtained at a time")
         stack = int(item["stack"]) if item else 1
         with self.db.transaction() as conn:
+            # The uniqueness check runs inside the write transaction so two
+            # simultaneous grants cannot both see an empty bag and insert a copy.
+            if unique and self._owns_item(conn, character_id, item_id):
+                raise ApiError(409, "already_owned",
+                               "the character already possesses %s" % item["name"])
             rows = conn.execute(
                 "SELECT slot, quantity FROM char_inventory WHERE character_id = ? AND container = 0 "
                 "AND item_id = ? ORDER BY slot", (int(character_id), int(item_id))).fetchall()

@@ -47,6 +47,7 @@ One JSON file, mode `0600`, at:
   "token": "…",
   "token_expires_at": "2026-11-19T…Z",
   "character_id": 1,
+  "tenant_character_id": 1,
   "game_dir": "/Users/aria/Games/FINAL FANTASY XI",
   "host64": "/…/fanxi/build/host64",
   "auto_login": true,
@@ -82,18 +83,49 @@ or is revoked, use **Accounts → Sign in again**.
 | Page | What it does |
 |---|---|
 | **Sign in / Create account** | Server URL, username, password; registration creates a player account. The server URL is saved locally. |
-| **Home** | Server status, the active character, Play, Control room, latest news. |
-| **Characters** | Every character on the active account. **New mule** creates another; Select chooses the one Play uses. |
+| **Home** | Server status, the selected tenant character, Play, Control room, latest news. |
+| **Characters** | Every character on the active account. **New mule** creates another; Select chooses the one Play uses. **Design** opens that character in the tenant context. |
+| **Design** | Race, face, hair colour and size for the selected tenant. Applying writes to that character only; a running client repaints immediately. |
 | **Accounts** | Every saved account. **Add account** signs in a second account for multiboxing; Use switches the active one; Remove forgets only the local token. |
 | **Control** | The party roster, Launch / Launch all, the live KPI table, Stop, and the command console. |
-| **Gear / GearSwap** | Every running client with an **Open Gear & GearSwap** button; job defaults, imports and versioned set libraries. |
+| **Warps** | Saved `/!warp` places for the selected tenant: mark the live position, rename aliases, delete rows, and warp just that character or every online box in the account family. Works for main and sub-account characters. |
+| **Data** | The Rust launcher's assignment page: merits, job points, Mastery Rank, gil, Home Points, currencies, key items, the Armory, mission/fame/Mog Garden ranks, jobs and Master Levels, Exemplar Points, crafts, Trusts and augment RP paths, applied to the selected tenant. |
+| **Gear / GearSwap** | The selected tenant's live gear and GearSwap library, plus job defaults, imports and versioned set libraries. |
 | **News** | Posts from `news` in the database. |
 | **Settings** | Server URL, game folder, Save, Detect game, Build game, Open data folder, live build log. |
+
+The **Armory** is a typeahead over migration 111's full equipment catalogue: it starts
+suggesting as soon as a name is typed, draws each item's BG Wiki icon, and shows the slot,
+level, item level, job count and gil price. Selecting a piece opens a purchase card. A Rare or
+Ex piece the character already holds says **Currently owned** and cannot be bought again; any
+other owned piece can be bought again. The price is charged against the character's wallet and
+recorded in the purchase history.
+
+## Tenants
+
+The bar above the page area names the **tenant** the character pages are looking at. A tenant is one
+character: any character on the main account, or the single character of a sub-account box. The bar
+is visible on every page, and switching it changes **Home**, **Design**, **Data**, **Gear /
+GearSwap** and **Warps** together without changing the signed-in account. The choice is stored as
+`tenant_character_id` in `launcher.json` (separate from `character_id`, which is the main account's
+Play character), so it survives page changes and restarts. A tenant that is not running still has
+Design, Data and Warps; Gear shows its live client only while it is up. Create and launch boxes from
+the **Team** page. Characters on a different saved account are not tenants here: use **Accounts → Use**
+to make that account the main one first.
 
 The default server is `http://127.0.0.1:8080`. For a server elsewhere, change it in Settings or
 sign-in before you sign in; it is saved in `api_url`. If you terminate HTTPS with a self-signed
 certificate, start the launcher with `FANXI_API_INSECURE=1` (it disables certificate checking for
 that launcher process only).
+
+**Warps** reads and edits the same `char_warps` rows as the in-game command. The tenant bar's
+selection is the character it manages (switching the tenant changes Home, Data, Gear and Warps
+together); it can be a mule on a sub-account because the main account's token is allowed to manage
+its whole family. The row's **Warp** button sends `!warp me <slot>` (or `!warp all <slot>` when
+**Everyone** is selected) to the selected character's running client. **Mark** reads the client's
+current `state` first, so a spot saved from the page is the position the client is actually standing
+on, not a polling snapshot. The **Control room** button makes the round trip easy when a client is
+offline.
 
 ## Building the game
 
@@ -181,8 +213,11 @@ polled. Per client it shows:
 - whether the client is online, signing in, or has no control port yet.
 
 Double-click a row to open its **Gear** window. The command console sends a line to the selected
-client: `!zone 100`, `!merits 5`, `!heal`, `!where`, `!help`, or any other server command. The
-control addon executes it as if typed, without the launcher's `/say` fallback.
+client: `!zone 100`, `!warp list`, `!merits 5`, `!heal`, `!where`, `!help`, or any other server
+command. The control addon executes it as if typed, without the launcher's `/say` fallback. In the
+game's chat line, **Tab** completes `/!` commands when the prefix is unique and leaves an ambiguous
+one alone until another letter is typed; the **Warps** page is the point-and-click equivalent for
+saved places.
 
 The same protocol is available to scripts: see `tools/xi_mcp.py` and `host/addons/lua/control.lua`.
 It is JSON, one object per line over `127.0.0.1:<port>`.
@@ -250,8 +285,11 @@ On the Sets tab, the phase engine is split into the groups the player thinks in:
   an empty row uses the default JA set, then the library's `precast.JA`. The action is matched by
   its low-nine-bit id, so sambas, waltzes, runes and similar non-`JobAbility` types work too.
 - **Resting** — a manual resting set and toggle.
-- **Spells** — a precast set, a midcast default for every spell, and per-spell override cards
-  picked from the current job's spell list (macc/mab/magic-skill sets included).
+- **Spells** — a precast set, a midcast default for every spell, category override cards, and
+  per-spell override cards picked from the current job's spell list (macc/mab/magic-skill sets
+  included). A category card gives one set to every spell in its host-classified group — enfeebles
+  macc or duration (Enfeebling Magic), buff potency or duration (Enhancing Magic) and helix
+  magic — and a per-spell card still wins over its category.
 - **Idle** — field, town, movement, DT/PDT/MDT/Eva/Meva sets and a manual idle focus.
 
 The phase header shows the live state and set (`Kiting · idle.pdt`), the rule counts and the
@@ -295,12 +333,13 @@ Limitations:
   table and `tools/item_models.py` repairs/reports an existing database;
 - `include()`d libraries are not evaluated, so sets defined in an included file are not visible;
 - augments are preserved in the imported JSON and **shown read-only**: augmented items get a
-  `*` (Odyssey armour and weapons get `R30`) and the selected item's full augment list appears
-  below the item pane. `Wear set` still matches the base item name, so it cannot choose between
-  two builds of the same JSE cape or Nyame piece; the editor and saved versions flatten the set to
-  names and drop the augment arrays. The default libraries use 198 augmented JSE cape builds, the
-  five Unity items' fixed augments, and every Odyssey Rank 30 build — Nyame Paths A-D, Sakpata's,
-  Gleti's, Agwu's and their weapons. See [odyssey-r30.md](odyssey-r30.md);
+  `*` (Odyssey and Limbus Rank 30 builds get `R30`) and the selected item's full augment list
+  appears below the item pane. `Wear set` still matches the base item name, so it cannot choose
+  between two builds of the same JSE cape or Nyame piece; the editor and saved versions flatten
+  the set to names and drop the augment arrays. The default libraries use 198 augmented JSE cape
+  builds, the five Unity items' fixed augments, every Odyssey Rank 30 build — Nyame Paths A-D,
+  Sakpata's, Gleti's, Agwu's and their weapons — and the five Limbus top tiers. See
+  [odyssey-r30.md](odyssey-r30.md) and [limbus-r30.md](limbus-r30.md);
 - GearSwap's rules/functions (`sets.precast`, `rule`, `aftercast`) run only through the normal
   addon host if you install GearSwap itself; the Gear window is a set viewer/editor/equipper, not a
   full replacement for GearSwap's event engine;

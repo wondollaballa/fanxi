@@ -91,6 +91,10 @@ downloaded runtime and no third-party UI framework to audit. It:
 - opens a **Control room** that launches several clients, one per account, and shows each one's
   zone, HP/MP, EXP/hr and DPS;
 - sends in-game commands such as `!zone`, `!merits` and `!heal` to any running client;
+- saves `/!warp` places and can mark, rename, delete and warp to them from the **Warps** page,
+  alone or with every online character on the account and its sub-accounts;
+- completes `/!` commands in the game's chat line with Tab when the typed word is unique, and
+  leaves an ambiguous prefix alone until another letter narrows it;
 - reads the active gear of each client, detects its live main job, loads that job's default
   GearSwap library, and can import/edit/save timestamped versions from the **Gear** page, with a
   launcher-wide **GearSwap** on/off switch for players who do not want auto-swapping;
@@ -143,9 +147,11 @@ move, change zones and talk/attack. Its small world adds:
   Mulsum in the inventory, pulling from the hidden locker when they are used;
 - monster death, rewards and respawn.
 
-Server commands: `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!time`, `!storage`, `!locker`,
-`!stock`, `!help`. Positions are persisted to the database (throttled to a few writes a second at
-most). See [docs/world.md](docs/world.md) for content, packet flow and limits.
+Server commands: `!zone`, `!warp`, `!pos`, `!where`, `!entities`, `!trust`, `!heal`, `!time`,
+`!storage`, `!locker`, `!stock`, `!help`. `!warp` marks your own camps (`!warp mark [alias]`) and returns to
+them by number or alias (`!warp me 1`, `!warp all 1` for your sub-account boxes); the launcher's
+**Warps** page edits the same list. Positions are persisted to the database (throttled to a few
+writes a second at most). See [docs/world.md](docs/world.md) for content, packet flow and limits.
 
 ### Our database
 

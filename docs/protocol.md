@@ -162,11 +162,12 @@ Implemented client messages:
 | `0x00C` | zone fully loaded | sends the bulk zone/UI state |
 | `0x015` | position update | stores position (throttled) and spawns nearby entities on first use |
 | `0x01A` | target action | Talk, Attack, AttackOff, ChangeTarget, SendResRdy |
+| `0x037` | item use | consumes the container/slot the packet names; food applies its `food_effects` row and its `0x028` ItemFinish action plays the eat/drink animation |
 | `0x083` | shop buy | charges gil, adds item, replies `0x03F` and inventory |
 | `0x016`, `0x017` | entity request | self `0x00D`/status, or re-sends an NPC/mob spawn |
 | `0x061` | status request | stats and exact HP/MP |
 | `0x05E` | zone line | changes zone if `zone_lines` has the rect; `zmrq` is the Mog House exit menu, modes 1–4 naming a city area |
-| `0x0B5` | chat | `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!hp`, `!time`, `!help` |
+| `0x0B5` | chat | `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!hp`, `!warp`, `!time`, `!help` |
 | `0x04B` | server message request | sends the MOTD in chunks |
 | `0x05A` | conquest | zeroed standings |
 | `0x03C` | blacklist | empty |
@@ -189,16 +190,29 @@ Fanxi places three NPCs at `0x100`–`0x102` and six monsters at `0x200`–`0x20
 `0x00E` is 88 bytes total; its payload is x/y/z floats, rotation, speed, HP percentage, animation,
 status, triggerable flag, model/size and a 16-byte name. `0x00D` is the equivalent for the player.
 
+Trust alter egos are `0x00E` spawns in the pet range with Flags3's TrustFlag (`0x01`), PetNewFlag
+(`0x04`) and PetFlag (`0x40`) set and player allegiance. The owner also receives `0x067` with the
+Trust's id, targid and the owner's own targid; that is what makes the client offer the Trust
+sub-menu. (`0x067` is shared with the player level block, which starts `0x02/0x09`; the entity
+name variant starts `0x03/0x05`.) The spawnable name lives at packet offset `0x38` rather than the
+static-NPC `0x35`, and the Trust look block is the factual model from the `trusts` table.
+
 ### 4.2 Combat
 
 A player attacks with `C2S 0x01A`, action `0x02` (inside 30 yalms); `0x04` asks to disengage.
 The client also sends `0x04` on its own when the target leaves auto-attack reach, so the server
-ignores that first distance-driven packet and keeps the engagement out to 30 yalms. Each swing
-sends an S2C `0x028` bit-packed battle action with:
+ignores that first distance-driven packet and keeps the engagement out to 30 yalms. An attack
+round sends one S2C `0x028` bit-packed battle action with:
 
 - actor id and one target id;
 - category `1` (basic attack) and action id `atk0` (`0x306B7461`);
-- hit or miss resolution, critical/defeated flags, sub-kind, value and message id.
+- a result per swing: the main hand's base hit and its Double/Triple/Quadruple Attack
+  extras (animation 0), then the off hand's (animation 1), each with its hit or miss
+  resolution, critical/defeated flags, value and message id.
+
+A dual-wielded or multi-attacking round is therefore still one action packet: the client
+plays the results in order.  Two `0x028`s for the same actor and target in one update made
+it drop the first.  A round is capped at eight results.
 
 For a finished spell the sub-kind is the spell id and the value is the damage, the HP
 healed, or the status effect id the spell lands; the message chooses the line
@@ -219,6 +233,11 @@ id (`canj` for ninjutsu, `cawh`, `cabk`, ...) and the spell id as its value.
   Every Fanxi sync therefore carries all 18 container bits, even when only two bags changed.
 - `0x01E` updates only a quantity (used for gil).
 - `0x01F` is a lighter item list, available for future equipment changes.
+- `C2S 0x037` uses an item. It names the container (`Category`, 0x10) and the slot
+  (`PropertyItemIndex`, 0x0E), not the item id; 0x08 is `ItemNum` and is always 0. The reply is
+  a `0x020` for that container/slot, one all-bag `0x01D`, and a `0x028` ItemFinish action
+  (category 5) whose sub-kind is the item's animation; food adds its `0x037`/`0x063` status
+  icon pair.
 - `C2S 0x03A` names a container after the client sorts it. The server merges partial stacks of
   the same item (and same 24-byte extdata) in that container, then sends `0x020` for every
   changed slot and one all-bag `0x01D`.
@@ -244,6 +263,11 @@ Chat commands:
 !zone <id> [x y z [rot]]   change zone, optional position
 !pos <x> <y> <z> [rot]     reposition in the current zone
 !where                     print zone and position
+!warp mark [alias]         save this zone/position as the next numbered warp
+!warp me|all <n|alias>     return, alone or with the account's online sub-characters
+!warp list [page]          print the saved places
+!warp delete <n|alias>     delete one
+!warp rename <n> <alias>   name or clear one
 !entities                  list live NPCs/monsters and targids
 !heal                      restore HP/MP
 !time <hour>               set Vana'diel hour (0-23, fractions allowed)
@@ -253,6 +277,11 @@ Chat commands:
 !locker list               list the locker's contents
 !help                      list commands
 ```
+
+`/!` lines are server chat commands, not client slash commands; the host sends them to the
+server as say lines. Tab completion for the whole `/!` command set is a host feature, not a
+protocol change (see `docs/control-panel.md#command-completion`). The saved warps live in
+`char_warps`, one row per character and slot 1-1000.
 
 ### 4.5 Emotes and style lock
 

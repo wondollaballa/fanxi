@@ -36,6 +36,13 @@ class ZoneEntity:
     script: str = ""
     dialogue: list[str] = field(default_factory=list)
     hp_index: int = -1
+    # trust fields (a Trust is an NPC-sized ally owned by one player)
+    owner_char_id: int = 0
+    trust_spell: int = 0
+    job: int = 1
+    sub_job: int = 0
+    damage_mult: int = 100
+    passive: bool = False
     # mob fields
     template_id: int = 0
     level: int = 1
@@ -61,7 +68,17 @@ class ZoneEntity:
     respawn_at: float = 0.0
     corpse_until: float = 0.0
     engaged_char_id: int | None = None
+    # Who the client should show as the claimer (the red name).  Kept after death so the
+    # corpse stays red until it despawns; the hate target (engaged_char_id) is cleared.
+    claim_char_id: int | None = None
     next_attack_at: float = 0.0
+    # Enmity per character id.  ``enmity`` is the combined CE + VE total the target
+    # picker reads; ``enmity_ve`` is the volatile half, which decays and is the part that
+    # lets a tank lose the monster again.  The first source of hate on a mob also gets
+    # retail's 200 CE + 900 VE claim bonus, which is why a single spell pulls.
+    enmity: dict[int, int] = field(default_factory=dict)
+    enmity_ve: dict[int, int] = field(default_factory=dict)
+    enmity_decay_at: float = 0.0
     last_move_at: float = 0.0
     roam_target: tuple[float, float] | None = None
     roam_pause_until: float = 0.0
@@ -86,12 +103,19 @@ class ZoneEntity:
     def is_mob(self) -> bool:
         return self.kind == "mob"
 
+    def is_trust(self) -> bool:
+        return self.kind == "trust"
+
     def reset_mob(self, now: float) -> None:
         self.alive = True
         self.hp = self.hp_max
         self.mp = self.mp_max
         self.x, self.y, self.z = self.spawn_x, self.spawn_y, self.spawn_z
         self.engaged_char_id = None
+        self.claim_char_id = None
+        self.enmity.clear()
+        self.enmity_ve.clear()
+        self.enmity_decay_at = 0.0
         self.animation = 0
         self.next_attack_at = 0.0
         self.last_move_at = now
@@ -152,5 +176,36 @@ def mob_from_row(row: dict, targid: int, rng: random.Random | None = None) -> Zo
         respawn_seconds=int(row["respawn_seconds"] or row["template_respawn"] or 30),
         behavior=str(row["behavior"] or "roam"),
         spawn_x=float(row["pos_x"]), spawn_y=float(row["pos_y"]), spawn_z=float(row["pos_z"]),
+        last_move_at=0.0,
+    )
+
+
+def trust_from_row(row: dict, targid: int, zone: int, owner_char_id: int,
+                   level: int) -> ZoneEntity:
+    """One alter ego from the factual ``trusts`` row.
+
+    The look block is the client's 20-byte NPC model (size, model id, then eight
+    equipment models).  Every Trust in the imported data is a fixed-model NPC, so the
+    second uint16 is the model id the spawn packet carries.  Level tracks the owner's
+    main job, as retail does; HP is a compact stand-in until a Trust has its own sheet.
+    """
+    level = max(1, int(level))
+    look = bytes.fromhex(row.get("look_hex") or "")
+    if len(look) < 20:
+        look = bytes(20)
+    model = int(row.get("model") or int.from_bytes(look[2:4], "little"))
+    delay = max(1, int(row.get("delay") or 240))
+    return ZoneEntity(
+        kind="trust", id=0x01000000 | (int(zone) << 12) | (int(targid) & 0xFFF),
+        targid=int(targid) & 0xFFF, zone=int(zone), name=str(row["name"]),
+        model=model, size=0, look=look, speed=62, animation=0,
+        triggerable=False, widescan=True, name_prefix=int(row.get("name_prefix") or 0),
+        namevis=0, level=level, hp_max=max(1, level * 30 + 200),
+        hp=max(1, level * 30 + 200), mp_max=max(0, level * 4),
+        mp=max(0, level * 4), attack_delay_ms=max(1500, delay * 1000 // 60),
+        owner_char_id=int(owner_char_id), trust_spell=int(row["spell_id"]),
+        job=int(row.get("job") or 1), sub_job=int(row.get("sub_job") or 0),
+        damage_mult=int(row.get("damage_mult") or 100),
+        passive=bool(int(row.get("passive") or 0)),
         last_move_at=0.0,
     )

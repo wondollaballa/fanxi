@@ -45,6 +45,54 @@ export type PhaseFocusSets = {
 
 export type FocusMode = "auto" | "dt" | "pdt" | "mdt" | "eva" | "meva";
 
+export type SpellCategoryKey =
+  | "enfeebles_macc"
+  | "enfeebles_duration"
+  | "buff_potency"
+  | "buff_duration"
+  | "helix_magic";
+
+export type SpellCategory = {
+  key: SpellCategoryKey;
+  label: string;
+  detail: string;
+  /** The other answer to the same question: a spell gets one set, not two. */
+  alternate?: SpellCategoryKey;
+};
+
+/** The spell groups the host classifies (`job_spells.categories`) and the Spells panel edits. */
+export const SPELL_CATEGORIES: SpellCategory[] = [
+  {
+    key: "enfeebles_macc",
+    label: "Enfeebles · Macc",
+    detail: "Magic Accuracy set for every Enfeebling Magic spell.",
+    alternate: "enfeebles_duration",
+  },
+  {
+    key: "enfeebles_duration",
+    label: "Enfeebles · Duration",
+    detail: "Duration set for every Enfeebling Magic spell.",
+    alternate: "enfeebles_macc",
+  },
+  {
+    key: "buff_potency",
+    label: "Buff potency",
+    detail: "Potency set for every Enhancing Magic spell.",
+    alternate: "buff_duration",
+  },
+  {
+    key: "buff_duration",
+    label: "Buff duration",
+    detail: "Duration set for every Enhancing Magic spell.",
+    alternate: "buff_potency",
+  },
+  {
+    key: "helix_magic",
+    label: "Helix magic",
+    detail: "Set for every helix spell the job pair can cast.",
+  },
+];
+
 export type PhaseConfig = {
   engaged: string;
   idleTown: string;
@@ -65,6 +113,8 @@ export type PhaseConfig = {
   jaOverrides: Record<string, string>;
   /** spell id (string) -> set path */
   spellOverrides: Record<string, string>;
+  /** spell category key -> one set for every spell the host puts in that category */
+  spellCategoryOverrides: Record<string, string>;
 };
 
 export const FOCUS_MODES: { value: FocusMode; label: string }[] = [
@@ -93,6 +143,7 @@ export const DEFAULT_PHASE_CONFIG: PhaseConfig = {
   wsOverrides: {},
   jaOverrides: {},
   spellOverrides: {},
+  spellCategoryOverrides: {},
 };
 
 function text(value: unknown, fallback = ""): string {
@@ -150,6 +201,7 @@ export function loadPhaseConfig(): PhaseConfig {
     wsOverrides: objectMap(saved.wsOverrides),
     jaOverrides: objectMap(saved.jaOverrides),
     spellOverrides: objectMap(saved.spellOverrides),
+    spellCategoryOverrides: objectMap(saved.spellCategoryOverrides),
   };
 }
 
@@ -179,6 +231,7 @@ export function phaseOptions(config: PhaseConfig): Record<string, unknown> {
     ws_overrides: config.wsOverrides,
     ja_overrides: config.jaOverrides,
     spell_overrides: config.spellOverrides,
+    spell_category_overrides: config.spellCategoryOverrides,
   };
 }
 

@@ -12,13 +12,27 @@ with every **Rank 30** augment row. Each family climbs three tiers:
 | Mercy | Mercy Armor Set | Grace Armor Set | **Clemency Armor Set** | RNG / SAM / DRG / COR |
 
 All 25 top-tier pieces are granted at Rank 30 to characters 1 and 2
-(Onedough/Twodough) by `database/migrations/0099_limbus_r30.sql`.
+(Onedough/Twodough) by `database/migrations/0099_limbus_r30.sql`, and
+migration `0104_limbus_rp30.sql` re-stamps any copy already in a bag.
 The same data drives the script that writes that migration and this page:
 `data/limbus_r30.json` and `tools/gen_limbus_r30.py`.
 
-Augments are chosen at the Limbus furnaces with a *Jewel of Des.*; a piece
-picks **one** of the four numbered rows below, and Rank 30 is the maximum
-rank for each.
+Every augment line on every piece is already at its Rank 30 value. The four
+numbered columns are the four augment lines a piece carries, not a choice:
+each line unlocks at a different rank, and all four are live at 30. The
+item exdata also records 55,800 RP, the curve-B total for rank 30 (rank 1
+costs 1,600), so the client reads the block at rank 30, not rank 0.
+
+Each piece carries its own client augment **bundle** index. The indices
+come from the client's bundle table (LandSandBoat's
+`xi.data.augments.bundles`, parsed from the MNC2 data); every one was
+matched to the Rank 30 row above by content. `!rp30` re-stamps the
+pieces in a character's bags, and `!r30 <piece>` prints the rows.
+
+The rows are **not only tooltips**: `FanxiService.equipped_mods()` joins each
+equipped piece back to its inventory copy, `augment_stats` decodes the rank-30
+block and adds the piece's four rows, so Revelation's five `"Double Attack"+7%`
+style rows (34% total) reach the attack round's per-hand multi-attack roll.
 
 ## Duty Armor Set
 
@@ -26,13 +40,13 @@ rank for each.
 - **Jobs:** MNK / THF / BST / PUP / DNC
 - **Item level:** 119, Superior 5
 
-| Piece | Slot | Item ID | [1] | [2] | [3] | [4] |
-| --- | --- | --- | --- | --- | --- | --- |
-| Duty Crown | head | 24167 | Accuracy+30 Mag. Acc+30 | "Store TP"+7 | "Triple Attack"+4% | Pet: Accuracy+30 Mag. Acc+30 |
-| Duty Cyclas | body | 24170 | Accuracy+30 Mag. Acc+30 | "Store TP"+8 | "Triple Attack"+5% | Pet: Accuracy+30 Mag. Acc+30 |
-| Duty Gauntlets | hands | 24173 | Accuracy+30 Mag. Acc+30 | "Store TP"+6 | "Triple Attack"+3% | Pet: Accuracy+30 Mag. Acc+30 |
-| Duty Flanchard | legs | 24176 | Accuracy+30 Mag. Acc+30 | "Store TP"+7 | "Triple Attack"+4% | Pet: Accuracy+30 Mag. Acc+30 |
-| Duty Sollerets | feet | 24179 | Accuracy+30 Mag. Acc+30 | "Store TP"+6 | "Triple Attack"+3% | Pet: Accuracy+30 Mag. Acc+30 |
+| Piece | Slot | Item ID | Bundle | [1] | [2] | [3] | [4] |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Duty Crown | head | 24167 | 477 | Accuracy+30 Mag. Acc+30 | "Store TP"+7 | "Triple Attack"+4% | Pet: Accuracy+30 Mag. Acc+30 |
+| Duty Cyclas | body | 24170 | 478 | Accuracy+30 Mag. Acc+30 | "Store TP"+8 | "Triple Attack"+5% | Pet: Accuracy+30 Mag. Acc+30 |
+| Duty Gauntlets | hands | 24173 | 479 | Accuracy+30 Mag. Acc+30 | "Store TP"+6 | "Triple Attack"+3% | Pet: Accuracy+30 Mag. Acc+30 |
+| Duty Flanchard | legs | 24176 | 480 | Accuracy+30 Mag. Acc+30 | "Store TP"+7 | "Triple Attack"+4% | Pet: Accuracy+30 Mag. Acc+30 |
+| Duty Sollerets | feet | 24179 | 481 | Accuracy+30 Mag. Acc+30 | "Store TP"+6 | "Triple Attack"+3% | Pet: Accuracy+30 Mag. Acc+30 |
 
 ## Revelation Armor Set
 
@@ -40,13 +54,13 @@ rank for each.
 - **Jobs:** WAR / BRD / NIN
 - **Item level:** 119, Superior 5
 
-| Piece | Slot | Item ID | [1] | [2] | [3] | [4] |
-| --- | --- | --- | --- | --- | --- | --- |
-| Revelation Masque | head | 24122 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+7% | Physical Damage Limit+6% |  |
-| Revelation Plate. | body | 24125 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+8% | Physical Damage Limit+7% |  |
-| Revelation Gaunt. | hands | 24128 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+6% | Physical Damage Limit+5% |  |
-| Revelation Brais | legs | 24131 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+7% | Physical Damage Limit+6% |  |
-| Revelation Sab. | feet | 24134 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+6% | Physical Damage Limit+5% |  |
+| Piece | Slot | Item ID | Bundle | [1] | [2] | [3] | [4] |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Revelation Masque | head | 24122 | 472 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+7% | Physical Damage Limit+6% |  |
+| Revelation Plate. | body | 24125 | 473 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+8% | Physical Damage Limit+7% |  |
+| Revelation Gaunt. | hands | 24128 | 474 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+6% | Physical Damage Limit+5% |  |
+| Revelation Brais | legs | 24131 | 475 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+7% | Physical Damage Limit+6% |  |
+| Revelation Sab. | feet | 24134 | 476 | Accuracy+30 Ranged Accuracy+30 Mag. Acc+30 | "Double Attack"+6% | Physical Damage Limit+5% |  |
 
 ## Sworn Armor Set
 
@@ -54,13 +68,13 @@ rank for each.
 - **Jobs:** WHM / RDM / PLD / DRK / BLU / RUN
 - **Item level:** 119, Superior 5
 
-| Piece | Slot | Item ID | [1] | [2] | [3] | [4] |
-| --- | --- | --- | --- | --- | --- | --- |
-| Sworn Crown | head | 24137 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+6% | "Phalanx" received +4 |  |
-| Sworn Platemail | body | 24140 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+8% | "Phalanx" received +6 |  |
-| Sworn Gauntlets | hands | 24143 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+7% | "Phalanx" received +5 |  |
-| Sworn Brais | legs | 24146 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+6% | "Phalanx" received +4 |  |
-| Sworn Sabatons | feet | 24149 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+7% | "Phalanx" received +5 |  |
+| Piece | Slot | Item ID | Bundle | [1] | [2] | [3] | [4] |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Sworn Crown | head | 24137 | 487 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+6% | "Phalanx" received +4 |  |
+| Sworn Platemail | body | 24140 | 488 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+8% | "Phalanx" received +6 |  |
+| Sworn Gauntlets | hands | 24143 | 489 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+7% | "Phalanx" received +5 |  |
+| Sworn Brais | legs | 24146 | 490 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+6% | "Phalanx" received +4 |  |
+| Sworn Sabatons | feet | 24149 | 491 | Accuracy+30 Mag. Acc+30 | "Triple Attack"+7% | "Phalanx" received +5 |  |
 
 ## Indomitable Attire Set
 
@@ -68,13 +82,13 @@ rank for each.
 - **Jobs:** BLM / SMN / SCH / GEO
 - **Item level:** 119, Superior 5
 
-| Piece | Slot | Item ID | [1] | [2] | [3] | [4] |
-| --- | --- | --- | --- | --- | --- | --- |
-| Indom. Petasos | head | 24152 | Mag. Acc+30 | "Magic Atk. Bonus"+28 | "Blood Pact" damage+10 | Pet: Accuracy+30 Mag. Acc+30 |
-| Indomitable Coat | body | 24155 | Mag. Acc+30 | "Magic Atk. Bonus"+32 | "Blood Pact" damage+12 | Pet: Accuracy+30 Mag. Acc+30 |
-| Indom. Gloves | hands | 24158 | Mag. Acc+30 | "Magic Atk. Bonus"+30 | "Blood Pact" damage+11 | Pet: Accuracy+30 Mag. Acc+30 |
-| Indom. Tonban | legs | 24161 | Mag. Acc+30 | "Magic Atk. Bonus"+28 | "Blood Pact" damage+10 | Pet: Accuracy+30 Mag. Acc+30 |
-| Indom. Sabots | feet | 24164 | Mag. Acc+30 | "Magic Atk. Bonus"+30 | "Blood Pact" damage+11 | Pet: Accuracy+30 Mag. Acc+30 |
+| Piece | Slot | Item ID | Bundle | [1] | [2] | [3] | [4] |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Indom. Petasos | head | 24152 | 482 | Mag. Acc+30 | "Magic Atk. Bonus"+28 | "Blood Pact" damage+10 | Pet: Accuracy+30 Mag. Acc+30 |
+| Indomitable Coat | body | 24155 | 483 | Mag. Acc+30 | "Magic Atk. Bonus"+32 | "Blood Pact" damage+12 | Pet: Accuracy+30 Mag. Acc+30 |
+| Indom. Gloves | hands | 24158 | 484 | Mag. Acc+30 | "Magic Atk. Bonus"+30 | "Blood Pact" damage+11 | Pet: Accuracy+30 Mag. Acc+30 |
+| Indom. Tonban | legs | 24161 | 485 | Mag. Acc+30 | "Magic Atk. Bonus"+28 | "Blood Pact" damage+10 | Pet: Accuracy+30 Mag. Acc+30 |
+| Indom. Sabots | feet | 24164 | 486 | Mag. Acc+30 | "Magic Atk. Bonus"+30 | "Blood Pact" damage+11 | Pet: Accuracy+30 Mag. Acc+30 |
 
 ## Clemency Armor Set
 
@@ -82,13 +96,13 @@ rank for each.
 - **Jobs:** RNG / SAM / DRG / COR
 - **Item level:** 119, Superior 5
 
-| Piece | Slot | Item ID | [1] | [2] | [3] | [4] |
-| --- | --- | --- | --- | --- | --- | --- |
-| Clemen. Somen | head | 24182 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-8 | "Quadruple Attack"+4% | Pet: Accuracy+30 Mag. Acc.+30 |
-| Clemen. Hara. | body | 24185 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-10 | "Quadruple Attack"+6% | Pet: Accuracy+30 Mag. Acc.+30 |
-| Clemency Kote | hands | 24188 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-9 | "Quadruple Attack"+5% | Pet: Accuracy+30 Mag. Acc.+30 |
-| Clem. Haidate | legs | 24191 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-8 | "Quadruple Attack"+4% | Pet: Accuracy+30 Mag. Acc.+30 |
-| Clem. Sune-Ate | feet | 24194 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-9 | "Quadruple Attack"+5% | Pet: Accuracy+30 Mag. Acc.+30 |
+| Piece | Slot | Item ID | Bundle | [1] | [2] | [3] | [4] |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| Clemen. Somen | head | 24182 | 492 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-8 | "Quadruple Attack"+4% | Pet: Accuracy+30 Mag. Acc.+30 |
+| Clemen. Hara. | body | 24185 | 493 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-10 | "Quadruple Attack"+6% | Pet: Accuracy+30 Mag. Acc.+30 |
+| Clemency Kote | hands | 24188 | 494 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-9 | "Quadruple Attack"+5% | Pet: Accuracy+30 Mag. Acc.+30 |
+| Clem. Haidate | legs | 24191 | 495 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-8 | "Quadruple Attack"+4% | Pet: Accuracy+30 Mag. Acc.+30 |
+| Clem. Sune-Ate | feet | 24194 | 496 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-9 | "Quadruple Attack"+5% | Pet: Accuracy+30 Mag. Acc.+30 |
 
 ## Where they go in the libraries
 
@@ -107,8 +121,16 @@ suits, [tukaware.fc2.net](https://tukaware.fc2.net/blog-entry-547.html), and the
 - **Sworn (Trust)** is PLD/RUN fast-cast and tank gear (the *Phalanx received* row
   is the draw), RDM's enspell/FC set, and DRK's hybrid head and feet once Triple
   Attack unlocks past R15. WHM/BLU skip it.
-- **Indomitable (Bravery)** is rated below the casters' AF/relic pieces in every
-  slot; it ships here as a container, not as a default.
+- **Indomitable (Bravery)** is SCH's raw-nuke, enfeebling and fast-cast suit.
+  Every R30 piece carries Mag. Acc+42 and "Magic Atk. Bonus"+40 before the
+  augment rows, plus Magic Damage+22, native Fast Cast and 2-6% Damage taken; the
+  Rank 30 Mag. Acc+30 / "Magic Atk. Bonus"+28-32 rows take it to 72 M.Acc and
+  68-72 MAB a piece. SCH wears head/body/legs for free nukes and helix,
+  body/hands/legs for enfeebles, body/legs in fast cast, the full five in the
+  elemental M.Acc set and a five-piece `sets.idle.dt_indom`. Arbatel Loafers +3
+  stays in the free-nuke and helix feet ("Klimaform"+25 and Magic Burst Damage
+  II +5), Arbatel Bracers +3 stays in helix, and the Enhancing Magic and Healing
+  Magic sets are untouched.
 - **Clemency (Mercy)** is the weakest of the five -- Enmity- sits where Store TP
   would have been -- but its head and feet beat what SAM/DRG otherwise have, its
   Physical damage limit helps multi-hit weaponskills, and the accuracy row is a
@@ -117,8 +139,10 @@ suits, [tukaware.fc2.net](https://tukaware.fc2.net/blog-entry-547.html), and the
 What the suits do **not** replace: Nyame Path B stays the weaponskill set (flat WSD
 beats the new pieces for single-hit WS), Malignance/Sakpata's keep their Subtle Blow
 slots, and an unaugmented Limbus piece loses to R30 Odyssey gear -- the multi-attack
-and PDL only turn on past roughly Rank 15, which is why most players cherry-pick
-one or two slots per job instead of building all five.
+and PDL only turn on past roughly Rank 15, which is why most melee players cherry-pick
+one or two slots per job instead of building all five. The casters are the exception:
+for SCH every Indomitable piece is 72 M.Acc and 22 Magic Damage, so the Elemental
+Macc set takes all five, enfeebling and the damage sets take three, and fast cast two.
 
 `tools/gen_limbus_r30.py --lua` writes a `local limbus` build table and a
 `sets.Limbus` container into every library, then puts the pieces where the table
@@ -139,12 +163,23 @@ below says:
 | PLD | `sets.precast.FC` | head, body, hands, legs, feet | Sworn phalanx, R30 [3] |
 | RUN | `sets.precast.FC` | head, body, hands, legs, feet | Sworn phalanx, R30 [3] |
 | RDM | `sets.precast.FC` | head, body, hands, legs, feet | Sworn ta, R30 [2] |
+| SCH | `sets.midcast.Elemental Magic` | head, body, legs | Indomitable cast, R30 [2] |
+| SCH | `sets.midcast.Elemental Magic Macc` | head, body, hands, legs, feet | Indomitable cast, R30 [2] |
+| SCH | `sets.midcast.Helix` | head, body, legs | Indomitable cast, R30 [2] |
+| SCH | `sets.midcast.Enfeebling Magic` | body, hands, legs | Indomitable cast, R30 [2] |
+| SCH | `sets.precast.FC` | body, legs | Indomitable cast, R30 [2] |
+| SCH | `sets.idle.dt_indom` | head, body, hands, legs, feet | Indomitable cast, R30 [2] |
 | DRK | `sets.engaged.tp` | head, feet | Sworn ta, R30 [2] |
 | DRK | `sets.engaged.hybrid` | head, feet | Sworn ta, R30 [2] |
 | DRK | `sets.WS.Resolution` | head, feet | Sworn acc, R30 [1] |
 | DRK | `sets.WS.Torcleaver` | head, feet | Sworn acc, R30 [1] |
 | SAM | `sets.engaged.tp` | head, feet | Clemency tp, R30 [3] |
 | DRG | `sets.engaged.tp` | head, feet | Clemency tp, R30 [3] |
+
+On SCH the Magic Burst variant (`sets.midcast.Elemental Magic MB`) deliberately
+stays on Nyame Path C for its Magic Burst Damage II rows, and the max PDT/MDT
+idle sets stay on Nyame because its per-piece Damage taken (7-9%) is higher than
+Indomitable's (2-6%). The new `sets.idle.dt_indom` is the balanced DT build.
 
 Jobs not listed keep their defaults and only gain the `sets.Limbus` container;
 the five-piece copy in every variant carries the same augment choice so a set can
@@ -158,10 +193,19 @@ be worn as a unit.
 - The base stat lines are copied verbatim and turned into `item_mods` by the
   generator. Pet, avatar and wyvern rows are recorded here but not stored: the
   engine has no pet sheet yet, so nothing would read them.
-- The 24-byte exdata block says rank 30 / tier 3, but its augment bundle index
-  is still unknown (LandSandBoat has no Limbus augment table), so the client
-  cannot print the four rows on a tooltip. `!r30 <piece>` prints them in game,
-  the same way `!r30` covers Odyssey.
+- The 24-byte exdata block is rank 30 / tier 3 / 55,800 RP (curve B) with
+  the piece's own augment bundle index, so the client prints the four rows
+  on the tooltip. `!r30 <piece>` still prints them in chat, and `!rp30`
+  re-stamps every Limbus piece a character is carrying.
+- The bundle indices sit in the client table as 472-496: 477-481 Duty,
+  472-476 Revelation, 487-491 Sworn, 482-486 Indomitable and 492-496
+  Clemency. Bundles 458-471 are other Su5 entries this dataset does not grant.
+- The pieces carry the client's own armour models: Revelation MId 513, Sworn
+  514, Indomitable 515, Duty 516 and Clemency 517.  The raw grap model is the
+  slot base (0x1000 head, 0x2000 body, 0x3000 hands, 0x4000 legs, 0x5000 feet)
+  plus that MId.  The values come from xi-tools' `mv/lists/characters.json`;
+  migration 107 writes them, and `tools/item_models.json` keeps them for new
+  grants and cloned characters.
 - Sources: https://www.bg-wiki.com/ffxi/Justice_Armor_Set, https://www.bg-wiki.com/ffxi/Hope_Armor_Set, https://www.bg-wiki.com/ffxi/Trust_Armor_Set, https://www.bg-wiki.com/ffxi/Bravery_Attire_Set, https://www.bg-wiki.com/ffxi/Mercy_Armor_Set
 
 ## Client data
@@ -171,5 +215,5 @@ A 2025-07-03 client (client version `30250704_0`, the build `meta/builds.json`
 labels `2025-07-03`) has ids 24122-24194 unused, so it draws the null record --
 no name, "All jobs", `Lv.127` -- no matter what the server sends. Check a folder
 with `tools/newbuild.py identify --game <folder>`; `tools/prepare.py` only accepts
-a build `meta/builds.json` lists. The 2026-10-05 install used to check this was
-client version `30261006_0` and is not in that list yet.
+a build `meta/builds.json` lists. The build this page was checked against is the
+2026-10-05 install, client version `30261006_0`, which `meta/builds.json` lists.

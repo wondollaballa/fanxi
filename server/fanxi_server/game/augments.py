@@ -23,11 +23,11 @@ This layout is confirmed against a retail rank-25 JSE neck,
 ``03 83 00 00 78 2D 64 03 CC 00 00 00``: the bitfield decodes to type 0,
 rank 25, max tier 2 (25), and bundle 204 -- exactly that item's build.
 
-The one value Fanxi does not have yet is the per-item *augment index*: retail's
-server carries it in its item data, LandSandBoat leaves Odyssey augmentation
-unimplemented, and the client's bundle table lives in a DAT file Fanxi has not
-parsed.  Until the index is known the block is well formed but names no effects,
-so the client has nothing to print.
+The per-item *augment index* is data, not code: Odyssey keeps its four Nyame
+paths and the other sets' rows in ``data/odyssey_r30.json``, Limbus keeps each
+piece's client bundle in ``data/limbus_r30.json`` (472-496, matched to the Rank
+30 rows by content).  The block is well formed but names no effects when the
+index is zero, so the client has nothing to print.
 """
 
 from __future__ import annotations

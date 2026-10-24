@@ -10,7 +10,8 @@
  *   xi.addons  load, unload, reload, list
  *   xi.fs      host paths, listing, folders
  *   xi.game    the game's data (game_lua.c), xi.res its resources (res_lua.c)
- *   xi.log, xi.clock, xi.time, xi.paths, xi.sjis_to_utf8 / utf8_to_sjis, xi.open_url */
+ *   xi.log, xi.clock, xi.time, xi.fx (a renderer setting), xi.paths, xi.sjis_to_utf8 / utf8_to_sjis,
+ *   xi.open_url */
 #include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -21,6 +22,7 @@
 
 #include "build.h"
 #include "d3d8.h"
+#include "gfx.h"
 #include "gthread.h"
 #include "gwin.h"
 #include "host.h"
@@ -915,6 +917,17 @@ static int x_time(lua_State* L)
     return 1;
 }
 
+/* native.fx(key [, value]): a scene-effect setting of the renderer (gfx_fx_get / gfx_fx_set),
+ * e.g. "fps" for the frame-rate overlay. With no value it returns the setting now. */
+static int x_fx(lua_State* L)
+{
+    const char* key = luaL_checkstring(L, 1);
+    if (!lua_isnoneornil(L, 2))
+        gfx_fx_set(key, (float)luaL_checknumber(L, 2));
+    lua_pushnumber(L, (double)gfx_fx_get(key));
+    return 1;
+}
+
 /* A web page in the player's browser, as an addon asks. Never from the harness: surveys run every
  * addon's commands, and a wiki link would open the browser each time. */
 int xi_open_url(const char* url)
@@ -1041,7 +1054,7 @@ static int x_embedded(lua_State* L)
 }
 
 static const luaL_Reg MISC[] = { { "log", x_log }, { "embedded", x_embedded }, { "error", x_error }, { "listen", x_listen }, { "clock", x_clock }, { "time", x_time },
-    { "open_url", x_open_url }, { "sjis_to_utf8", x_sjis_to_utf8 }, { "utf8_to_sjis", x_utf8_to_sjis }, { NULL, NULL } };
+    { "fx", x_fx }, { "open_url", x_open_url }, { "sjis_to_utf8", x_sjis_to_utf8 }, { "utf8_to_sjis", x_utf8_to_sjis }, { NULL, NULL } };
 
 static void sub(lua_State* L, const char* name, const luaL_Reg* fns)
 {

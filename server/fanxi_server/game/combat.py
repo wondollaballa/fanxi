@@ -79,6 +79,9 @@ HIT_RATE_CAP_TWO_HANDED = 0.95
 HIT_RATE_CAP_MOB = 0.95
 HIT_RATE_FLOOR_PC = 0.20
 
+# One attack round -- both hands and every multi-attack proc -- is capped at 8 hits.
+MAX_ATTACKS_PER_ROUND = 8
+
 # Shield size -> base block rate, and how much of a blocked hit the shield eats.
 # The rate table is retail's; the absorption table is an approximation (retail's own
 # reference server leaves shield absorption at zero and only flags the block).
@@ -403,8 +406,13 @@ def hit_rate(*, accuracy: int, evasion: int, attacker_level: int, target_level: 
 
 
 def crit_rate(*, attacker_dex: int, target_agi: int, is_pc: bool,
-              crit_mod: int = 0, target_crit_evasion: int = 0) -> float:
-    """Chance that a swing crits.  PCs get the dDEX table; mobs a flat 5%."""
+              crit_mod: int = 0, target_crit_evasion: int = 0,
+              crit_bonus: float = 0.0) -> float:
+    """Chance that a swing crits.  PCs get the dDEX table; mobs a flat 5%.
+
+    ``crit_bonus`` is a fraction for effects the caller has already resolved, such as
+    Fencer's critical-hit rate on a weapon skill; it is added before the 5% floor.
+    """
     base = 0.05
     if not is_pc:
         return base
@@ -425,7 +433,8 @@ def crit_rate(*, attacker_dex: int, target_agi: int, is_pc: bool,
     else:
         bonus = 0.0
 
-    rate = base + bonus + int(crit_mod) / 10000 - int(target_crit_evasion) / 10000
+    rate = (base + bonus + int(crit_mod) / 10000
+            - int(target_crit_evasion) / 10000 + float(crit_bonus))
     return max(0.05, min(1.0, rate))
 
 
@@ -444,6 +453,25 @@ def magic_resist(*, skill: int, caster_int: int, mods: dict[int, int],
     return max(0.5, min(1.0, 0.75 + (accuracy - evasion) / 1000.0))
 
 
+def _magic_finish(raw: float, *, skill: int, caster_int: int, mods: dict[int, int],
+                  target_mods: dict[int, int], target_level: int) -> int:
+    """The tail every magic-damage formula shares.
+
+    ``Magic Damage`` is added to the spell's base before Magic Atk. Bonus, and the bonus
+    is the reference server's ratio ``(100 + MAB) / (100 + MDB)`` -- not a multiply by
+    MAB followed by a subtract of MDB.  Elemental affinity (``Fire MAB`` and friends) is
+    not loaded for the reforged sets, so only the generic bonus is read.  The Magic
+    Accuracy resist multiplier is still Fanxi's deterministic approximation.
+    """
+    base = float(raw) + int(mods.get(mod.MAGIC_DAMAGE, 0))
+    mab = max(-100, int(mods.get(mod.MATT, 0)))
+    mdb = max(-100, int(target_mods.get(mod.MDEF, 0)))
+    adjusted = base * (100 + mab) / max(1, 100 + mdb)
+    resist = magic_resist(skill=skill, caster_int=caster_int, mods=mods,
+                          target_level=target_level, target_mods=target_mods)
+    return max(1, int(adjusted * resist))
+
+
 def magic_damage(*, base: int, multiplier: float, caster_int: int, target_int: int,
                  skill: int, mods: dict[int, int], target_mods: dict[int, int],
                  target_level: int) -> int:
@@ -452,18 +480,42 @@ def magic_damage(*, base: int, multiplier: float, caster_int: int, target_int: i
     ``(base x multiplier + dINT x 2) x (1 + Magic Atk. Bonus) + Magic Damage``, then the
     Magic Accuracy resist multiplier and the target's ``Magic Def. Bonus``.  A spell with
     no base (Drain, Aspir) is handled by its own path before this is called.
-
-    Elemental affinity (``Fire MAB`` and friends) is not loaded for the reforged sets, so
-    only the generic ``Magic Atk. Bonus`` is read here.
     """
     dint = max(-100, min(200, int(caster_int) - int(target_int)))
     raw = int(base) * float(multiplier) + max(0, dint) * 2
-    mab = max(-100, int(mods.get(mod.MATT, 0)))
-    raw = raw * (1.0 + mab / 100.0) + int(mods.get(mod.MAGIC_DAMAGE, 0))
-    resist = magic_resist(skill=skill, caster_int=caster_int, mods=mods,
-                          target_level=target_level, target_mods=target_mods)
-    mdef = max(0, min(80, int(target_mods.get(mod.MDEF, 0))))
-    return max(1, int(raw * resist * (1.0 - mdef / 100.0)))
+    return _magic_finish(raw, skill=skill, caster_int=caster_int, mods=mods,
+                         target_mods=target_mods, target_level=target_level)
+
+
+def helix_damage(*, base: int, multiplier: float, caster_int: int, target_int: int,
+                 skill: int, mods: dict[int, int], target_mods: dict[int, int],
+                 target_level: int) -> int:
+    """The opening hit of a Helix spell.
+
+    A Helix is a nuke with its own stat curve: BG-wiki's tests put it at ``base + dINT``
+    (25 + 38 = 63 at level 99), with the slope halving after 100 dINT (LandSandBoat's
+    ``M100 = 0.5``).  The generic ``dINT x 2`` term would nearly double every Helix.
+    Magic Atk. Bonus, flat Magic Damage, Magic Accuracy and Magic Def. Bonus apply as
+    they do to any other nuke.  The spell's data already carries base 25/75 and
+    multiplier 1.0, which is the helix V/M from retail.
+    """
+    dint = max(0, min(200, int(caster_int) - int(target_int)))
+    stat = float(dint) if dint <= 100 else 100.0 + (dint - 100) / 2.0
+    raw = int(base) * float(multiplier) + stat
+    return _magic_finish(raw, skill=skill, caster_int=caster_int, mods=mods,
+                         target_mods=target_mods, target_level=target_level)
+
+
+def dia_damage(*, base: int, caster_mnd: int, target_mnd: int) -> int:
+    """The opening hit of a Dia or Diaga spell.
+
+    Dia is not an elemental nuke: its data says base 2..23 with a zero stat multiplier, and
+    retail gives it only 1-5 HP per three-second tick afterwards.  MND adds a little to the
+    opening hit; Magic Attack Bonus and "Magic Damage" deliberately do not, or a level 99
+    mage in Hvergelmir gear turns a 2-base enfeebling into a 1,400-damage nuke.
+    """
+    bonus = min(50, max(0, int(caster_mnd) - int(target_mnd)) // 8)
+    return max(1, int(base) + bonus)
 
 
 def cast_time(milliseconds: int, fast_cast: int) -> int:
@@ -475,6 +527,60 @@ def cast_time(milliseconds: int, fast_cast: int) -> int:
 def tp_gain(tenths: int, store_tp: int) -> int:
     """TP from a landed hit after Store TP, in tenths."""
     return max(0, int(tenths) * (100 + max(0, int(store_tp))) // 100)
+
+
+def tp_delay(delay: int, *, dual_wield: int = 0) -> int:
+    """The delay one hit's TP return is calculated from.
+
+    Dual Wield halves each hand's own base delay after its reduction, not the round's
+    averaged delay: the main hand and the off hand keep their separate TP returns.
+    """
+    delay = max(1, int(delay))
+    if dual_wield:
+        reduction = max(0, min(100, int(dual_wield)))
+        delay = max(1, int(delay * (100 - reduction) / 100 / 2))
+    return max(1, delay)
+
+
+def tp_return(delay: int) -> int:
+    """TP from one landed hit, in tenths, on retail's current curve.
+
+    This is LandSandBoat's ``xi.combat.tp.calculateTPReturn`` (PC branch), not the old
+    ``(delay + 480) * 0.0085`` approximation: the curve is piecewise and flattens at
+    higher delays, which is why a dual-wielded pair does not lose as much TP as halving
+    the old formula suggests.
+    """
+    delay = int(delay)
+    if delay > 900:
+        tp = 173 + (delay - 900) * 28 / 360
+    elif delay > 720:
+        tp = 161 + (delay - 720) * 24 / 360
+    elif delay > 630:
+        tp = 154 + (delay - 630) * 28 / 360
+    elif delay > 540:
+        tp = 149 + (delay - 540) * 20 / 360
+    elif delay > 180:
+        tp = 61 + (delay - 180) * 88 / 360
+    else:
+        tp = 61 + (delay - 180) * 63 / 360
+    return max(0, int(tp))
+
+
+def multi_attack_hits(rng: random.Random | None = None, *, double: int = 0,
+                      triple: int = 0, quadruple: int = 0) -> int:
+    """How many hits one hand gets before its accuracy rolls.
+
+    Retail checks the multi-attacks in descending order and stops at the first proc:
+    Quadruple (4 hits) > Triple (3) > Double (2).  The winning proc replaces the lower
+    checks for that hand, which is why a Double Attack proc "overwrites" a Mythic
+    aftermath's Triple Attack chance.  No proc is the single base hit.
+    """
+    rng = rng or random
+    for chance, hits in ((quadruple, 4), (triple, 3), (double, 2)):
+        chance = max(0, min(100, int(chance or 0)))
+        if chance and rng.random() * 100.0 < chance:
+            return hits
+    return 1
 
 
 # --- damage taken ---------------------------------------------------------------------------
@@ -561,8 +667,16 @@ class Hit:
 
 def melee(attacker: Fighter, target: Fighter, *, zone: int = 0,
           rng: random.Random | None = None, attack_multiplier: float = 1.0,
-          ftp: float = 1.0) -> Hit:
-    """Resolve one physical swing, from hit check to damage-taken gear."""
+          ftp: float = 1.0, crit_bonus: float = 0.0, wsc: int = 0,
+          ignored_defense: float = 0.0) -> Hit:
+    """Resolve one physical swing, from hit check to damage-taken gear.
+
+    ``crit_bonus`` is an extra critical-hit rate (a fraction) for the caller's own
+    effects; a weapon skill passes Fencer's rate and its own "critical hit rate varies
+    with TP" here.  ``wsc`` is a weapon skill's secondary-attribute bonus, added to the
+    weapon damage and fSTR before pDIF.  ``ignored_defense`` is the fraction of the
+    target's Defense the skill ignores (Blade: Kamu's 25%, for example).
+    """
     rng = rng or random
     corrected = level_corrected(zone)
 
@@ -578,10 +692,14 @@ def melee(attacker: Fighter, target: Fighter, *, zone: int = 0,
         attacker_dex=attacker.dexterity, target_agi=target.agility,
         is_pc=attacker.is_pc,
         crit_mod=attacker.mods.get(mod.CRIT_HIT_RATE, 0),
-        target_crit_evasion=target.mods.get(mod.CRITICAL_HIT_EVASION, 0))
+        target_crit_evasion=target.mods.get(mod.CRITICAL_HIT_EVASION, 0),
+        crit_bonus=crit_bonus)
 
+    defense = int(target.defense)
+    if ignored_defense:
+        defense = max(1, int(defense * (1.0 - max(0.0, min(1.0, float(ignored_defense))))))
     multiplier = pdif(
-        attack=int(attacker.attack * attack_multiplier), defense=target.defense,
+        attack=int(attacker.attack * attack_multiplier), defense=defense,
         weapon_skill=attacker.weapon_skill, is_critical=critical,
         attacker_level=attacker.level, target_level=target.level,
         is_pc=attacker.is_pc, corrected=corrected,
@@ -591,7 +709,7 @@ def melee(attacker: Fighter, target: Fighter, *, zone: int = 0,
 
     strength_term = fstr(attacker.strength, target.vitality, attacker.weapon_rank,
                          is_mob=not attacker.is_pc, level=attacker.level)
-    base = max(0, attacker.weapon_dmg + strength_term)
+    base = max(0, attacker.weapon_dmg + strength_term + int(wsc))
     raw = int(base * multiplier * ftp)
 
     if critical:

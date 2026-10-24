@@ -70,6 +70,12 @@ class ReforgedItemDataTest(unittest.TestCase):
     def test_percent_hp_modifier_is_kept(self):
         self.assertEqual(self.mods(26366)[mod.HPP], 10)  # Plat. Mog. Belt: HP+10%
 
+    def test_regen_and_enhancing_duration_gear_has_its_mods(self):
+        self.assertEqual(self.mods(23573)[mod.PERPETUANCE], 6500)   # Arbatel Bracers +3
+        self.assertEqual(self.mods(26265)[mod.REGEN_DURATION], 15)  # Lugh's Cape
+        self.assertEqual(self.mods(23439)[mod.REGEN_MULTIPLIER], 25)  # Arbatel Bonnet +3
+        self.assertEqual(self.mods(23982)[mod.ENH_MAGIC_DURATION], 12)  # Pedagogy Gown +4
+
     def test_placeholder_race_rows_are_gone(self):
         self.assertIsNone(self.db.one(
             "SELECT 1 FROM item_mods WHERE item_id = ? AND mod_id = ?", (23913, 276)))
@@ -110,6 +116,13 @@ class PercentMaximumTest(unittest.TestCase):
         sheet = stats.build_character(character, {mod.MP: 50, mod.MPP: 20}, {})
         self.assertEqual(sheet.max_mp, (base + 50) * 120 // 100)
 
+    def test_food_percent_bonus_is_capped(self):
+        mods = {mod.FOOD_ATT_PERCENT: 23, mod.FOOD_ATT_CAP: 150}
+        self.assertEqual(
+            stats._food_percent(100, mods, mod.FOOD_ATT_PERCENT, mod.FOOD_ATT_CAP), 23)
+        self.assertEqual(
+            stats._food_percent(1000, mods, mod.FOOD_ATT_PERCENT, mod.FOOD_ATT_CAP), 150)
+
 
 class DescriptionParserTest(unittest.TestCase):
     """The parser reads the client's stat line, not a hand-maintained table."""
@@ -138,6 +151,25 @@ class DescriptionParserTest(unittest.TestCase):
         table = dict(mods)
         self.assertEqual(table[mod.ACC], 50)
         self.assertNotIn(mod.ATT, table)  # the pet's Attack is not the player's
+
+    def test_regen_duration_and_perpetuance_lines(self):
+        text = ('[Hands] All Races DEF:112 "Perpetuance"+65% '
+                '"Regen" effect duration +15 Enhancing magic duration +20% LV 99 SCH')
+        mods, _skills, leftover = reforged.parse_description(text)
+        table = dict(mods)
+        self.assertEqual(table[mod.PERPETUANCE], 6500)
+        self.assertEqual(table[mod.REGEN_DURATION], 15)
+        self.assertEqual(table[mod.ENH_MAGIC_DURATION], 20)
+        self.assertFalse(reforged.looks_like_stat(leftover))
+
+    def test_regen_potency_and_short_duration_lines(self):
+        text = ('[Head] All Races DEF:100 "Regen" potency +25% '
+                '"Regen" duration +27 LV 99 SCH')
+        mods, _skills, leftover = reforged.parse_description(text)
+        table = dict(mods)
+        self.assertEqual(table[mod.REGEN_MULTIPLIER], 25)
+        self.assertEqual(table[mod.REGEN_DURATION], 27)
+        self.assertFalse(reforged.looks_like_stat(leftover))
 
 
 if __name__ == "__main__":

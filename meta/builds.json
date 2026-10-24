@@ -965,9 +965,7 @@
       "addresses": {
         "chars_ptr": "0x104dd500",
         "present_site": "0x100035cb",
-        "ability_list": "0x106323a8",
-        "ability_list_commands": "0x160",
-        "ability_list_count": "0x1760"
+        "ability_list": "0x106323a8"
       },
       "crt": {},
       "hooks": {},

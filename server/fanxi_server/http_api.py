@@ -18,7 +18,8 @@ from urllib.parse import parse_qs, urlsplit
 from . import __version__
 from .config import Config
 from .security import ValidationError, safe_equal
-from .service import ApiError, FanxiService
+from .game import augment_gear
+from .service import ApiError, FanxiService, GIL_MAX
 
 log = logging.getLogger("fanxi.http")
 MAX_BODY = 64 * 1024
@@ -94,6 +95,23 @@ class Api:
         route("POST", r"/api/v1/characters")(self.create_character)
         route("PATCH", r"/api/v1/characters/(?P<character_id>\d+)")(self.patch_character)
         route("PATCH", r"/api/v1/characters/(?P<character_id>\d+)/design")(self.patch_character_design)
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/data")(self.character_data)
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/warps")(self.character_warps)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/warps")(self.character_warp_mark)
+        route("PATCH", r"/api/v1/characters/(?P<character_id>\d+)/warps/(?P<slot>\d+)")(
+            self.character_warp_update)
+        route("DELETE", r"/api/v1/characters/(?P<character_id>\d+)/warps/(?P<slot>\d+)")(
+            self.character_warp_delete)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/merits")(self.character_merits)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/progress")(self.character_progress)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/job-points")(self.character_job_points)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/mastery-rank")(self.character_mastery_rank)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/gil")(self.character_gil)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/home-points")(self.character_home_points)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/key-items")(self.character_key_items)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/currencies")(self.character_currencies)
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/items/search")(self.character_item_search)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/armory")(self.character_armory)
         route("POST", r"/api/v1/launch")(self.launch)
         # server-owned sub-accounts; the main account's token is the only key
         route("GET", r"/api/v1/accounts/sub")(self.sub_accounts)
@@ -243,11 +261,220 @@ class Api:
         return json_response(200, {"character": character})
 
     def patch_character_design(self, request: Request) -> Response:
-        assert request.account
-        character = self.service.save_design_for_account(
-            request.account["id"], int(request.params["character_id"]), request.json()
-        )
+        # The Design page is tenant-scoped too: a main account may repaint the boxes it owns.
+        row = self._data_character(request)
+        character = self.service.save_design(int(row["id"]), request.json())
         return json_response(200, {"character": character})
+
+    # --- character data page -------------------------------------------------------------------
+    def _data_character(self, request: Request) -> dict:
+        """A character this account may manage, including its sub-account characters.
+
+        The Data and Design pages follow the launcher's tenant bar, so they are one page for the
+        whole team: a main account's token manages its own characters and the boxes it owns.
+        Other accounts still get a plain 404, so character ids are not enumerable.
+        """
+        assert request.account
+        row = self.service.character(int(request.params["character_id"]))
+        if (request.account.get("role") != "admin"
+                and not self.service.account_can_manage_character(
+                    int(request.account["id"]), int(row["id"]))):
+            raise ApiError(404, "not_found", "character not found")
+        return row
+
+    def character_data(self, request: Request) -> Response:
+        row = self._data_character(request)
+        return json_response(200, self.service.character_data(int(row["id"])))
+
+    # --- /!warp --------------------------------------------------------------------------------
+    def _warp_character(self, request: Request) -> dict:
+        """A character this account may manage, including its sub-account characters.
+
+        Warps are per character, but the Warps page is one page for the player's whole team:
+        a main account's token edits the marks of the boxes it owns as well.  Other accounts
+        still get a plain 404, so character ids are not enumerable.
+        """
+        assert request.account
+        row = self.service.character(int(request.params["character_id"]))
+        if (request.account.get("role") != "admin"
+                and not self.service.account_can_manage_character(
+                    int(request.account["id"]), int(row["id"]))):
+            raise ApiError(404, "not_found", "character not found")
+        return row
+
+    def character_warps(self, request: Request) -> Response:
+        row = self._warp_character(request)
+        return json_response(200, self.service.warp_payload(int(row["id"])))
+
+    def character_warp_mark(self, request: Request) -> Response:
+        row = self._warp_character(request)
+        body = request.json()
+        zone = pos = None
+        if any(key in body for key in ("zone", "x", "y", "z")):
+            zone = body.get("zone", row["zone"])
+            pos = [body.get("x", row["pos_x"]), body.get("y", row["pos_y"]),
+                   body.get("z", row["pos_z"]), body.get("rot", row["rot"])]
+        warp = self.service.mark_warp(int(row["id"]), body.get("alias"), zone, pos)
+        return json_response(201, {
+            "warp": warp,
+            "data": self.service.warp_payload(int(row["id"])),
+        })
+
+    def character_warp_update(self, request: Request) -> Response:
+        row = self._warp_character(request)
+        body = request.json()
+        warp = self.service.rename_warp(
+            int(row["id"]), int(request.params["slot"]), body.get("alias"))
+        return json_response(200, {
+            "warp": warp,
+            "data": self.service.warp_payload(int(row["id"])),
+        })
+
+    def character_warp_delete(self, request: Request) -> Response:
+        row = self._warp_character(request)
+        warp = self.service.delete_warp(int(row["id"]), int(request.params["slot"]))
+        return json_response(200, {
+            "deleted": warp,
+            "data": self.service.warp_payload(int(row["id"])),
+        })
+
+    def character_merits(self, request: Request) -> Response:
+        row = self._data_character(request)
+        body = request.json()
+        if body.get("top_off"):
+            self.service.top_off_merits(int(row["id"]))
+        else:
+            try:
+                points = int(body.get("points"))
+            except (TypeError, ValueError):
+                raise ApiError(422, "validation_error", "send points or top_off")
+            self.service.set_merit_points(int(row["id"]), points)
+        return json_response(200, self.service.character_data(int(row["id"])))
+
+    def character_progress(self, request: Request) -> Response:
+        """Ranks, fame, jobs, Exemplar Points, crafts, Trust re-issue and augment paths."""
+        row = self._data_character(request)
+        cid = int(row["id"])
+        body = request.json()
+        op = str(body.get("op") or "").strip().lower()
+        if op == "rank":
+            self.service.set_mission_rank(
+                cid, body.get("nation", row["nation"]), body.get("rank"), body.get("points"))
+        elif op == "mog-garden":
+            self.service.set_mog_garden_rank(cid, body.get("rank"))
+        elif op == "fame":
+            if body.get("all"):
+                self.service.max_fame(cid)
+            else:
+                self.service.set_fame(cid, str(body.get("city") or ""), body.get("value"))
+        elif op == "jobs":
+            if body.get("all", True):
+                self.service.set_all_jobs(cid, body.get("level", 99),
+                                          body.get("master_level"))
+            else:
+                self.service.set_job_master_level(cid, body.get("job"),
+                                                  body.get("level"))
+        elif op == "master-level":
+            if body.get("all", True):
+                self.service.set_all_master_levels(cid, body.get("level"))
+            else:
+                self.service.set_job_master_level(cid, body.get("job"), body.get("level"))
+        elif op == "exemplar":
+            self.service.set_exemplar_points(cid, body.get("points"))
+        elif op == "crafts":
+            if body.get("max_all"):
+                self.service.max_crafts(cid)
+            else:
+                self.service.set_craft_skills(cid, body.get("values") or {})
+        elif op == "trusts":
+            # The zone-in burst already carries every Trust spell and cipher; the
+            # endpoint only gives the launcher the refreshed snapshot and a place to
+            # hang the !reload that re-sends the bitmaps.
+            pass
+        elif op == "augment":
+            try:
+                augment_gear.cap(
+                    self.service, cid, int(body.get("container")), int(body.get("slot")),
+                    str(body.get("path") or ""))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        else:
+            raise ApiError(422, "validation_error", "unknown progress op")
+        return json_response(200, self.service.character_data(cid))
+
+    def character_job_points(self, request: Request) -> Response:
+        row = self._data_character(request)
+        # Every job already gets the capped 0x063 block at zone-in; the endpoint exists so
+        # the page can confirm that state and refresh the client, not to move a stored number.
+        return json_response(200, self.service.character_data(int(row["id"])))
+
+    def character_mastery_rank(self, request: Request) -> Response:
+        row = self._data_character(request)
+        body = request.json()
+        try:
+            rank = int(body.get("rank"))
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "rank must be a number")
+        self.service.set_mastery_rank(int(row["id"]), rank)
+        return json_response(200, self.service.character_data(int(row["id"])))
+
+    def character_gil(self, request: Request) -> Response:
+        row = self._data_character(request)
+        body = request.json()
+        if body.get("top_off"):
+            self.service.top_off_gil(int(row["id"]))
+        else:
+            try:
+                amount = int(body.get("amount"))
+            except (TypeError, ValueError):
+                raise ApiError(422, "validation_error", "send amount or top_off")
+            if not 0 <= amount <= GIL_MAX:
+                raise ApiError(422, "validation_error", "gil must be between 0 and %d" % GIL_MAX)
+            self.service.set_gil(int(row["id"]), amount)
+        return json_response(200, self.service.character_data(int(row["id"])))
+
+    def character_home_points(self, request: Request) -> Response:
+        row = self._data_character(request)
+        self.service.register_all_home_points(int(row["id"]))
+        return json_response(200, self.service.character_data(int(row["id"])))
+
+    def character_key_items(self, request: Request) -> Response:
+        row = self._data_character(request)
+        # The zone-in burst already carries all seven permanent key-item tables.
+        return json_response(200, self.service.character_data(int(row["id"])))
+
+    def character_currencies(self, request: Request) -> Response:
+        row = self._data_character(request)
+        body = request.json()
+        self.service.add_currency(int(row["id"]), str(body.get("name") or ""),
+                                  body.get("amount"))
+        return json_response(200, self.service.character_data(int(row["id"])))
+
+    def character_item_search(self, request: Request) -> Response:
+        row = self._data_character(request)
+        try:
+            limit = int(request.arg("limit", "40") or 40)
+        except ValueError:
+            limit = 40
+        items = self.service.search_items(
+            int(row["id"]), request.arg("q", "") or "", request.arg("kind"), limit)
+        return json_response(200, {"items": items})
+
+    def character_armory(self, request: Request) -> Response:
+        row = self._data_character(request)
+        body = request.json()
+        try:
+            item_id = int(body.get("item_id"))
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "item_id must be a number")
+        try:
+            quantity = int(body.get("quantity") or 1)
+        except (TypeError, ValueError):
+            quantity = 1
+        added = self.service.armory_add(int(row["id"]), item_id, quantity)
+        return json_response(201, {"item": added, "data": self.service.character_data(int(row["id"]))})
 
     def launch(self, request: Request) -> Response:
         assert request.account

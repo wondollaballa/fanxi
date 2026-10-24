@@ -45,7 +45,8 @@ Entity identity follows the client's rules:
 - NPC/mob long id: `0x01000000 | (zone << 12) | targid`;
 - static NPC targids: `0x100`–`0x1FF`; monsters: `0x200`–`0x2FF`;
 - the player's targid: `0x400`;
-- NPC/mob packets use `0x00E`; the player uses `0x00D`.
+- pets and Trust alter egos: `0x700`–`0x8FF`;
+- NPC/mob/pet/Trust packets use `0x00E`; the player uses `0x00D`.
 
 Spawn packets are 88 bytes (`0x58`), with type/size packed into the first 16-bit header word
 (9-bit type, 7-bit size in 32-bit units) and a 16-bit sequence. The payload carries the long id,
@@ -75,6 +76,38 @@ A login only continues a session handed to it by the lobby or a recent zone chan
 takes over the session at the same UDP address: the OS recycles local ports, and doing so gave
 the new character the old occupant's name, looks, gear and database id — two different clients
 drew the same character after a multi-box relog.
+
+## Trust alter egos
+
+Trust magic is its own spell group (spell ids 896 and up).  A client casts one exactly
+like any other spell (`C2S 0x01A` action `0x03`), but `cast_trust()` does not spend MP
+and `finish_trust_cast()` spawns an NPC instead of resolving an effect.  The old path
+fell through to `resolve_self_spell()`, which printed "Shantotto takes hold." and left
+the zone empty.
+
+Each call creates a `ZoneEntity(kind="trust")`:
+
+- targid from `0x700`–`0x8FF`, long id `0x01000000 | (zone << 12) | targid`;
+- a normal `0x00E` spawn whose Flags3 carries TrustFlag (`0x01`), PetNewFlag (`0x04`)
+  and PetFlag (`0x40`), with allegiance 1 and the Trust's look block from
+  `trusts.look_hex`;
+- a `0x067` to the owner with the Trust id, targid and the owner's `0x400` targid, which
+  is what makes the client offer the Release sub-menu.
+
+`database/migrations/0115_trusts.sql` carries the factual appearance and combat data
+for all 122 Trust spells (model, main/sub job, attack delay, damage multiplier and the
+passive-Geomancy flag).  The level tracks the owner's main job.  A Trust follows its
+owner, attacks the monster the owner is fighting, and passes half its damage on as the
+owner's enmity.  A duplicate spell is refused, five active Trusts is the cap, and a
+zone change, logout, K.O., or the client's Release menu despawns them.  Every other
+player in the zone sees the same `0x00E` spawn.  The HUD reads the client's TrustFlag and
+the `0x067` master targid, highlights a called Trust's button, and turns a second click into
+`!trust release <spell id>`; `!trust` lists what is out and `!trust release all` clears
+the group.
+
+Limits: Trusts do not cast their own spells or use job abilities, do not appear in the
+party window, and monsters cannot select one as their hate target -- a Trust's damage
+is credited to its owner.  They are also not persisted; a server restart clears them.
 
 ## NPCs and the quest
 
@@ -175,12 +208,17 @@ deliberate:
   animation `0x1B = 1` (battle stance, weapon drawn); disengaging, target death or player death
   sets it back to 0 (sheathe). Without that byte the client stays in its idle pose and never
   plays the draw or swing animations. The same animation byte is set on a monster while it has
-  a target;
+  a target. The client lowers the pose within about a second of any animation (a swing, a
+  flinch, a cast), so while the player is engaged the server re-sends just the General animation
+  every half second; that is what keeps the weapon out. Engaging, a cast result and an equipment
+  batch also send the `0x058` assist target with the first draw;
 - hit chance, damage and critical chance are server-side and follow retail's physical damage
   model (Attack/Defense ratio, fSTR, per-weapon pDIF caps, level correction);
   [combat-damage.md](combat-damage.md) is the reference;
-- each swing sends a bit-packed `0x028` battle action: actor, target, basic-attack category,
-  `atk0`, hit/miss, critical/defeated flags, animation, damage and the hit/critical/miss message;
+- each attack round sends one bit-packed `0x028` battle action: actor, target, basic-attack
+  category, `atk0`, then a result per swing -- each hand's base hit plus its Double/Triple/
+  Quadruple Attack extras, main hand first -- with each result's hit/miss, critical/defeated
+  flags, animation, damage and hit/critical/miss message;
 - HP changes broadcast `0x00E` with the HP mask and refresh `0x037`/`0x061`/`0x0DF`.
 - The gauges carry percentages (`0x037` HPP, `0x0DF` HPP/MPP, `0x00A` HPP), and every one divides
   by the character's current maximum HP/MP. A character at 7240/10149 shows a 71% bar, not a full
@@ -340,7 +378,15 @@ Chat commands remain the fastest way to exercise the world:
 !zone 246                 Port Jeuno (NPCs and the shop)
 !pos <x> <y> <z> [rot]    reposition
 !where                    zone and position
+!warp mark [alias]        save the spot you are standing on as 1-1000
+!warp me <n|alias>        return to one of your saved places
+!warp all <n|alias>       return with every online character on your account and subs
+!warp list [page]         print the saved places (8 per page)
+!warp delete <n|alias>    forget a saved place
+!warp rename <n> <alias>  name or clear a saved place from chat
 !entities                 list live NPCs/monsters and their targids
+!trust [list]             list the alter egos currently out
+!trust release <id|name|all>  release one or every alter ego
 !heal                     restore HP/MP
 !time <hour>              set Vana'diel hour
 !storage store <job>      move that job's storable gear onto its slips
@@ -348,7 +394,7 @@ Chat commands remain the fastest way to exercise the world:
 !locker store|grab <sel>  use the hidden 9999-item locker (all, ammo, back, materials, name)
 !locker list              list the locker's contents
 !stock                    refill the visible working consumables from the locker
-!ws <name>                use a weapon skill (needs 1000 TP and a target)
+!ws <name>                use a weapon skill (needs 1000 TP; self skills need no target)
 !ja <name>                use a job ability; quotes around multi-word names are optional
 !job <job> [sub]          change job: slip the old set, pull the new one, tidy the bags
 !character model <race> <1-48|random>
@@ -358,6 +404,20 @@ Chat commands remain the fastest way to exercise the world:
 !traits                   list the current job pair's job traits and their modifiers
 !help                     list commands
 ```
+
+`!warp` stores a row in `char_warps` (migration 110) with the zone and position, so the list
+survives a relog. The next number is one past the highest existing one; an alias is optional and
+must be unique per character. `me` and `all` accept either the number or a case-insensitive alias
+(prefixes are accepted when exactly one warp matches). `all` selects the online sessions whose
+account is the sender's main account or one of its sub-accounts; it is the multibox group, not the
+whole zone. The launcher's **Warps** page reads and edits the same rows, so a mark made in game can
+be renamed there and vice versa. Home Points keep their own `!hp` command; `!warp` is the custom
+list.
+
+In chat, a `/!` command can be completed with **Tab** (see
+[docs/control-panel.md](control-panel.md#command-completion)). `/!wa` + Tab becomes `/!warp `;
+`/!warp ma` + Tab becomes `/!warp mark `. An ambiguous prefix is left as typed — `/!w` and
+`/!warp ` do nothing, and `/!wh` + Tab becomes `/!where ` — so add a letter and press Tab again.
 
 `!job` is a self-contained swap. It takes the old outfit off, runs the same job store as
 `!storage store <old job>`, pulls every item on the new job's slips into a cleared inventory,
@@ -396,15 +456,62 @@ main-hand weapon's skill type (hand-to-hand when unarmed) plus archery/marksmans
 ranged slot, and only skills at or below the character's value for that weapon. Merit and gear
 skill bonuses count. Quested/relic/empyrean/aeonic skills have no `skill_level`; they are offered
 once that weapon skill is mastered (350+, the level-99 band). The server rejects a weapon skill
-outside that list, so `!ws` and the advertised bitmap agree.
+outside that list, so `!ws` and the advertised bitmap agree. Campaign Battle skills (Uriel Blade,
+Glory Slash, Tartarus Torpor) need a Campaign weapon and a Campaign zone, so they are left out of
+the list and refused by name.
 
-The 2025-07-03 client does not read the bitmap directly. It keeps a command-id list at
-`[0x106323a8] + 0x160` (count at `+0x1760`) that it saves in `aix.dat`; old profiles kept the
+Prime weapons are the exception to the skill-value rule. Each one carries its own skill through
+the item's `ADDS_WEAPONSKILL` (`item_mods` 355), so the skill is usable only while that weapon is
+equipped: Dokoku grants Zesho Meppo, Kusanagi grants Tachi: Mumei, and so on. The `weapon_skills`
+table stores these rows with a negative `skill_level`, which the normal type/value filter skips;
+`ZoneSession.equipped_weapon_skills()` adds the ids the current outfit grants through 355. An
+ordinary katana, even at 350+ skill, therefore never advertises Zesho Meppo. Migration 114 adds
+the fourteen Prime skills and the 355 rows for the 119 III Prime weapons (Loughnashade's Prime
+song is not a weapon skill and Duban is a shield).
+
+A weapon skill is more than its damage roll. `server/fanxi_server/game/weapon_skill_effects.py`
+carries the rows LandSandBoat's `scripts/actions/weaponskills/*.lua` give an extra behaviour:
+
+- **Self skills need no target.** Myrkr (Hvergelmir/Tupsimati) restores 20/40/60% of maximum MP at
+  1000/2000/3000 TP and removes up to three status ailments; Dagan restores 22/33/52% HP and
+  15/22/35% MP. Both play their animation against the player and never need a claim or melee range.
+- **Drains convert the hit.** Spirit Taker and Mystic Boon restore MP equal to the damage, Entropy
+  20% of it, Catastrophe 50% as HP, and Sanguine Blade 50/75/100% as HP. Energy Drain and Energy
+  Steal have no HP damage at all: their formula uses dagger skill and MND and prints the MP drained.
+- **Debuffs land after a hit that did damage.** Poison, Plague, Stun, Silence, Blind, Bind, Sleep,
+  Weight, Slow, Attack/Accuracy/Defense/Evasion Down, Magic Atk./Def./Eva. Down, INT Down and
+  Critical Hit Evasion Down are applied to the monster with their retail durations (interpolated
+  from 1000/2000/3000 TP) and the same Magic Accuracy resist term spells use. The skills retail
+  rolls for use its TP/3000 chance.
+
+The TP spend is the usual one: the skill consumes all TP up to 3000 and the bar keeps the excess.
+Gear and traits that change how that TP is used are read from the merged modifier pool:
+"Weapon skill damage" (`ALL_WSDMG_ALL_HITS` 840 and `ALL_WSDMG_FIRST_HIT` 841), the per-skill
+`WEAPONSKILL_DAMAGE_BASE + id` block (571 Combo, 580 Final Heaven, 707 Blade Metsu, ...),
+generic "TP Bonus" (345), "fTP +x" gear (`ANY_FTP_BONUS` 1144, in 1/256 units), "Weapon skill
+accuracy" (48), and Fencer's TP Bonus (903) and critical-hit rate (904) while single-wielding a
+one-handed weapon. The skill's own fTP anchors, WSC, hit count, critical rate, Attack multiplier
+and Defense-ignore fraction come from `data/weapon_skills.json`; every hit is rolled and packed
+into one action, and the first-hit damage line applies only to the first hit. See
+[combat-damage.md](combat-damage.md#weapon-skills) for the formula.
+
+The client does not read the bitmap directly. It keeps a command-id list at
+`[ability_list] + 0x160` (count at `+0x1760`) that it saves in `aix.dat`; old profiles kept the
 all-weapon-skill list, and a fresh profile had an empty one. `host/addons/hooks.c` rebuilds that
 list from every `0x0AC` packet on the game thread, so the Weapon Skills menu (in the field and
 while engaged) shows exactly the advertised skills. The list is rebuilt at zone-in, after
 `!abilities`, and after a weapon change. A client started before this patch keeps its old list
 until it is restarted once. `!ws` still enforces the filtered list.
+
+The list's command array and count are struct offsets, not per-build addresses: they are
+`+0x160` and `+0x1760` in both the 2025-07-03 and 2026-10-05 clients (checked against the menu
+code that reads them). `host/addons/hooks.c` supplies those two offsets itself whenever
+`meta/builds.json` maps `ability_list`, instead of requiring every build entry to repeat them.
+`tools/newbuild.py` carries addresses only, so a new build that kept `ability_list` but not the
+offsets used to compile the whole hook out, leaving every job's Abilities menu with "No
+abilities available." If a future client changes the object's layout, update the two defaults in
+`host/addons/hooks.c`; do not put them in `meta/builds.json`, where the new-build tool would try
+to relocate them as addresses.
 
 ### Job traits
 
@@ -429,14 +536,18 @@ the damage limit therefore read traits and gear through the same path. `Max HP B
 `!traits` lists every active trait, including the killer/resist, Fast Cast, Dual Wield and Store
 TP families whose modifiers the current engine does not read yet. Those rows are kept for the
 client's trait list and future combat work; only the modifiers named above and the two passive
-ticks change behaviour today.
+ticks change behaviour today. The closing "Passive tick" line adds the worn gear's Regen and
+Refresh to the traits, so `Chirich Ring +1` and `Stikini Ring +1` report their tick even on a
+job pair with no Auto Regen/Auto Refresh trait.
 
 `Auto Regen` (White Mage 25/76, Rune Fencer 35/65/95) and `Auto Refresh` (Paladin 35, Summoner
 25/90) are passive modifiers (`REGEN`/`REFRESH`), not status effects: they put no icon in the
 client's status bar. The zone tick restores their value once every three seconds while the
-character is alive, and gear with `Regen`/`Refresh` adds to the same modifiers. `Auto Refresh`
-is not a Red Mage trait; Red Mage has the Refresh spell instead. Blue Mage gets both from its
-set spells, which Fanxi does not track yet.
+character is alive, and gear with `Regen`/`Refresh` adds to the same modifiers. The tick
+re-derives the maxima from the stat sheet and an equipment batch calls `refresh_vitals`, so a
+set that raises max HP/MP -- or the reforged body with `"Refresh"+4` -- cannot leave the
+character stuck below its own maximum. `Auto Refresh` is not a Red Mage trait; Red Mage has the
+Refresh spell instead. Blue Mage gets both from its set spells, which Fanxi does not track yet.
 
 ## Spells, buffs and debuffs
 
@@ -458,11 +569,56 @@ its duration and the numbers the engine reads:
 - Blind lowers the monster's accuracy, Slow lengthens its swing interval, Paralyze can
   skip a swing, Sleep/Stun stop it, Bind stops movement and Weight slows it, Attack Down
   lowers its damage, and Poison/Bio tick damage every three seconds.
+- Dia and the Helix line are the two debuffs whose action carries the opening damage
+  instead of message 237.  Dia's small hit and 1-5 HP tick are table values.  A Helix's
+  opening nuke (`combat.helix_damage`) is stored as that effect's tick, so the monster
+  takes the same number again every ten seconds (`tick_interval`) for 30/60/90 s by
+  Scholar level; the first tock lands 1-10 s after the cast.
 - Sneak and Invisible keep a monster from aggroing.  Regen/Refresh and Poison tick on the
   player through the same three-second timer as the passive Auto Regen/Auto Refresh.
-- A support spell with no entry in the table still finishes; it just does not put an icon
-  on anything.  A spell's target flags decide whether it is aimed at the caster or a
+- `game/spell_effects.py` is generated by `tools/import_lsb_spell_effects.py` from
+  LandSandBoat's enhancing, enfeebling, ninjutsu and song tables, and gives every spell an
+  icon even where the engine has no numbers for it (the Bar- and Boost- lines, Protectra
+  and Shellra, the songs, the -ga line).  The hand-written tables above override it, so a
+  spell with ticks, potency or modifiers keeps them.  Spells LandSandBoat's tables stop
+  short of --- the -storm II line (whose icons are 589-596, not the tier-I ids), the
+  -Carol II songs, Enlight, Endark II, Reraise II-IV, Adloquium, Animus and the trust
+  songs --- live in `effects.SWEPT_EXTRAS`.  Blue magic (its durations are script
+  variables, not table columns) and Geomancy's Indi-/Geo- bubbles are not in the sweep.
+- A support spell with no entry in either table still finishes; it just does not put an
+  icon on anything.  A spell's target flags decide whether it is aimed at the caster or a
   monster; enfeebles always require a live monster.
+
+Buff durations are not just the table's `duration`.  `effects.buff_duration` adds flat
+seconds first (Light Arts/Tabula Rasa on the Regen line, gear such as Lugh's Cape or
+Telchine's Regen seconds), then multiplies the gear's listed Enhancing Magic Duration and
+its augment Enhancing Magic Duration as two separate terms, then applies Perpetuance
+(2.0x, or 2.25-2.65x with the Savant's/Arbatel hands).  The Regen tick goes through
+`effects.regen_tick`, where `"Regen"` potency multiplies the base and Light Arts/Tabula
+Rasa add flat HP.  `buff_duration` also accepts `light_arts_jp_rank` (+3 s per rank, 20
+max); the zone passes 0 because this build does not store JP ranks -- the client's JP
+menu is maxed only to unlock the job gifts.
+
+The same merged modifier dict is the only spell-modifier source.  `combat_mods()` merges
+equipped gear, job traits, active buff modifiers, food and HP/MP merits; magic damage,
+Magic Accuracy, Fast Cast, the stat sheet, `buff_duration`/`debuff_duration`, healing and
+the enfeebling potency all read it.  Enfeebling and dark spells add `ENF_MAG_DURATION` /
+`DARK_MAGIC_DURATION`; enfeebling potency reads `ENF_MAG_POTENCY`; Cures read
+`"Cure" potency` (and II/received/bonus); Refresh reads `"Enhances Refresh"`; Stoneskin
+reads its bonus HP; Drain/Aspir read their potency line.  Gear the engine does not model
+(augments stored only as client extdata, most food, another player's buffs) still does not
+appear.
+
+Food lives in `food_effects` (`item_id`, duration, modifier dict, animation).  The client's
+`C2S 0x037` carries the container (`Category`, 0x10) and the slot (`PropertyItemIndex`,
+0x0E), not the item id: the four bytes at 0x08 are `ItemNum`, which is always zero.
+`item_use` resolves that slot, consumes exactly that stack, stores the dict on the session,
+puts the Food icon up and sends the item finish action (`0x028` category 5) with the food's
+animation so the character plays the eat/drink motion; `combat_mods()` adds it to the same
+pool and the three-second tick removes it when the timer expires.  The starter table has
+Apple Pie, Witch Soup, Chocolate Cake, Miso Ramen and Red Curry Bun; adding a food is one
+row in `food_effects` plus its `items` row.  The attack, defence and accuracy percentage
+lines apply through their flat caps; HP/MP percentage food caps are not applied yet.
 
 Rest is `C2S 0x0E8` (`/heal`).  While resting, the player recovers 5% of maximum HP and
 MP every three seconds; taking damage, casting, attacking or moving stops it.
@@ -484,7 +640,8 @@ the client menu index (`home_points.hp_index`); opening the crystal menu require
 | `npc_lines` | ordered ambient lines per NPC |
 | `monster_templates` | reusable monster template: name, model, level range, HP, combat stats |
 | `monster_spawns` | placed monster: template, zone, position, respawn seconds |
-| `items` | item id, name, stack size, usable flag, equip slot, level |
+| `trusts` | factual alter-ego appearance and combat data, one row per Trust spell |
+| `items` | item id, name, stack size, usable flag, equip slot, level, Rare/Ex flags |
 | `char_inventory` | per-character slots; slot 0 is gil (`65535`) |
 | `quests` | quest key, reward, required template and kill count |
 | `char_quests` | accepted/completed state and progress |
@@ -502,8 +659,10 @@ This slice deliberately omits:
   implemented, and the Abilities menu lists the weapon skills and job abilities the server
   advertises);
 - linkshells, parties beyond the local player line, auctions, bazaars and mail;
-- raise, and the status effects outside the spell table above (the engine tracks the
-  ninjutsu, enfeebling and common enhancing families);
+- raise, and the status effects outside the spell and weapon-skill tables (the engine tracks
+  the ninjutsu, enfeebling, enhancing and weapon-skill families);
+- skillchains, magic bursts and weapon-skill aftermath (Empyrean/Relic/Mythic Aftermath is a
+  separate buff model; the per-skill damage and status rows above still apply);
 - navmesh pathing (monsters roam in a short radius);
 - loot tables beyond the quest reward and shop stock;
 - anti-cheat or client-position validation.

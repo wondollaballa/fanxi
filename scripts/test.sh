@@ -8,6 +8,7 @@ echo "== launcher"
 python3 -m unittest discover -s launcher/tests -v
 echo "== tools"
 python3 tests/verify_install_test.py
+python3 tests/chat_complete_test.py
 echo "== syntax"
 python3 -m compileall -q server/fanxi_server launcher/fanxi_launcher tools/make_brand_assets.py
 echo "OK"

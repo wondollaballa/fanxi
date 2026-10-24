@@ -129,6 +129,124 @@ impl ApiClient {
         Ok(value.get("character").cloned().unwrap_or(value))
     }
 
+    /// The Data page snapshot: merits, gil, mastery rank, home points, currencies and the
+    /// Armory history for one character.
+    pub async fn character_data(&self, token: &str, character_id: i64) -> AppResult<Value> {
+        self.request(
+            Method::GET,
+            &format!("/characters/{character_id}/data"),
+            None,
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    /// Run one Data page action.  Every endpoint returns the refreshed snapshot, except the
+    /// Armory, which returns `{ item, data }`.
+    pub async fn character_action(
+        &self,
+        token: &str,
+        character_id: i64,
+        action: &str,
+        body: Value,
+    ) -> AppResult<Value> {
+        self.request(
+            Method::POST,
+            &format!("/characters/{character_id}/{action}"),
+            Some(body),
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    /// The Warps page snapshot: the character's saved places, the slot limit and the next
+    /// auto-increment number.
+    pub async fn character_warps(&self, token: &str, character_id: i64) -> AppResult<Value> {
+        self.request(
+            Method::GET,
+            &format!("/characters/{character_id}/warps"),
+            None,
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    pub async fn mark_character_warp(
+        &self,
+        token: &str,
+        character_id: i64,
+        body: Value,
+    ) -> AppResult<Value> {
+        self.request(
+            Method::POST,
+            &format!("/characters/{character_id}/warps"),
+            Some(body),
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    pub async fn rename_character_warp(
+        &self,
+        token: &str,
+        character_id: i64,
+        slot: i64,
+        alias: Option<String>,
+    ) -> AppResult<Value> {
+        self.request(
+            Method::PATCH,
+            &format!("/characters/{character_id}/warps/{slot}"),
+            Some(json!({"alias": alias.unwrap_or_default()})),
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    pub async fn delete_character_warp(
+        &self,
+        token: &str,
+        character_id: i64,
+        slot: i64,
+    ) -> AppResult<Value> {
+        self.request(
+            Method::DELETE,
+            &format!("/characters/{character_id}/warps/{slot}"),
+            None,
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    pub async fn search_armory(
+        &self,
+        token: &str,
+        character_id: i64,
+        query: &str,
+        kind: Option<&str>,
+    ) -> AppResult<Value> {
+        let mut params = vec![
+            ("q".to_string(), query.to_string()),
+            ("limit".to_string(), "40".to_string()),
+        ];
+        if let Some(kind) = kind.filter(|value| !value.is_empty()) {
+            params.push(("kind".to_string(), kind.to_string()));
+        }
+        self.request(
+            Method::GET,
+            &format!("/characters/{character_id}/items/search"),
+            None,
+            Some(token),
+            Some(params),
+        )
+        .await
+    }
+
     pub async fn launch(&self, token: &str, character_id: Option<i64>) -> AppResult<Value> {
         self.request(
             Method::POST,

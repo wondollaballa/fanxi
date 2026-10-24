@@ -29,7 +29,7 @@ Nyame paths, Sakpata's, Gleti's and Agwu's armour and the seven Odyssey weapons,
 | `DRK.lua` | Dark Knight | scythe, drain/aspir | 44 |
 | `BST.lua` | Beastmaster | pet melee, axe | 33 |
 | `BRD.lua` | Bard | songs, Macc support | 32 |
-| `RNG.lua` | Ranger | marksmanship, snapshot | 34 |
+| `RNG.lua` | Ranger | marksmanship, snapshot | 35 |
 | `SAM.lua` | Samurai | great katana, skillchains | 29 |
 | `NIN.lua` | Ninja | dual-wield katana, ninjutsu | 32 |
 | `DRG.lua` | Dragoon | polearm, jumps, wyvern | 32 |
@@ -38,12 +38,12 @@ Nyame paths, Sakpata's, Gleti's and Agwu's armour and the seven Odyssey weapons,
 | `COR.lua` | Corsair | gun, rolls, quick draw | 32 |
 | `PUP.lua` | Puppetmaster | hand-to-hand, automaton | 30 |
 | `DNC.lua` | Dancer | dual-wield dagger, waltzes | 34 |
-| `SCH.lua` | Scholar | healing/nuking, stratagems | 40 |
+| `SCH.lua` | Scholar | healing/nuking, stratagems | 42 |
 | `GEO.lua` | Geomancer | geomancy support/nukes | 31 |
 | `RUN.lua` | Rune Fencer | great-sword tank, runes | 42 |
 
 "Sets" is what the launcher lists after import (empty group tables are not
-counted). Together the folder defines **742 importable sets**, counted with the
+counted). Together the folder defines **745 importable sets**, counted with the
 launcher's own flatten pass.
 
 The same files also carry the five **Limbus** top-tier suits: a `local limbus`
@@ -51,8 +51,13 @@ build table (one copy per augment choice a set needs), a `sets.Limbus`
 container, and — where the job community rates the suit — the pieces already
 worn in `sets.engaged.tp` / `sets.engaged.hybrid` / `sets.precast.FC`. Duty
 goes to MNK/THF/DNC/BST/PUP, Revelation to BRD/NIN, Sworn's fast-cast to
-PLD/RUN/RDM, and Clemency's head and feet to SAM/DRG. See
-[../docs/limbus-r30.md](../docs/limbus-r30.md) for the table and the reasoning.
+PLD/RUN/RDM, Clemency's head and feet to SAM/DRG, and SCH wears Indomitable:
+head/body/legs in the free nuke and helix, body/hands/legs in enfeebling,
+body/legs in fast cast, the full five in Elemental Macc, and the new
+`sets.idle.dt_indom`. Arbatel Loafers +3 stays in the nuke/helix feet
+(`"Klimaform"+25`), and the Enhancing Magic and Healing Magic sets are
+untouched. See [../docs/limbus-r30.md](../docs/limbus-r30.md) for the table and
+the reasoning.
 
 
 ## Quick start
@@ -89,10 +94,19 @@ holds the worn set as an override. Paths it reads:
 | `sets.JA.<name>` | before that job ability's action packet (fallback `sets.precast.JA`) |
 | `sets.precast.FC` or `sets.precast` | before any spell's action packet |
 | `sets.midcast.<skill>` | right after a spell's action packet, keyed by the spell's skill |
+| any `midcast.*` or `precast.*` set | a category override: enfeebles macc/duration (Enfeebling Magic), buff potency/duration (Enhancing Magic) or helix magic |
 | `engaged.tp` | on `/attack` (the **Engaged set** dropdown) |
 | `idle.town`, else `idle` | disengaged, standing still, in a city (**Town set**) |
 | `idle.field`, else `idle.dt`/`idle.pdt` | disengaged, standing still, anywhere else (**Field set**) |
 | `idle.movement` | disengaged and moving (**Movement set**) |
+
+The Spells panel also offers category overrides. The host groups the current job pair's spells
+the same way it sends them to the page: Enfeebling Magic fills **Enfeebles · Macc** and
+**Enfeebles · Duration**, Enhancing Magic fills **Buff potency** and **Buff duration**, and a
+spell whose name contains `helix` fills **Helix magic**. A category set applies to every spell in
+the group; a per-spell card wins over it, and the midcast default and `sets.midcast.<skill>` are
+only used when neither names a set. The two faces of a pair are alternatives (one set is worn per
+cast), so picking one on the page releases the other.
 
 The plan is built from static set tables; user functions (`precast`, `midcast`, `aftercast`,
 `rule`) are still not run — see the note below.
@@ -108,15 +122,18 @@ not `sets.midcast["Enfeebling Magic"]`).
 | Max PDT | `sets.idle.pdt` | Sakpata's for WAR/PLD/DRK, Nyame for the rest, plus Defending/Gelatinous rings |
 | Max MDT | `sets.idle.mdt` | Nyame + magic-damage accessories; PLD keeps Aegis equipped |
 | Balanced DT | `sets.idle.dt` | job AF/relic/empyrean pieces with DT accessories |
+| Balanced DT, Indomitable | `sets.idle.dt_indom` | SCH only: five Indomitable R30 pieces with the DT accessories; max PDT/MDT stay on Nyame |
 | TP | `sets.engaged.tp` | job AF/relic/empyrean + Windbuffet Belt +1, Cessance/Dedition, Rajas/Petrov |
 | TP, accuracy | `sets.engaged.acc` | Nyame 5/5, Combatant's Torque, Telos Earring, Rajas/Petrov |
 | TP, dual wield | `sets.engaged.dw` | NIN, THF, DNC only; Suppanomimi |
 | TP, damage taken | `sets.engaged.hybrid` | TP weapons/armour with DT accessories |
-| Fast cast | `sets.precast.FC` | job AF/relic pieces where a generic piece is job-locked, plus Orunmila/Kishar/Rahab |
-| Macc (enfeebling) | `sets.midcast.Enfeebling Magic` | Nyame Macc + Eschan Stone + Stikini/Kishar |
-| Macc (elemental resist) | `sets.midcast.Elemental Magic Macc` | BLM, SCH only |
+| Fast cast | `sets.precast.FC` | job AF/relic pieces where a generic piece is job-locked, plus Orunmila/Kishar/Rahab; SCH adds Indomitable body/legs |
+| Macc (enfeebling) | `sets.midcast.Enfeebling Magic` | SCH uses Indomitable body/hands/legs; Nyame Macc + Eschan Stone + Stikini/Kishar elsewhere |
+| Macc (elemental resist) | `sets.midcast.Elemental Magic Macc` | BLM, SCH only; SCH wears the full Indomitable R30 set |
 | Macc (dark/divine/ninjutsu) | `sets.midcast.Dark Magic`, `Divine Magic`, `Ninjutsu` | job-dependent |
-| MAB (elemental) | `sets.midcast.Elemental Magic` | Nyame MAB + Eschan Stone + Friomisi/Crematio + Metamorph/Mujin |
+| MAB (elemental) | `sets.midcast.Elemental Magic` | SCH free nuke: Indomitable head/body/legs + Arbatel Loafers +3; Nyame MAB + Eschan Stone + Friomisi/Crematio + Metamorph/Mujin elsewhere |
+| Magic burst (elemental) | `sets.midcast.Elemental Magic MB` | SCH only: Nyame C keeps Magic Burst Damage II +5–7 |
+| Helix | `sets.midcast.Helix` | SCH only: Indomitable head/body/legs, Arbatel Bracers +3 and Loafers +3 |
 | Cure | `sets.midcast.Healing Magic` | WHM, RDM, PLD, SCH, RUN |
 | Enmity+ | `sets.enmity.up` | PLD, RUN, WAR, DRK |
 | Enmity− | `sets.enmity.down` | WHM, BRD, RNG, COR |

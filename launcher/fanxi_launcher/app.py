@@ -47,6 +47,13 @@ RACES = [
     ("Hume male", 1), ("Hume female", 2), ("Elvaan male", 3), ("Elvaan female", 4),
     ("Tarutaru male", 5), ("Tarutaru female", 6), ("Mithra", 7), ("Galka", 8),
 ]
+# Item families whose GearSwap entry is a Rank 30 build; the Gear window marks them
+# "R30" (Odyssey's four sets and the five Limbus top tiers).
+RANK30_PREFIXES = (
+    "Nyame ", "Sakpata's ", "Gleti's ", "Agwu's ",
+    "Duty ", "Revelation ", "Sworn ", "Indom. ", "Indomitable ",
+    "Clemen. ", "Clemency ",
+)
 NATIONS = [("San d'Oria", 0), ("Bastok", 1), ("Windurst", 2)]
 JOBS = [
     ("Warrior", 1), ("Monk", 2), ("White Mage", 3), ("Black Mage", 4), ("Red Mage", 5),
@@ -2128,7 +2135,7 @@ class GearWindow(tk.Toplevel):
                 augments = (details.get(slot) or {}).get("augments") or []
                 if not augments:
                     marker = ""
-                elif items[slot].startswith(("Nyame ", "Sakpata's ", "Gleti's ", "Agwu's ")):
+                elif items[slot].startswith(RANK30_PREFIXES):
                     marker = "  R30"
                 else:
                     marker = "  *"
@@ -2162,7 +2169,7 @@ class GearWindow(tk.Toplevel):
         augments = detail.get("augments") or []
         if augments:
             prefix = ("R30 Augments: "
-                      if (detail.get("name") or "").startswith(("Nyame ", "Sakpata's ", "Gleti's ", "Agwu's "))
+                      if (detail.get("name") or "").startswith(RANK30_PREFIXES)
                       else "Augments: ")
             self.augment_label.configure(
                 text=prefix + "  |  ".join(augments), fg=TEXT)

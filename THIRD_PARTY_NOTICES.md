@@ -91,5 +91,24 @@ numbers only: item ids, levels and values that come from the game itself. The sc
 names, generator code and the code that reads them are Fanxi's own; no LandSandBoat source,
 comments, Lua, or SQL statements are copied.
 
+`data/weapon_skills.json` carries the factual per-skill combat numbers behind a weapon skill:
+its three fTP anchors, stat-modifier fractions, hit count and "varies with TP" tables. It is
+produced by `tools/import_lsb_weapon_skills.py` from LandSandBoat's published weapon-skill
+scripts and the BG-Wiki Prime weapon-skill pages. The file holds numbers only; the schema,
+field names, importer and the code that reads it are Fanxi's own, and no LandSandBoat Lua or
+comments are copied.
+
+`database/migrations/0115_trusts.sql` carries the factual appearance and combat data behind
+the 122 Trust alter egos: the client's 20-byte look block, model id, main/sub job, attack delay
+and damage multiplier. It is produced by `tools/import_lsb_trusts.py` from LandSandBoat's
+`mob_pools` table (rows at `poolid = spellid + 5000`) and Fanxi's own spell names. The table
+schema, importer and comments are Fanxi's own, and no LandSandBoat SQL text, comments or code is
+copied.
+
+The trust portrait atlas in `host/addons/trust_faces.c` is cropped from the BGWiki trust cards
+(`bg-wiki.com/ffxi/BGWiki:Trusts`) and the skillchain element atlas in `host/addons/sc_icons.c`
+from the BGWiki skillchain icons; the artwork is FINAL FANTASY XI game art and remains the
+property of Square Enix. Both are bundled only to draw the local HUD buttons.
+
 FINAL FANTASY XI and SQUARE ENIX are trademarks of Square Enix Holdings Co., Ltd. Fanxi is not
 affiliated with or endorsed by Square Enix.

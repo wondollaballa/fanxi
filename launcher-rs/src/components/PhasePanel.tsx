@@ -1,7 +1,13 @@
 import { useMemo, useState } from "react";
 import { Lock, LockOpen, Pencil, Plus, Shield, Sparkles, Trash2, Wind, Zap } from "lucide-react";
 import type { JobAbility, JobSpell, PhaseStatus } from "../types";
-import { FOCUS_MODES, phaseStateLabel, slotLabelOf, type PhaseConfig } from "../lib/phase";
+import {
+  FOCUS_MODES,
+  SPELL_CATEGORIES,
+  phaseStateLabel,
+  slotLabelOf,
+  type PhaseConfig,
+} from "../lib/phase";
 import { Badge, Button, Card, Field, Select, cn } from "./ui";
 
 type PhasePanelProps = {
@@ -164,7 +170,18 @@ export function PhasePanel({
     () => spells.filter((spell) => !(String(spell.id) in config.spellOverrides)),
     [spells, config.spellOverrides],
   );
+  const spellGroups = useMemo(
+    () =>
+      SPELL_CATEGORIES.map((category) => ({
+        ...category,
+        spells: spells.filter((spell) => spell.categories?.includes(category.key)),
+      })),
+    [spells],
+  );
   const overrides = Object.entries(config.spellOverrides);
+  const categoryOverrideCount = SPELL_CATEGORIES.filter(
+    (category) => config.spellCategoryOverrides[category.key],
+  ).length;
   const jaOverrideCount = Object.keys(config.jaOverrides).length;
   const now = status?.state ? `${phaseStateLabel(status.state)}` : "—";
   const activeSet = status?.set ?? null;
@@ -472,8 +489,14 @@ export function PhasePanel({
 
       <Group
         title="Spells"
-        badge={<Badge tone="neutral">{overrides.length} overrides</Badge>}
-        hint="Precast is worn before the cast is timed; the midcast default is worn for every spell; a per-spell override wins over the default. The spell is tracked by its action id, so macc, mab and magic-skill sets can be picked per spell."
+        wide
+        badge={
+          <Badge tone="neutral">
+            {overrides.length} per-spell
+            {categoryOverrideCount ? ` · ${categoryOverrideCount} categories` : ""}
+          </Badge>
+        }
+        hint="Precast is worn before the cast is timed; the midcast default is worn for every spell. A category card gives one set to every spell in its group, and a per-spell card wins over its category. Enfeebles macc/duration and buff potency/duration are alternatives, so choosing one releases the other. The host classifies the job pair's spells, so macc, mab and magic-skill sets can be picked per category or per spell."
       >
         <div className="phase-row">
           <SetSelect
@@ -492,6 +515,62 @@ export function PhasePanel({
             empty="— library midcast.<skill> —"
             onChange={(midcast) => onConfig({ midcast })}
           />
+        </div>
+        <div className="phase-category-heading">
+          <span className="eyebrow">Category overrides</span>
+          <span className="muted">One set for every spell in the group.</span>
+        </div>
+        <div className="phase-category-cards">
+          {spellGroups.map((category) => {
+            const path = config.spellCategoryOverrides[category.key] ?? "";
+            return (
+              <div key={category.key} className={cn("phase-category", path && "configured")}>
+                <div className="phase-category-head">
+                  <span className="phase-category-title">{category.label}</span>
+                  <Badge tone={path ? "accent" : "neutral"}>{category.spells.length} spells</Badge>
+                </div>
+                <InlineSetSelect
+                  value={path}
+                  sets={sets}
+                  prefixes={["midcast.", "precast."]}
+                  empty="— use the default —"
+                  onChange={(nextPath) => {
+                    const next = { ...config.spellCategoryOverrides };
+                    if (nextPath) {
+                      next[category.key] = nextPath;
+                      // Macc and duration answer the same question, as do potency and duration:
+                      // one set is worn per cast, so picking one releases its pair.
+                      if (category.alternate) delete next[category.alternate];
+                    } else {
+                      delete next[category.key];
+                    }
+                    onConfig({ spellCategoryOverrides: next });
+                  }}
+                />
+                <details className="phase-category-spells">
+                  <summary>{category.detail}</summary>
+                  {category.spells.length ? (
+                    <div className="phase-category-names">
+                      {category.spells.map((spell) => (
+                        <span
+                          key={spell.id}
+                          title={`${spell.skill || "spell"} · Lv ${spell.level}`}
+                        >
+                          {spell.name}
+                        </span>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="muted">No matching spells for this job pair.</p>
+                  )}
+                </details>
+              </div>
+            );
+          })}
+        </div>
+        <div className="phase-category-heading">
+          <span className="eyebrow">Per-spell overrides</span>
+          <span className="muted">A spell card wins over its category.</span>
         </div>
         {overrides.map(([id, path]) => {
           const spell = spellById.get(Number(id));
@@ -528,7 +607,7 @@ export function PhasePanel({
           );
         })}
         <div className="phase-row">
-          <Field label="Add a spell override" className="phase-return">
+          <Field label="Add a per-spell override" className="phase-return">
             <Select value={addSpell} onChange={(event) => setAddSpell(event.target.value)}>
               <option value="">{spells.length ? "Choose a spell…" : "No spell list yet"}</option>
               {spellChoices.map((spell) => (

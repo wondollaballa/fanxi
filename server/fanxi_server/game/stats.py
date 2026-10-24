@@ -79,32 +79,39 @@ class Sheet:
     sub_weapon: Weapon | None = None
     sub_fighter: combat.Fighter | None = None
     dual_wield: bool = False
+    # The Dual Wield trait's percent, kept for the per-hand TP delay.
+    dual_wield_percent: int = 0
 
     @property
     def attack_delay_ms(self) -> int:
         """Swing interval in milliseconds, after equipment haste.
 
         Item delay is in sixtieths of a second, which is why a 450-delay katana swings
-        every 7.5 seconds at zero haste -- the same conversion the client's own TP
-        formula uses ((delay + 480) * 0.0085 per hit).  Equipment haste caps at 25%,
-        and the swing interval itself cannot drop below a fifth of the base delay.
+        every 7.5 seconds at zero haste.  Equipment haste caps at 25%, and the swing
+        interval itself cannot drop below a fifth of the base delay.
 
         ``delay`` is already the per-hand delay: for dual wield it is
         ``(main + sub) * (1 - Dual Wield%) / 2``, because both hands swing together
-        once per attack round.
+        once per attack round.  TP is separate: it uses each weapon's own delay (see
+        ``tp_per_hit``).
         """
         base_ms = max(1, int(self.delay)) * 1000.0 / 60.0
         haste = min(0.25, max(-1.0, self.haste))
         return max(1, int(base_ms * max(0.2, 1.0 - haste)))
 
-    @property
-    def tp_per_hit(self) -> int:
-        """TP per landed hit in tenths, retail's ``(delay + 480) * 0.0085``.
+    def tp_per_hit(self, off_hand: bool = False) -> int:
+        """TP from one landed hit by this hand, in tenths.
 
-        Dual wield lowers the delay per hand, which lowers TP per hit as well; the
-        two hits in a round are what make the overall TP rate comparable.
+        Retail computes TP from *that weapon's* base delay, with Dual Wield halving the
+        reduced delay for each hand, and does not give the off hand the main hand's
+        number.  Store TP is applied by ``combat.tp_gain`` after this.
         """
-        return max(1, int((max(1, int(self.delay)) + 480) * 0.085))
+        weapon = (self.sub_weapon if off_hand and self.sub_weapon is not None
+                  else self.weapon)
+        delay = max(1, int((weapon.delay if weapon is not None else 0) or UNARMED_DELAY))
+        if self.dual_wield:
+            delay = combat.tp_delay(delay, dual_wield=self.dual_wield_percent)
+        return combat.tp_return(delay)
 
     @property
     def attack(self) -> int:
@@ -159,11 +166,23 @@ def _damage_rating(weapon: Weapon, skill_value: int) -> int:
     return 0
 
 
+def _food_percent(base: int, mods: dict[int, int], percent_id: int,
+                  cap_id: int) -> int:
+    """A food percentage bonus, capped at the flat cap the food carries."""
+    percent = int(mods.get(percent_id, 0))
+    if percent <= 0:
+        return 0
+    bonus = int(base) * percent // 100
+    cap = int(mods.get(cap_id, 0))
+    return min(bonus, cap) if cap > 0 else bonus
+
+
 def _attack_value(mods: dict[int, int], strength: int, skill_value: int,
                   str_multiplier: float) -> int:
     attack = 8 + int(mods.get(mod.ATT, 0))
     attack += int(strength * str_multiplier)
     attack += skill_value
+    attack += _food_percent(attack, mods, mod.FOOD_ATT_PERCENT, mod.FOOD_ATT_CAP)
     return max(1, attack + attack * int(mods.get(mod.ATT_PERCENT, 0)) // 100)
 
 
@@ -171,6 +190,7 @@ def _accuracy_value(mods: dict[int, int], dexterity: int, skill_value: int) -> i
     accuracy = combat.acc_from_skill(skill_value)
     accuracy += int(dexterity * combat.DEX_TO_ACC)
     accuracy += int(mods.get(mod.ACC, 0))
+    accuracy += _food_percent(accuracy, mods, mod.FOOD_ACC_PERCENT, mod.FOOD_ACC_CAP)
     return accuracy
 
 
@@ -218,6 +238,7 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
     defense = 8 + int(attributes["vit"] * 1.5)
     defense += _level_defense_factor(level)
     defense += int(mods.get(mod.DEF, 0))
+    defense += _food_percent(defense, mods, mod.FOOD_DEF_PERCENT, mod.FOOD_DEF_CAP)
     defense = max(1, defense + defense * int(mods.get(mod.DEF_PERCENT, 0)) // 100)
 
     accuracy = _accuracy_value(mods, attributes["dex"], skill_value)
@@ -283,15 +304,18 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
         haste=mod.percent(mods.get(mod.HASTE_GEAR, 0)),
         max_hp=_with_percent(
             base_stats.base_hp(int(char.get("race", 1)), job, level, sub_job, sub_level)
-            + int(mods.get(mod.HP, 0)) + int(mods.get(mod.MAX_HP_BOOST, 0)),
+            + int(mods.get(mod.HP, 0)) + int(mods.get(mod.MAX_HP_BOOST, 0))
+            + int(mods.get(mod.FOOD_HP, 0)),
             mods.get(mod.HPP, 0), floor=1),
         max_mp=_with_percent(
             base_stats.base_mp(int(char.get("race", 1)), job, level, sub_job, sub_level)
-            + int(mods.get(mod.MP, 0)) + int(mods.get(mod.MAX_MP_BOOST, 0)),
+            + int(mods.get(mod.MP, 0)) + int(mods.get(mod.MAX_MP_BOOST, 0))
+            + int(mods.get(mod.FOOD_MP, 0)),
             mods.get(mod.MPP, 0), floor=0),
         shield_size=int(shield_size),
         sub_weapon=sub_weapon if dual_wield else None,
-        sub_fighter=sub_fighter, dual_wield=dual_wield)
+        sub_fighter=sub_fighter, dual_wield=dual_wield,
+        dual_wield_percent=dual_wield_percent if dual_wield else 0)
 
 
 # --- monsters -------------------------------------------------------------------------------

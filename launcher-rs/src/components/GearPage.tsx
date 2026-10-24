@@ -28,6 +28,7 @@ import type {
   JobInfo,
   JobSpell,
   PhaseStatus,
+  Tenant,
 } from "../types";
 import { backend } from "../lib/api";
 import { SLOT_KEYS, slotLabel } from "../lib/format";
@@ -154,30 +155,26 @@ function WeaponSelect({
 
 export function GearPage({
   instances,
+  tenant,
   onControl,
+  onTeam,
   notify,
-  initialPort,
   phaseOn,
   onTogglePhase,
 }: {
   instances: InstanceView[];
+  tenant: Tenant | null;
   onControl: () => void;
+  onTeam: () => void;
   notify: (message: string, kind?: "success" | "error" | "info") => void;
-  initialPort?: number | null;
   /** The launcher-wide GearSwap master switch, shared with Settings. */
   phaseOn: boolean;
   onTogglePhase: () => void;
 }) {
   const running = instances.filter((instance) => instance.alive);
-  const [port, setPort] = useState<number | null>(initialPort ?? running[0]?.port ?? null);
   const [tab, setTab] = useState<GearTab>("sets");
   const pageRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (initialPort && running.some((item) => item.port === initialPort)) {
-      setPort(initialPort);
-    }
-  }, [initialPort, running]);
   const [slots, setSlots] = useState<Record<string, GearSlot>>({});
   const [encumbrance, setEncumbrance] = useState(0);
   const [job, setJob] = useState<JobInfo | null>(null);
@@ -213,13 +210,11 @@ export function GearPage({
     [phaseLive?.lockedSlots],
   );
 
-  const instance = running.find((item) => item.port === port) ?? running[0] ?? null;
-
-  useEffect(() => {
-    if (!running.some((item) => item.port === port)) {
-      setPort(running[0]?.port ?? null);
-    }
-  }, [running, port]);
+  const instance = tenant
+    ? running.find(
+        (item) => Number(item.character?.id) === Number(tenant.character.id),
+      ) ?? null
+    : null;
 
   useEffect(() => {
     if (!instance) {
@@ -1057,7 +1052,7 @@ export function GearPage({
     pageRef.current?.closest(".page-scroll")?.scrollTo({ top: 0 });
   }
 
-  if (!instance) {
+  if (!tenant || !instance) {
     return (
       <div className="page">
         <div className="section-header">
@@ -1069,9 +1064,24 @@ export function GearPage({
         <Card>
           <EmptyState
             icon={<Shirt size={26} />}
-            title="No clients running"
-            body="Gear and GearSwap read the live client, so they need a running game and its control port."
-            action={<Button onClick={onControl}>Open Control room</Button>}
+            title={
+              tenant
+                ? `${tenant.character.name} is not running`
+                : "No tenant selected"
+            }
+            body={
+              tenant
+                ? `Gear and GearSwap read the live client. Start ${tenant.character.name} (@${tenant.account}) from the Team or Control room, then come back.`
+                : "Pick a tenant in the bar at the top, or add a box on the Team page."
+            }
+            action={
+              <>
+                <Button onClick={onTeam}>Open Team</Button>
+                <Button variant="ghost" onClick={onControl}>
+                  Control room
+                </Button>
+              </>
+            }
           />
         </Card>
       </div>
@@ -1082,7 +1092,7 @@ export function GearPage({
     <div className="page" ref={pageRef}>
       <div className="section-header">
         <div>
-          <div className="eyebrow">Live client · @{instance.account}</div>
+          <div className="eyebrow">Tenant · @{tenant.account}</div>
           <h1 className="page-title">Gear &amp; GearSwap</h1>
           <p className="page-subtitle">
             The live gear and the state sets the host wears, plus the GearSwap library that feeds
@@ -1091,17 +1101,6 @@ export function GearPage({
           </p>
         </div>
         <div className="section-actions">
-          <Select
-            value={instance.port}
-            onChange={(event) => setPort(Number(event.target.value))}
-            className="header-select"
-          >
-            {running.map((item) => (
-              <option key={item.port} value={item.port}>
-                {item.name} (:{item.port})
-              </option>
-            ))}
-          </Select>
           <Button
             variant="ghost"
             icon={<RefreshCw size={15} />}

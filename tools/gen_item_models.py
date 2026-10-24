@@ -80,6 +80,24 @@ ALIAS = {
     "Erilaz": "erilaz",
 }
 
+# Limbus Su5 armour: LandSandBoat's item_equipment rows still say MId 0 ("not
+# implemented"), but the client model table (xi-tools' mv/lists/characters.json)
+# labels the five families and gives them MIds 513-517.  Keep the raw grap model
+# (slot base + MId) here so a regeneration cannot drop the new suits; migration
+# 107 stamps the same values into a database.
+EXTRA_MODELS = {
+    # Revelation (Hope), MId 513
+    24122: 4609, 24125: 8705, 24128: 12801, 24131: 16897, 24134: 20993,
+    # Sworn (Trust), MId 514
+    24137: 4610, 24140: 8706, 24143: 12802, 24146: 16898, 24149: 20994,
+    # Indomitable (Bravery), MId 515
+    24152: 4611, 24155: 8707, 24158: 12803, 24161: 16899, 24164: 20995,
+    # Duty (Justice), MId 516
+    24167: 4612, 24170: 8708, 24173: 12804, 24176: 16900, 24179: 20996,
+    # Clemency (Mercy), MId 517
+    24182: 4613, 24185: 8709, 24188: 12805, 24191: 16901, 24194: 20997,
+}
+
 
 def norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
@@ -157,6 +175,9 @@ def resolve(db: Path, lsb_path: Path, dressup_path: Path) -> tuple[dict[int, int
     missing: list[tuple[int, str, str]] = []
     for item in items:
         item_id, name, slot = int(item["item_id"]), item["name"], item["equip_slot"]
+        if item_id in EXTRA_MODELS:
+            resolved[item_id] = EXTRA_MODELS[item_id]
+            continue
         if slot in ARMOR:
             mid = lsb.get(item_id, {}).get("mid", 0)
             if not mid:

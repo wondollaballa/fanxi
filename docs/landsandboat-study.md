@@ -102,8 +102,9 @@ Useful behaviours from the study:
 
 Fanxi implements the shape, not the full simulation: a main-hand swing (plus an off-hand
 swing when dual wielding), a simple hit/crit roll, one target, 8-yalm aggro, 30-yalm
-disengage, 5-yalm roam, 20–25 s respawn, no enmity list, claim, linking, TP moves or spells.
-The packet flow is real; the combat math is deliberately small.
+disengage, 5-yalm roam, 20–25 s respawn, one hate total per player (no VE decay), a small
+spell set with enfeebles and DoTs, and Provoke/weapon skills. Claim, linking and TP moves
+are still missing. The packet flow is real; the combat math is deliberately small.
 
 ## 4. The action packet
 
@@ -122,7 +123,11 @@ for each target:
 For a basic attack the category is 1, the action id is the FourCC `atk0` (`0x306B7461`), the
 resolution is hit/miss, and the message is hit/critical/miss. The client uses this to play the
 swing animation and display the damage number. Fanxi's builder packs those fields least-
-significant-bit first, matching the client's bit reader, and sends a `0x028` per swing.
+significant-bit first, matching the client's bit reader, and sends one `0x028` per attack round:
+the target's result count is the main hand's base hit plus any Double/Triple/Quadruple Attack
+extras (animation 0), followed by the off hand's (animation 1), so the client plays every swing
+in order.  Separate packets for the two hands made it drop the main hand and keep only the off
+hand, and a round is capped at eight results.
 
 The reference also uses `0x029` for standalone battle messages (defeat, gil) and `0x02D` for
 end-of-combat messages (EXP, chains, level up). Fanxi sends both for kills and level-ups.

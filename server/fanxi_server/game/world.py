@@ -19,7 +19,7 @@ from ..config import Config
 from ..service import FanxiService
 from dataclasses import replace
 
-from . import combat, effects, stats
+from . import combat, effects, modifiers as mod, stats
 from .cipher import M32, VIEW_KEY, Huffman, md5, zone_cipher
 from .entities import ZoneEntity, mob_from_row, npc_from_row
 from .packets import (
@@ -74,6 +74,17 @@ ENGAGE_RANGE = 30.0
 # Entities are streamed in as the player walks, the way retail does it: sending a zone's
 # whole population at once floods the client's entity table.
 SYNC_RANGE = 60.0
+# Pets and Trusts use the client's spawnable range (0x700-0x8FF).  Every client can hold
+# up to five alter egos beside its own character.
+TRUST_TARGID_FIRST = 0x700
+TRUST_TARGID_LAST = 0x8FF
+TRUST_MAX = 5
+TRUST_SPAWN_DISTANCE = 2.0
+TRUST_FOLLOW_DISTANCE = 2.5
+TRUST_WARP_DISTANCE = 25.0
+TRUST_REACH = 3.5
+TRUST_CHASE_SPEED = 6.2
+TRUST_LEASH = 40.0
 # Player characters use the client's PC targid range (0x400-0x6FF). 0x400 is the local
 # player in its own view; every other character gets one of these from World.
 PLAYER_TARGID_FIRST = 0x401
@@ -84,6 +95,14 @@ PLAYER_DESPAWN_RANGE = 50.0
 MOB_WALK_SPEED = 2.0  # yalms per second, matched to the client's walk cycle
 MOB_REACH = 3.5  # how close a mob must be before its swing can land
 MOB_CHASE_SPEED = 6.0  # a mob closing on its target runs, it does not amble
+# Enmity.  Retail keeps two meters: cumulative enmity (CE) never decays on its own,
+# while volatile enmity (VE) drains 60 points a second and is what lets a tank lose the
+# monster again.  Both are capped at 30,000; the target is the highest CE + VE.
+ENMITY_CAP = 30000
+VE_DECAY_PER_SECOND = 60.0
+# The first player to generate hate on an idle monster also gets 200 CE + 900 VE.
+CLAIM_CE = 200
+CLAIM_VE = 900
 # A zone session has no TCP connection to watch: silence is the disconnect.  The client
 # sends position packets continuously, so a force-quit or a dead network is visible as a
 # long gap.  Without this the character stayed in every other client's world forever.
@@ -240,6 +259,234 @@ class World:
         self.content[zone] = entities
         log.info("zone %d content: %d entities", zone, len(entities))
         return entities
+
+    # --- trusts --------------------------------------------------------------------------------
+    def allocate_trust_targid(self, zone: int) -> int | None:
+        """A free pet/trust ActIndex in this zone, or None when all 512 are in use."""
+        used = {int(entity.targid) for entity in self.entities_for_zone(zone)}
+        for targid in range(TRUST_TARGID_FIRST, TRUST_TARGID_LAST + 1):
+            if targid not in used:
+                return targid
+        return None
+
+    def spawn_trust(self, session, row: dict, now: float | None = None):
+        """Call one alter ego beside its owner and show it to everyone in the zone.
+
+        The client draws a Trust from a normal 0x00E spawn with Flags3's Trust/Pet bits
+        set; 0x067 is the extra packet that tells the owner's client this spawnable is
+        a Trust of that player, which is what gives it the Release sub-menu.
+        """
+        from . import packets
+        from .zone import TARGID, sub
+        from .entities import trust_from_row
+
+        now = time.time() if now is None else now
+        zone = int(session.zone)
+        if getattr(session, "char", {}).get("moghouse"):
+            session.say("You cannot call an alter ego here.")
+            return None
+        targid = self.allocate_trust_targid(zone)
+        if targid is None:
+            session.say("There is no room for another alter ego.")
+            return None
+        index = len(getattr(session, "trust_entities", []))
+        level = max(1, int(session.char.get("main_level", 1)))
+        entity = trust_from_row(row, targid, zone, int(session.char["char_id"]), level)
+        angle = math.pi * (0.5 + index * 0.35)
+        distance = TRUST_SPAWN_DISTANCE + index * 0.8
+        entity.x = float(session.pos[0]) + math.sin(angle) * distance
+        entity.y = float(session.pos[1])
+        entity.z = float(session.pos[2]) + math.cos(angle) * distance
+        entity.spawn_x, entity.spawn_y, entity.spawn_z = entity.x, entity.y, entity.z
+        entity.rot = heading_to_rot(session.pos[0] - entity.x, session.pos[2] - entity.z)
+        entity.last_move_at = now
+        self.entities_for_zone(zone).append(entity)
+        for observer in self.sessions_in_zone(zone):
+            if entity not in observer.entities:
+                observer.entities.append(entity)
+            if observer is not session:
+                if not getattr(observer, "entities_sent", False):
+                    continue
+                if entity.distance_to(*observer.pos[:3]) > SYNC_RANGE:
+                    continue
+            # The caster is ready by definition (the client just sent the cast), so the
+            # owner's spawn goes out even if the first position sweep has not run yet.
+            observer.sent_targids.add(int(entity.targid))
+            observer.queue_spawn(entity)
+            if observer is session:
+                # 0x067 only goes to the master; other clients read the 0x00E spawn.
+                observer.queue.append(sub(0x067, packets.entity_set_name(entity, TARGID)))
+        if getattr(session, "trust_entities", None) is None:
+            session.trust_entities = []
+        session.trust_entities.append(entity)
+        session.say("%s joins you." % entity.name)
+        log.info("%s called trust %s (%#x) in zone %d", session.addr, entity.name,
+                 int(entity.id), zone)
+        return entity
+
+    def despawn_trust(self, entity, now: float | None = None, reason: str = "") -> None:
+        """Remove one alter ego from the world and from every client that draws it."""
+        from . import packets
+        from .zone import sub
+
+        zone = int(entity.zone)
+        entities = self.entities_for_zone(zone)
+        try:
+            entities.remove(entity)
+        except ValueError:
+            return
+        entity.alive = False
+        body = packets.entity_despawn(entity)
+        for observer in self.sessions_in_zone(zone):
+            if entity in getattr(observer, "entities", []):
+                observer.entities.remove(entity)
+            if entity in getattr(observer, "trust_entities", []):
+                observer.trust_entities.remove(entity)
+            if int(entity.targid) in getattr(observer, "sent_targids", set()):
+                observer.sent_targids.discard(int(entity.targid))
+                observer.queue.append(sub(0x00E, body))
+        log.info("trust %s (%#x) left zone %d%s", entity.name, int(entity.id), zone,
+                 (" (%s)" % reason) if reason else "")
+
+    def trust_attack(self, entity: ZoneEntity, mob: ZoneEntity, owner, now: float) -> None:
+        """One alter-ego swing at the monster its owner is fighting."""
+        from . import packets
+        from .zone import sub
+
+        sheet = stats.build_monster(int(entity.level))
+        multiplier = max(0, min(300, int(entity.damage_mult))) / 100.0
+        weapon_dmg = max(1, int(int(entity.level) * 0.80 * multiplier))
+        attacker = replace(
+            sheet.fighter, weapon_dmg=weapon_dmg,
+            attack=max(1, int(sheet.fighter.attack * 0.95)),
+            accuracy=int(sheet.fighter.accuracy + 10))
+        hit = combat.melee(attacker, self.debuffed_monster(mob),
+                           zone=int(mob.zone), rng=self.rng)
+        defeated = (not hit.missed) and int(mob.hp) - int(hit.damage) <= 0
+        body = packets.battle_action(
+            int(entity.id), int(mob.id), int(hit.damage), miss=hit.missed,
+            critical=hit.critical, defeated=defeated, animation=0,
+            category=packets.ACTION_CATEGORY_BASIC_ATTACK,
+            action_id=packets.BASIC_ATTACK_ID)
+        for observer in self.sessions_in_zone(entity.zone):
+            if int(entity.targid) in getattr(observer, "sent_targids", set()):
+                observer.queue.append(sub(0x028, body))
+        if hit.missed:
+            self.add_mob_hate(mob, int(owner.char["char_id"]), 1, now)
+        else:
+            mob.hp = max(0, int(mob.hp) - int(hit.damage))
+            for observer in self.sessions_in_zone(entity.zone):
+                if int(mob.targid) in getattr(observer, "sent_targids", set()):
+                    observer.queue_entity(mob, SEND_HP)
+            self.wake_mob(mob)
+            # The owner is the one on the monster's hate list; half the Trust's damage
+            # is passed along so an alter ego helps pull without becoming untouchable.
+            self.add_damage_hate(mob, int(owner.char["char_id"]),
+                                 max(1, int(hit.damage) // 2), now)
+            if defeated:
+                self.kill_mob(owner, mob, now)
+        entity.next_attack_at = now + max(1.5, int(entity.attack_delay_ms) / 1000.0)
+
+    def _tick_trust(self, entity: ZoneEntity, sessions: list, now: float) -> None:
+        """Follow the owner, then fight whatever monster the owner is fighting."""
+        if not entity.alive:
+            return
+        owner = self.session_by_char(entity.owner_char_id)
+        if (owner is None or owner.zone != entity.zone or getattr(owner, "gone", False)
+                or owner.dead_until or int(owner.char.get("hp_current", 0)) <= 0):
+            self.despawn_trust(entity, now, "owner gone")
+            return
+        level = max(1, int(owner.char.get("main_level", 1)))
+        if int(entity.level) != level:
+            entity.level = level
+            entity.hp_max = max(1, level * 30 + 200)
+            entity.hp = entity.hp_max
+            entity.mp_max = max(0, level * 4)
+            entity.mp = entity.mp_max
+
+        target = None
+        if owner.engaged_id:
+            candidate = self.entity_by_id(entity.zone, int(owner.engaged_id))
+            if candidate is not None and candidate.is_mob() and candidate.alive:
+                target = candidate
+        if target is None:
+            for candidate in self.entities_for_zone(entity.zone):
+                if (candidate.is_mob() and candidate.alive
+                        and candidate.engaged_char_id == int(owner.char["char_id"])):
+                    target = candidate
+                    break
+        if target is not None and target.distance_to(*owner.pos[:3]) > TRUST_LEASH:
+            target = None
+
+        if entity.passive or target is None:
+            self._move_trust(entity, owner, sessions, now)
+            return
+
+        distance = entity.distance_to(target.x, target.y, target.z)
+        if distance > TRUST_REACH:
+            self.set_animation(entity, 1, sessions)
+            dx = target.x - entity.x
+            dz = target.z - entity.z
+            self._move_trust_step(entity, dx, dz, TRUST_CHASE_SPEED, sessions, now)
+            return
+        if entity.moving:
+            entity.moving = False
+            for observer in sessions:
+                if int(entity.targid) in getattr(observer, "sent_targids", set()):
+                    observer.queue_entity(entity, SEND_POSITION)
+        entity.rot = heading_to_rot(target.x - entity.x, target.z - entity.z)
+        self.set_animation(entity, 1, sessions)
+        if now < entity.next_attack_at:
+            return
+        self.trust_attack(entity, target, owner, now)
+
+    def _move_trust(self, entity: ZoneEntity, owner, sessions: list, now: float) -> None:
+        """Walk to the owner (or snap back if left far behind)."""
+        from . import packets
+
+        dx = float(owner.pos[0]) - entity.x
+        dz = float(owner.pos[2]) - entity.z
+        span = math.hypot(dx, dz)
+        if span > TRUST_WARP_DISTANCE:
+            entity.x = float(owner.pos[0]) + 1.5
+            entity.y = float(owner.pos[1])
+            entity.z = float(owner.pos[2]) + 1.5
+            entity.moving = False
+            self.set_animation(entity, 0, sessions)
+            for observer in sessions:
+                if int(entity.targid) in getattr(observer, "sent_targids", set()):
+                    observer.queue_entity(entity, packets.SEND_POSITION)
+            return
+        if span <= TRUST_FOLLOW_DISTANCE:
+            if entity.moving:
+                entity.moving = False
+                for observer in sessions:
+                    if int(entity.targid) in getattr(observer, "sent_targids", set()):
+                        observer.queue_entity(entity, packets.SEND_POSITION)
+            self.set_animation(entity, 0, sessions)
+            return
+        self._move_trust_step(entity, dx, dz, TRUST_CHASE_SPEED, sessions, now)
+
+    def _move_trust_step(self, entity: ZoneEntity, dx: float, dz: float,
+                         speed: float, sessions: list, now: float) -> None:
+        """Move an alter ego toward a point and stream its position on the AI beat."""
+        elapsed = max(0.0, min(0.5, now - float(entity.last_move_at or now)))
+        step = speed * elapsed
+        entity.last_move_at = now
+        span = math.hypot(dx, dz) or 1.0
+        if step <= 0 or span <= 0.01:
+            return
+        travel = min(step, span)
+        entity.x += dx / span * travel
+        entity.z += dz / span * travel
+        entity.moving = True
+        entity.rot = heading_to_rot(dx, dz)
+        if now - float(entity.last_sync_at or 0.0) < 0.3:
+            return
+        entity.last_sync_at = now
+        for observer in sessions:
+            if int(entity.targid) in getattr(observer, "sent_targids", set()):
+                observer.queue_entity(entity, packets.SEND_POSITION)
 
     def entity_by_targid(self, zone: int, targid: int):
         for entity in self.entities_for_zone(zone):
@@ -422,6 +669,12 @@ class World:
         """Remove a player from the clients that can see it (zone change, logout)."""
         from .zone import sub
 
+        # Alter egos do not survive their master's zone line, logout or death.  Do this
+        # before the zone changes below, while the Trust still knows the old zone.
+        try:
+            session.despawn_trusts()
+        except Exception as exc:
+            log.warning("%s trust cleanup failed: %s", getattr(session, "addr", "?"), exc)
         char_id = int(session.char["char_id"])
         for observer in self.sessions_in_zone(session.zone):
             if observer is session:
@@ -487,9 +740,11 @@ class World:
             sessions = self.sessions_in_zone(zone)
             if not sessions:
                 continue
-            for entity in entities:
+            for entity in list(entities):
                 if entity.is_mob():
                     self._tick_mob(entity, sessions, now)
+                elif entity.is_trust():
+                    self._tick_trust(entity, sessions, now)
         # A logged-out session stays long enough for flush() to send its 0x00B, then goes.
         for addr, session in list(self.sessions.items()):
             if getattr(session, "gone", False) and not session.queue:
@@ -543,14 +798,44 @@ class World:
         if not entity.alive:
             return
 
+        # Petrification (Break/Breakga) freezes the monster where it stands: no walking,
+        # no swings and no facing changes until the 30 seconds run out.  It is not the
+        # same as Sleep -- damage does not wake it (see wake_mob).
+        if effects.PETRIFICATION in entity.effect_state:
+            entity.next_attack_at = now + 1.0
+            if entity.moving:
+                entity.moving = False
+                for session in sessions:
+                    session.queue_entity(entity, SEND_POSITION)
+            return
+
+        self.decay_mob_enmity(entity, now)
+        # VE is the half that moves a monster between players: once it drains, a player
+        # with more cumulative hate can overtake the current target.
+        if entity.engaged_char_id and len(entity.enmity) > 1:
+            top = self.mob_hate_target(entity)
+            if top is not None and int(top.char["char_id"]) != int(entity.engaged_char_id):
+                entity.engaged_char_id = int(top.char["char_id"])
+                entity.claim_char_id = int(top.char["char_id"])
+                entity.next_attack_at = now + 1.0
+
         target = self.session_by_char(entity.engaged_char_id) if entity.engaged_char_id else None
         if entity.engaged_char_id and (target is None or target.zone != entity.zone
                                        or target.dead_until or int(target.char.get("hp_current", 0)) <= 0
                                        or entity.distance_to(*target.pos[:3]) > DISENGAGE_DISTANCE):
             entity.engaged_char_id = None
             entity.aggro_announced = False
-            self.set_animation(entity, 0, sessions)
-            target = None
+            # A spell pull leaves hate behind: if the current target dies, zones out or
+            # runs, hand the monster to the next-highest player instead of resetting it.
+            target = self.mob_hate_target(entity)
+            if target is None:
+                entity.claim_char_id = None
+                self.set_animation(entity, 0, sessions)
+            else:
+                entity.engaged_char_id = int(target.char["char_id"])
+                entity.claim_char_id = int(target.char["char_id"])
+                entity.next_attack_at = now + 1.0
+                self.set_animation(entity, 1, sessions)
 
         if target is not None:
             # Sleep and Stun stop the mob where it stands.  Damage wakes it (wake_mob).
@@ -643,6 +928,7 @@ class World:
                     continue
                 if entity.distance_to(*session.pos[:3]) <= AGGRO_DISTANCE:
                     entity.engaged_char_id = int(session.char["char_id"])
+                    entity.claim_char_id = int(session.char["char_id"])
                     entity.next_attack_at = now + 1.5
                     self.set_animation(entity, 1, sessions)
                     if not entity.aggro_announced:
@@ -733,28 +1019,85 @@ class World:
             self._monster_sheets[int(entity.level)] = sheet
         return sheet
 
+    def debuffed_monster(self, entity: ZoneEntity) -> combat.Fighter:
+        """The cached monster fighter with the player's debuffs applied.
+
+        The sheet itself is cached per level and must stay clean, so every debuff is a
+        ``replace`` on a copy.  Evasion, Defense and Accuracy Down are percentages;
+        Dia lowers Defense the same way (it and Defense Down are separate effects in
+        retail, so they stack multiplicatively).  Critical Hit Evasion Down is stored
+        as a negative ``CRITICAL_HIT_EVASION`` modifier, which is the same field the
+        player's own crit rate already reads.
+        """
+        fighter = self.monster_sheet(entity).fighter
+        evasion = int(fighter.evasion)
+        defense = int(fighter.defense)
+
+        state = entity.effect_state.get(effects.EVASION_DOWN)
+        if state is not None:
+            cut = max(0, min(90, int(state.get("potency", 0))))
+            evasion = max(1, int(evasion * (100 - cut) / 100.0))
+        for effect_id in (effects.DIA, effects.DEFENSE_DOWN):
+            state = entity.effect_state.get(effect_id)
+            if state is None:
+                continue
+            cut = max(0, min(90, int(state.get("potency", 0))))
+            defense = max(1, int(defense * (100 - cut) / 100.0))
+
+        mods = dict(fighter.mods)
+        crit_down = entity.effect_state.get(effects.CRIT_HIT_EVASION_DOWN)
+        if crit_down is not None:
+            percent = max(0.0, float(crit_down.get("potency", 0) or 0))
+            mods[mod.CRITICAL_HIT_EVASION] = (
+                int(mods.get(mod.CRITICAL_HIT_EVASION, 0)) - int(percent * 100))
+
+        return replace(fighter, evasion=max(1, evasion), defense=max(1, defense), mods=mods)
+
+    def monster_debuff_mods(self, entity: ZoneEntity) -> dict[int, int]:
+        """The monster's magic-side debuffs as modifier deltas.
+
+        ``combat._magic_finish`` accepts a negative ``MDEF`` (Magic Defense Down raises
+        magic damage) and ``combat.magic_resist`` adds ``MEVA`` straight into the
+        evasion term, so Magic Evasion Down lowers it.  INT Down is a flat stat, which
+        the spell path subtracts from the target's INT itself.
+        """
+        mods = dict(self.monster_sheet(entity).fighter.mods)
+        defense_down = entity.effect_state.get(effects.MAGIC_DEF_DOWN)
+        if defense_down is not None:
+            amount = int(defense_down.get("power") or defense_down.get("potency") or 0)
+            mods[mod.MDEF] = int(mods.get(mod.MDEF, 0)) - amount
+        evasion_down = entity.effect_state.get(effects.MAGIC_EVASION_DOWN)
+        if evasion_down is not None:
+            amount = int(evasion_down.get("power") or evasion_down.get("potency") or 0)
+            mods[mod.MEVA] = int(mods.get(mod.MEVA, 0)) - amount
+        return mods
+
     def player_attack(self, session, entity: ZoneEntity, *, ftp: float = 1.0,
-                      attack_multiplier: float = 1.0, off_hand: bool = False):
+                      attack_multiplier: float = 1.0, off_hand: bool = False,
+                      accuracy_bonus: int = 0, crit_bonus: float = 0.0,
+                      wsc: int = 0, ignored_defense: float = 0.0):
         """One player swing at a monster: (missed, damage, critical).
 
         ``off_hand`` picks the sheet's second Fighter (the dual-wielded sub weapon).
         It has its own damage rating, skill and Accuracy, and retail caps its hit rate
-        at 95% instead of 99%.
+        at 95% instead of 99%.  ``accuracy_bonus`` and ``crit_bonus`` are the weapon
+        skill's own gear/trait terms ("Weapon skill accuracy" and Fencer).  ``wsc`` and
+        ``ignored_defense`` are the weapon skill's secondary-attribute bonus and the
+        fraction of the target's Defense it ignores.
         """
-        target = self.monster_sheet(entity).fighter
-        evasion_down = entity.effect_state.get(effects.EVASION_DOWN)
-        if evasion_down is not None:
-            target = replace(target, evasion=max(
-                1, int(target.evasion * (1.0 - int(evasion_down.get("potency", 0)) / 100.0))))
+        target = self.debuffed_monster(entity)
         sheet = session.stat_sheet()
         attacker = sheet.sub_fighter if off_hand else sheet.fighter
         if attacker is None:
             # Only callers that saw a dual-wield sheet ask for the off hand; a missing
             # fighter would otherwise silently swing the main hand twice.
             return True, 0, False
+        if accuracy_bonus:
+            attacker = replace(attacker, accuracy=int(attacker.accuracy) + int(accuracy_bonus))
         hit = combat.melee(
             attacker, target, zone=int(entity.zone), rng=self.rng, ftp=ftp,
-            attack_multiplier=attack_multiplier)
+            attack_multiplier=attack_multiplier, crit_bonus=crit_bonus,
+            wsc=wsc, ignored_defense=ignored_defense)
         return hit.missed, hit.damage, hit.critical
 
     def mob_attack(self, entity: ZoneEntity, session):
@@ -762,14 +1105,19 @@ class World:
 
         The player's damage-taken gear is applied inside the engine, so the number that
         comes back is what the client should print -- PDT and DT already taken off.
-        Blind and Attack Down are applied to the monster's fighter copy here; the
-        monster sheet itself is cached per level and must stay clean.
+        Blind, Accuracy Down and Attack Down are applied to the monster's fighter copy
+        here; the monster sheet itself is cached per level and must stay clean.
         """
         attacker = self.monster_sheet(entity).fighter
         blind = entity.effect_state.get(effects.BLINDNESS)
         if blind is not None:
             attacker = replace(attacker, accuracy=max(
                 1, int(attacker.accuracy * (1.0 - int(blind.get("potency", 0)) / 100.0))))
+        accuracy_down = entity.effect_state.get(effects.ACCURACY_DOWN)
+        if accuracy_down is not None:
+            attacker = replace(attacker, accuracy=max(
+                1, int(attacker.accuracy
+                        * (1.0 - int(accuracy_down.get("potency", 0)) / 100.0))))
         attack_down = entity.effect_state.get(effects.ATTACK_DOWN)
         if attack_down is not None:
             attacker = replace(attacker, attack=max(
@@ -781,32 +1129,157 @@ class World:
 
     # --- status effects on monsters -----------------------------------------------------
 
+    def add_mob_hate(self, entity: ZoneEntity, char_id: int, amount: int = 0,
+                     now: float = 0.0, *, ce: int | None = None,
+                     ve: int | None = None) -> None:
+        """Add cumulative and volatile enmity, and pick the highest-hate player.
+
+        Callers that only know one number (an enfeeble, an ability that hands over a
+        fixed hate chunk) can pass ``amount``; it is split 25% CE / 75% VE.  Damage
+        uses :meth:`add_damage_hate` and Provoke passes ``ce=1800, ve=0``, because
+        Provoke's hate is cumulative and does not decay.
+
+        The first player to generate hate on an idle monster receives retail's
+        200 CE + 900 VE claim bonus, which is why a single spell pulls.
+        """
+        char_id = int(char_id)
+        if char_id <= 0 or not entity.alive:
+            return
+        if ce is None and ve is None:
+            total = max(0, int(amount))
+            ce, ve = total * 25 // 100, total - total * 25 // 100
+        else:
+            ce = max(0, int(ce or 0))
+            ve = max(0, int(ve or 0))
+
+        hate = entity.enmity
+        if not hate:
+            ce += CLAIM_CE
+            ve += CLAIM_VE
+        previous_total = int(hate.get(char_id, 0))
+        previous_ve = int(entity.enmity_ve.get(char_id, 0))
+        new_ce = min(ENMITY_CAP, max(0, previous_total - previous_ve + ce))
+        new_ve = min(ENMITY_CAP, previous_ve + ve)
+        hate[char_id] = new_ce + new_ve
+        entity.enmity_ve[char_id] = new_ve
+        if entity.enmity_decay_at <= 0.0:
+            entity.enmity_decay_at = now
+        top = max(hate, key=hate.get)
+        if entity.engaged_char_id != top:
+            entity.engaged_char_id = top
+            entity.claim_char_id = top
+            entity.next_attack_at = now + 1.5
+            entity.aggro_announced = True
+            self.set_animation(entity, 1)
+
+    def add_damage_hate(self, entity: ZoneEntity, char_id: int, damage: int,
+                        now: float) -> None:
+        """Enmity from one landed hit or nuke.
+
+        LandSandBoat's level-scaled split: ``80 / GetEnmityModDamage(level)`` CE and
+        ``240 / ...`` VE per point of damage.  A miss still passes 1, which is how a
+        whiff can claim an idle monster.
+        """
+        damage = max(1, int(damage))
+        modifier = max(1, int(entity.level) * 31 // 50 + 6)
+        self.add_mob_hate(entity, char_id, now=now,
+                          ce=80 * damage // modifier,
+                          ve=240 * damage // modifier)
+
+    def decay_mob_enmity(self, entity: ZoneEntity, now: float) -> None:
+        """Drain volatile enmity by 60 points a second; CE never decays by itself."""
+        if not entity.enmity:
+            entity.enmity_decay_at = now
+            return
+        last = float(entity.enmity_decay_at or 0.0)
+        if last <= 0.0:
+            entity.enmity_decay_at = now
+            return
+        elapsed = now - last
+        if elapsed < 1.0:
+            return
+        entity.enmity_decay_at = now
+        decay = int(VE_DECAY_PER_SECOND * elapsed)
+        for char_id in list(entity.enmity):
+            volatile = int(entity.enmity_ve.get(char_id, 0))
+            if volatile <= 0:
+                continue
+            cumulative = max(0, int(entity.enmity.get(char_id, 0)) - volatile)
+            volatile = max(0, volatile - decay)
+            if cumulative <= 0 and volatile <= 0:
+                entity.enmity.pop(char_id, None)
+                entity.enmity_ve.pop(char_id, None)
+            else:
+                entity.enmity[char_id] = cumulative + volatile
+                entity.enmity_ve[char_id] = volatile
+
+    def mob_hate_target(self, entity: ZoneEntity):
+        """The highest-hate player still in this zone and in range, or None.
+
+        Entries for players who died, zoned out or ran past the disengage distance are
+        dropped, so the monster falls back to the next name on its list instead of
+        forgetting the fight.
+        """
+        while entity.enmity:
+            top = max(entity.enmity, key=entity.enmity.get)
+            session = self.session_by_char(top)
+            if (session is not None and session.zone == entity.zone
+                    and not session.dead_until
+                    and int(session.char.get("hp_current", 0)) > 0
+                    and entity.distance_to(*session.pos[:3]) <= DISENGAGE_DISTANCE):
+                return session
+            entity.enmity.pop(top, None)
+            entity.enmity_ve.pop(top, None)
+        entity.engaged_char_id = None
+        return None
+
     def mob_effect(self, entity: ZoneEntity, effect_id: int) -> dict | None:
         return entity.effect_state.get(int(effect_id))
 
     def apply_mob_effect(self, entity: ZoneEntity, spec, session, now: float,
-                         duration_scale: float = 1.0) -> bool:
+                         duration_scale: float = 1.0,
+                         duration: float | None = None,
+                         potency: int | None = None,
+                         tick: int | None = None,
+                         tick_interval: float = 3.0,
+                         first_tick_delay: float | None = None,
+                         tier: int = 0) -> bool:
         """Land an enfeebling spell.  Returns False when there is no effect to apply.
 
         ``duration_scale`` comes from the caster's Magic Accuracy against the target's
         Magic Evasion (``combat.magic_resist``): a weak caster keeps the effect for less
-        time.  The numbers the AI reads are kept on the entity: potency is a percentage
-        (accuracy down, delay up, paralyze chance), tick is the damage the poison/bio
-        family deals every three seconds.
+        time.  ``duration``/``potency`` are the caster's already-modified values; when
+        omitted the spell's table values are used.  The numbers the AI reads are kept on
+        the entity: potency is a percentage (accuracy down, delay up, paralyze chance),
+        tick is the damage the poison/bio family deals every three seconds.
+
+        ``tick`` overrides the table's per-tick damage, which is how a Helix stores the
+        opening nuke as the value it repeats.  ``tick_interval`` is the seconds between
+        ticks (Helixes use ten, everything else three) and ``first_tick_delay`` shifts
+        the first one.  ``tier`` is only meaningful for the Helix line: retail lets a
+        tier-2 Helix replace any Helix but a tier-1 Helix only replaces tier 1.
         """
         if spec is None or int(spec.effect) <= 0:
             return False
         effect_id = int(spec.effect)
+        existing = entity.effect_state.get(effect_id)
+        if existing is not None and int(tier) and int(existing.get("tier", 0)) > int(tier):
+            return False
         if effect_id not in entity.status_effects:
             entity.status_effects.append(effect_id)
+        base_duration = float(spec.duration if duration is None else duration)
+        interval = max(0.1, float(tick_interval))
+        first_tick = interval if first_tick_delay is None else max(0.0, float(first_tick_delay))
         entity.effect_state[effect_id] = {
-            "until": (now + float(spec.duration) * max(0.5, min(1.0, float(duration_scale)))
-                      if spec.duration else 0.0),
+            "until": (now + base_duration * max(0.5, min(1.0, float(duration_scale)))
+                      if base_duration else 0.0),
             "power": int(spec.power),
-            "potency": int(spec.potency),
-            "tick": int(spec.tick),
+            "potency": int(spec.potency if potency is None else potency),
+            "tick": int(spec.tick if tick is None else tick),
+            "tick_interval": interval,
+            "tier": int(tier),
             "icon": int(spec.icon or effect_id),
-            "next_tick": now + 3.0,
+            "next_tick": now + first_tick,
             "source": int(session.char["char_id"]) if session is not None else 0,
         }
         log.info("%s gains effect %d", entity.name, effect_id)
@@ -835,7 +1308,9 @@ class World:
         return 0
 
     def tick_mob_effects(self, entity: ZoneEntity, sessions: list, now: float) -> None:
-        """Expire debuffs and apply poison/bio damage once every three seconds."""
+        """Expire debuffs and apply poison/bio damage once per effect's own interval."""
+        from .zone import sub
+
         if not entity.effect_state:
             return
         for effect_id, state in list(entity.effect_state.items()):
@@ -848,23 +1323,30 @@ class World:
                     pass
                 icon = int(state.get("icon", effect_id))
                 for session in sessions:
-                    session.queue_action(int(entity.id), icon, actor_id=int(entity.id),
-                                         message=206, kind=0,
-                                         category=4, info=0)
+                    # A 0x029 battle message prints the wear-off line without an action,
+                    # so the monster does not play a casting animation for it.
+                    session.queue.append(sub(0x029, battle_message(
+                        int(entity.id), int(entity.id), int(entity.targid),
+                        int(entity.targid), icon, 0, 206)))
                 continue
             tick = int(state.get("tick") or 0)
             if tick <= 0 or now < float(state.get("next_tick") or 0.0):
                 continue
-            state["next_tick"] = now + 3.0
+            # A Helix repeats its opening hit every ten seconds; poison/bio keep the
+            # three-second cadence the rest of the effect system uses.
+            state["next_tick"] = now + max(0.1, float(state.get("tick_interval") or 3.0))
             actor = int(state.get("source") or 0)
+            source = self.session_by_char(actor) if actor else None
             entity.hp = max(0, int(entity.hp) - tick)
+            log.info("%s takes %d from effect %d", entity.name, tick, effect_id)
             for session in sessions:
-                session.queue_action(int(entity.id), tick,
-                                     actor_id=actor or int(entity.id),
-                                     message=185, kind=0, category=4, info=0)
+                # DoT ticks are silent: the 0x00E HP update already draws the loss, and
+                # a chat line was printing "takes 0 points of damage" (the client does
+                # not read the number from the 0x029 Data field).  A 0x028 action would
+                # animate the caster every tick, so neither line is sent.
                 session.queue_entity(entity, SEND_HP)
             if entity.hp <= 0:
-                source = self.session_by_char(actor) if actor else (sessions[0] if sessions else None)
+                source = source or (sessions[0] if sessions else None)
                 if source is not None:
                     self.kill_mob(source, entity, now)
                 break
@@ -875,6 +1357,9 @@ class World:
         entity.alive = False
         entity.hp = 0
         entity.engaged_char_id = None
+        entity.enmity.clear()
+        entity.enmity_ve.clear()
+        entity.enmity_decay_at = 0.0
         entity.respawn_at = now + max(5, entity.respawn_seconds)
         # Leave the body on the ground for a moment instead of blinking it out: the client
         # plays the death animation from the entity update's animation byte.

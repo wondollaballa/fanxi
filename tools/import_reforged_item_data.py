@@ -52,7 +52,8 @@ MOD = {
     "ENMITY": 27, "MATT": 28, "MDEF": 29, "MACC": 30, "MEVA": 31, "WSACC": 48,
     "EVA": 68, "STORETP": 73, "SOULEATER": 96, "DARK_CAST": 1071, "FASTCAST": 170,
     "SKILLCHAINBONUS": 174, "DUAL_WIELD": 259, "DOUBLE_ATTACK": 288,
-    "SUBTLE_BLOW": 289, "TRIPLE_ATTACK": 302, "DRAIN_ASPIR": 315, "MAGIC_DAMAGE": 311,
+    "SUBTLE_BLOW": 289, "TRIPLE_ATTACK": 302, "QUADRUPLE_ATTACK": 430,
+    "DRAIN_ASPIR": 315, "MAGIC_DAMAGE": 311,
     "RAPID_SHOT": 359, "SNAPSHOT": 365, "REFRESH": 369, "REGEN": 370,
     "HASTE_GEAR": 384, "WEAPON_BASH": 392, "CRIT_DMG_INCREASE": 421,
     "SKILLCHAINDMG": 175, "MAGIC_BURST": 487, "MAGIC_BURST_II": 274,
@@ -60,6 +61,8 @@ MOD = {
     "NETHR": 1083, "ABSORB_DUR": 1138, "ABSORB_TP": 1153, "OCCULT": 902,
     "WS_DMG": 840, "DMG": 160, "DMGPHYS": 161, "DMGBREATH": 162,
     "DMGMAGIC": 163, "DMGRANGE": 164, "DMGPHYS_II": 190, "DMGMAGIC_II": 831,
+    "ENH_MAGIC_DURATION": 890, "REGEN_DURATION": 339, "REGEN_MULTIPLIER": 838,
+    "PERPETUANCE": 1221,
 }
 
 # Client skill ids (0x062 block) -> the words the item description uses.
@@ -145,6 +148,7 @@ def parse_description(description: str):
     take(r'"Subtle Blow"\s*\+\s*(\d+)', MOD["SUBTLE_BLOW"])
     take(r'"Double Attack"\s*\+\s*(\d+)%?', MOD["DOUBLE_ATTACK"])
     take(r'"Triple Attack"\s*\+\s*(\d+)%?', MOD["TRIPLE_ATTACK"])
+    take(r'"Quadruple Attack"\s*\+\s*(\d+)%?', MOD["QUADRUPLE_ATTACK"])
     take(r'"Dual Wield"\s*\+\s*(\d+)%?', MOD["DUAL_WIELD"])
     take(r'"Fast Cast"\s*\+\s*(\d+)%?', MOD["FASTCAST"])
     take(r"Critical hit rate\s*\+\s*(\d+)%?", 165)
@@ -166,7 +170,12 @@ def parse_description(description: str):
     take(r"Magic burst damage II\s*\+\s*(\d+)", MOD["MAGIC_BURST_II"])
     take(r"Magic burst damage\s*\+\s*(\d+)", MOD["MAGIC_BURST"])
     take(r'"Refresh"\s*\+\s*(\d+)', MOD["REFRESH"])
+    take(r'"Regen" effect duration\s*\+\s*(\d+)', MOD["REGEN_DURATION"])
+    take(r'"Regen" duration\s*\+\s*(\d+)', MOD["REGEN_DURATION"])
+    take(r'"Regen" potency\s*\+\s*(\d+)%', MOD["REGEN_MULTIPLIER"])
     take(r'"Regen"\s*\+\s*(\d+)', MOD["REGEN"])
+    take(r'"Perpetuance"\s*\+\s*(\d+)%', MOD["PERPETUANCE"], lambda value: value * 100)
+    take(r"Enhancing magic duration\s*\+\s*(\d+)%", MOD["ENH_MAGIC_DURATION"])
     take(r'"Snapshot"\s*\+\s*(\d+)', MOD["SNAPSHOT"])
     take(r'"Rapid Shot"\s*\+\s*(\d+)', MOD["RAPID_SHOT"])
     take(r"Dark magic casting time\s*-\s*(\d+)%", MOD["DARK_CAST"], lambda value: -value)

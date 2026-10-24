@@ -1095,6 +1095,367 @@ uint8_t* res_icon_rgba(const ResIcon* icon)
     return out;
 }
 
+/* ---- menu icons: spell and ability list images ----------------------------------------------- */
+
+/* The menu icon DAT (file id 39551, ROM/280/15.DAT) has one 32x32 image chunk per icon and a
+ * "magi" sprite sheet (type 0x31) whose sprites are indexed by the spell/ability `icon_id`. Most
+ * sprites draw a base part from a texture we do not ship (the colored ring) and then the icon's
+ * own image; the last part that names an image in this DAT is the icon itself, so that is what
+ * res_icon_rgba decodes. The image chunks are DXT3, 8bpp or 32bpp (the same encodings as the UI
+ * sheets in datui.c), and FFXI's alpha is 0..0x80. */
+#define RES_ICON_FILE 39551u
+
+typedef struct MenuImage
+{
+    char category[9];
+    char name[9];
+    const uint8_t* payload;
+    size_t size;
+} MenuImage;
+
+static uint8_t* g_icon_data;
+static size_t g_icon_data_size;
+static MenuImage* g_icon_images;
+static uint32_t g_icon_image_count;
+static const uint8_t* g_icon_sheet;
+static size_t g_icon_sheet_size;
+static int g_icons_loaded;
+
+static void icon_name(const uint8_t* src, char out[9])
+{
+    int n = 0;
+    for (int i = 0; i < 8; ++i)
+    {
+        char c = (char)src[i];
+        out[i] = c >= 'A' && c <= 'Z' ? (char)(c + 32) : c;
+        if (c != ' ' && c)
+            n = i + 1;
+    }
+    out[n] = 0;
+}
+
+static void load_menu_icons(void)
+{
+    if (g_icons_loaded)
+        return;
+    g_icons_loaded = 1;
+    g_icon_data = res_file_read(RES_ICON_FILE, &g_icon_data_size);
+    if (!g_icon_data)
+        return;
+    MenuImage* images = NULL;
+    uint32_t count = 0, cap = 0;
+    for (size_t o = 0; o + 16 <= g_icon_data_size;)
+    {
+        uint32_t info = rd32(g_icon_data + o + 4);
+        size_t len = (size_t)(info >> 7) * 16;
+        unsigned type = info & 0x7f;
+        if (len < 16 || o + len > g_icon_data_size)
+            break;
+        const uint8_t* payload = g_icon_data + o + 16;
+        size_t size = len - 16;
+        if (type == 0x31 && !memcmp(g_icon_data + o, "magi", 4) && size >= 19)
+        {
+            g_icon_sheet = payload;
+            g_icon_sheet_size = size;
+        }
+        else if (type == 0x20 && size >= 17)
+        {
+            if (count == cap)
+            {
+                uint32_t next = cap ? cap * 2 : 64;
+                MenuImage* grown = realloc(images, sizeof *grown * next);
+                if (!grown)
+                    break;
+                images = grown;
+                cap = next;
+            }
+            MenuImage* image = &images[count++];
+            icon_name(payload + 1, image->category);
+            icon_name(payload + 9, image->name);
+            image->payload = payload;
+            image->size = size;
+        }
+        o += len;
+    }
+    g_icon_images = images;
+    g_icon_image_count = count;
+}
+
+/* A 4x4 block's colours: DXT1 has a transparent 3-colour mode (c0 <= c1); DXT3/5 always 4. */
+static void icon_rgb565(uint16_t c, uint8_t out[4])
+{
+    out[0] = (uint8_t)((c >> 11 & 31) * 255 / 31);
+    out[1] = (uint8_t)((c >> 5 & 63) * 255 / 63);
+    out[2] = (uint8_t)((c & 31) * 255 / 31);
+    out[3] = 255;
+}
+
+static void icon_dxt_colors(const uint8_t* b, int dxt1, uint8_t pal[4][4])
+{
+    uint16_t c0 = rd16(b), c1 = rd16(b + 2);
+    icon_rgb565(c0, pal[0]);
+    icon_rgb565(c1, pal[1]);
+    for (int k = 0; k < 3; ++k)
+    {
+        if (!dxt1 || c0 > c1)
+        {
+            pal[2][k] = (uint8_t)((2 * pal[0][k] + pal[1][k]) / 3);
+            pal[3][k] = (uint8_t)((pal[0][k] + 2 * pal[1][k]) / 3);
+        }
+        else
+        {
+            pal[2][k] = (uint8_t)((pal[0][k] + pal[1][k]) / 2);
+            pal[3][k] = 0;
+        }
+    }
+    pal[2][3] = 255;
+    pal[3][3] = (uint8_t)(!dxt1 || c0 > c1 ? 255 : 0);
+}
+
+static int icon_decode_dxt(const uint8_t* src, size_t n, int kind, uint32_t w, uint32_t h, uint8_t* rgba)
+{
+    size_t block = kind == 1 ? 8 : 16;
+    uint32_t bw = (w + 3) / 4, bh = (h + 3) / 4;
+    if ((size_t)bw * bh * block > n)
+        return 0;
+    for (uint32_t by = 0; by < bh; ++by)
+        for (uint32_t bx = 0; bx < bw; ++bx, src += block)
+        {
+            const uint8_t* cb = kind == 1 ? src : src + 8;
+            uint8_t pal[4][4], alpha[16];
+            icon_dxt_colors(cb, kind == 1, pal);
+            uint32_t bits = rd32(cb + 4);
+            if (kind == 3)
+                for (int i = 0; i < 16; ++i)
+                    alpha[i] = (uint8_t)(((src[i / 2] >> (i % 2 * 4)) & 15) * 17);
+            else if (kind == 5)
+            {
+                uint8_t a[8] = {src[0], src[1]};
+                for (int i = 2; i < 8; ++i)
+                    a[i] = a[0] > a[1] ? (uint8_t)(((8 - i) * a[0] + (i - 1) * a[1]) / 7)
+                           : i < 6       ? (uint8_t)(((6 - i) * a[0] + (i - 1) * a[1]) / 5)
+                                         : (uint8_t)(i == 6 ? 0 : 255);
+                uint64_t ab = 0;
+                for (int i = 0; i < 6; ++i)
+                    ab |= (uint64_t)src[2 + i] << (8 * i);
+                for (int i = 0; i < 16; ++i)
+                    alpha[i] = a[ab >> (3 * i) & 7];
+            }
+            for (int i = 0; i < 16; ++i)
+            {
+                uint32_t x = bx * 4 + (uint32_t)(i % 4), y = by * 4 + (uint32_t)(i / 4);
+                if (x >= w || y >= h)
+                    continue;
+                uint8_t* d = rgba + ((size_t)y * w + x) * 4;
+                const uint8_t* c = pal[bits >> (2 * i) & 3];
+                d[0] = c[0];
+                d[1] = c[1];
+                d[2] = c[2];
+                d[3] = kind == 1 ? c[3] : alpha[i];
+            }
+        }
+    return 1;
+}
+
+static int decode_menu_image(const uint8_t* p, size_t n, uint8_t** out, int* ow, int* oh)
+{
+    /* 17-byte image header (flag, category, name), a BITMAPINFOHEADER, then the pixels. */
+    if (n < 17 + 40)
+        return 0;
+    const uint8_t* bi = p + 17;
+    int32_t w = (int32_t)rd32(bi + 4), h = (int32_t)rd32(bi + 8);
+    unsigned bpp = rd16(bi + 14);
+    if (h < 0)
+        h = -h;
+    if (w <= 0 || h <= 0 || w > 1024 || h > 1024)
+        return 0;
+    const uint8_t* src = bi + 40;
+    size_t left = n - 17 - 40, px = (size_t)w * (size_t)h;
+    uint8_t* rgba = malloc(px * 4);
+    if (!rgba)
+        return 0;
+    int ok = 0;
+    char fourcc[4] = {0};
+    if (left >= 4)
+        for (int i = 0; i < 4; ++i)
+            fourcc[i] = (char)src[3 - i];
+    if (left >= 12 && !memcmp(fourcc, "DXT", 3) &&
+        (fourcc[3] == '1' || fourcc[3] == '3' || fourcc[3] == '5'))
+        ok = icon_decode_dxt(src + 12, left - 12, fourcc[3] - '0', (uint32_t)w, (uint32_t)h, rgba);
+    else if (bpp == 8 && left >= 1024 + px)
+    {
+        const uint8_t* pal = src;
+        for (size_t i = 0; i < px; ++i)
+        {
+            const uint8_t* c = pal + src[1024 + i] * 4;
+            rgba[i * 4 + 0] = c[2];
+            rgba[i * 4 + 1] = c[1];
+            rgba[i * 4 + 2] = c[0];
+            rgba[i * 4 + 3] = c[3];
+        }
+        ok = 1;
+    }
+    else if (bpp == 32 && left >= px * 4)
+    {
+        for (size_t i = 0; i < px; ++i)
+        {
+            rgba[i * 4 + 0] = src[i * 4 + 2];
+            rgba[i * 4 + 1] = src[i * 4 + 1];
+            rgba[i * 4 + 2] = src[i * 4 + 0];
+            rgba[i * 4 + 3] = src[i * 4 + 3];
+        }
+        ok = 1;
+    }
+    if (!ok)
+    {
+        free(rgba);
+        return 0;
+    }
+    /* PS2 alpha: 0x80 is opaque. DXT1's 0/255 stays as it is. */
+    for (size_t i = 0; i < px; ++i)
+    {
+        unsigned a = rgba[i * 4 + 3] * 2u;
+        rgba[i * 4 + 3] = (uint8_t)(a > 255 ? 255 : a);
+    }
+    *out = rgba;
+    *ow = (int)w;
+    *oh = (int)h;
+    return 1;
+}
+
+/* The sheet's part selects a sub-rectangle of its texture (generic icons share one 32x32 atlas);
+ * crop that rectangle and scale it to the 32x32 cell the HUD draws. */
+static int menu_icon_crop(const uint8_t* src, int sw, int sh, int x, int y, int cw, int ch, uint8_t** out, int* ow,
+                          int* oh)
+{
+    if (!src || sw <= 0 || sh <= 0 || cw <= 0 || ch <= 0)
+        return 0;
+    if (x < 0)
+    {
+        cw += x;
+        x = 0;
+    }
+    if (y < 0)
+    {
+        ch += y;
+        y = 0;
+    }
+    if (x >= sw)
+        x = sw - 1;
+    if (y >= sh)
+        y = sh - 1;
+    if (cw > sw - x)
+        cw = sw - x;
+    if (ch > sh - y)
+        ch = sh - y;
+    if (cw <= 0 || ch <= 0)
+        return 0;
+    enum { ICON_W = 32, ICON_H = 32 };
+    uint8_t* dst = malloc(ICON_W * ICON_H * 4);
+    if (!dst)
+        return 0;
+    for (int dy = 0; dy < ICON_H; ++dy)
+    {
+        int sy = y + dy * ch / ICON_H;
+        if (sy >= sh)
+            sy = sh - 1;
+        for (int dx = 0; dx < ICON_W; ++dx)
+        {
+            int sx = x + dx * cw / ICON_W;
+            if (sx >= sw)
+                sx = sw - 1;
+            memcpy(dst + ((size_t)dy * ICON_W + dx) * 4, src + ((size_t)sy * sw + sx) * 4, 4);
+        }
+    }
+    *out = dst;
+    *ow = ICON_W;
+    *oh = ICON_H;
+    return 1;
+}
+
+static const MenuImage* menu_image(const char* category, const char* name)
+{
+    for (uint32_t i = 0; i < g_icon_image_count; ++i)
+        if (!strcmp(g_icon_images[i].category, category) && !strcmp(g_icon_images[i].name, name))
+            return &g_icon_images[i];
+    return NULL;
+}
+
+/* The part records of sprite `id` in the menu sheet, or 0. Each part is 61 bytes. */
+static int menu_sprite(uint32_t id, const uint8_t** parts, int* count)
+{
+    if (!g_icon_sheet || g_icon_sheet_size < 19)
+        return 0;
+    size_t at = 17 + (size_t)g_icon_sheet[16] * 16;
+    if (at + 2 > g_icon_sheet_size)
+        return 0;
+    uint32_t sprites = rd16(g_icon_sheet + at);
+    at += 2;
+    for (uint32_t s = 0; s < sprites; ++s)
+    {
+        if (at >= g_icon_sheet_size)
+            return 0;
+        unsigned n = g_icon_sheet[at++];
+        if ((size_t)n * 61 > g_icon_sheet_size - at)
+            return 0;
+        if (s == id)
+        {
+            *parts = g_icon_sheet + at;
+            *count = (int)n;
+            return 1;
+        }
+        at += (size_t)n * 61;
+    }
+    return 0;
+}
+
+int res_menu_icon_rgba(uint32_t id, uint8_t** rgba, int* width, int* height)
+{
+    if (rgba)
+        *rgba = NULL;
+    if (width)
+        *width = 0;
+    if (height)
+        *height = 0;
+    load_menu_icons();
+    const uint8_t* parts = NULL;
+    int count = 0;
+    if (!menu_sprite(id, &parts, &count))
+        return 0;
+    /* The first parts are the sheet's base texture; the last part naming an image in this DAT is
+     * the icon itself. Walk backwards so an overlay wins over the base ring. */
+    for (int i = count - 1; i >= 0; --i)
+    {
+        const uint8_t* r = parts + (size_t)i * 61;
+        char category[9], name[9];
+        icon_name(r + 45, category);
+        icon_name(r + 53, name);
+        const MenuImage* image = menu_image(category, name);
+        if (!image)
+            continue;
+        uint8_t* decoded = NULL;
+        int w = 0, h = 0;
+        if (!decode_menu_image(image->payload, image->size, &decoded, &w, &h))
+            continue;
+        int crop_x = (int16_t)rd16(r + 20), crop_y = (int16_t)rd16(r + 22);
+        int crop_w = (int16_t)rd16(r + 16), crop_h = (int16_t)rd16(r + 18);
+        if (menu_icon_crop(decoded, w, h, crop_x, crop_y, crop_w, crop_h, rgba, width, height))
+        {
+            free(decoded);
+            return 1;
+        }
+        free(decoded);
+        if (w == 32 && h == 32)
+        {
+            *rgba = decoded;
+            if (width) *width = w;
+            if (height) *height = h;
+            return 1;
+        }
+    }
+    return 0;
+}
+
 /* ---- items ----------------------------------------------------------------------------------- */
 
 static const struct
@@ -1962,7 +2323,16 @@ void res_shutdown(void)
     g_jobs = NULL;
     g_nzones = g_njobs = 0;
     g_zj_loaded = 0;
+    free(g_icon_data);
+    free(g_icon_images);
+    g_icon_data = NULL;
+    g_icon_images = NULL;
+    g_icon_data_size = g_icon_image_count = 0;
+    g_icon_sheet = NULL;
+    g_icon_sheet_size = 0;
+    g_icons_loaded = 0;
     arena_free();
+    res_trust_faces_shutdown();
 }
 
 void res_init(const char* game_dir, const char* const* overlays, int overlay_count)

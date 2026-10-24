@@ -15,6 +15,7 @@
 #include <SDL3/SDL.h>
 
 #include "addons.h"
+#include "complete.h"
 #include "d3d8.h"
 #include "dinput.h"
 #include "host.h"
@@ -278,6 +279,24 @@ static int mouse(int msg, float px, float py, int delta)
 /* A press the overlay took is the overlay's until it is released. */
 static uint8_t g_mouse_taken;
 
+/* Tab in the chat line completes /! commands.  The game's own command assist does not know
+ * them (they are server chat commands, not client slash commands), so the host rewrites the
+ * input line and keeps Tab away from the game.  An ambiguous prefix comes back unchanged:
+ * keep the key, leave the input and its caret alone, and let the typist add letters. */
+static int chat_complete_tab(void)
+{
+    char input[400], output[400];
+    if (!xi_chat_input_open())
+        return 0;
+    if (xi_chat_input(input, sizeof input) <= 0)
+        return 0;
+    if (!xi_complete_line(input, output, sizeof output))
+        return 0;
+    if (strcmp(input, output) != 0)
+        xi_chat_set_input(output);
+    return 1;
+}
+
 static int hook(const void* ev, int ww, int wh)
 {
     const SDL_Event* e = (const SDL_Event*)ev;
@@ -319,6 +338,10 @@ static int hook(const void* ev, int ww, int wh)
             if (!e->key.repeat)
                 g_down[dik] = (uint8_t)down;
             if (!taken && !e->key.repeat && run_binds(dik, down))
+                taken = 1;
+            if (!taken && down && !e->key.repeat && dik == 0x0F
+                && !(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))
+                && chat_complete_tab())
                 taken = 1;
             XiEvent k;
             memset(&k, 0, sizeof k);

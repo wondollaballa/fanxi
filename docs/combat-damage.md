@@ -51,8 +51,65 @@ ATT = max(1, ATT + ATT * ATTP/100 + min(ATT * FOOD_ATTP/100, FOOD_ATT_CAP))
 **Dual wield.** When both slots hold a one-handed weapon and the job has the Dual Wield
 trait, one attack round swings both hands.  Each swing uses its own weapon DMG, skill,
 weapon rank and Accuracy; the off hand takes the 0.5 STR multiplier above and the 95%
-hit-rate cap.  The round delay is `(main + sub) × (1 - Dual Wield%) / 2`, and TP per hit
-is calculated from that same per-hand delay, so both hands swing on the reduced timer.
+hit-rate cap.  The round delay is `(main + sub) × (1 - Dual Wield%) / 2`, but TP is not
+taken from that average: each hand keeps its own weapon delay for TP (see "Tactical
+Points"), so the two hits do not pay the same amount.
+
+**Multi-attack.** Each hand independently rolls Double, Triple and Quadruple Attack once
+per round, in descending order.  The first proc wins and replaces the lower checks for
+that hand:
+
+| Proc | Modifier | Hits for that hand |
+|---|---|---:|
+| Quadruple Attack | 430 | 4 |
+| Triple Attack | 302 | 3 |
+| Double Attack | 288 | 2 |
+| none | — | 1 |
+
+Rates are percent-integers: gear `"Double Attack"+3` adds 3, the Warrior Double Attack
+trait adds 10/12/14/16/18% by tier (the Thief Triple Attack trait adds 5/6%), and the
+job's bought rate merit adds 1% per rank while that job is the main (a Warrior's Double
+Attack Rate follows the Warrior main, not a Ninja main; the trait itself still comes from
+a support job).  Extra hits use that hand's own weapon, Accuracy, damage and animation
+(0 main, 1 off), and each hit lands, crits, pays TP and adds hate on its own.  The whole
+round -- both hands and every proc -- is capped at 8 results.  Weapon skills are a
+separate path and do not roll multi-attack here.
+
+Virtue/Raetic follow-up swings, "Occasionally Attacks X Times" weapons, Mythic aftermath,
+Zanshin/Hasso, the Warrior job-point gifts and buff-side rates (Fighter's Roll, Temper,
+food) are not modelled yet.
+
+## Tactical Points
+
+TP is paid **per landed hit**, not per round, and each hand uses its own weapon's delay.
+Dual Wield halves the reduced delay for the hand that is swinging:
+
+```
+delay = weapon base delay
+if dual wielding: delay = floor(delay * (100 - Dual Wield%) / 100 / 2)
+TP    = floor of the curve below (tenths)
+TP    = floor(TP * (100 + Store TP) / 100)
+```
+
+| Delay | TP at the breakpoint |
+|---:|---:|
+| 180 | 6.1 |
+| 540 | 14.9 |
+| 630 | 15.4 |
+| 720 | 16.1 |
+| 900 | 17.3 |
+| > 900 | `17.3 + (delay - 900) × 28/360` |
+
+Within a band the curve is `start + (delay - bandStart) × slope/360`; the exact
+coefficients are in `combat.tp_return`.  A 227-delay katana pays 7.2 TP; dual wielded at
+35% its hand's delay is 73.8 → 73, worth 4.2 TP, while a 190-delay off hand at 35% is 61,
+worth 4.0 TP.  So the two halves of a dual-wield round are **not** equal, and a
+Double/Triple/Quadruple extra hit pays the same as a normal hit with that hand.
+
+The old `(delay + 480) × 0.0085` formula is gone: it overpaid slow weapons and underpaid
+fast ones.  There is no "first hit full TP, later hits 10 TP" rule in retail; each hit is
+computed independently.  Monster TP gain from being hit (with Subtle Blow and the dAGI
+term) is not modelled because monsters have no TP moves here.
 
 ## Defense (player)
 
@@ -261,6 +318,58 @@ dDEX bonus (attacker DEX − target AGI):
 
 Clamped to `[0.05, 1.0]`.
 
+## Weapon skills
+
+Every weapon skill has its own three fTP anchors and its own secondary-attribute
+modifiers (WSC); `data/weapon_skills.json` holds them.  The values are LandSandBoat's
+`scripts/actions/weaponskills/*.lua` table, taking the **Adoulin** branch
+(`USE_ADOULIN_WEAPON_SKILL_CHANGES`), which is the one a level 119 character uses.
+
+```
+effective_tp = min(3000, TP + mod(TP_BONUS) + Fencer TP Bonus)
+fTP          = interpolate(skill fTP, effective_tp)     -- 1000 / 2000 / 3000 anchors
+fTP         += mod(ANY_FTP_BONUS) / 256                 -- Fotia Gorget/Belt
+WSC          = sum(floor(stat * skill coef))            -- no alpha at level 99+
+base         = weapon DMG + fSTR + WSC
+damage/hit   = base * fTP * pDIF
+TP after     = TP - min(TP, 3000)                        -- the bar keeps any excess above 3000
+```
+
+Each hit is rolled separately (hit, critical, pDIF) and packed into one action.  The
+first hit uses the full fTP; later hits use `1.0` unless the skill carries fTP across
+its hits (`multiHitfTP`: Blade: Shun, Resolution, Vorpal Blade, ...).  Multi-hit skills
+also stop rolling once the target's HP is spent, as retail does.
+
+A skill may also carry:
+
+| Field | Effect |
+|---|---|
+| `critVaries` | extra critical-hit rate by TP (Blade: Hi is +15/30/60%) |
+| `atkVaries` | Attack multiplier for the pDIF ratio (Blade: Kamu is x2.25) |
+| `ignoredDefense` | fraction of the target's Defense removed before the ratio (Blade: Kamu is 25%) |
+
+`WSD` is the sum of three LandSandBoat modifier families that all mean "weapon skill
+damage +x%" on an item:
+
+| Id | Meaning |
+|---|---|
+| 840 | `ALL_WSDMG_ALL_HITS` — the generic line on every hit |
+| 841 | `ALL_WSDMG_FIRST_HIT` — the first-hit-only line |
+| 570 + ws id | that weapon skill's own line (571 Combo, 580 Final Heaven, ...) |
+
+The per-skill line and 840 are folded into every hit's fTP; 841 only into the first
+hit.  "Weapon skill accuracy" (48) is added to the attacker's Accuracy for the hit, and
+Fencer (Warrior/Beastmaster/Bard, single-wielding a one-handed weapon) adds its TP Bonus
+(903) to `effective_tp` and its critical-hit rate (904) to the crit roll.
+
+The skill's extra effect (`weapon_skill_effects.py`) runs after the damage: drains
+restore MP/HP from the hit, and debuffs land only when `damage > 0`.  The self skills
+(Myrkr, Dagan) skip the swing path entirely and restore a percentage of maximum MP/HP
+instead.  The monster's own debuffs feed back into the next attack: Defense Down and
+Dia lower its Defense, Evasion Down its Evasion, Accuracy Down its Accuracy, Attack Down
+its Attack, Magic Def./Magic Eva. Down the spell resist terms, and INT Down the `dINT`
+term.  See [world.md](world.md) for the full table.
+
 ## Base HP and MP
 
 HP and MP are not stored truths: they follow race, job, level and subjob, plus whatever
@@ -361,10 +470,10 @@ Direct-damage spells use the caster's INT, the spell's own base and multiplier, 
 gear modifiers the status screen shows:
 
 ```
-dINT    = clamp(caster INT - target INT, -100, 200)
-raw     = (spell.base x spell.multiplier + max(0, dINT) x 2)
-damage  = (raw x (1 + MATT/100) + MAGIC_DAMAGE)
-          x magic_resist x (1 - target MDEF/100)
+dINT     = clamp(caster INT - target INT, -100, 200)
+raw      = (spell.base x spell.multiplier + max(0, dINT) x 2) + MAGIC_DAMAGE
+MAB/MDB  = (100 + MATT) / (100 + target MDEF)         -- LandSandBoat's ratio
+damage   = raw x MAB/MDB x magic_resist
 ```
 
 `magic_resist` is the deterministic middle of the retail resist roll:
@@ -376,19 +485,56 @@ resist = clamp(0.75 + (macc - meva)/1000, 0.5, 1.0)
 ```
 
 `MATT` is "Magic Atk. Bonus", `MAGIC_DAMAGE` is "Magic Damage", `MDEF` is "Magic Def.
-Bonus" (capped at 80%), and the skill is the spell's own school (Elemental Magic 36 for
-Fire/Blizzard/Thunder, Dark Magic 37 for Drain, and so on). The same resist multiplies an
+Bonus", and the skill is the spell's own school (Elemental Magic 36 for
+Fire/Blizzard/Thunder, Dark Magic 37 for Drain, and so on).  Magic Damage joins the base
+*before* the MAB ratio, which is why a 100-point Magic Damage line is worth 150 at +50%
+MAB.  The old implementation multiplied by MAB and then subtracted MDEF as a separate
+percentage, which double-counted both.  The same resist multiplies an
 enfeeble's duration, so a caster with too little Magic Accuracy keeps Slow/Paralyze for
 less time rather than the spell always landing at full duration.
+
+**Dia and Diaga are not nukes.** Their data is base 2/6/10/16/23 with a zero stat
+multiplier, and retail gives them only 1-5 HP per three-second tick plus a 10-30%
+Defence Down. `combat.dia_damage` adds a small MND bonus and deliberately ignores Magic
+Atk. Bonus and flat Magic Damage: on a level 99 set carrying Magic Damage +421, the nuke
+formula turned Dia into a 1,475-damage hit. Dia is also unresistable (retail stops it only
+with Magic Shield or immunity), so its duration does not shorten with Magic Accuracy.
+
+**Helixes are one nuke, repeated.** A Helix's opening hit is a normal nuke with its own
+stat curve: `base + dINT` up to 100, then half a point per dINT to 200 (BG-wiki's test:
+25 + 38 = 63 at level 99), which is why `combat.helix_damage` exists beside
+`magic_damage`. The monster then takes that same number again every ten seconds
+("tock") for a duration that follows the Scholar level: 30 s at 20-39, 60 s at 40-59,
+90 s from 60; a support-job Scholar caps at 49, so /SCH is 60 s. The first tock lands
+1-10 s after the cast, one tock is capped at 9,999, and a tier-1 Helix does not replace an
+active tier-2 Helix. The opening hit is uncapped and is not a fixed 10 damage: reading
+LandSandBoat's `BASE_TICK` column as damage is what made Noctohelix a 10-damage nuke with
+a three-second tick. Dark Arts and Tabula Rasa add Helix damage and duration in retail;
+this engine only draws those abilities' icons, so the bonuses are not applied.
+
+**Enmity** is two meters per player on every monster: cumulative enmity (CE) in
+`ZoneEntity.enmity` minus `enmity_ve`, and volatile enmity (VE) in `enmity_ve`.  The
+monster's target is the highest CE + VE.  Damage adds `80 / (level × 31/50 + 6)` CE and
+`240 / ...` VE per point (a level-119 monster's divisor is 79, so about 1 CE + 3 VE per
+damage); a pure enfeeble adds 100 split 25/75; Provoke adds 1,800 CE and no VE.  The first
+source of hate gets retail's 200 CE + 900 VE claim bonus.  Both meters clamp to 30,000.
+
+VE drains 60 points a second, so a tank can lose the monster again; CE never decays by
+itself.  When a player dies, zones out, runs past 30 yalms, or if the current target is
+overtaken on CE + VE, the monster re-picks the highest remaining player on its next tick.
+Linking and the claim lock (a second player being unable to attack a claimed monster) are
+not modelled yet.
 
 Two smaller gear paths share the same merged modifier dict:
 
 - **Fast Cast** reduces the cast timer by its percent, capped at 50% and a 0.5 s floor.
-- **Store TP** scales the TP from a landed hit: `tp = base x (100 + STOREP/100)`.
+- **Store TP** scales the TP from a landed hit after the delay curve (see "Tactical Points").
 
 **Refresh** and **Regen** are passive three-second ticks from `tick_regen`; the same dict
 carries the Auto Refresh/Auto Regen traits and the gear lines, so a reforged body with
-`"Refresh"+4` restores 4 MP per tick.
+`"Refresh"+4` restores 4 MP per tick. The tick reads the maxima from the stat sheet (and
+`flush_equipment` refreshes them after every outfit batch), so swapping into gear that raises
+max HP/MP never leaves the character regenerating against the previous set's cap.
 
 ## Worked example
 
@@ -416,8 +562,9 @@ not move when Attack, weapon damage or STR change. That is the whole complaint.
 | Base attributes, HP/MP, Attack, Defense, Accuracy, Evasion | `server/fanxi_server/game/stats.py` |
 | Race/job/level grade tables | `server/fanxi_server/game/base_stats.py` (generated) |
 | Item modifier ids | `server/fanxi_server/game/modifiers.py` |
+| Weapon-skill extra effects, drain rates and status rows | `server/fanxi_server/game/weapon_skill_effects.py` |
 | Weapon and item data | `item_weapon` / `item_mods` tables (migrations `0080`, `0092`) |
-| The package of the above | `World.player_attack`, `World.mob_attack`, `ZoneSession.stat_sheet` |
+| The package of the above | `World.player_attack`, `World.mob_attack`, `ZoneSession.stat_sheet`, `ZoneSession.weaponskill` |
 
 Regenerate the data with:
 
@@ -452,11 +599,13 @@ they are easy to revisit:
   than nothing.
 - **Shield absorption** comes from the size table above rather than per-item data, because
   LandSandBoat leaves every shield's absorption at zero.
-- **Augments stored only as client extdata do not contribute.** `item_mods` covers base
-  gear, which is where Nyame's and Burtgang's damage-taken numbers live. Job-cape
-  augments are encoded for the client in `char_inventory.extra`; the server cannot read
-  those numbers back yet, so `!cape pdt` changes what the tooltip says and not what the
-  damage engine sees.
+- **Augments are read, with a short list of exceptions.** `equipped_mods()` joins each
+  equipped row to its inventory copy and `augment_stats` decodes both block families:
+  bundled rows for Odyssey (Nyame A-D), Limbus Rank 30 and Unity Rank 15, and the
+  five-slot standard block for the Ambuscade job capes. The engine has no model only for
+  pet stats, Snapshot, block rate, magic-burst II, spell interruption, the weapon `DMG:`
+  rating and the Phalanx/Blood Pact lines; they are listed in
+  `augment_stats.UNMODELLED` and a test walks every dataset row against that list.
 - **Magic is a deterministic resist, not a tier roll.** The retail resist tiers are
   replaced by one multiplier in `combat.magic_resist`; there is no random full/half/quarter
   resist. Monsters do not cast yet, so a player's own MEVA/MDEF is only read when a
@@ -466,10 +615,38 @@ they are easy to revisit:
   `MATT`/`MDEF` are used.
 - **Magic burst, skillchains and casting-time gear** are not modelled. `MAGIC_BURST` and
   `"Elemental magic casting time -x%"` are stored in `item_mods` but nothing reads them.
-- **Status-effect potency/duration gear** (`"Refresh" potency`, `"Regen" potency`,
-  `Enhancing magic duration`, `Enfeebling magic effect`) is not read; the base spell
-  duration/potency is used. **Subtle Blow** and **Regain** are stored but inert: monsters
-  do not accumulate TP, and the tick has no Regain path yet.
+  The per-skill damage, drain and status rows *are* implemented.
+- **Weapon-skill magic and ranged paths lag the melee one.** The per-skill fTP, WSC,
+  hit count, attack and critical-hit tables are imported for every skill, but a
+  `doMagicWeaponskill` row (Aeolian Edge, Sanguine Blade, Wildfire, ...) still rides the
+  physical pDIF path instead of the magic resist path, and an archery/marksmanship row
+  still uses the main-hand weapon because the ranged attack path is not implemented.
+  **Spirits Within** (current-HP formula), **Atonement** (enmity formula), **Moonlight**
+  and **Starlight** (MP restore) do not use their special formulas either.  **Dagda**
+  has no published fTP or stat modifiers, so it keeps the generic fallback curve.
+- **Weapon-skill TP return and aftermath are not modelled.** The bar spends the TP and
+  keeps the excess, but the hits do not pay TP back; the Relic/Mythic/Empyrean/Prime
+  aftermath buffs need a weapon category and a second buff model.
+- **Job traits are only read where the engine consumes their modifier.** Attack/Accuracy/
+  Evasion/Defense bonus, Max HP/MP Boost, Store TP, Fast Cast, Dual Wield, Critical damage
+  and the weapon-skill lines (WS Damage 840, TP Bonus 345/903, Fencer 904, WS Accuracy 48)
+  flow into the sheet.  Double/Triple/Quadruple Attack are read by the attack round (see
+  "Multi-attack").  Counter, Kick Attacks, Zanshin,
+  Conserve MP/TP, Subtle Blow, Occult Acumen, Shield Mastery/Tactical Parry/Guard and the
+  killer/resist families are still inert: the modifier is in the trait table and the
+  menu, but no combat path reads it.
+- **Status-effect potency/duration gear** is read through `combat_mods()` for the lines
+  the engine models: Enhancing Magic duration (listed and augment), Regen potency and
+  duration, per-school duration (`ENF_MAG_DURATION`, `DARK_MAGIC_DURATION`, Ninjutsu,
+  songs, Sneak/Invisible/En-spell), Cure potency I/II/received/bonus, enfeebling
+  potency, `"Enhances Refresh"`, Stoneskin bonus HP and Drain/Aspir potency, with augments
+  merged through the same path.  **Not modelled:** Protect/Shell/Haste/Phalanx base
+  potency, bar-spell amounts and HP/MP food percentage caps.
+- **Food** is a modifier source with a starter table (`food_effects`); the full food
+  catalogue is not imported.  **Another player's buffs are not modelled** because the
+  server has no party system yet, so only the session's own effects merge into the pool.
+  **Subtle Blow** and **Regain** are stored but inert: monsters do not accumulate TP, and
+  the tick has no Regain path yet.
 - **Merits** are not added to base attributes; they are added to skills, which does flow
   into Attack and Accuracy.
 
@@ -480,9 +657,8 @@ they are easy to revisit:
    many families share a level.
 2. **Hand-to-hand double hits.** One line in the attack loop once the animation and TP
    accounting for two fists is settled.
-3. **Cape augments as real stats.** `capes.py` already knows each build's stat list, so a
-   build the server itself encoded could contribute mods without needing the client's
-   augment index. That would make `!cape pdt` mean something.
+3. **Pet stats from augments.** The cape and Odyssey rows name Pet Accuracy/Attack/Haste
+   and damage taken; the engine has no pet pool yet, so `augment_stats` skips them.
 
 ## Sources
 
@@ -492,6 +668,19 @@ they are easy to revisit:
   formulas, the 50% cap, Burtgang/Epeolatry, the 87.5% overall cap.
 - [BG-wiki: Hit Rate](https://www.bg-wiki.com/ffxi/Hit_Rate) and
   [BG-wiki: FSTR](https://www.bg-wiki.com/ffxi/FSTR) — referenced by the code below.
+- [BG-wiki: Myrkr](https://www.bg-wiki.com/ffxi/Myrkr) — 20/40/60% MP at
+  1000/2000/3000 TP, removes up to three status effects, self-targeted and no damage.
+- [BG-wiki: Fencer](https://www.bg-wiki.com/ffxi/Fencer) — the one-handed main-hand
+  condition, TP Bonus and critical-hit rate tiers.
+- [LandSandBoat weapon-skill scripts](https://github.com/LandSandBoat/server/tree/base/scripts/actions/weaponskills)
+  — the per-skill fTP anchors, WSC, hit counts and status-effect powers/durations.  The
+  Adoulin branch of each script is what `tools/import_lsb_weapon_skills.py` writes to
+  `data/weapon_skills.json`.
+- [BG-wiki: Zesho Meppo](https://www.bg-wiki.com/ffxi/Zesho_Meppo) and the other Prime
+  weapon-skill pages — the skills LandSandBoat only scripts as monster skills have their
+  fTP, hit count and stat modifiers in `EXTRA` in that importer.
+- [BG-wiki: Savage Blade](https://www.bg-wiki.com/ffxi/Savage_Blade) — the Adoulin-era
+  fTP anchors that make the skill's 1000 -> 3000 TP jump so large.
 - [FF11用語辞典: 被物理ダメージ](https://wiki.ffo.jp/html/12470.html) — 50% PDT cap,
   PDT-II removing it, DT affecting both physical and magic.
 - LandSandBoat (reference implementation, local checkout `/tmp/lsb`):
@@ -503,5 +692,9 @@ they are easy to revisit:
   - `src/map/entities/battle_entity.cpp` — `ATT()`, `DEF()`, `ACC()`, `EVA()`,
     `GetMainWeaponRank()`.
   - `src/map/attack.cpp` — `ProcessDamage()`: `floor(max(DMG + fSTR, 0) * pDIF)`.
+  - `scripts/combat/basic/tp.lua` — `calculateTPReturn`, the per-slot delay split and
+    the Store TP floor.
+  - `src/map/enmity_container.cpp` — `UpdateEnmityFromDamage` (80/240 split scaled by
+    `GetEnmityModDamage`), `DecayEnmity` (60 VE/s) and the 30,000 cap.
   - `src/map/utils/charutils.cpp` + `src/map/grades.cpp` — base stats from
     `data/stats.yaml` and `data/grades.yaml`.

@@ -1,9 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  ArmoryAddResult,
+  ArmoryItem,
   Bootstrap,
   BuildResult,
   Character,
+  CharacterData,
   ConfigView,
+  ControlState,
   EquipIcons,
   FollowEvent,
   FollowStatus,
@@ -14,6 +18,8 @@ import type {
   GearSetResult,
   GearVersion,
   GearWeapon,
+  HudPatch,
+  HudState,
   InstanceView,
   JobAbility,
   JobInfo,
@@ -26,6 +32,8 @@ import type {
   SubAccount,
   TeamMutation,
   TeamView,
+  WarpList,
+  WarpMutation,
 } from "../types";
 
 export class LauncherError extends Error {
@@ -89,8 +97,33 @@ export const backend = {
     call<SessionView>("create_character", { data }),
   saveCharacterDesign: (characterId: number, data: Record<string, unknown>) =>
     call<SessionView>("save_character_design", { characterId, data }),
+  characterData: (characterId: number) =>
+    call<CharacterData>("character_data", { characterId }),
+  characterAction: (
+    characterId: number,
+    action: string,
+    payload: Record<string, unknown> = {},
+  ) =>
+    call<CharacterData & Partial<ArmoryAddResult>>("character_data_action", {
+      characterId,
+      action,
+      payload,
+    }),
+  searchArmory: (characterId: number, query: string, kind: string | null) =>
+    call<{ items: ArmoryItem[] }>("search_armory", { characterId, query, kind }),
+  characterWarps: (characterId: number) =>
+    call<WarpList>("character_warps", { characterId }),
+  markCharacterWarp: (characterId: number, payload: Record<string, unknown>) =>
+    call<WarpMutation>("character_warp_mark", { characterId, payload }),
+  renameCharacterWarp: (characterId: number, slot: number, alias: string) =>
+    call<WarpMutation>("character_warp_rename", { characterId, slot, alias }),
+  deleteCharacterWarp: (characterId: number, slot: number) =>
+    call<WarpMutation>("character_warp_delete", { characterId, slot }),
   selectCharacter: (characterId: number) =>
     call<ConfigView>("select_character", { characterId }),
+  /** Persist the tenant bar's character; null clears it. */
+  selectTenant: (characterId: number | null) =>
+    call<ConfigView>("select_tenant", { characterId }),
 
   setLastPage: (page: string) => call<void>("set_last_page", { page }),
 
@@ -132,8 +165,9 @@ export const backend = {
 
   sendCommand: (port: number, line: string) =>
     call<unknown>("send_command", { port, line }),
+  sendHud: (port: number, patch: HudPatch) => call<HudState>("send_hud", { port, patch }),
   sendChat: (port: number, line: string) => call<unknown>("send_chat", { port, line }),
-  controlState: (port: number) => call<Record<string, unknown>>("control_state", { port }),
+  controlState: (port: number) => call<ControlState>("control_state", { port }),
   controlMetrics: (port: number) => call<Record<string, unknown>>("control_metrics", { port }),
   setFollow: (port: number, enabled: boolean, leader: string | null, distance = 1) =>
     call<FollowStatus>("set_follow", { port, enabled, leader, distance }),

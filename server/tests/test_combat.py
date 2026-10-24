@@ -85,12 +85,14 @@ class MagicTest(unittest.TestCase):
         self.assertEqual(self.damage(), 300)
         self.assertEqual(self.damage(mods={mod.MATT: 50}), 450)
 
-    def test_flat_magic_damage_is_added_after_mab(self):
+    def test_flat_magic_damage_is_added_before_mab(self):
         self.assertEqual(self.damage(mods={mod.MAGIC_DAMAGE: 100}), 400)
-        self.assertEqual(self.damage(mods={mod.MATT: 50, mod.MAGIC_DAMAGE: 100}), 550)
+        # Magic Damage joins the base, then the whole thing takes the MAB multiplier.
+        self.assertEqual(self.damage(mods={mod.MATT: 50, mod.MAGIC_DAMAGE: 100}), 600)
 
-    def test_magic_defence_bonus_reduces(self):
-        self.assertEqual(self.damage(target_mods={mod.MDEF: 10}), 270)
+    def test_magic_defence_bonus_uses_the_mab_over_mdb_ratio(self):
+        # 300 * 100 / (100 + 10) = 272.7
+        self.assertEqual(self.damage(target_mods={mod.MDEF: 10}), 272)
 
     def test_skill_and_magic_accuracy_push_resist_to_full(self):
         self.assertEqual(combat.magic_resist(
@@ -99,6 +101,27 @@ class MagicTest(unittest.TestCase):
         self.assertLess(combat.magic_resist(
             skill=0, caster_int=30, mods={}, target_level=125,
             target_mods={mod.MEVA: 200}), 0.75)
+
+    def test_dia_opening_hit_stays_small(self):
+        """Dia's base is 2..23 and MND adds only a little; gear Magic Damage is ignored."""
+        self.assertEqual(combat.dia_damage(base=2, caster_mnd=300, target_mnd=10), 38)
+        self.assertEqual(combat.dia_damage(base=2, caster_mnd=5, target_mnd=12), 2)
+        # Even an impossible MND gap cannot turn the enfeebling into a nuke.
+        self.assertLess(combat.dia_damage(base=23, caster_mnd=999, target_mnd=0), 80)
+
+    def test_helix_uses_its_own_stat_curve(self):
+        """BG-wiki's test: 25 + dINT, halving after 100 (not the nuke's dINT x 2)."""
+        def helix(caster_int: int, **overrides) -> int:
+            values = dict(base=25, multiplier=1.0, caster_int=caster_int, target_int=100,
+                          skill=400, mods={}, target_mods={}, target_level=99)
+            values.update(overrides)
+            return combat.helix_damage(**values)
+
+        self.assertEqual(helix(138), 63)     # the wiki's 99 SCH vs dINT 38
+        self.assertEqual(helix(200), 125)    # dINT 100: 25 + 100
+        self.assertEqual(helix(300), 175)    # dINT 200: 25 + 100 + 50
+        self.assertEqual(helix(200, mods={mod.MATT: 50}), 187)
+        self.assertEqual(helix(200, target_mods={mod.MDEF: 10}), 113)
 
     def test_fast_cast_halves_at_fifty_percent(self):
         self.assertEqual(combat.cast_time(3000, 0), 3000)
@@ -373,7 +396,9 @@ class DualWieldTest(unittest.TestCase):
         # (227 + 190) * 65% / 2, the per-hand delay of a dual-wielded attack round.
         self.assertEqual(sheet.delay, int((227 + 190) * 0.65 / 2))
         self.assertEqual(sheet.attack_delay_ms, int(sheet.delay * 1000 / 60))
-        self.assertEqual(sheet.tp_per_hit, int((sheet.delay + 480) * 0.085))
+        # TP is per weapon, not the round's averaged delay: 227 -> 73 and 190 -> 61.
+        self.assertEqual(sheet.tp_per_hit(), 42)
+        self.assertEqual(sheet.tp_per_hit(off_hand=True), 40)
 
     def test_off_hand_uses_the_half_strength_multiplier_and_its_own_skill(self):
         dagger = stats.Weapon(skill=2, dmg=120, delay=190)
@@ -415,6 +440,70 @@ class DualWieldTest(unittest.TestCase):
         self.assertFalse(sheet.dual_wield)
         self.assertIsNone(sheet.sub_fighter)
         self.assertEqual(sheet.delay, 227)
+
+
+class TpReturnTest(unittest.TestCase):
+    """The current retail TP curve and Dual Wield's per-hand delay."""
+
+    def test_curve_breakpoints(self):
+        self.assertEqual(combat.tp_return(180), 61)
+        self.assertEqual(combat.tp_return(540), 149)
+        self.assertEqual(combat.tp_return(720), 161)
+        self.assertEqual(combat.tp_return(900), 173)
+
+    def test_dual_wield_halves_each_weapons_own_delay(self):
+        self.assertEqual(combat.tp_delay(227, dual_wield=35), 73)
+        self.assertEqual(combat.tp_delay(190, dual_wield=35), 61)
+        self.assertEqual(combat.tp_delay(227), 227)
+
+    def test_store_tp_applies_after_the_curve(self):
+        self.assertEqual(combat.tp_return(227), 72)
+        self.assertEqual(combat.tp_gain(combat.tp_return(227), 20), 86)
+
+
+class MultiAttackTest(unittest.TestCase):
+    """Double, Triple and Quadruple Attack: one roll per hand, highest tier wins."""
+
+    def test_quadruple_beats_triple_and_double(self):
+        rng = random.Random(1)
+        self.assertEqual(combat.multi_attack_hits(
+            rng, double=100, triple=100, quadruple=100), 4)
+
+    def test_triple_is_checked_before_double(self):
+        rng = random.Random(1)
+        # Quadruple at 0 is skipped, Triple at 100 always procs, Double never rolls.
+        self.assertEqual(combat.multi_attack_hits(
+            rng, double=100, triple=100, quadruple=0), 3)
+
+    def test_double_is_the_last_tier(self):
+        rng = random.Random(1)
+        self.assertEqual(combat.multi_attack_hits(
+            rng, double=100, triple=0, quadruple=0), 2)
+        self.assertEqual(combat.multi_attack_hits(
+            rng, double=0, triple=0, quadruple=0), 1)
+
+    def test_rates_clamp_and_negative_gear_never_procs(self):
+        rng = random.Random(1)
+        self.assertEqual(combat.multi_attack_hits(
+            rng, double=250, triple=0, quadruple=0), 2)
+        self.assertEqual(combat.multi_attack_hits(
+            rng, double=-25, triple=0, quadruple=0), 1)
+
+    def test_a_failed_higher_tier_falls_through_to_double(self):
+        class Rolls:
+            """QA 50% and TA 50% both fail, then DA 100% procs."""
+
+            def __init__(self):
+                self.values = [0.99, 0.99, 0.0]
+
+            def random(self):
+                return self.values.pop(0)
+
+        self.assertEqual(combat.multi_attack_hits(
+            Rolls(), double=100, triple=50, quadruple=50), 2)
+
+    def test_round_cap_is_eight_hits(self):
+        self.assertEqual(combat.MAX_ATTACKS_PER_ROUND, 8)
 
 
 class MeleeTest(unittest.TestCase):

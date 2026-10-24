@@ -1,0 +1,22 @@
+# A state transition that lands on the set already worn must not re-equip it (host/addons/phase.c).
+# Run by tests/phase_state_test.sh.  While engaged, a movement step used to send the whole engaged
+# set again: every piece made the client drop its battle stance for the server to re-assert, which
+# is the sheathe/draw loop seen while fighting.  Only a state whose set changes may send gear.
+frames 2
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=8, sets={{{1,0,0},{2,0,0}},{{3,0,0}},{{4,0,0},{5,0,0}}}, names={'engaged','idle.town','move'}, engage=1, idle=2, town=1, move=3, rules={}} return xi.phase.status().sets
+echo --- the first apply wears the idle set
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- moving wears the movement set once
+lua control local e = xi.phase.moving(true) return e and #e or 0
+echo --- engaging wears the engaged set
+lua control local e = xi.phase.engaged(true) return e and #e or 0
+echo --- a movement step while engaged keeps the engaged set on
+lua control local e = xi.phase.moving(false) return e and #e or 0
+lua control local e = xi.phase.moving(true) return e and #e or 0
+lua control local e = xi.phase.moving(false) return e and #e or 0
+echo --- a pushed plan still re-wears the set even when it is the one on
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- disengaging returns to the idle set, and moving swaps again
+lua control local e = xi.phase.engaged(false) return e and #e or 0
+lua control local e = xi.phase.moving(true) return e and #e or 0
+lua control local e = xi.phase.moving(false) return e and #e or 0

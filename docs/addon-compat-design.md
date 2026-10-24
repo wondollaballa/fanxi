@@ -2,7 +2,8 @@
 
 Status: being built on branch feat/addons (2026-09-30). Input: Vekien's VanaCore write-up (how
 CatsEyeXI's client core runs Ashita v4 and Windower 4 addons and plugins without either present);
-the implementation is our own.
+the implementation is our own. For the product/feasibility assessment of launcher-managed addons
+and legacy native plugins, see [addon-plugin-feasibility.md](addon-plugin-feasibility.md).
 
 Where things are:
 

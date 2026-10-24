@@ -17,7 +17,7 @@ cannot drift apart:
                 where the suit goes in the libraries);
 * ``--lua``    rewrite ``gearswap/*.lua``: the ``local limbus`` build table, the
                 ``sets.Limbus`` container, and the pieces the ``PLACEMENT`` table
-                wears in the existing TP / hybrid / fast-cast sets;
+                wears in the existing sets (including bracket-named midcast sets);
 * ``--check``  exit non-zero if the SQL or the docs are out of date.
 
 Run ``python3 tools/gen_limbus_r30.py --all`` after editing the JSON.
@@ -35,6 +35,7 @@ from __future__ import annotations
 import argparse
 import json
 import re
+import struct
 import sys
 from pathlib import Path
 
@@ -76,9 +77,14 @@ VARIANTS = {
 # outright, Revelation is a 3/5 bard TP set (head and hands keep their Odyssey
 # pieces), Sworn is fast-cast/tank gear plus DRK's hybrid head and feet, and
 # Clemency only beats the defaults in the head and feet slots of the
-# two-handers.  Bravery stays a container: casters rate it below their AF/relic
-# pieces.  Nyame Path B is deliberately untouched -- it is still the
-# weaponskill set -- and so are the Subtle Blow sets Malignance owns.
+# two-handers.  Bravery is SCH's raw-nuke/enfeebling/FC suit: every R30 piece
+# carries Mag. Acc+42 and "Magic Atk. Bonus"+40 before the augment rows, so it
+# takes the Elemental/Helix/Enfeebling bodies, the FC body and legs, the
+# Elemental Macc five-piece and a dedicated idle/DT build.  The job's functional
+# pieces stay where they are: Arbatel Loafers +3 in the free-nuke and helix
+# feet ("Klimaform"+25), Arbatel Bracers +3 in helix, and the whole Enhancing
+# Magic and Healing Magic sets.  Nyame Path C keeps the Magic Burst variant,
+# which is where the Magic Burst Damage II rows live.
 #
 # The rewrite is additive per slot: only the slots named here are replaced, so
 # dropping a slot from the table leaves the item the library had (or the last
@@ -97,6 +103,32 @@ PLACEMENT = {
     "PLD": {"sets.precast.FC": {slot: ("trust", "phalanx") for slot in SLOTS}},
     "RUN": {"sets.precast.FC": {slot: ("trust", "phalanx") for slot in SLOTS}},
     "RDM": {"sets.precast.FC": {slot: ("trust", "ta") for slot in SLOTS}},
+    "SCH": {
+        # Free nuke: Indomitable head/body/legs, Nyame C hands and Arbatel
+        # Loafers +3 feet (the "+25 Klimaform" and Magic Burst terms).
+        "sets.midcast.Elemental Magic": {
+            "head": ("bravery", "cast"), "body": ("bravery", "cast"),
+            "legs": ("bravery", "cast")},
+        # Landing set: the same M.Acc logic as Enfeebling, all five pieces.
+        "sets.midcast.Elemental Magic Macc": {
+            slot: ("bravery", "cast") for slot in SLOTS},
+        # Helix landing/DoT: Indomitable head/body/legs, Arbatel hands and feet.
+        "sets.midcast.Helix": {
+            "head": ("bravery", "cast"), "body": ("bravery", "cast"),
+            "legs": ("bravery", "cast")},
+        # Enfeebling: the INT/MND body, hands and legs; head and feet keep the
+        # duration/M.Acc pieces the live file already has.
+        "sets.midcast.Enfeebling Magic": {
+            "body": ("bravery", "cast"), "hands": ("bravery", "cast"),
+            "legs": ("bravery", "cast")},
+        # Fast cast: the suit's own 10% body and 8% legs, with the FC accessories.
+        "sets.precast.FC": {
+            "body": ("bravery", "cast"), "legs": ("bravery", "cast")},
+        # Balanced idle/DT: five pieces plus the DT accessories.  Max PDT/MDT
+        # stay on Nyame, whose per-piece DT (7-9%) is higher than Bravery's.
+        "sets.idle.dt_indom": {
+            slot: ("bravery", "cast") for slot in SLOTS},
+    },
     "DRK": {"sets.engaged.tp": {"head": ("trust", "ta"), "feet": ("trust", "ta")},
             "sets.engaged.hybrid": {"head": ("trust", "ta"), "feet": ("trust", "ta")},
             "sets.WS.Resolution": {"head": ("trust", "acc"), "feet": ("trust", "acc")},
@@ -141,11 +173,31 @@ MODS = (
     ("CHR", 14, 1),
 )
 
-# 24-byte Exdata::AugmentBundle, rank 30 / tier 3 (the 30-rank unlock), index 0.
-# Mirrors server/fanxi_server/game/augments.py; the per-item bundle index is not
-# known yet, so the block names no effects and !r30 prints the rows instead.
-R30_EXDATA = bytes([0x03, 0x83, 0x00, 0x00, 0x00, 0x00, 0xF8, 0x01]
-                   + [0x00] * 4 + [0x00] * 12)
+# 24-byte Exdata::AugmentBundle: rank 30 / tier 3 (the 30-rank unlock) and the
+# piece's own bundle index in the client's augment table.  Limbus RP uses curve
+# B, whose rank-30 total is 55,800 (rank 1 costs 1,600 -- the number the FFXIAH
+# thread quotes).  Mirrors server/fanxi_server/game/augments.py.
+R30_RP = 55800
+R30_CURVE = 1
+
+
+def exdata(data: dict, piece: dict) -> bytes:
+    """The 24-byte augment block for one piece: rank 30, 55,800 RP, its bundle."""
+    rank = int(data.get("rank", 30))
+    tier = 3
+    rp = int(data.get("rp", R30_RP))
+    curve = int(data.get("rp_curve", R30_CURVE))
+    bundle = piece.get("bundle")
+    if bundle is None:
+        raise SystemExit("no augment bundle for %s" % piece["name"])
+    value = ((rank & 0x1F) << 18) | ((tier & 0x03) << 23) | ((curve & 0x03) << 26) \
+        | ((rp & 0xFFFF) << 2)
+    block = bytearray(24)
+    block[0] = 0x03
+    block[1] = 0x83
+    struct.pack_into("<I", block, 4, value)
+    struct.pack_into("<I", block, 8, int(bundle) & 0xFFFFFFFF)
+    return bytes(block)
 
 PHRASE = re.compile(
     r"(?P<name>%s)\"?\s*(?:[:+])?\s*(?P<sign>[+-])?\s*(?P<num>\d+)\s*%%?"
@@ -179,6 +231,41 @@ def lua_string(value: str) -> str:
     if '"' in value:
         return "'%s'" % value
     return '"%s"' % value
+
+
+LUA_KEYWORDS = {
+    "and", "break", "do", "else", "elseif", "end", "false", "for", "function",
+    "if", "in", "local", "nil", "not", "or", "repeat", "return", "then",
+    "true", "until", "while",
+}
+LUA_IDENTIFIER = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*$")
+
+
+def lua_set_expression(path: str) -> str:
+    """``sets.midcast.Elemental Magic`` -> the Lua table constructor expression."""
+    expression = "sets"
+    for segment in path.split(".")[1:]:
+        if LUA_IDENTIFIER.match(segment) and segment not in LUA_KEYWORDS:
+            expression += "." + segment
+        else:
+            expression += "[%s]" % lua_string(segment)
+    return expression
+
+
+def lua_set_alternatives(path: str) -> list[str]:
+    """The expression plus its bracketed last segment (``[...]`` is optional there).
+
+    The libraries quote every midcast name -- ``sets.midcast["Helix"]`` even
+    where ``sets.midcast.Helix`` would parse -- so a placement has to accept
+    both spellings for a one-word set.
+    """
+    expression = lua_set_expression(path)
+    head, _, last = path.rpartition(".")
+    if head and LUA_IDENTIFIER.match(last) and last not in LUA_KEYWORDS:
+        expression_bracketed = "%s[%s]" % (lua_set_expression(head), lua_string(last))
+        if expression_bracketed != expression:
+            return [expression, expression_bracketed]
+    return [expression]
 
 
 def lua_name(data: dict, key: str) -> str:
@@ -240,7 +327,12 @@ def replace_table(text: str, header: str, table: str) -> str:
         if end < 0:
             raise SystemExit("unterminated %r table" % header)
         head = text[:start].rstrip("\n").split("\n")
-        while head and (head[-1].startswith("-- Limbus Rank 30") or not head[-1].strip()):
+        while head and (
+            not head[-1].strip()
+            or head[-1].startswith("-- Limbus Rank 30")
+            or head[-1].startswith("-- per augment choice")
+            or head[-1].startswith("-- Generated from data/limbus_r30.json")
+        ):
             head.pop()
         return "\n".join(head) + "\n\n" + table + text[end + 2:]
     anchor = text.find("function get_sets()")
@@ -265,10 +357,12 @@ def replace_sets_block(text: str, block: str) -> str:
 
 def replace_set_items(text: str, path: str, items: dict, data: dict) -> str:
     """Rewrite the armour slots of one ``sets.<path> = {...}`` literal."""
-    opener = "    %s = {\n" % path
-    start = text.find(opener)
-    if start < 0:
+    opener = next(("    %s = {\n" % expression
+                   for expression in lua_set_alternatives(path)
+                   if "    %s = {\n" % expression in text), None)
+    if opener is None:
         raise SystemExit("set %s not found (or not a literal table)" % path)
+    start = text.find(opener)
     end = text.find("\n    }\n", start)
     if end < 0:
         raise SystemExit("set %s has no closing brace" % path)
@@ -332,7 +426,6 @@ def sql_item(piece: dict, family: dict, mask: int) -> str:
 def render_sql(data: dict) -> str:
     fams = families(data)
     pieces = [piece for family in fams for piece in family["pieces"]]
-    piece_ids = ", ".join(str(piece["item_id"]) for piece in sorted(pieces, key=lambda p: p["item_id"]))
     ids = [piece["item_id"] for piece in pieces]
 
     lines = [
@@ -347,9 +440,11 @@ def render_sql(data: dict) -> str:
         "-- Item ids, slots, job masks and stat lines are factual game data from",
         "-- BG Wiki (the set pages and each item page's ffxidb link).  The",
         "-- 24-byte block is LandSandBoat's Exdata::AugmentBundle with rank 30 /",
-        "-- tier 3, the shape migration 75 wrote for Odyssey; the per-item",
-        "-- augment bundle index is not known yet, so it stays 0 and !r30 is",
-        "-- the in-game view of the rows (docs/limbus-r30.md).",
+        "-- tier 3 and the piece's own augment bundle index; Limbus uses RP curve",
+        "-- B, whose rank-30 total is 55,800.  The bundle indices are the client's",
+        "-- own table (LandSandBoat's xi.data.augments.bundles, parsed from the",
+        "-- MNC2 data); they were matched to the Rank 30 rows in",
+        "-- docs/limbus-r30.md by content.",
         "--",
         "-- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.",
         "",
@@ -405,12 +500,16 @@ def render_sql(data: dict) -> str:
         "SELECT w.character_id, f.container, f.slot, w.item_id, 1",
         "FROM want w JOIN free f ON f.character_id = w.character_id AND f.rn = w.rn;",
         "",
-        "-- Rank 30 augment block (rank 30, tier 3, bundle index 0).",
-        "UPDATE char_inventory SET extra = X'%s'" % R30_EXDATA.hex().upper(),
-        "WHERE character_id IN (%s)" % ", ".join(str(c) for c in CHARACTERS),
-        "  AND item_id IN (%s);" % piece_ids,
-        "",
+        "-- Rank 30 augment block for every copy: rank 30, tier 3, 55,800 RP",
+        "-- (curve B), and the piece's own bundle index.  Updating by item id",
+        "-- covers both main characters and any later copy of the suit.",
     ]
+    lines += [
+        "UPDATE char_inventory SET extra = X'%s' WHERE item_id = %d;" % (
+            exdata(data, piece).hex().upper(), int(piece["item_id"]))
+        for piece in sorted(pieces, key=lambda p: p["item_id"])
+    ]
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -433,13 +532,22 @@ def render_docs(data: dict) -> str:
     lines += [
         "",
         "All 25 top-tier pieces are granted at Rank 30 to characters 1 and 2",
-        "(Onedough/Twodough) by `database/migrations/0099_limbus_r30.sql`.",
+        "(Onedough/Twodough) by `database/migrations/0099_limbus_r30.sql`, and",
+        "migration `0104_limbus_rp30.sql` re-stamps any copy already in a bag.",
         "The same data drives the script that writes that migration and this page:",
         "`data/limbus_r30.json` and `tools/gen_limbus_r30.py`.",
         "",
-        "Augments are chosen at the Limbus furnaces with a *Jewel of Des.*; a piece",
-        "picks **one** of the four numbered rows below, and Rank 30 is the maximum",
-        "rank for each.",
+        "Every augment line on every piece is already at its Rank 30 value. The four",
+        "numbered columns are the four augment lines a piece carries, not a choice:",
+        "each line unlocks at a different rank, and all four are live at 30. The",
+        "item exdata also records 55,800 RP, the curve-B total for rank 30 (rank 1",
+        "costs 1,600), so the client reads the block at rank 30, not rank 0.",
+        "",
+        "Each piece carries its own client augment **bundle** index. The indices",
+        "come from the client's bundle table (LandSandBoat's",
+        "`xi.data.augments.bundles`, parsed from the MNC2 data); every one was",
+        "matched to the Rank 30 row above by content. `!rp30` re-stamps the",
+        "pieces in a character's bags, and `!r30 <piece>` prints the rows.",
     ]
 
     for family in fams:
@@ -453,14 +561,15 @@ def render_docs(data: dict) -> str:
             "- **Jobs:** %s" % " / ".join(family["jobs"]),
             "- **Item level:** 119, Superior %d" % family["su"],
             "",
-            "| Piece | Slot | Item ID | [1] | [2] | [3] | [4] |",
-            "| --- | --- | --- | --- | --- | --- | --- |",
+            "| Piece | Slot | Item ID | Bundle | [1] | [2] | [3] | [4] |",
+            "| --- | --- | --- | --- | --- | --- | --- | --- |",
         ]
         for piece in family["pieces"]:
             rows = list(piece["augments"]) + [""] * (4 - len(piece["augments"]))
             cells = [cell.replace("|", "\\|") for cell in rows]
-            lines.append("| %s | %s | %d | %s |" % (
-                piece["name"], piece["slot"], piece["item_id"], " | ".join(cells)))
+            lines.append("| %s | %s | %d | %d | %s |" % (
+                piece["name"], piece["slot"], piece["item_id"], int(piece["bundle"]),
+                " | ".join(cells)))
 
     lines += [
         "",
@@ -481,8 +590,16 @@ def render_docs(data: dict) -> str:
         "- **Sworn (Trust)** is PLD/RUN fast-cast and tank gear (the *Phalanx received* row",
         "  is the draw), RDM's enspell/FC set, and DRK's hybrid head and feet once Triple",
         "  Attack unlocks past R15. WHM/BLU skip it.",
-        "- **Indomitable (Bravery)** is rated below the casters' AF/relic pieces in every",
-        "  slot; it ships here as a container, not as a default.",
+        "- **Indomitable (Bravery)** is SCH's raw-nuke, enfeebling and fast-cast suit.",
+        "  Every R30 piece carries Mag. Acc+42 and \"Magic Atk. Bonus\"+40 before the",
+        "  augment rows, plus Magic Damage+22, native Fast Cast and 2-6% Damage taken; the",
+        "  Rank 30 Mag. Acc+30 / \"Magic Atk. Bonus\"+28-32 rows take it to 72 M.Acc and",
+        "  68-72 MAB a piece. SCH wears head/body/legs for free nukes and helix,",
+        "  body/hands/legs for enfeebles, body/legs in fast cast, the full five in the",
+        "  elemental M.Acc set and a five-piece `sets.idle.dt_indom`. Arbatel Loafers +3",
+        "  stays in the free-nuke and helix feet (\"Klimaform\"+25 and Magic Burst Damage",
+        "  II +5), Arbatel Bracers +3 stays in helix, and the Enhancing Magic and Healing",
+        "  Magic sets are untouched.",
         "- **Clemency (Mercy)** is the weakest of the five -- Enmity- sits where Store TP",
         "  would have been -- but its head and feet beat what SAM/DRG otherwise have, its",
         "  Physical damage limit helps multi-hit weaponskills, and the accuracy row is a",
@@ -491,8 +608,10 @@ def render_docs(data: dict) -> str:
         "What the suits do **not** replace: Nyame Path B stays the weaponskill set (flat WSD",
         "beats the new pieces for single-hit WS), Malignance/Sakpata's keep their Subtle Blow",
         "slots, and an unaugmented Limbus piece loses to R30 Odyssey gear -- the multi-attack",
-        "and PDL only turn on past roughly Rank 15, which is why most players cherry-pick",
-        "one or two slots per job instead of building all five.",
+        "and PDL only turn on past roughly Rank 15, which is why most melee players cherry-pick",
+        "one or two slots per job instead of building all five. The casters are the exception:",
+        "for SCH every Indomitable piece is 72 M.Acc and 22 Magic Damage, so the Elemental",
+        "Macc set takes all five, enfeebling and the damage sets take three, and fast cast two.",
         "",
         "`tools/gen_limbus_r30.py --lua` writes a `local limbus` build table and a",
         "`sets.Limbus` container into every library, then puts the pieces where the table",
@@ -512,6 +631,11 @@ def render_docs(data: dict) -> str:
 
     lines += [
         "",
+        "On SCH the Magic Burst variant (`sets.midcast.Elemental Magic MB`) deliberately",
+        "stays on Nyame Path C for its Magic Burst Damage II rows, and the max PDT/MDT",
+        "idle sets stay on Nyame because its per-piece Damage taken (7-9%) is higher than",
+        "Indomitable's (2-6%). The new `sets.idle.dt_indom` is the balanced DT build.",
+        "",
         "Jobs not listed keep their defaults and only gain the `sets.Limbus` container;",
         "the five-piece copy in every variant carries the same augment choice so a set can",
         "be worn as a unit.",
@@ -524,10 +648,19 @@ def render_docs(data: dict) -> str:
         "- The base stat lines are copied verbatim and turned into `item_mods` by the",
         "  generator. Pet, avatar and wyvern rows are recorded here but not stored: the",
         "  engine has no pet sheet yet, so nothing would read them.",
-        "- The 24-byte exdata block says rank 30 / tier 3, but its augment bundle index",
-        "  is still unknown (LandSandBoat has no Limbus augment table), so the client",
-        "  cannot print the four rows on a tooltip. `!r30 <piece>` prints them in game,",
-        "  the same way `!r30` covers Odyssey.",
+        "- The 24-byte exdata block is rank 30 / tier 3 / 55,800 RP (curve B) with",
+        "  the piece's own augment bundle index, so the client prints the four rows",
+        "  on the tooltip. `!r30 <piece>` still prints them in chat, and `!rp30`",
+        "  re-stamps every Limbus piece a character is carrying.",
+        "- The bundle indices sit in the client table as 472-496: 477-481 Duty,",
+        "  472-476 Revelation, 487-491 Sworn, 482-486 Indomitable and 492-496",
+        "  Clemency. Bundles 458-471 are other Su5 entries this dataset does not grant.",
+        "- The pieces carry the client's own armour models: Revelation MId 513, Sworn",
+        "  514, Indomitable 515, Duty 516 and Clemency 517.  The raw grap model is the",
+        "  slot base (0x1000 head, 0x2000 body, 0x3000 hands, 0x4000 legs, 0x5000 feet)",
+        "  plus that MId.  The values come from xi-tools' `mv/lists/characters.json`;",
+        "  migration 107 writes them, and `tools/item_models.json` keeps them for new",
+        "  grants and cloned characters.",
         "- Sources: " + ", ".join(data["source"]),
         "",
         "## Client data",
@@ -537,8 +670,8 @@ def render_docs(data: dict) -> str:
         "labels `2025-07-03`) has ids 24122-24194 unused, so it draws the null record --",
         "no name, \"All jobs\", `Lv.127` -- no matter what the server sends. Check a folder",
         "with `tools/newbuild.py identify --game <folder>`; `tools/prepare.py` only accepts",
-        "a build `meta/builds.json` lists. The 2026-10-05 install used to check this was",
-        "client version `30261006_0` and is not in that list yet.",
+        "a build `meta/builds.json` lists. The build this page was checked against is the",
+        "2026-10-05 install, client version `30261006_0`, which `meta/builds.json` lists.",
         "",
     ]
     return "\n".join(lines)

@@ -9,8 +9,17 @@ side by side with the original Python/Tkinter launcher in `../launcher/` while p
 
 - sign in, register, and keep a vault of saved accounts (tokens only, mode-0600);
 - browse characters, create a mule, pick the active character, and press Play;
+- a global **tenant** bar above every page: pick a main-account character or a sub-account box and
+  Home, Design, Data, Gear and Warps follow it; the choice is saved in `launcher.json`;
+- create server-owned sub-account boxes on **Team** and launch the whole team without extra
+  passwords or tokens;
 - launch several clients, one per account, and watch live HP/MP, EXP/hr and DPS;
 - send server commands and chat through the client's control port;
+- toggle four in-game HUD windows per account — **Abilities**, **Spells**, **Trusts** and
+  **Weapon skills** — with real game icons, `/ja` / `/ma` / `/ws` buttons, clock-face recasts,
+  per-type grid/list/bar layouts with folder-tab group pages, grouping (job, magic type, element,
+  trust job, weapon type or custom drag-and-drop groups), portrait trust buttons, TP-aware weapon-skill pages with skillchain elements and a window timer, compact bar pages, readable abbreviated
+  labels and draggable overlay positions;
 - read the active gear, load/import GearSwap libraries, edit sets (a bundled job library saves
   in place with a `.bak`), wear a set, and save a timestamped version;
 - a launcher-wide **GearSwap** on/off switch in Settings and on the Gear page: off clears the

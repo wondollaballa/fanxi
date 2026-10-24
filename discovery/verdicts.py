@@ -101,9 +101,13 @@ VERDICTS = {
     ('ffxi', '2025-12-26'): {'NOT_CODE': [0x100067d0], 'REDECODE': [0x100067c8], 'SWITCHES': {}},
     # Carried over from 2025-07-03 by tools/newbuild.py carry; re-checked by the discovery pass.
     ('ffximain', '2026-10-05'): {
-        'NOT_CODE': [],
-        'REDECODE': [],
-        'SWITCHES': {},
+        'NOT_CODE': [0x1030df80, 0x1030ef80, 0x1030eff0, 0x10310f40,   # 16-byte records {ptr,int,flags} in .text
+                     0x1030fdd0,                                     # inside the 6-byte import-thunk run
+                     0x1015bee0,                                     # aligned start inside `mov [edi+0xccc],esi`
+                     0x1015d7e0, 0x100f46b0,                         # 4-entry switch tables after a ret
+                     0x100657d0],                                    # aligned start inside `mov eax,imm` (0x90 read as padding)
+        'REDECODE': [0x1030efc9, 0x1030f109, 0x1015bedd, 0x1015d7eb, 0x100657ce, 0x100f46be],
+        'SWITCHES': {0x1022221d: 9, 0x102a72f8: 4, 0x10006412: 21, 0x10006ff7: 11, 0x102bacf9: 6},
     },
     ('ffxi', '2026-10-05'): {
         'NOT_CODE': [],

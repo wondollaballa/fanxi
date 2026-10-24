@@ -62,6 +62,7 @@ MOD_LABELS = {
     303: "Treasure Hunter",
     305: "Recycle",
     306: "Zanshin",
+    430: "Quadruple Attack",
     359: "Rapid Shot",
     485: "Shield Mastery",
     486: "Tactical Parry",

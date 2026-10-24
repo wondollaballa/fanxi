@@ -138,6 +138,13 @@ impl ControlClient {
             .await
     }
 
+    /// Change the in-game ability/spell HUD. `args` is the addon's `hud` command payload
+    /// (`show_abilities`, `show_spells`, `edit`, `layout`, `columns`, `size`, `labels`,
+    /// `opacity`, `reset_positions`), so the frontend can add fields without another command.
+    pub async fn hud(&self, args: Value) -> AppResult<Value> {
+        self.call("hud", args, Duration::from_secs(10)).await
+    }
+
     pub async fn chat(&self, line: &str) -> AppResult<Value> {
         self.call("chat_send", json!({"line": line}), Duration::from_secs(10))
             .await

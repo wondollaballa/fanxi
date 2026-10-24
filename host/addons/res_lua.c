@@ -266,6 +266,24 @@ static int l_item_icon_rgba(lua_State* L)
     return push_icon(L, res_item_icon(check_id(L, 1), &icon), &icon, 1);
 }
 
+/* The menu icon for a spell or ability `icon_id`: 32x32 top-down RGBA, or nil. */
+static int l_menu_icon_rgba(lua_State* L)
+{
+    uint8_t* rgba = NULL;
+    int w = 0, h = 0;
+    if (!res_menu_icon_rgba(check_id(L, 1), &rgba, &w, &h) || !rgba)
+    {
+        free(rgba);
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushlstring(L, (const char*)rgba, (size_t)w * (size_t)h * 4);
+    free(rgba);
+    lua_pushnumber(L, w);
+    lua_pushnumber(L, h);
+    return 3;
+}
+
 /* ---- spells, abilities ----------------------------------------------------------------------- */
 
 static void push_spell(lua_State* L, const ResSpell* s)
@@ -335,6 +353,40 @@ static void push_ability(lua_State* L, const ResAbility* a)
     set_text2(L, "description", a->description);
     lua_pushlstring(L, (const char*)a->raw, sizeof a->raw);
     lua_setfield(L, -2, "raw");
+}
+
+static int l_sc_icon_rgba(lua_State* L)
+{
+    uint8_t* rgba = NULL;
+    int w = 0, h = 0;
+    if (!res_sc_icon_rgba(check_id(L, 1), &rgba, &w, &h) || !rgba)
+    {
+        free(rgba);
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushlstring(L, (const char*)rgba, (size_t)w * (size_t)h * 4);
+    free(rgba);
+    lua_pushnumber(L, w);
+    lua_pushnumber(L, h);
+    return 3;
+}
+
+static int l_trust_face_rgba(lua_State* L)
+{
+    uint8_t* rgba = NULL;
+    int w = 0, h = 0;
+    if (!res_trust_face_rgba(check_id(L, 1), &rgba, &w, &h) || !rgba)
+    {
+        free(rgba);
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushlstring(L, (const char*)rgba, (size_t)w * (size_t)h * 4);
+    free(rgba);
+    lua_pushnumber(L, w);
+    lua_pushnumber(L, h);
+    return 3;
 }
 
 static int l_spell(lua_State* L)
@@ -660,6 +712,9 @@ int xi_res_open(lua_State* L)
         {"item_ids", l_item_ids},
         {"item_icon", l_item_icon},
         {"item_icon_rgba", l_item_icon_rgba},
+        {"menu_icon_rgba", l_menu_icon_rgba},
+        {"trust_face_rgba", l_trust_face_rgba},
+        {"sc_icon_rgba", l_sc_icon_rgba},
         {"spell", l_spell},
         {"spell_by_name", l_spell_by_name},
         {"spell_ids", l_spell_ids},

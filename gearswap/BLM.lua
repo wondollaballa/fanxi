@@ -1,32 +1,135 @@
 --[[
     Fanxi GearSwap library — Onedough BLM
-    Updated 2026-10-22 13:38:39
-    The launcher writes sets back to this file; the first copy is kept as a .bak.
-    Source: /Users/wondochoung/Documents/GitHub/fanxi/gearswap/BLM.lua
+    elemental nuker, enfeebling, dark magic
 
-    Each set holds only slot = "Item" pairs so Fanxi lists every one;
-    to add a variant, copy an existing set and give it a new path.
+    Import : Launcher -> Gear -> Import GearSwap file... -> BLM.lua
+    Wear   : select a set, then "Wear set". Items must be in bags 0-17.
+    Save   : "Save profile" writes JSON under the launcher's gearswap folder.
+
+    This file is a static set library: no includes, no windower/player calls,
+    no rules.  Fanxi's importer runs get_sets() in a Lua 5.1 sandbox and shows
+    every set below.  Each set is a leaf table of slot -> item, because the
+    launcher flattens a table that contains slot keys as one set and stops
+    descending; groups such as sets.idle are left empty on purpose.
+
+    Requested categories:
+      max HP     -> sets.idle.maxhp
+      max PDT    -> sets.idle.pdt   (sets.idle.mdt for magic)
+      TP         -> sets.engaged.tp
+      TP + DT    -> sets.engaged.hybrid
+      Fast Cast  -> sets.precast.FC
+      Magic Acc  -> sets.midcast (Enfeebling/Dark)
+      Magic Atk. -> sets.midcast (Elemental)
+      Weaponskill-> sets.WS.*
+      Abilities  -> sets.JA.*
+
+    Gear follows retail names: iLvl 119 reforged AF/relic/empyrean, Nyame,
+    Sakpata's, JSE necks/capes and Odyssey/Limbus accessories, plus a few older
+    all-jobs staples (Rajas Ring, Windbuffet Belt +1, Pole Grip).  The generic
+    pieces were checked against the wiki's per-job access lists.  The item
+    tables below add the job's JSE cape builds, the five Unity items' fixed
+    augments, and Nyame, Sakpata's, Gleti's and Agwu's Rank 30 Odyssey augments.
+    The BLM cape is Taranus's Cape; the nine Ambuscade builds are tp, pdt, mdt,
+    maxhp, dt, fcmp, macc, nuke and mabws.  The import itself does not need the
+    items to exist.
 ]]
 
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
+-- combine() is provided for extending a set without repeating it:
+--   sets.idle.regen = combine(sets.idle.dt, { waist = "Windbuffet Belt +1" })
+local function combine(base, extra)
+    local out = {}
+    for key, value in pairs(base or {}) do out[key] = value end
+    for key, value in pairs(extra or {}) do out[key] = value end
+    return out
+end
 
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
+-- JSE cape builds. The same base cape is reused with different
+-- Ambuscade augments; GearSwap matches the augment list on equip.
+local capes = {
+    fcmp = { name = "Taranus's Cape", augments = {"MP+60", "Mag. Acc+20 /Mag. Dmg.+20", "MP+20", '"Fast Cast"+10', "Phys. dmg. taken-10%"} },
+    pdt = { name = "Taranus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Taranus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Taranus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Taranus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Taranus's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    macc = { name = "Taranus's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "Mag. Acc.+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    nuke = { name = "Taranus's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", '"Mag.Atk.Bns."+10', "Phys. dmg. taken-10%"} },
+    mabws = { name = "Taranus's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", "Weapon skill damage +10%", "Phys. dmg. taken-10%"} },
+}
 
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
+-- Unity accessories: fixed max-rank Odyssey augments.
+local unity = {
+    collar = { name = "Unmoving Collar +1", augments = {"DEF+30", "HP+200"} },
+    odnowa = { name = "Odnowa Earring +1", augments = {"DEF+30", "Damage taken-3%"} },
+    ring = { name = "Gelatinous Ring +1", augments = {"VIT+15", "HP+100"} },
+    tathlum = { name = "Ghastly Tathlum +1", augments = {"Magic Damage +10", "INT+5"} },
+    loess = { name = "Loess Barbuta +1", augments = {"Enmity+10", "Damage taken-10%", "All Attr.+10"} },
+}
 
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
+-- Odyssey Rank 30 builds: every Odyssey armour piece and weapon at Rank 30.
+-- Nyame has four paths (A accuracy/TP, B physical WS, C magic, D pet);
+-- Sakpata's, Gleti's and Agwu's each have one Rank 30 row.
+-- Generated from data/odyssey_r30.json by tools/gen_odyssey_r30.py.
+local odyssey = {
+    A = {
+        helm = { name = "Nyame Helm", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+13", "Phys. dmg. limit +5%", "Crit.hit rate+10%"} },
+        mail = { name = "Nyame Mail", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+15", "Phys. dmg. limit +7%", "DEX/AGI+10"} },
+        gauntlets = { name = "Nyame Gauntlets", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+14", "Phys. dmg. limit +5%", "DEX+15"} },
+        flanchard = { name = "Nyame Flanchard", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+13", "Phys. dmg. limit +6%", "Crit.hit rate+13%"} },
+        sollerets = { name = "Nyame Sollerets", augments = {"Acc/Rng. Acc./M. Acc.+30", "Store TP+13", "Phys. dmg. limit +5%", "AGI+15"} },
+    },
+    B = {
+        helm = { name = "Nyame Helm", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +11%", '"Dbl.Atk."+5%', "Acc.+10 Rng. Acc.+10"} },
+        mail = { name = "Nyame Mail", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +13%", '"Double Attack"+7%', "STR/VIT+10"} },
+        gauntlets = { name = "Nyame Gauntlets", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +11%", '"Double Attack"+5%', "VIT+15"} },
+        flanchard = { name = "Nyame Flanchard", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +12%", '"Double Attack"+6%', "STR+15"} },
+        sollerets = { name = "Nyame Sollerets", augments = {"Attack+35 Rng. Atk.+35", "Weapon skill dmg +11%", '"Double Attack"+5%', "Acc+13 Rng. Acc+13"} },
+    },
+    C = {
+        helm = { name = "Nyame Helm", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+30", "Magic burst damage II +6", "Mag. Acc.+10"} },
+        mail = { name = "Nyame Mail", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+40", "Magic burst damage II +7", "INT/MND/CHR+10"} },
+        gauntlets = { name = "Nyame Gauntlets", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+30", "Magic burst damage II +5", "MND+15"} },
+        flanchard = { name = "Nyame Flanchard", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+35", "Magic burst damage II +5", "INT+15"} },
+        sollerets = { name = "Nyame Sollerets", augments = {'"Mag.Atk.Bns."+35', "Magic Damage+30", "Magic burst damage II +5", "CHR+15"} },
+    },
+    D = {
+        helm = { name = "Nyame Helm", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: All Attr.+15", "Pet: Damage taken -8%"} },
+        mail = { name = "Nyame Mail", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: DMG+11%", "Pet: Damage taken -10%"} },
+        gauntlets = { name = "Nyame Gauntlets", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: All Attr.+15", "Pet: Damage taken -8%"} },
+        flanchard = { name = "Nyame Flanchard", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: DMG+10%", "Pet: Damage taken -9%"} },
+        sollerets = { name = "Nyame Sollerets", augments = {"Acc+30 Mag. Acc.+30", "Pet: Acc./Mag. Acc.+30", "Pet: All Attr.+15", "Pet: Damage taken -8%"} },
+    },
+    sakpata = {
+        helm = { name = "Sakpata's Helm", augments = {"Attack+30", '"Double Attack" damage +15%', "Accuracy+15 Mag. Acc+15", '"Cure" potency+5%'} },
+        breastplate = { name = "Sakpata's Breastplate", augments = {"Attack+30", "Occ. inc. resist. to stat. ailments+15", "Accuracy+15 Mag. Acc+15", "Crit.hit rate+5%"} },
+        gauntlets = { name = "Sakpata's Gauntlets", augments = {"Attack+30", '"Store TP"+8', "Accuracy+15 Mag. Acc+15", "VIT+5"} },
+        cuisses = { name = "Sakpata's Cuisses", augments = {"Attack+30", "Skillchain dmg.+15%", "Accuracy+15 Mag. Acc+15", "STR+5"} },
+        leggings = { name = "Sakpata's Leggings", augments = {"Attack+30", '"Subtle Blow"+15', "Accuracy+15 Mag. Acc+15", "Chance of successful block +5"} },
+    },
+    gleti = {
+        mask = { name = "Gleti's Mask", augments = {"Attack+30", '"Counter"+10', "Accuracy+15 Mag. Acc+15", '"Regen"+3'} },
+        cuirass = { name = "Gleti's Cuirass", augments = {"Attack+30", '"Double Attack"+10%', "Accuracy+15 Mag. Acc+15", "Occ. inc. resist. to stat. ailments+10"} },
+        gauntlets = { name = "Gleti's Gauntlets", augments = {"Attack+30", '"Store TP"+8', "Accuracy+15 Mag. Acc+15", "DEX+5"} },
+        breeches = { name = "Gleti's Breeches", augments = {"Attack+30", '"Subtle Blow"+15', "Accuracy+15 Mag. Acc+15", '"Triple Attack"+5%'} },
+        boots = { name = "Gleti's Boots", augments = {"Attack+30", "Evasion+15", "Accuracy+15 Mag. Acc+15", "STR+5"} },
+    },
+    agwu = {
+        cap = { name = "Agwu's Cap", augments = {'"Mag.Atk.Bns."+25', "Magic Damage+15", "Accuracy+15 Mag. Acc+15", "Enmity-5"} },
+        robe = { name = "Agwu's Robe", augments = {'"Mag.Atk.Bns."+25', "Enmity-8", "Accuracy+15 Mag. Acc+15", "Magic Damage+10"} },
+        gages = { name = "Agwu's Gages", augments = {'"Mag.Atk.Bns."+25', "Magic burst damage II +6", "Accuracy+15 Mag. Acc+15", "MND+5"} },
+        slops = { name = "Agwu's Slops", augments = {'"Mag.Atk.Bns."+25', "Damage taken-10%", "Accuracy+15 Mag. Acc+15", "INT+5"} },
+        pigaches = { name = "Agwu's Pigaches", augments = {'"Mag.Atk.Bns."+25', '"Drain" and "Aspir" potency+15', "Accuracy+15 Mag. Acc+15", "Spell interruption rate down 10%"} },
+    },
+    weapons = {
+        fists = { name = "Sakpata's Fists", augments = {"DMG:+20", "Attack+45", "Accuracy+15 Mag. Acc+15", "Skillchain dmg.+10%"} },
+        sword = { name = "Sakpata's Sword", augments = {"DMG:+13", "Attack+45", "Accuracy+15 Mag. Acc+15", '"Refresh"+3'} },
+        knife = { name = "Gleti's Knife", augments = {"DMG:+11", "Attack+45", "Accuracy+15 Mag. Acc+15", '"Subtle Blow II"+10'} },
+        crossbow = { name = "Gleti's Crossbow", augments = {"DMG:+9", "Rng. Atk.+45", "Rng. Acc.+15 Mag. Acc.+15", '"Snapshot"+10'} },
+        axe = { name = "Agwu's Axe", augments = {"DMG:+15", "Attack+45", "Accuracy+15 Mag. Acc+15", "Skillchain dmg.+10%"} },
+        claymore = { name = "Agwu's Claymore", augments = {"DMG:+26", "Attack+45", "Accuracy+15 Mag. Acc+15", '"Counter"+10'} },
+        scythe = { name = "Agwu's Scythe", augments = {"DMG:+28", "Attack+45", "Accuracy+15 Mag. Acc+15", "Damage taken-10%"} },
+    },
+}
 
 -- Limbus Rank 30 builds: the top tier of all five families, one copy
 -- per augment choice a set needs (TP, weaponskill, fast cast, tank).
@@ -116,205 +219,154 @@ local limbus = {
 
 function get_sets()
     sets = {}
-    sets.engaged = {}
-    sets.idle = {}
-    sets.JA = {}
-    sets.midcast = {}
-    sets.Odyssey = {}
-    sets.precast = {}
     sets.weaponset = {}
-    sets.WS = {}
 
-    -- ===== JA =====
-    sets.JA["Burst Affinity"] = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        head = "Spaekona's Petasos +4",
-        body = "Spaekona's Coat +4",
-        hands = "Spaekona's Gloves +4",
-        legs = "Spaekona's Tonban +4",
-        feet = "Spaekona's Sabots +4",
-        neck = "Sorcerer's Stole +2",
-        back = "Taranus's Cape",
-    }
-    sets.JA["Elemental Seal"] = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        head = "Archmage's Petasos +4",
-        body = "Spaekona's Coat +4",
-        hands = "Spaekona's Gloves +4",
-        legs = "Spaekona's Tonban +4",
-        feet = "Spaekona's Sabots +4",
-        neck = "Sorcerer's Stole +2",
-        back = "Taranus's Cape",
-    }
-    sets.JA["Mana Wall"] = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        head = "Spaekona's Petasos +4",
-        body = "Spaekona's Coat +4",
-        hands = "Wicce Gloves +3",
-        legs = "Spaekona's Tonban +4",
-        feet = "Wicce Sabots +3",
-        neck = "Sorcerer's Stole +2",
-        back = "Taranus's Cape",
-    }
-    sets.JA.Manafont = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        head = "Spaekona's Petasos +4",
-        body = "Archmage's Coat +4",
-        hands = "Spaekona's Gloves +4",
-        legs = "Spaekona's Tonban +4",
-        feet = "Spaekona's Sabots +4",
-        neck = "Sorcerer's Stole +2",
-        back = "Taranus's Cape",
-    }
+    -- ===== Odyssey Rank 30 sets =================================
+    sets.Odyssey = {}  -- container: every Odyssey build this job can wear
+    sets.Odyssey.nyame_a = { head = odyssey.A.helm, body = odyssey.A.mail, hands = odyssey.A.gauntlets, legs = odyssey.A.flanchard, feet = odyssey.A.sollerets }
+    sets.Odyssey.nyame_b = { head = odyssey.B.helm, body = odyssey.B.mail, hands = odyssey.B.gauntlets, legs = odyssey.B.flanchard, feet = odyssey.B.sollerets }
+    sets.Odyssey.nyame_c = { head = odyssey.C.helm, body = odyssey.C.mail, hands = odyssey.C.gauntlets, legs = odyssey.C.flanchard, feet = odyssey.C.sollerets }
+    sets.Odyssey.nyame_d = { head = odyssey.D.helm, body = odyssey.D.mail, hands = odyssey.D.gauntlets, legs = odyssey.D.flanchard, feet = odyssey.D.sollerets }
+    sets.Odyssey.agwu = { head = odyssey.agwu.cap, body = odyssey.agwu.robe, hands = odyssey.agwu.gages, legs = odyssey.agwu.slops, feet = odyssey.agwu.pigaches }
 
-    -- ===== Odyssey =====
-    sets.Odyssey.agwu = {
-        head = "Agwu's Cap",
-        body = "Agwu's Robe",
-        hands = "Agwu's Gages",
-        legs = "Agwu's Slops",
-        feet = "Agwu's Pigaches",
-    }
-    sets.Odyssey.nyame_a = {
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-    }
-    sets.Odyssey.nyame_b = {
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-    }
-    sets.Odyssey.nyame_c = {
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-    }
-    sets.Odyssey.nyame_d = {
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-    }
+    -- ===== Limbus Rank 30 sets =================================
+    sets.Limbus = {}  -- container: every top-tier Limbus build this job can wear
+    sets.Limbus.indomitable_cast = { head = limbus.indomitable.cast.head, body = limbus.indomitable.cast.body, hands = limbus.indomitable.cast.hands, legs = limbus.indomitable.cast.legs, feet = limbus.indomitable.cast.feet }
 
-    -- ===== WS =====
-    sets.WS.Cataclysm = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Ghastly Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Sorcerer's Stole +2",
-        waist = "Orpheus's Sash",
-        ear1 = "Friomisi Earring",
-        ear2 = "Moonshade Earring",
-        ring1 = "Epaminondas's Ring",
-        ring2 = "Metamorph Ring +1",
-        back = "Taranus's Cape",
-    }
-    sets.WS.Omniscience = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Ghastly Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Sorcerer's Stole +2",
-        waist = "Orpheus's Sash",
-        ear1 = "Friomisi Earring",
-        ear2 = "Moonshade Earring",
-        ring1 = "Epaminondas's Ring",
-        ring2 = "Metamorph Ring +1",
-        back = "Taranus's Cape",
-    }
-    sets.WS.Shattersoul = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Ghastly Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Sibyl Scarf",
-        waist = "Orpheus's Sash",
-        ear1 = "Friomisi Earring",
-        ear2 = "Moonshade Earring",
-        ring1 = "Epaminondas's Ring",
-        ring2 = "Metamorph Ring +1",
-        back = "Taranus's Cape",
-    }
-    sets.WS.Vidohunir = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Ghastly Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Sibyl Scarf",
-        waist = "Orpheus's Sash",
-        ear1 = "Friomisi Earring",
-        ear2 = "Moonshade Earring",
-        ring1 = "Epaminondas's Ring",
-        ring2 = "Metamorph Ring +1",
-        back = "Taranus's Cape",
-    }
-
-    -- ===== engaged =====
-    sets.engaged.acc = {
-        main = "Hvergelmir 119 III",
+    -- ===== idle =================================================
+    sets.idle = {}  -- container: Fanxi lists the children below
+    -- town / CP / walking around
+    sets.idle.town = {
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Combatant's Torque",
-        waist = "Windbuffet Belt +1",
-        ear1 = "Telos Earring",
-        ear2 = "Cessance Earring",
-        ring1 = "Rajas Ring",
-        ring2 = "Petrov Ring",
-        back = "Taranus's Cape",
+        head = "Spaekona's Petasos +4",
+        body = "Spaekona's Coat +4",
+        hands = "Archmage's Gloves +4",
+        legs = "Spaekona's Tonban +4",
+        feet = "Hippomenes Socks +1",
+        neck = "Sorcerer's Stole +2",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Etiolation Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Chirich Ring +1",
+        ring2 = "Shneddick Ring +1",
+        back = "Aptitude Mantle",
     }
-    sets.engaged.hybrid = {
-        main = "Hvergelmir 119 III",
+    -- Refresh sources
+    sets.idle.refresh = {
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Unmoving Collar +1",
-        waist = "Windbuffet Belt +1",
-        ear1 = "Cessance Earring",
-        ear2 = "Odnowa Earring +1",
+        head = "Spaekona's Petasos +4",
+        body = "Spaekona's Coat +4",
+        hands = "Archmage's Gloves +4",
+        legs = "Spaekona's Tonban +4",
+        feet = "Spaekona's Sabots +4",
+        neck = "Sorcerer's Stole +2",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Etiolation Earring",
+        ear2 = "Loquac. Earring",
+        ring1 = "Chirich Ring +1",
+        ring2 = "Stikini Ring +1",
+        back = capes.fcmp,
+    }
+    -- max physical damage taken
+    sets.idle.pdt = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = unity.collar,
+        waist = "Plat. Mog. Belt",
+        ear1 = "Tuisto Earring",
+        ear2 = unity.odnowa,
         ring1 = "Defending Ring",
-        ring2 = "Gelatinous Ring +1",
-        back = "Taranus's Cape",
+        ring2 = unity.ring,
+        back = capes.pdt,
     }
+    -- max magic damage taken
+    sets.idle.mdt = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = unity.collar,
+        waist = "Plat. Mog. Belt",
+        ear1 = "Tuisto Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Defending Ring",
+        ring2 = unity.ring,
+        back = capes.mdt,
+    }
+    -- max HP
+    sets.idle.maxhp = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sorcerer's Stole +2",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Tuisto Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Defending Ring",
+        ring2 = unity.ring,
+        back = capes.maxhp,
+    }
+    -- balanced damage taken with job pieces
+    sets.idle.dt = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = "Spaekona's Petasos +4",
+        body = "Wicce Coat +3",
+        hands = "Archmage's Gloves +4",
+        legs = "Archmage's Tonban +4",
+        feet = "Spaekona's Sabots +4",
+        neck = unity.collar,
+        waist = "Plat. Mog. Belt",
+        ear1 = "Tuisto Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Defending Ring",
+        ring2 = unity.ring,
+        back = capes.dt,
+    }
+    -- movement speed + town
+    sets.idle.movement = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = "Spaekona's Petasos +4",
+        body = "Spaekona's Coat +4",
+        hands = "Archmage's Gloves +4",
+        legs = "Spaekona's Tonban +4",
+        feet = "Hippomenes Socks +1",
+        neck = "Sorcerer's Stole +2",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Etiolation Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Shneddick Ring +1",
+        ring2 = "Chirich Ring +1",
+        back = "Aptitude Mantle",
+    }
+
+    -- ===== engaged =================================================
+    sets.engaged = {}  -- container: TP variants below
+    -- main TP set
     sets.engaged.tp = {
-        main = "Hvergelmir 119 III",
+        main = "Hvergelmir",
         sub = "Pole Grip",
         ammo = "Staunch Tathlum +1",
         head = "Spaekona's Petasos +4",
@@ -328,210 +380,53 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Taranus's Cape",
+        back = capes.tp,
+    }
+    -- accuracy-first TP
+    sets.engaged.acc = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.A.helm,
+        body = odyssey.A.mail,
+        hands = odyssey.A.gauntlets,
+        legs = odyssey.A.flanchard,
+        feet = odyssey.A.sollerets,
+        neck = "Combatant's Torque",
+        waist = "Windbuffet Belt +1",
+        ear1 = "Telos Earring",
+        ear2 = "Cessance Earring",
+        ring1 = "Rajas Ring",
+        ring2 = "Petrov Ring",
+        back = capes.tp,
+    }
+    -- TP with DT accessories
+    sets.engaged.hybrid = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Staunch Tathlum +1",
+        head = odyssey.A.helm,
+        body = odyssey.A.mail,
+        hands = odyssey.A.gauntlets,
+        legs = odyssey.A.flanchard,
+        feet = odyssey.A.sollerets,
+        neck = unity.collar,
+        waist = "Windbuffet Belt +1",
+        ear1 = "Cessance Earring",
+        ear2 = unity.odnowa,
+        ring1 = "Defending Ring",
+        ring2 = unity.ring,
+        back = capes.tp,
     }
 
-    -- ===== Limbus Rank 30 sets =================================
-    sets.Limbus = {}  -- container: every top-tier Limbus build this job can wear
-    sets.Limbus.indomitable_cast = { head = limbus.indomitable.cast.head, body = limbus.indomitable.cast.body, hands = limbus.indomitable.cast.hands, legs = limbus.indomitable.cast.legs, feet = limbus.indomitable.cast.feet }
-
-    -- ===== idle =====
-    sets.idle.dt = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Staunch Tathlum +1",
-        head = "Spaekona's Petasos +4",
-        body = "Wicce Coat +3",
-        hands = "Archmage's Gloves +4",
-        legs = "Archmage's Tonban +4",
-        feet = "Spaekona's Sabots +4",
-        neck = "Unmoving Collar +1",
-        waist = "Plat. Mog. Belt",
-        ear1 = "Tuisto Earring",
-        ear2 = "Odnowa Earring +1",
-        ring1 = "Defending Ring",
-        ring2 = "Gelatinous Ring +1",
-        back = "Taranus's Cape",
-    }
-    sets.idle.maxhp = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Staunch Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Sorcerer's Stole +2",
-        waist = "Plat. Mog. Belt",
-        ear1 = "Tuisto Earring",
-        ear2 = "Odnowa Earring +1",
-        ring1 = "Defending Ring",
-        ring2 = "Gelatinous Ring +1",
-        back = "Taranus's Cape",
-    }
-    sets.idle.mdt = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Staunch Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Unmoving Collar +1",
-        waist = "Plat. Mog. Belt",
-        ear1 = "Tuisto Earring",
-        ear2 = "Odnowa Earring +1",
-        ring1 = "Defending Ring",
-        ring2 = "Gelatinous Ring +1",
-        back = "Taranus's Cape",
-    }
-    sets.idle.movement = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Staunch Tathlum +1",
-        head = "Spaekona's Petasos +4",
-        body = "Spaekona's Coat +4",
-        hands = "Spaekona's Gloves +4",
-        legs = "Spaekona's Tonban +4",
-        feet = "Hippomenes Socks +1",
-        neck = "Sorcerer's Stole +2",
-        waist = "Plat. Mog. Belt",
-        ear1 = "Etiolation Earring",
-        ear2 = "Odnowa Earring +1",
-        ring1 = "Shneddick Ring +1",
-        ring2 = "Chirich Ring +1",
-        back = "Aptitude Mantle",
-    }
-    sets.idle.pdt = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Staunch Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Unmoving Collar +1",
-        waist = "Plat. Mog. Belt",
-        ear1 = "Tuisto Earring",
-        ear2 = "Odnowa Earring +1",
-        ring1 = "Defending Ring",
-        ring2 = "Gelatinous Ring +1",
-        back = "Taranus's Cape",
-    }
-    sets.idle.refresh = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Staunch Tathlum +1",
-        head = "Spaekona's Petasos +4",
-        body = "Spaekona's Coat +4",
-        hands = "Spaekona's Gloves +4",
-        legs = "Spaekona's Tonban +4",
-        feet = "Spaekona's Sabots +4",
-        neck = "Sorcerer's Stole +2",
-        waist = "Plat. Mog. Belt",
-        ear1 = "Etiolation Earring",
-        ear2 = "Loquac. Earring",
-        ring1 = "Chirich Ring +1",
-        ring2 = "Stikini Ring +1",
-        back = "Taranus's Cape",
-    }
-    sets.idle.town = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Staunch Tathlum +1",
-        head = "Spaekona's Petasos +4",
-        body = "Spaekona's Coat +4",
-        hands = "Spaekona's Gloves +4",
-        legs = "Spaekona's Tonban +4",
-        feet = "Hippomenes Socks +1",
-        neck = "Sorcerer's Stole +2",
-        waist = "Plat. Mog. Belt",
-        ear1 = "Etiolation Earring",
-        ear2 = "Odnowa Earring +1",
-        ring1 = "Chirich Ring +1",
-        ring2 = "Shneddick Ring +1",
-        back = "Aptitude Mantle",
-    }
-
-    -- ===== midcast =====
-    sets.midcast["Dark Magic"] = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Pemphredo Tathlum",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Sorcerer's Stole +2",
-        waist = "Eschan Stone",
-        ear1 = "Digni. Earring",
-        ear2 = "Enchntr. Earring +1",
-        ring1 = "Stikini Ring +1",
-        ring2 = "Kishar Ring",
-        back = "Taranus's Cape",
-    }
-    sets.midcast["Elemental Magic"] = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Ghastly Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Sorcerer's Stole +2",
-        waist = "Eschan Stone",
-        ear1 = "Friomisi Earring",
-        ear2 = "Crematio Earring",
-        ring1 = "Metamorph Ring +1",
-        ring2 = "Mujin Band",
-        back = "Taranus's Cape",
-    }
-    sets.midcast["Elemental Magic Macc"] = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Pemphredo Tathlum",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Sorcerer's Stole +2",
-        waist = "Eschan Stone",
-        ear1 = "Enchntr. Earring +1",
-        ear2 = "Digni. Earring",
-        ring1 = "Stikini Ring +1",
-        ring2 = "Kishar Ring",
-        back = "Taranus's Cape",
-    }
-    sets.midcast["Enfeebling Magic"] = {
-        main = "Hvergelmir 119 III",
-        sub = "Pole Grip",
-        ammo = "Pemphredo Tathlum",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Sorcerer's Stole +2",
-        waist = "Eschan Stone",
-        ear1 = "Enchntr. Earring +1",
-        ear2 = "Digni. Earring",
-        ring1 = "Stikini Ring +1",
-        ring2 = "Kishar Ring",
-        back = "Taranus's Cape",
-    }
-
-    -- ===== precast =====
+    -- ===== precast =================================================
+    sets.precast = {}  -- container: fast cast below
+    -- fast cast
     sets.precast.FC = {
         ammo = "Staunch Tathlum +1",
         head = "Spaekona's Petasos +4",
         body = "Spaekona's Coat +4",
-        hands = "Spaekona's Gloves +4",
+        hands = "Archmage's Gloves +4",
         legs = "Spaekona's Tonban +4",
         feet = "Spaekona's Sabots +4",
         neck = "Orunmila's Torque",
@@ -540,7 +435,200 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = "Taranus's Cape",
+        back = capes.fcmp,
+    }
+
+    -- ===== midcast =================================================
+    sets.midcast = {}  -- container: magic sets below
+    -- enfeebling Macc
+    sets.midcast["Enfeebling Magic"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Pemphredo Tathlum",
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sorcerer's Stole +2",
+        waist = "Eschan Stone",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = capes.macc,
+    }
+    -- elemental MAB
+    sets.midcast["Elemental Magic"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = unity.tathlum,
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sorcerer's Stole +2",
+        waist = "Eschan Stone",
+        ear1 = "Friomisi Earring",
+        ear2 = "Crematio Earring",
+        ring1 = "Metamorph Ring +1",
+        ring2 = "Mujin Band",
+        back = capes.nuke,
+    }
+    -- elemental Macc
+    sets.midcast["Elemental Magic Macc"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Pemphredo Tathlum",
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sorcerer's Stole +2",
+        waist = "Eschan Stone",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = capes.macc,
+    }
+    -- drain/aspir Macc
+    sets.midcast["Dark Magic"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = "Pemphredo Tathlum",
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sorcerer's Stole +2",
+        waist = "Eschan Stone",
+        ear1 = "Digni. Earring",
+        ear2 = "Enchntr. Earring +1",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = capes.macc,
+    }
+
+    -- ===== WS =================================================
+    sets.WS = {}  -- container: weaponskills below
+    sets.WS["Vidohunir"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = unity.tathlum,
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sibyl Scarf",
+        waist = "Orpheus's Sash",
+        ear1 = "Friomisi Earring",
+        ear2 = "Moonshade Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Metamorph Ring +1",
+        back = capes.mabws,
+    }
+    sets.WS["Cataclysm"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = unity.tathlum,
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sorcerer's Stole +2",
+        waist = "Orpheus's Sash",
+        ear1 = "Friomisi Earring",
+        ear2 = "Moonshade Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Metamorph Ring +1",
+        back = capes.mabws,
+    }
+    sets.WS["Shattersoul"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = unity.tathlum,
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sibyl Scarf",
+        waist = "Orpheus's Sash",
+        ear1 = "Friomisi Earring",
+        ear2 = "Moonshade Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Metamorph Ring +1",
+        back = capes.mabws,
+    }
+    sets.WS["Omniscience"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        ammo = unity.tathlum,
+        head = odyssey.C.helm,
+        body = odyssey.C.mail,
+        hands = odyssey.C.gauntlets,
+        legs = odyssey.C.flanchard,
+        feet = odyssey.C.sollerets,
+        neck = "Sorcerer's Stole +2",
+        waist = "Orpheus's Sash",
+        ear1 = "Friomisi Earring",
+        ear2 = "Moonshade Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Metamorph Ring +1",
+        back = capes.mabws,
+    }
+
+    -- ===== JA =================================================
+    sets.JA = {}  -- container: job abilities below
+    sets.JA["Manafont"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        head = "Spaekona's Petasos +4",
+        body = "Archmage's Coat +4",
+        hands = "Archmage's Gloves +4",
+        legs = "Spaekona's Tonban +4",
+        feet = "Spaekona's Sabots +4",
+        neck = "Sorcerer's Stole +2",
+        back = capes.fcmp,
+    }
+    sets.JA["Elemental Seal"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        head = "Archmage's Petasos +4",
+        body = "Spaekona's Coat +4",
+        hands = "Archmage's Gloves +4",
+        legs = "Spaekona's Tonban +4",
+        feet = "Spaekona's Sabots +4",
+        neck = "Sorcerer's Stole +2",
+        back = capes.fcmp,
+    }
+    sets.JA["Mana Wall"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        head = "Spaekona's Petasos +4",
+        body = "Spaekona's Coat +4",
+        hands = "Wicce Gloves +3",
+        legs = "Spaekona's Tonban +4",
+        feet = "Wicce Sabots +3",
+        neck = "Sorcerer's Stole +2",
+        back = capes.fcmp,
+    }
+    sets.JA["Burst Affinity"] = {
+        main = "Hvergelmir",
+        sub = "Pole Grip",
+        head = "Spaekona's Petasos +4",
+        body = "Spaekona's Coat +4",
+        hands = "Archmage's Gloves +4",
+        legs = "Spaekona's Tonban +4",
+        feet = "Spaekona's Sabots +4",
+        neck = "Sorcerer's Stole +2",
+        back = capes.fcmp,
     }
 
     -- ===== weaponset =====
@@ -553,10 +641,13 @@ function get_sets()
         sub = "Pole Grip",
     }
     sets.weaponset.WizardsRod = {
-        main = "Wizard's Rod",
+        main = "Wizard's Rod (Reforged)",
         sub = "Genbu's Shield",
     }
+
 end
 
--- Fanxi launcher; this file is the loaded job library. The first copy was kept as a .bak.
-
+-- Real GearSwap calls get_sets() on load / job change; Fanxi's importer
+-- calls it once and flattens the resulting sets table.  The Gear window
+-- matches augmented items by their base name, so keep the cape table for
+-- real GearSwap and for the item tooltip.

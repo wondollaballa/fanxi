@@ -51,30 +51,34 @@ Commands the launcher uses:
 |---|---|
 | `state` | login status, player, zone, target, menu, chat input |
 | `metrics` | state plus EXP/hr, rolling DPS, damage total, session seconds and active gear |
-| `command {line}` | runs `!zone`, `!merits`, `/heal`, … as typed (no `/say` fallback) |
+| `command {line}` | runs `!zone`, `!warp`, `!merits`, `/heal`, … as typed (no `/say` fallback) |
 | `gear` | item id/name/bag/index, stack count and the encumbrance bitfield for all 16 equipment slots |
 | `equip {slot, item}` | finds the item in the character's bags and sends `0x050` |
 | `equip_set {items}` | finds every piece with one bag scan and injects the whole set of `0x050`s in a single frame |
 | `gearswap {path}` | loads a GearSwap Lua file in a sandbox and returns its `sets` table |
-| `phase {path, enabled, engaged, idle_town, idle_field, move, default_ws, default_ja, ws_overrides, ja_overrides, spell_overrides, focus}` | builds the precast/midcast/WS/JA/state plan from a GearSwap library and hands it to the host (see below) |
+| `phase {path, enabled, engaged, idle_town, idle_field, move, default_ws, default_ja, ws_overrides, ja_overrides, spell_overrides, spell_category_overrides, focus}` | builds the precast/midcast/WS/JA/state plan from a GearSwap library and hands it to the host (see below) |
 | `phase_status` | the engine's rules, sets, counters, `state`, `town`, `zone`, `job`, `kiting`, `resting`, `focus`, `locked` and `lockedSlots` |
 | `phase_lock {locked}` | holds the set that is worn now (`true`) or resumes automatic swaps (`false`) |
 | `phase_kiting {on}` | forced kiting state, on until switched off |
 | `phase_resting {on}` | manual resting state (this server has no rest packet to follow) |
 | `phase_focus {mode}` | idle focus: `auto`, `dt`, `pdt`, `mdt`, `eva` or `meva` |
 | `phase_lock_slots {mask}` | pin equipment slots (bit 0 main … bit 15 back) out of every automatic set |
-| `job_spells` | the current main/sub job's spell list for the override form |
+| `job_spells` | the current main/sub job's spell list for the override form, with the spell-override `categories` the host will use |
 | `job_abilities` | the main/sub job abilities the client's 0x0AC command list advertises, with action ids and types |
 | `weapons` | main/sub/ranged/ammo items in all 18 client bags (slots 1-80) that the main job meets the level and job requirements for, with copy and stack counts |
 | `bag_items {container}` | every item in one client container (diagnostic; scans slots 1-80, including slots past `container_max`) |
 | `icons {ids}` | item icons as top-down RGBA hex, decoded from the game's DATs |
 | `item_ids {names}` | item name -> id, for launcher-side GearSwap set previews |
+| `hud {show_abilities, show_spells, show_trusts, show_weapon_skills, edit, type, layout, columns, size, labels, font, tabs, group, custom_groups, assign_key, assign_group, opacity, menu_hide, reset_positions}` | change one in-game combat HUD window (or all of them); returns the saved state |
+| `battle_info {show, toggle, start, pause, stop, reset, auto_start, native_fps, advanced, opacity, x, y, reset_position}` | the Battle Info window and the measurement session; returns the live snapshot |
+| `party_info {show, toggle, tab, replace, buffs, names, opacity, x, y, reset_position}` | the Party Info window; `tab` is `party` or `alliance`; returns the saved state and the member list |
 | `follow {enabled, leader, distance}` | follow a character: replay its trail with native auto-run |
 | `follow_status` | `enabled`, `leader`, `state`, `distance`, `stuck`, `leader_found`, `trail` |
 | `follow_events` | drain the queued `!follow` commands the client's chat blocked |
 
 In the launcher, the Gear window is under **Gear** in the sidebar (or **Gear & GearSwap** in the
-Control room, or by double-clicking a live row). Its **Import GearSwap file…** button is the entry
+Control room, or by double-clicking a live row). It follows the global tenant bar: the selected
+tenant's running client supplies the live gear. Its **Import GearSwap file…** button is the entry
 point for a user's `.lua` sets.
 
 ### Follow
@@ -99,6 +103,171 @@ Chat commands are handled in the client addon and blocked from reaching the serv
 
 The launcher drains these with `follow_events` and applies the same graph as the Follow card. A
 leader may itself follow another leader; cycles are rejected by the launcher.
+
+### Combat HUD
+
+Every running account in the **Control room** has four switches beside its character picker:
+**Abilities**, **Spells**, **Trusts** and **Weapon skills**. They drive four in-game ImGui windows
+drawn by the control addon:
+
+- **Abilities** lists the job abilities the client's `0x0AC` command list advertises for the
+  current main/sub pair. It groups by main job and sub job by default; a Scholar's list splits
+  further into **Light Arts**, **Dark Arts** and **Other** instead of one long SCH page.
+- **Spells** lists the same job pair's spell table, with trust magic removed. **Trusts** is its
+  own window and groups by the trust's main job (Kupipi WHM, Trion PLD, Shantotto BLM, …). Its
+  buttons use cropped portrait faces bundled from the BGWiki trust cards, with the full trust name
+  and level still in the hover tooltip. A button runs `/ma "<name>" <me>`; the server calls that
+  alter ego, and it follows you and attacks your current target. While a Trust is out its button
+  gets a cyan border and an active dot; clicking it again releases that Trust through
+  `!trust release <spell id>`.
+- **Weapon skills** lists the client's weapon-skill actions (ids 1-255) and runs `/ws "Name" <t>`.
+  It groups by weapon type: Hand-to-Hand, Dagger, Sword, Great Sword, Axe, Great Axe, Scythe,
+  Polearm, Katana, Great Katana, Club, Staff, Archery or Marksmanship. The equipped weapon's icon
+  sits beside the group title. Each button shows the skillchain element it can open (the BGWiki
+  element badge) with an L1/L2/L3 badge; a weapon skill with no property falls back to the weapon
+  icon. The header carries current TP (`TP n / 1000`), the skillchain-window countdown (wait, then
+  go), and a dropdown for the skillchain being hunted. Matching buttons get a coloured border;
+  the rest dim. Below 1000 TP every weapon-skill tile is dim and clicks are ignored. Hovering
+  shows the interpolated fTP at the current TP, the hit count and all three resonance properties.
+
+The icon on each tile is the game's own menu icon: the addon's resource layer reads the icon DAT
+(`ROM/280/15.DAT`, file id 39551) and decodes the 32x32 DXT3 image for the spell/ability
+`icon_id` (`res.menu_icon_rgba`); trust faces and skillchain badges are bundled 48x48 atlases
+from the BGWiki cards and icons. Missing art falls back to a lettered tile, never to a broken
+texture. Clicks run the game command (`/ja`, `/ma` or `/ws`), so the client's own range, target
+and recast checks still apply. The button immediately darkens and a clock-style sector unwinds
+from the top; the sector covers the recast that is left and the icon is fully unveiled and
+clickable again when `spell_recast` / `ability_recast` reaches zero. A click that the game refuses
+clears after the short pending window instead of sticking.
+
+**Layout** opens the per-account editor. Each of the four types has its own tab and its own saved
+layout:
+
+- **Grid** (3-12 columns), **List** or **Bar**.
+- **Folder tabs** (on by default) put one group on each page. Click the tab strip at the top of
+  the window to flip between Buff/Debuff/Nuke, main/sub job, a trust job or a weapon type
+  instead of scrolling through the whole list. Turning tabs off stacks every group with headers.
+- **Group by**: spells by type (healing, buff, debuff, nuke, avatar), magic skill or element;
+  abilities by main/sub job or ability type; trusts by job; weapon skills by weapon type. Every
+  type also offers **No grouping**.
+- **Custom groups**: create named groups and drag items from **Unsorted** into them. The game
+  draws the groups in the order shown, and remembers which item belongs where.
+- Tile size 32-72 px and label size 7-12 px. The window chrome is only a few pixels of padding;
+  with tabs on, the bar is one tab row plus one row of tiles. Labels appear under the icon in grid and bar; they
+  use short, stock-style abbreviations and never an ellipsis. Hovering a tile always shows the
+  full name, level and recast, even when labels are off.
+- **List** width is measured from the longest name in that window, so it fits the text instead of
+  using a fixed column. **Grid** and **Bar** set their width and height from the tile size so the
+  cells sit flush inside the window.
+- **Edit** turns on drag mode in game: each visible window grows a title bar
+  (`Spells (40) - drag to move`) and is moved by dragging it. Position is saved when the mouse is
+  released. **Reset positions** puts the visible windows back in their default corners.
+- **Hide the HUD on the game-menu side** hides windows whose left edge is in the right half of the
+  screen when a client menu is open, because the client's Commands/Status/Magic menu is drawn on
+  the right and sits above the overlay. A HUD moved to the left stays visible. The hide is
+  suppressed while the player is engaged or has a live target, so opening the battle/ability menu
+  mid-fight never clears the ability or trust windows.
+
+The addon saves the six switches (the four action windows and the two hubs), each type's
+layout/labels/font/grouping/custom groups and all six positions per character in
+`<data dir>/hud/<character>.json`. A toggle flipped while the
+character is still at the login screen is carried into the character's file when it logs in. The
+switches are restored on the next launch and shown from `metrics.hud`, so two clients on different
+characters keep independent layouts.
+
+The launcher talks to the addon's `hud` command through the Tauri `send_hud` bridge. A patch names
+the tab it edits with `type` (`abilities`, `spells`, `trusts` or `weapon_skills`); an older
+launcher that omits `type` still applies layout fields to all four. `custom_groups` replaces the
+custom group list, and `assign_key` + `assign_group` moves one item (an empty group clears it).
+Invalid values are clamped or ignored. `metrics` includes the same state as `hud`, which is what
+the Control room's switches render.
+
+### Battle Info and Party Info
+
+Two more in-game windows live beside the action HUD. They are plain ImGui text and bars, use the
+same per-character file (`hud.state.battle` and `hud.state.party`), and are opened with
+`//battleinfo` / `//partyinfo` (alias `//battle` / `//party`) or from the control port with the
+`battle_info` and `party_info` commands; the Rust launcher's Control room shows **Battle info** and
+**Party info** switches beside the four action-HUD ones. Each window has its own `Hide` button,
+title-bar drag and saved position.
+
+**Battle Info** measures the player's own session from the client's `0x028` action packets and the
+live TP bar:
+
+- `Start` begins a session (or resumes a paused one), `Pause` freezes the clock and the 60-second
+  window, `Stop` ends it, and `Reset` clears every counter and starts fresh. With **Auto-start on
+  damage** on, the first outgoing action opens a session; a Stop suppresses auto-start until Start
+  or Reset. The state badge reads `READY`, `LIVE`, `PAUSED` or `STOPPED`.
+- DPS (session and rolling 60 s), peak 10 s, total/melee/WS/magic/ability/skillchain damage, max
+  and average hit, melee accuracy, hit and miss counts, critical rate, WS count/damage/accuracy,
+  damage taken, DTPS, kills and EXP/hr.
+- **TP to 1000** times the next cycle from 0 TP: elapsed seconds, hits, TP/s, TP per hit, an ETA
+  while the bar fills, and the last/average completed cycles. A missed swing adds no TP and a
+  weapon skill that empties the bar starts the next cycle.
+- The renderer's frame-rate overlay moves here: the window shows FPS, frame milliseconds, a 1% low
+  from the last few seconds and a sparkline. While Battle Info is shown its
+  **Native FPS overlay** checkbox is off by default, so `xi.fx('fps', 0)` hides the top-left
+  counter; hiding the window restores the previous setting. If the running `host64` predates
+  `xi.fx`, the checkbox is shown disabled with a note and the native counter stays.
+
+**Party Info** has **Party** and **Alliance** tabs. Each row shows the member's name, job/sub-job
+and level, HP/MP/TP bars with numbers and percent, and the status-effect icons the client holds for
+that member (hover lists their names; **Names** adds a short line under the icons). The player's own
+buffs come from `player_t.Buffs`; the other five from `partystatusicons_t` via packet `0x076`.
+Alliance members outside the player's own party have no status data in the client, and the row says
+so rather than showing an empty strip.
+
+**Replace game list** makes the window opaque (and draws a dark backing behind it) so it covers the
+client's own party list while it is shown. This is an overlay replacement: the client still draws
+the native list underneath, and moving the window uncovers it. That is deliberate for now - the
+native list is also the only place the client exposes some party interactions - but the window is
+positioned over the usual top-left list and its opacity is forced to 100%, so the visible result is
+the new list.
+
+### Warps
+
+**Warps** in the sidebar (and the **Warps** shortcut in the Control room) is the friendly face of
+`/!warp`. It is part of the Rust launcher (`launcher-rs`, see [launcher.md](launcher.md)); the
+in-game commands below work with either front end. It lists the selected character's saved places
+with the number, alias, zone and coordinates; **Mark** stores the live client's current position,
+**Warp** sends `!warp me` or `!warp all` for the chosen target, and the pencil/trash buttons rename
+or delete a row. Aliases can be edited while the character is offline; marking and warping need the
+selected character's client running because the position and the destination are on that session.
+
+The page can manage a main character or a sub-account character; the launcher's token is allowed to
+read and edit the whole account family (`account_can_manage_character`). The tenant bar's selection
+is the character whose list is shown, so changing the tenant changes Home, Data, Gear and Warps
+together. The REST routes are:
+
+| Route | Result |
+|---|---|
+| `GET /api/v1/characters/{id}/warps` | `{character, warps, limit, next_slot}` |
+| `POST /api/v1/characters/{id}/warps` | mark; optional `alias`, `zone`, `x`, `y`, `z`, `rot` (otherwise the server uses the character's saved position) |
+| `PATCH /api/v1/characters/{id}/warps/{slot}` | `{alias}`; an empty alias clears the name |
+| `DELETE /api/v1/characters/{id}/warps/{slot}` | delete one |
+
+The "Everyone" target is the same selection `!warp all` makes on the server: the sender's main
+account and its sub-accounts that are online, not every client in the launcher. A mark made in game
+appears in the page after **Refresh** (or immediately after a page action).
+
+### Command completion
+
+The game's own command assist knows slash commands, not the server's `!` chat commands. The host
+completes them itself: while the chat line starts with `/!` (or `!`), **Tab** rewrites the line
+through `host/addons/complete.c` and keeps the key from the game. A unique match is completed with a
+trailing space (`/!wa` -> `/!warp `, `/!warp ma` -> `/!warp mark `), and a word that is already a
+command completes itself even when a longer command shares it (`/!home` -> `/!home `, not
+`/!homepoint`). An ambiguous match does not pick a command: the line stays exactly as typed, Tab is
+consumed, and adding a letter and pressing Tab again completes it (`/!w` does nothing; `/!wh` ->
+`/!where `). The table covers every server command and the client-side `/!gs` and `/!follow`
+subcommands. `tests/chat_complete_test.py` compiles the source with the system C compiler and checks
+the table and the ambiguity rule.
+
+`xi_chat_set_input` now also writes the input object's caret (`+0xA58`) and display count
+(`+0xA50`) at the end of the new text, then asks the chat manager's message handler to redraw the
+input line. Without the redraw, a completion stayed invisible until the next key press (so Tab had
+to be pressed twice); without the caret/display writes, the next typed character would land in the
+middle of the command.
 
 ### Precast, midcast and idle states
 
@@ -168,8 +337,13 @@ set name and the lock button; the Gear page's **Idle** group picks the town, fie
 sets.
 
 The control addon samples the player's position a few frames apart; a change calls
-`xi.phase.moving()`, which hands back the set for the new state. An action's aftercast returns to
-whichever state you are in, and pushing a plan wears the current state's set immediately.
+`xi.phase.moving()`, which hands back the set for the new state. Only a state whose set differs
+sends gear: a step while engaged (the engaged set outranks movement) leaves the worn set alone,
+and so does the client re-sending `/attack` for the target it is already fighting. Re-sending an
+unchanged set made the client drop its battle stance piece by piece for the server to re-assert,
+which looked like the character disengaging and re-engaging. A pushed plan, a zone or job settle,
+an unlock and a slot-pin change still re-send it. An action's aftercast returns to whichever state
+you are in.
 
 **Stopping GearSwap.** The **Turn GearSwap off** switch on the Gear page's phase header and the
 same switch in **Settings → GearSwap** are launcher-wide. Off sends `phase {enabled: false}` to
@@ -229,7 +403,7 @@ The Gear page groups the plan the way the player thinks about it:
 | **Weaponskills** | a full-width card with a default and one card per `sets.WS.*` name; empty uses the library's WS set, then the default |
 | **Job abilities** | a full-width card with a default JA set and one row per main/sub ability; empty uses the default, then the library's `precast.JA` |
 | **Resting** | a manual resting set; this server has no rest packet, so it is a toggle |
-| **Spells** | a precast set, a midcast default for every spell, and per-spell overrides (picked from the current job's spell list) |
+| **Spells** | a precast set, a midcast default for every spell, category overrides (enfeebles macc/duration, buff potency/duration, helix magic) and per-spell overrides (picked from the current job's spell list) |
 | **Idle** | town, field and movement sets, the DT/PDT/MDT/Eva/Meva sets, and a manual focus selector |
 
 A weaponskill's or job ability's gear is worn before the action, and the state set returns on
@@ -238,7 +412,17 @@ spell default replaces the library's skill sets for every spell; an override is 
 spell-table id and wins over the default. A per-WS or per-JA card wins over its library set; an
 empty card uses the default JA/WS set, then the library fallback. The per-WS, per-JA and
 per-spell choices ride in the `phase` command's options object (`ws_overrides`, `ja_overrides`,
-`spell_overrides`), so the host builds exactly what the page shows.
+`spell_overrides`, `spell_category_overrides`), so the host builds exactly what the page shows.
+
+A category override (`spell_category_overrides`, keyed `enfeebles_macc`, `enfeebles_duration`,
+`buff_potency`, `buff_duration` or `helix_magic`) gives one set to every spell the host puts in
+that group for the current main/sub pair. The host's classifier is the one `job_spells` returns
+in each spell's `categories` array: Enfeebling Magic fills both enfeebles groups, Enhancing Magic
+both buff groups, and a spell whose name contains `helix` fills helix magic. The plan resolves a
+spell in this order: per-spell override, then its category, then the midcast default, then the
+library's `sets.midcast.<skill>`. The two faces of a pair answer the same question (one set is
+worn per cast), so the page releases the other when one is picked; a saved plan that carries both
+still resolves in the order above, with macc before duration and potency before duration.
 
 **Weapon pins.** The host filters pinned slots out of every set it sends — precast, midcast,
 engaged, idle, kiting, resting, focus. The Active gear card draws a red border on a pinned
@@ -333,8 +517,10 @@ This is intentionally a safe subset:
 - augments are carried as data and shown read-only in the Gear window (`*`, or `R30` for
   Odyssey armour and weapons); same-name cape and Nyame builds flatten to one base name for Wear
   set, and saving a version drops the augment arrays;
-- `!r30 <item>` in the game's chat log prints that item's Odyssey Rank 30 rows (all four
-  Nyame paths, or the single Sakpata's/Gleti's/Agwu's row); `!r30` alone lists the 27 items.
+- `!r30 <item>` in the game's chat log prints that item's Rank 30 rows — Odyssey (all four
+  Nyame paths, or the single Sakpata's/Gleti's/Agwu's row) or Limbus (the four suit rows);
+  `!r30` alone lists every item the server knows. `!rp30` re-stamps the Limbus pieces the
+  character is carrying to Rank 30 (55,800 RP and the piece's augment bundle).
 - GearSwap's rules, `aftercast`, `precast` hooks and state machine are not reimplemented here.
   Actual GearSwap can still run through the addon host if installed under
   `windower/addons/GearSwap`; the panel is a native inspector/equipper.

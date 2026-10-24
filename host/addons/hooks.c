@@ -439,6 +439,28 @@ int xi_chat_input_open(void)
     return m ? rd32(m + 0xF108) != 1 : 0;
 }
 
+/* The input line is drawn by the chat manager's message handler on its "draw" message (case 2
+ * of the handler's switch).  Writing the text buffer directly does not invalidate that widget,
+ * so the line keeps showing the old text until the next key press.  Call the handler after a
+ * rewrite so a completion appears immediately.  The pattern is the handler's prologue:
+ * mov eax,[esp+4]; sub esp,0x41c; and eax,0xff; push ebx; push esi; mov esi,ecx. */
+static void chat_redraw(uint32_t m)
+{
+    static uint32_t draw = 0xFFFFFFFFu;
+    if (draw == 0xFFFFFFFFu)
+    {
+        uint32_t text = 0, size = 0;
+        xi_image(NULL, NULL, &text, &size);
+        draw = xi_find_pattern(text, size, "8B44240481EC1C04000025FF000000", 0, 0);
+        if (!draw)
+            draw = 0;
+    }
+    if (!draw || !m || rd32(m + 0xF108) == 1)
+        return;
+    uint32_t args[3] = {2, 0, 0};
+    guest_thiscall(draw, m, 3, args);
+}
+
 void xi_chat_set_input(const char* text)
 {
     uint32_t m = chat_manager();
@@ -447,9 +469,18 @@ void xi_chat_set_input(const char* text)
     size_t n = strlen(text);
     if (n > 0xFF)
         n = 0xFF;
-    memcpy(GUEST_PTR(m + 0x7E30 + 0x6C4), text, n);
-    wr8(m + 0x7E30 + 0x6C4 + (uint32_t)n, 0);
-    wr32(m + 0x7E30 + 0x888, (uint32_t)n);
+    uint32_t base = m + 0x7E30;
+    memcpy(GUEST_PTR(base + 0x6C4), text, n);
+    wr8(base + 0x6C4 + (uint32_t)n, 0);
+    wr32(base + 0x888, (uint32_t)n);
+    /* The input object tracks the caret at +0xA58 (the insert path compares it with the byte
+     * length at +0x888 before choosing append or middle insert) and the display count at
+     * +0xA50 (one byte per ASCII byte, the length the 120-character limit is checked against).
+     * A Tab completion makes the text longer, so leaving these at the old length would put
+     * the next typed character in the middle of the command. */
+    wr32(base + 0xA50, (uint32_t)n);
+    wr32(base + 0xA58, (uint32_t)n);
+    chat_redraw(m);
 }
 
 /* --- packets --------------------------------------------------------------------------------- */
@@ -812,10 +843,31 @@ static void dump_huff(uint32_t table)
  * weapon skill the list was saved with.  Rebuild it from each 0x0AC packet: the set bits, in
  * order, are exactly the commands the server advertises (weapon skills, then job abilities).
  * The decrypted packet is copied on the network thread; the list is written on the game
- * thread by xi_hooks_frame, so a menu open never sees a half-written list. */
-#if defined(FFXI_ABILITY_LIST) && defined(FFXI_ABILITY_LIST_COMMANDS) && defined(FFXI_ABILITY_LIST_COUNT)
+ * thread by xi_hooks_frame, so a menu open never sees a half-written list.
+ *
+ * commands/count are offsets inside the list object, not addresses, and the retail layout has
+ * not changed: 0x160 is the first uint16 and 0x1760 the uint32 count in both 2025-07-03 and
+ * 2026-10-05 (verified by disassembling the menu code that reads [ability_list+0x1760] and
+ * adds 0x160).  Keep them as defaults for every build that maps ability_list.  Do not make
+ * the hook depend on per-build entries for them: tools/newbuild.py carries addresses, not
+ * struct offsets, so a new build kept only ability_list and silently compiled this whole
+ * hook out, leaving every job's Abilities menu with "No abilities available." */
+#if defined(FFXI_ABILITY_LIST)
+#ifndef FFXI_ABILITY_LIST_COMMANDS
+#define FFXI_ABILITY_LIST_COMMANDS 0x160
+#endif
+#ifndef FFXI_ABILITY_LIST_COUNT
+#define FFXI_ABILITY_LIST_COUNT 0x1760
+#endif
+#define XI_ABILITY_LIST_HOOK 1
+#endif
+
+#ifdef XI_ABILITY_LIST_HOOK
 static uint8_t g_command_bits[224];
 static atomic_int g_command_pending;
+
+/* the list object holds 0xB00 uint16 ids (0x1600 bytes), then the count */
+#define ABILITY_LIST_ENTRIES 0xB00u
 
 static void note_command_data(uint32_t pkt, size_t n)
 {
@@ -859,7 +911,7 @@ static void apply_command_data(void)
      * list ids for traits are 0x600 + trait id (the same encoding HasTrait uses).  Not
      * adding them here is why the server's trait bits never reached the menu. */
     uint32_t trait_count = 0;
-    for (uint32_t trait_id = 1; trait_id < 256 && count < 0xB00; ++trait_id)
+    for (uint32_t trait_id = 1; trait_id < 256 && count < ABILITY_LIST_ENTRIES; ++trait_id)
     {
         uint32_t id = 0x600 + trait_id;
         if (!(g_command_bits[id >> 3] & (1u << (id & 7))))
@@ -870,8 +922,8 @@ static void apply_command_data(void)
     }
     wr32(list + FFXI_ABILITY_LIST_COUNT, count);
     /* keep no stale ids after the new end: the profile saves the whole buffer */
-    for (uint32_t off = count * 2; off < 0xB00; off += 4)
-        wr32(list + FFXI_ABILITY_LIST_COMMANDS + off, 0);
+    for (uint32_t i = count; i < ABILITY_LIST_ENTRIES; ++i)
+        wr16(list + FFXI_ABILITY_LIST_COMMANDS + i * 2, 0);
     xi_log("command list rebuilt from 0x0AC: %u entries (%u job traits)", count,
            trait_count);
 }
@@ -879,15 +931,15 @@ static void apply_command_data(void)
 
 int xi_ability_commands(uint16_t* out, int max)
 {
-#if defined(FFXI_ABILITY_LIST) && defined(FFXI_ABILITY_LIST_COMMANDS) && defined(FFXI_ABILITY_LIST_COUNT)
+#ifdef XI_ABILITY_LIST_HOOK
     if (!out || max <= 0)
         return 0;
     uint32_t list = rd32(FFXI_ABILITY_LIST);
     if (!list || !xi_mapped(list, FFXI_ABILITY_LIST_COUNT + 4))
         return 0;
     uint32_t count = rd32(list + FFXI_ABILITY_LIST_COUNT);
-    if (count > 0xB00)
-        count = 0xB00;
+    if (count > ABILITY_LIST_ENTRIES)
+        count = ABILITY_LIST_ENTRIES;
     int n = 0;
     for (uint32_t i = 0; i < count && n < max; ++i)
     {
@@ -917,7 +969,7 @@ static void wrap_packet_decrypt(Guest* g)
     dump_huff(rt_arg(g, 3));
     rt_orig_packet_decrypt(g);
     int32_t n = (int32_t)g->eax;
-#if defined(FFXI_ABILITY_LIST) && defined(FFXI_ABILITY_LIST_COMMANDS) && defined(FFXI_ABILITY_LIST_COUNT)
+#ifdef XI_ABILITY_LIST_HOOK
     if (n > 0x1C && (uint32_t)n <= capacity && xi_mapped(out, (uint32_t)n))
         note_command_data(out, (size_t)n);
 #endif
@@ -1037,7 +1089,7 @@ void xi_hooks_init(void)
 
 void xi_hooks_frame(void)
 {
-#if defined(FFXI_ABILITY_LIST) && defined(FFXI_ABILITY_LIST_COMMANDS) && defined(FFXI_ABILITY_LIST_COUNT)
+#ifdef XI_ABILITY_LIST_HOOK
     apply_command_data();
 #endif
     /* what is queued now, in order; what that queues runs next frame. Lines to write wait for the

@@ -16,10 +16,6 @@ import item_models  # noqa: E402
 
 ARMOR = ("head", "body", "hands", "legs", "feet")
 
-# Limbus Rank 30, item ids 24122-24194 every third id: the only armour the item model lookup
-# deliberately leaves at model 0 (see CHANGELOG.md and docs/limbus-r30.md).
-LIMBUS_R30 = {24122 + 3 * index for index in range(25)}
-
 
 class ItemModelTest(unittest.TestCase):
     def setUp(self):
@@ -38,6 +34,11 @@ class ItemModelTest(unittest.TestCase):
             23907: 4184,   # Hachiya Hatsuburi +4 (Ninja look)
             23761: 4566,   # Nyame Helm
             27410: 20499,  # Hippomenes Socks +1
+            24152: 4611,   # Indom. Petasos       (MId 515)
+            24155: 8707,   # Indomitable Coat     (MId 515)
+            24158: 12803,  # Indom. Gloves        (MId 515)
+            24161: 16899,  # Indom. Tonban        (MId 515)
+            24164: 20995,  # Indom. Sabots        (MId 515)
         }
         for item_id, model in expected.items():
             row = self.db.one("SELECT model FROM items WHERE item_id = ?", (item_id,))
@@ -45,16 +46,16 @@ class ItemModelTest(unittest.TestCase):
             self.assertEqual(int(row["model"]), model, item_id)
 
     def test_every_armour_slot_has_a_model(self):
-        """Only the Limbus Rank 30 pieces may be model-less, and only until a model pass.
+        """Every armour item has a Grap model, the Limbus Rank 30 pieces included.
 
-        That set is written down in CHANGELOG.md and docs/limbus-r30.md; any other armour
-        item with no Grap model is a hole in migration 95's lookup.
+        Migration 107 gives the 25 Limbus pieces their client models (MIds 513-517); any
+        armour item with no Grap model is a hole in migration 95's lookup or a new import.
         """
         rows = self.db.all(
             "SELECT item_id FROM items WHERE equip_slot IN (%s) AND model = 0 ORDER BY item_id"
             % ",".join("?" for _ in ARMOR), ARMOR)
         missing = [int(row["item_id"]) for row in rows]
-        self.assertEqual(missing, sorted(LIMBUS_R30))
+        self.assertEqual(missing, [])
 
     def test_a_new_item_is_stamped_from_the_lookup(self):
         self.db.execute("INSERT OR REPLACE INTO item_models (item_id, model) VALUES (99999, 4321)")

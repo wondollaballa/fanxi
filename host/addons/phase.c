@@ -34,7 +34,10 @@
 #include "host.h"
 #include "phase.h"
 
-enum { PHASE_SETS = 96, PHASE_RULES = 1024, PHASE_NAME = 48 };
+/* A plan can carry the library's skill rules for every spell plus one rule per spell in each
+ * configured category (Enfeebling Magic, Enhancing Magic and the helix spells overlap), so the
+ * rule table is wider than the old skill-only plan. */
+enum { PHASE_SETS = 96, PHASE_RULES = 4096, PHASE_NAME = 48 };
 /* 0x01A action categories: what the client is doing. */
 enum
 {
@@ -102,6 +105,11 @@ static _Atomic int g_lock_set = -1;
 static _Atomic int g_kiting, g_resting;
 static _Atomic int g_focus; /* 0 auto, 1 dt, 2 pdt, 3 mdt, 4 eva, 5 meva */
 static _Atomic unsigned g_locked_slots; /* bit i = equipment slot i is pinned */
+/* The state index whose set is on the character now (-1: unknown). A transition that lands on
+ * the state already worn - a movement step while engaged, or the client re-sending /attack for
+ * the same target - has nothing to change, and re-sending the set would only make the client
+ * drop its battle stance piece by piece for the server to re-assert it. */
+static _Atomic int g_worn_state = -1;
 /* A zone, job or stance change wants the state set re-worn once the client has settled. */
 static _Atomic int g_state_pending;
 static _Atomic uint64_t g_state_due;
@@ -181,7 +189,11 @@ static int state_index(const PhaseTable* t)
     return -1;
 }
 
-static int state_set(const PhaseTable* t, PhasePlan* plan)
+/* Wear the current state's set. `force` re-sends it even when it is the one already on (a plan
+ * just pushed, a zone/job settle, unlocking or re-pinning a slot); the automatic transitions
+ * leave the gear alone when the set has not changed, which is what stops a movement step while
+ * engaged (or a repeat /attack) from re-equipping every piece. */
+static int wear_state(const PhaseTable* t, PhasePlan* plan, int force)
 {
     plan->pre_n = plan->mid_n = plan->restore_n = 0;
     plan->hold = 0;
@@ -190,8 +202,16 @@ static int state_set(const PhaseTable* t, PhasePlan* plan)
     int idx = state_index(t);
     if (idx < 0 || idx >= t->nsets)
         return 0;
+    if (!force && atomic_load_explicit(&g_worn_state, memory_order_acquire) == idx)
+        return 0;
     copy_set(&t->sets[idx], plan->pre, &plan->pre_n);
+    atomic_store_explicit(&g_worn_state, idx, memory_order_release);
     return plan->pre_n > 0;
+}
+
+static int state_set(const PhaseTable* t, PhasePlan* plan)
+{
+    return wear_state(t, plan, 0);
 }
 
 static int fill_restore(const PhaseTable* t, PhasePlan* plan)
@@ -199,12 +219,19 @@ static int fill_restore(const PhaseTable* t, PhasePlan* plan)
     plan->restore_n = 0;
     if (atomic_load_explicit(&g_locked, memory_order_acquire))
         return 0;
+    int fell_back = 0;
     int idx = state_index(t);
     if (idx < 0 || idx >= t->nsets)
+    {
         idx = t->restore;
+        fell_back = 1;
+    }
     if (idx < 0 || idx >= t->nsets)
         return 0;
     copy_set(&t->sets[idx], plan->restore, &plan->restore_n);
+    /* The return set is the state's own set again, so a later transition to that same state has
+     * nothing to wear; a plain fallback set is not a state and leaves the worn state unknown. */
+    atomic_store_explicit(&g_worn_state, fell_back ? -1 : idx, memory_order_release);
     return plan->restore_n > 0;
 }
 
@@ -235,16 +262,13 @@ int xi_phase_action(uint16_t category, uint16_t action, PhasePlan* plan)
         atomic_store_explicit(&g_resting, 0, memory_order_release);
         int was = atomic_exchange_explicit(&g_engaged, 1, memory_order_acq_rel);
         /* Locked still follows the state (the next unlock needs to know which set to wear),
-         * it just does not move any gear. */
-        if (atomic_load_explicit(&g_locked, memory_order_acquire))
-            return 0;
-        int idx = state_index(t);
-        if (idx < 0 || idx >= t->nsets)
-            return 0;
-        copy_set(&t->sets[idx], plan->pre, &plan->pre_n);
+         * it just does not move any gear.  A repeated /attack for the same target is the
+         * client re-drawing after a range step, not a new engagement: the engaged set is
+         * already on, so wear_state leaves it alone. */
+        int worn = wear_state(t, plan, 0);
         if (was != 1)
             atomic_fetch_add(&g_swapped, 1);
-        return plan->pre_n > 0;
+        return worn;
     }
     /* Locked is the user's override: the action goes out exactly as the client made it. */
     if (atomic_load_explicit(&g_locked, memory_order_acquire))
@@ -407,7 +431,7 @@ int xi_phase_apply(PhasePlan* plan)
     PhaseTable* t = atomic_load_explicit(&g_table, memory_order_acquire);
     if (!t || !t->enabled)
         return 0;
-    return state_set(t, plan);
+    return wear_state(t, plan, 1);
 }
 
 int xi_phase_pending(PhasePlan* plan)
@@ -422,7 +446,7 @@ int xi_phase_pending(PhasePlan* plan)
     PhaseTable* t = atomic_load_explicit(&g_table, memory_order_acquire);
     if (!t || !t->enabled)
         return 0;
-    return state_set(t, plan);
+    return wear_state(t, plan, 1);
 }
 
 int xi_phase_lock(int on, PhasePlan* plan)
@@ -449,7 +473,8 @@ int xi_phase_lock(int on, PhasePlan* plan)
     if (!t || !t->enabled)
         return 0;
     atomic_fetch_add(&g_swapped, 1);
-    return state_set(t, plan);
+    /* The gear may have been changed by hand while the lock held it: put the state's set back. */
+    return wear_state(t, plan, 1);
 }
 
 int xi_phase_kiting(int on, PhasePlan* plan)
@@ -509,8 +534,8 @@ int xi_phase_lock_slots(unsigned mask, PhasePlan* plan)
     if (!t || !t->enabled)
         return 0;
     /* Unlocking a slot should put the current state's piece back; locking one still re-sends
-     * the rest of the set, which is already worn. */
-    return state_set(t, plan);
+     * the rest of the set, already worn, so the client draws the pieces the mask still keeps. */
+    return wear_state(t, plan, 1);
 }
 
 void xi_phase_reset(void)
@@ -518,6 +543,8 @@ void xi_phase_reset(void)
     atomic_store_explicit(&g_pending, 0, memory_order_release);
     atomic_store_explicit(&g_pending_action, 0, memory_order_release);
     atomic_store_explicit(&g_state_pending, 0, memory_order_release);
+    /* A new table means new set indices: what was worn no longer names anything. */
+    atomic_store_explicit(&g_worn_state, -1, memory_order_release);
 }
 
 /* --- xi.phase ------------------------------------------------------------------------------- */

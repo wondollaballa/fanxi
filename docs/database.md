@@ -49,14 +49,31 @@ The current schema is migrations `0001_initial.sql`, `0002_world_content.sql` an
 | `npc_lines` | Ambient lines | `npc_id`, `line_no`, `text` |
 | `monster_templates` | Monster templates | `name`, `model`, `level_min/max`, `hp`, combat stats, `aggro`, `roam_radius`, `respawn_seconds` |
 | `monster_spawns` | Monster placements | `template_id`, `zone`, `pos_*`, `rot`, `level`, `respawn_seconds` |
-| `items` | Item catalogue | `item_id`, `name`, `stack`, `usable`, `equip_slot`, `level` |
+| `trusts` | Factual alter-ego data behind the 122 Trust spells (migration 115) | `spell_id` (primary key), `name`, `job`/`sub_job`, `look_hex`, `model`, `delay`, `damage_mult`, `passive` |
+| `items` | Item catalogue | `item_id`, `name`, `stack`, `usable`, `equip_slot`, `level`, `item_level`, `rare`, `ex`, `price`, `base_sell` (retail flags; a Rare item is one per character) |
+| `char_purchases` | Armory purchase history | `character_id`, `item_id`, `quantity`, `price`, `created_at` |
 | `item_models` | Grap model per visible item (migration 95) | `item_id`, `model`; triggers on `items`/`char_inventory`/`char_equip` keep it applied |
 | `char_inventory` | Character slots | `character_id`, `container`, `slot`, `item_id`, `quantity`; slot 0 / item 65535 is gil |
+| `char_warps` | `/!warp` saved places (migration 110) | `character_id`, `slot` 1-1000, `alias` (unique per character when non-empty), `zone`, `pos_*`, `rot` |
 | `item_storage` | Storage Slip eligibility | `item_id`, `slip` (1–33) |
 | `char_storage` | Items on a character's slips | `character_id`, `item_id`, `quantity`, `slip`, `stored_at` |
 | `char_locker` | Hidden 9999-item locker | `character_id`, `item_id`, `quantity`, `stored_at` |
 | `quests` | Quest definitions | `quest_key`, `name`, reward, `required_template_id`, `required_kills` |
 | `char_quests` | Quest progress | `character_id`, `quest_id`, `state` (`active`/`complete`), `progress` |
+
+`items.rare` is retail's one-per-character flag. `FanxiService.add_item` and the shop refuse a
+second copy, and the ownership check looks in the bags, the storage slips and the hidden locker.
+`items.ex` means untradeable; on its own it does **not** limit copies for a normal grant (the
+augmented job capes depend on owning several builds of the same Ex cape). The Armory is stricter:
+it refuses a second copy of any Rare **or** Ex piece, because it is a shop and an Ex item cannot
+leave the character once bought.
+
+`items.price` is the Armory's deterministic gil price (migration 111): ten times the square of
+the item level (or level), raised to ten times the NPC resale value when that is higher, and
+doubled for Rare/Ex. Migration 111 also imports every equippable item the retail client names,
+so the Armory typeahead covers the whole catalogue rather than the hand-curated rows earlier
+migrations happened to need. Migration 113 fills the armour models LandSandBoat leaves at MId
+0, so those pieces do not wear the previous slot's look.
 
 Relationships:
 
@@ -71,6 +88,7 @@ zones    ── characters.zone / zone_lines.to_zone
 characters 1──n char_inventory
 characters 1──n char_storage
 characters 1──n char_locker
+characters 1──n char_warps ── zones.id (zone)
 characters 1──n char_quests ──n quests
 monster_templates 1──n monster_spawns
 world_npcs 1──n npc_lines

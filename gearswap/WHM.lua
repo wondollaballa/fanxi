@@ -503,7 +503,7 @@ function get_sets()
     }
     -- enfeebling Macc
     sets.midcast["Enfeebling Magic"] = {
-        main = "Opashoro 119 III",
+        main = "Opashoro",
         sub = "Pole Grip",
         ammo = "Pemphredo Tathlum",
         head = odyssey.C.helm,
@@ -521,7 +521,7 @@ function get_sets()
     }
     -- divine Macc/MAB
     sets.midcast["Divine Magic"] = {
-        main = "Opashoro 119 III",
+        main = "Opashoro",
         sub = "Pole Grip",
         ammo = "Pemphredo Tathlum",
         head = odyssey.C.helm,

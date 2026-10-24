@@ -66,10 +66,17 @@ class CapeTest(unittest.TestCase):
         self.assertEqual(capes.job_for_item(26254), "BST")
         self.assertEqual(capes.job_for_item(26258), "NIN")
         self.assertEqual(capes.job_for_item(26253), "DRK")
+        self.assertEqual(capes.job_for_item(26249), "BLM")
         self.assertIsNone(capes.job_for_item(1))
         self.assertEqual(capes.job_for_name("Andartia's Mantle"), "NIN")
         self.assertEqual(capes.job_for_name("Artio's Mantle"), "BST")
         self.assertEqual(capes.job_for_name("Ankou's Mantle"), "DRK")
+        self.assertEqual(capes.job_for_name("Taranus's Cape"), "BLM")
+
+    def test_black_mage_has_every_cape_build_the_library_uses(self):
+        self.assertEqual(sorted(capes.JOBS["BLM"]["builds"]),
+                         ["dt", "fcmp", "mabws", "macc", "maxhp", "mdt",
+                          "nuke", "pdt", "tp"])
 
     def test_unknown_build_is_rejected(self):
         with self.assertRaises(ValueError):

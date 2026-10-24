@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Check, Copy, Dices, Shuffle, UserRound } from "lucide-react";
-import type { Character, ConfigView, InstanceView, SessionView } from "../types";
+import type { Character, InstanceView, Tenant } from "../types";
 import { raceName } from "../lib/format";
 import { Badge, Button, Card, EmptyState, ErrorBanner, SectionHeader } from "./ui";
 import { CharacterPreview, hairSwatches } from "./CharacterPreview";
@@ -70,22 +70,17 @@ function sameDesign(a: Draft, b: Draft): boolean {
 }
 
 export function DesignPage({
-  session,
-  config,
+  tenant,
   instances,
   onSave,
-  onCharacters,
+  onTeam,
 }: {
-  session: SessionView;
-  config: ConfigView;
+  tenant: Tenant | null;
   instances: InstanceView[];
   onSave: (characterId: number, data: Record<string, unknown>) => Promise<void>;
-  onCharacters: () => void;
+  onTeam: () => void;
 }) {
-  const [characterId, setCharacterId] = useState<number | null>(
-    config.characterId ?? session.characters[0]?.id ?? null,
-  );
-  const character = session.characters.find((item) => item.id === characterId) ?? null;
+  const character = tenant?.character ?? null;
   const saved = character ? designOf(character) : null;
   const signature = character
     ? `${character.id}:${character.race}:${character.face}:${character.hair}:${character.size}`
@@ -97,24 +92,20 @@ export function DesignPage({
   const [error, setError] = useState("");
   const [copied, setCopied] = useState(false);
 
-  // Reset the form when the selected character (or its saved design) changes.
+  // Reset the form when the tenant (or its saved design) changes. Switching the tenant bar
+  // therefore switches the character this form edits.
   useEffect(() => {
     if (saved) setDraft(saved);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signature]);
-
-  useEffect(() => {
-    if (!session.characters.some((item) => item.id === characterId)) {
-      setCharacterId(config.characterId ?? session.characters[0]?.id ?? null);
-    }
-  }, [session.characters, characterId, config.characterId]);
 
   const changed = saved ? !sameDesign(draft, saved) : false;
   const variant = variantOf(draft);
   const rawFace = (draft.face - 1) * 2 + draft.hair;
   const command = `!character model ${RACE_COMMAND[draft.race] ?? "hume"} ${variant}`;
   const running = instances.some(
-    (instance) => instance.alive && instance.character.id === character?.id,
+    (instance) =>
+      instance.alive && Number(instance.character.id) === Number(character?.id),
   );
   const hairColors = useMemo(() => hairSwatches(draft.race), [draft.race]);
 
@@ -165,16 +156,16 @@ export function DesignPage({
     }
   }
 
-  if (session.characters.length === 0) {
+  if (!tenant || !character) {
     return (
       <div className="page">
         <SectionHeader eyebrow="Appearance" title="Character design" />
         <Card>
           <EmptyState
             icon={<UserRound size={26} />}
-            title="No character to design yet"
-            body="Make an adventurer first, then come back to choose a race, face, hair colour and size."
-            action={<Button onClick={onCharacters}>Go to characters</Button>}
+            title="No tenant selected"
+            body="Pick a character in the tenant bar, or create a box on the Team page, then come back to choose a race, face, hair colour and size."
+            action={<Button onClick={onTeam}>Open Team</Button>}
           />
         </Card>
       </div>
@@ -184,9 +175,9 @@ export function DesignPage({
   return (
     <div className="page design-page">
       <SectionHeader
-        eyebrow="Appearance"
+        eyebrow={`Appearance · @${tenant.account}`}
         title="Character design"
-        subtitle="Race, face, hair colour and size — the same 384 looks as the client's character creator."
+        subtitle={`Editing ${character.name} (${tenant.label}). Race, face, hair colour and size — the same 384 looks as the client's character creator. Applying writes only to this tenant.`}
         actions={
           <>
             <Button variant="ghost" icon={<Shuffle size={15} />} onClick={randomizeFace}>
@@ -199,26 +190,7 @@ export function DesignPage({
         }
       />
 
-      {session.characters.length > 1 && (
-        <div className="design-character-picker">
-          {session.characters.map((item) => (
-            <button
-              key={item.id}
-              className={item.id === characterId ? "design-character-chip active" : "design-character-chip"}
-              onClick={() => setCharacterId(item.id)}
-            >
-              <span className="design-character-avatar">{item.name.slice(0, 1).toUpperCase()}</span>
-              <span>
-                <strong>{item.name}</strong>
-                <small>{raceName(item.race)}</small>
-              </span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      {character && (
-        <div className="design-layout">
+      <div className="design-layout">
           <Card className="design-stage-card" accent>
             <div className="design-stage-top">
               <div>
@@ -390,7 +362,6 @@ export function DesignPage({
             </Card>
           </div>
         </div>
-      )}
     </div>
   );
 }

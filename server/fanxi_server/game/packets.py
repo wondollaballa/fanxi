@@ -23,6 +23,7 @@ ACTION_JOBABILITY = 0x09
 ACTION_CATEGORY_BASIC_ATTACK = 1
 ACTION_CATEGORY_SKILL_FINISH = 3    # weapon skill result
 ACTION_CATEGORY_MAGIC_FINISH = 4   # result of a spell
+ACTION_CATEGORY_ITEM_FINISH = 5     # item use result; its animation is the eat/drink motion
 ACTION_CATEGORY_ABILITY_FINISH = 6  # job ability result
 ACTION_CATEGORY_MAGIC_START = 8    # cast bar + casting animation
 # result.resolution: the client reads 0 as a hit and 1 as a miss (LSB's ActionResolution).
@@ -40,7 +41,12 @@ MESSAGE_ATTACK_CRIT = 67
 MESSAGE_MAGIC_NO_EFFECT = 75
 MESSAGE_MAGIC_TELEPORT = 93
 MESSAGE_USES_JOB_ABILITY = 100
-MESSAGE_DAMAGE = 185
+MESSAGE_SKILL_RECOVERS_HP = 103  # "<user> uses <skill>. <target> recovers N HP."
+MESSAGE_DAMAGE = 185        # "<user> uses <skill>. <target> takes N points of damage."
+MESSAGE_SKILL_DRAIN_HP = 187  # "<user> uses <skill>. <amount> HP drained from <target>."
+MESSAGE_SKILL_RECOVERS_MP = 224  # "<user> uses <skill>. <target> recovers N MP."
+MESSAGE_SKILL_DRAIN_MP = 225  # "<user> uses <skill>. <amount> MP drained from <target>."
+MESSAGE_TARGET_TAKES_DAMAGE = 264  # "<target> takes N points of damage." -- DoT ticks
 MESSAGE_STATUS_IS = 203
 MESSAGE_STATUS_WEARS_OFF = 206
 MESSAGE_MAGIC_GAIN_EFFECT = 230
@@ -59,6 +65,7 @@ MAGIC_CAST_SONG = 0x6F736163    # "caso"
 MAGIC_CAST_SUMMON = 0x6D736163  # "casm"
 MAGIC_CAST_BLUE = 0x6C626163    # "cabl"
 MAGIC_CAST_GEOMANCY = 0x65676163  # "cage"
+MAGIC_CAST_TRUST = 0x61666163    # "cafa", the Trust magic cast 4CC
 
 # Spell skill ids, the ones the spells table uses.
 SKILL_DIVINE = 32
@@ -158,19 +165,48 @@ def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
     body[27] = 2 if despawn else (int(getattr(entity, "animation", 0)) & 0xFF)
     body[28] = 1 if getattr(entity, "kind", "") == "mob" and entity.alive else 0
     body[29] = 0
-    body[33] = 0x08 if getattr(entity, "kind", "") == "mob" and entity.alive else 0  # health flag
+    is_trust = getattr(entity, "kind", "") == "trust"
+    body[33] = (0x08 if (getattr(entity, "kind", "") == "mob" or is_trust)
+                and entity.alive else 0)  # health flag
     body[35] = int(getattr(entity, "name_prefix", 0)) & 0xFF
     trigger = bool(getattr(entity, "triggerable", False)) and entity.alive
     body[36] = 0x40 if trigger else 0
     body[37] = 0  # allegiance: neutral
     body[39] = int(getattr(entity, "namevis", 0)) & 0xFF
-    struct.pack_into("<I", body, 40, 0)  # owner
+    # The claiming player's character id.  The client colours the target name red and
+    # keeps the claim shield from this field; left at 0 the mob stays "unclaimed" even
+    # while it is swinging at the player who pulled it.  ``engaged_char_id`` is the
+    # session the monster has hate on, so it is exactly the claim owner.
+    if is_trust:
+        # TrustFlag (0x01) gives the client the "Release" sub-menu, PetFlag (0x40)
+        # treats the alter ego as an ally and PetNewFlag (0x04) plays the spawn-in
+        # animation.  Allegiance 1 is the player side.  The flags ride every update,
+        # not just the spawn, because that is what also lets a Trust be despawned.
+        body[36] = (body[36] | 0x45) & 0xFF
+        body[37] = 1
+    claim = 0
+    if getattr(entity, "kind", "") == "mob":
+        # claim_char_id survives the monster's death, so the corpse keeps its red name
+        # until it despawns; the hate target is cleared when the fight ends.
+        claim = int(getattr(entity, "claim_char_id", 0)
+                    or getattr(entity, "engaged_char_id", 0) or 0)
+    struct.pack_into("<I", body, 40, claim)  # owner (packet 0x2C)
+    # ClaimStatus (0x02) is the flag that tells the client to read the owner.  LSB only
+    # writes 0x2C under UPDATE_STATUS, and without the bit every position update made the
+    # client forget the claim (the name went red -> yellow -> red while the fight went on).
+    if not despawn:
+        body[6] = (body[6] | 0x02) & 0xFF
     if name_only:
         # A name-only update after the equipped look: mask has no look bits, so the
         # client keeps the appearance while setting the target name.
-        body[6] = SEND_NAME
-        body[48] = 0x01
-        body[49:65] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
+        body[6] = (SEND_NAME | 0x02) & 0xFF
+        if is_trust:
+            # Spawnables (targid 0x700-0x8FF) have no literal-name marker: the client
+            # reads the name at 0x38, not 0x35.
+            body[52:68] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
+        else:
+            body[48] = 0x01
+            body[49:65] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
         return bytes(body)
 
     size = int(getattr(entity, "size", 0)) & 0xFFFF
@@ -185,7 +221,7 @@ def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
             body[44:64] = look[:20]
             return bytes(body)
 
-    if size == 2 and getattr(entity, "kind", "") == "npc":
+    if size == 2 and getattr(entity, "kind", "") == "npc" and not is_trust:
         # door: the client's static door mesh binds to this look/door id.  NPCs only -- a mob
         # carrying LSB's model_size 2 is a large monster, not a door.
         # Field-for-field match of a captured LandSandBoat door spawn.  Doors have
@@ -214,13 +250,20 @@ def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
             look = bytes(getattr(entity, "look", b"") or b"")
             look_model = int.from_bytes(look[2:4], "little") if len(look) >= 4 else model
             struct.pack_into("<I", body, 44, look_model << 16)
-        # Static NPCs/mobs carry a literal name.  The client's NPC path reads a one-byte
-        # name-type marker at 0x34 before the string; without it the client falls back to
-        # the model's DAT name ("NPC").
-        body[48] = 0x01
-        # The client reads the full 16-byte field; cstr() reserves a terminator and would
-        # truncate "Wandering Moogle" to "Wandering Moogl".
-        body[49:65] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
+        if is_trust:
+            # A Trust is a spawnable (targid >= 0x700), so its name lives at 0x38
+            # and 0x34 stays part of the model block.  0x067 also carries the name
+            # and tells the client this entity is a Trust of the master.
+            body[48:52] = bytes(4)
+            body[52:68] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
+        else:
+            # Static NPCs/mobs carry a literal name.  The client's NPC path reads a one-byte
+            # name-type marker at 0x34 before the string; without it the client falls back to
+            # the model's DAT name ("NPC").
+            body[48] = 0x01
+            # The client reads the full 16-byte field; cstr() reserves a terminator and would
+            # truncate "Wandering Moogle" to "Wandering Moogl".
+            body[49:65] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
     return bytes(body)
 
 
@@ -228,44 +271,90 @@ def entity_despawn(entity) -> bytes:
     return entity_update(entity, SEND_DESPAWN, despawn=True)
 
 
+def entity_set_name(entity, master_targid: int) -> bytes:
+    """Body of a 0x067: tell the client this spawnable is a Trust and who owns it.
+
+    The client uses this to show the Trust sub-menu ("Release") and to attach the
+    alter ego to its master.  It is sent to the owner only; every other client draws
+    the Trust from the ordinary 0x00E spawn.  0x067 is shared with the player level
+    block (``char_sync``), which starts 0x02/0x09; this one starts 0x03/0x05.
+    """
+    body = bytearray(0x14)
+    body[0] = 0x03
+    body[1] = 0x05
+    struct.pack_into("<H", body, 2, int(entity.targid) & 0xFFFF)
+    struct.pack_into("<I", body, 4, int(entity.id) & 0xFFFFFFFF)
+    struct.pack_into("<H", body, 8, int(master_targid) & 0xFFFF)
+    body[12] = 0x04
+    return bytes(body)
+
+
 def battle_action(actor_id: int, target_id: int, damage: int = 0, *, miss: bool = False,
                   critical: bool = False, defeated: bool = False, animation: int = 0,
                   message: int | None = None, kind: int = 1,
                   category: int = ACTION_CATEGORY_BASIC_ATTACK,
                   action_id: int = BASIC_ATTACK_ID, hit_distortion: int = 0,
-                  info: int | None = None) -> bytes:
-    """Body of a 0x028 action packet (one target, one result).
+                  info: int | None = None, results: list[dict] | None = None) -> bytes:
+    """Body of a 0x028 action packet (one target, one or more results).
 
-    ``animation`` is the result's sub_kind: the swing hand, a weapon skill's animation,
-    or -- for a finished spell -- the spell id the client animates from.  ``damage`` is
-    the result's 17-bit value: damage, HP healed, or the status effect id a spell lands.
-    ``info`` is the 5-bit result info; attacks use the defeated/critical flags, while a
-    finished spell carries its recast there.
+    ``results`` is the target's result list; a melee round passes one entry per hand,
+    main hand first.  The client plays the swings in that order from this count
+    (Windower's ``action_count``), which is what makes a dual-wield round look right.
+    Without ``results`` the single-result keywords describe the one hit.
+
+    Per result, ``animation`` is the result's sub_kind: the swing hand (0 main, 1 off),
+    a weapon skill's animation, or -- for a finished spell -- the spell id the client
+    animates from.  ``damage`` is the result's 17-bit value: damage, HP healed, or the
+    status effect id a spell lands.  ``info`` is the 5-bit result info; attacks use the
+    defeated/critical flags, while a finished spell carries its recast there.
     """
-    if message is None:
-        message = MESSAGE_ATTACK_MISSES if miss else (MESSAGE_ATTACK_CRIT if critical else MESSAGE_ATTACK_HITS)
-    if info is None:
-        info = (1 if defeated else 0) | (2 if critical else 0)
+    results = results or []
+    if not results:
+        results = [dict(damage=damage, miss=miss, critical=critical, defeated=defeated,
+                        animation=animation, message=message, info=info,
+                        hit_distortion=hit_distortion, kind=kind)]
     writer = BitWriter()
     writer.write(actor_id, 32)
     writer.write(1, 6)                 # target count
-    writer.write(0, 4)                 # result count (unused; targets carry their own)
+    writer.write(0, 4)                 # res_sum is always 0
     writer.write(category, 4)
     writer.write(action_id, 32)
     writer.write(0, 32)                # recast
     writer.write(target_id, 32)
-    writer.write(1, 4)                 # one result
-    writer.write(RESOLUTION_MISS if miss else RESOLUTION_HIT, 3)
-    writer.write(kind, 2)
-    writer.write(animation, 12)
-    writer.write(info & 0x1F, 5)
-    writer.write(hit_distortion, 2)
-    writer.write(0, 3)                 # knockback
-    writer.write(max(0, int(damage)) & 0x1FFFF, 17)
-    writer.write(message, 10)
-    writer.write(0, 31)                # modifier
-    writer.write(0, 1)                 # no additional effect
-    writer.write(0, 1)                 # no reaction effect
+    writer.write(len(results), 4)      # results for this target (a round has one per hand)
+    for entry in results:
+        hit_miss = bool(entry.get("miss", False))
+        hit_critical = bool(entry.get("critical", False))
+        hit_defeated = bool(entry.get("defeated", False))
+        hit_message = entry.get("message", message)
+        if hit_message is None:
+            hit_message = (MESSAGE_ATTACK_MISSES if hit_miss
+                           else MESSAGE_ATTACK_CRIT if hit_critical else MESSAGE_ATTACK_HITS)
+        hit_info = entry.get("info", info)
+        if hit_info is None:
+            hit_info = (1 if hit_defeated else 0) | (2 if hit_critical else 0)
+        writer.write(RESOLUTION_MISS if hit_miss else RESOLUTION_HIT, 3)
+        writer.write(entry.get("kind", kind), 2)
+        writer.write(entry.get("animation", animation), 12)
+        writer.write(hit_info & 0x1F, 5)
+        writer.write(entry.get("hit_distortion", hit_distortion), 2)
+        writer.write(0, 3)             # knockback
+        writer.write(max(0, int(entry.get("damage", damage))) & 0x1FFFF, 17)
+        writer.write(hit_message, 10)
+        writer.write(0, 31)            # modifier
+        # Optional additional-effect block.  A skillchain uses this on the closing
+        # weapon-skill result: proc_kind is ActionProcSkillChain, value is the
+        # resonance damage, and the message is 287 + proc (384 + proc when absorbed).
+        add_kind = max(0, min(63, int(entry.get("add_effect", 0) or 0)))
+        if add_kind:
+            writer.write(1, 1)
+            writer.write(add_kind, 6)
+            writer.write(max(0, int(entry.get("add_info", 0) or 0)) & 0xF, 4)
+            writer.write(max(0, int(entry.get("add_value", 0) or 0)) & 0x1FFFF, 17)
+            writer.write(max(0, int(entry.get("add_message", 0) or 0)) & 0x3FF, 10)
+        else:
+            writer.write(0, 1)         # no additional effect
+        writer.write(0, 1)             # no reaction effect
     bits = writer.bytes()
     # Byte 0x04 of the packet is the packed byte count (LSB's workSize); the packet's own
     # length is one more than it.  Writing count+1 here made the client drop the action.
@@ -304,9 +393,8 @@ def motion_message(caster_id: int, target_id: int, caster_targid: int, target_ta
     """Body of a 0x05A MOTIONMES: play an emote for the client and write its text line.
 
     The client does not draw its own outgoing emote, so the server has to echo it back
-    (and send it to every other player in range).  The 52-byte body carries the five
-    Trust ids even though this world has no Trusts; the client always reads the full
-    layout.
+    (and send it to every other player in range).  The 52-byte body reserves five
+    Trust ids even when none are out; the client always reads the full layout.
     """
     body = bytearray(52)
     struct.pack_into("<IIHHHHHBB", body, 0, int(caster_id) & 0xFFFFFFFF,

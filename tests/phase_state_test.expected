@@ -1,0 +1,17 @@
+[harness] = 3
+--- the first apply wears the idle set
+[harness] = 1
+--- moving wears the movement set once
+[harness] = 2
+--- engaging wears the engaged set
+[harness] = 2
+--- a movement step while engaged keeps the engaged set on
+[harness] = 0
+[harness] = 0
+[harness] = 0
+--- a pushed plan still re-wears the set even when it is the one on
+[harness] = 2
+--- disengaging returns to the idle set, and moving swaps again
+[harness] = 1
+[harness] = 2
+[harness] = 1

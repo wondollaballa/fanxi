@@ -10,7 +10,7 @@ from unittest import mock
 
 from support import make_service
 
-from fanxi_server.game import base_stats, content, merits, modifiers as mod, packets
+from fanxi_server.game import base_stats, combat, content, merits, modifiers as mod, packets
 from fanxi_server.game.world import SYNC_RANGE, World
 from fanxi_server.game.zone import ALL_CONTAINERS, ZoneSession, job_id, sub
 
@@ -19,14 +19,29 @@ def msg_types(session):
     return [struct.unpack_from("<H", message, 0)[0] & 0x1FF for message in session.queue]
 
 
-def action_sub_kind(message: bytes) -> int:
-    """Read a 0x028 result's sub-kind: 0 is the main hand, 1 the off hand."""
+def action_animations(message: bytes) -> list[int]:
+    """Every 0x028 result's animation, in order: 0 main hand, 1 off hand.
+
+    A melee round is one action with one result per hand (Windower's ``action_count``),
+    which is the order the client plays the swings in.
+    """
     data = message[5:]
-    bit = 32 + 6 + 4 + 4 + 32 + 32 + 32 + 4 + 3 + 2
-    value = 0
-    for index in range(12):
-        value |= ((data[(bit + index) >> 3] >> ((bit + index) & 7)) & 1) << index
-    return value
+
+    def read(bit: int, width: int) -> int:
+        value = 0
+        for index in range(width):
+            value |= ((data[(bit + index) >> 3] >> ((bit + index) & 7)) & 1) << index
+        return value
+
+    bit = 32 + 6 + 4 + 4 + 32 + 32 + 32          # header and target id
+    count = read(bit, 4)
+    bit += 4
+    animations = []
+    for _ in range(count):
+        bit += 3 + 2                              # resolution and kind
+        animations.append(read(bit, 12))
+        bit += 12 + 5 + 2 + 3 + 17 + 10 + 31 + 1 + 1
+    return animations
 
 
 def last_sync(session):
@@ -44,6 +59,13 @@ def zone_line_packet(rect: bytes, mode: int = 0, exit_bit: int = 0) -> bytes:
     packet[0x16] = exit_bit
     packet[0x17] = mode
     return bytes(packet)
+
+
+def item_use_packet(slot: int, container: int = 0, item_num: int = 0) -> bytes:
+    """A C2S 0x037 item-use request, with the client's real field layout."""
+    body = struct.pack("<IIHBBI", 0, int(item_num), 0x400,
+                       int(slot) & 0xFF, 0, int(container))
+    return bytes(sub(0x037, body))
 
 
 class WorldTest(unittest.TestCase):
@@ -384,6 +406,34 @@ class WorldTest(unittest.TestCase):
                       if bits[192 + (trait_id >> 3)] & (1 << (trait_id & 7))}
         self.assertEqual(advertised, {trait.id for trait in self.session.job_traits()})
 
+    def test_prime_weapon_grants_its_weaponskill(self):
+        """Dokoku's "Adds weapon skill" line puts Zesho Meppo on the katana menu.
+
+        The skill is not learned from a katana skill value: it is item-granted, so it
+        must not appear with Kikoku (or any other katana), only with the Prime weapon
+        that carries the 355 modifier.
+        """
+        self.session.char["main_job"] = 13          # NIN
+        self.session.char["main_level"] = 99
+        self.session.char["sub_job"] = 1            # WAR
+        self.session.char["sub_level"] = 49
+        self.session.equipped = {0: (0, 4, 21932)}  # Dokoku 119 III
+        self.session.store_equipment()
+        skills = self.session.equipped_weapon_skills()
+        self.assertIn(142, skills)                  # Zesho Meppo
+        self.assertNotIn(159, skills)               # Tachi: Mumei is Kusanagi's
+        # The ordinary skill-value filter must not offer it to every katana.
+        self.assertNotIn(142, self.service.weapon_skill_ids_for(9, 350))
+        body = bytes(self.session.char_abilities()[4:])
+        self.assertTrue(body[142 >> 3] & (1 << (142 & 7)))
+
+        # Kikoku is also a katana, but it carries no Prime skill.
+        self.session.equipped = {0: (0, 4, 21906)}
+        self.session.store_equipment()
+        self.assertNotIn(142, self.session.equipped_weapon_skills())
+        body = bytes(self.session.char_abilities()[4:])
+        self.assertFalse(body[142 >> 3] & (1 << (142 & 7)))
+
     def test_weapon_skills_follow_the_characters_skill_value(self):
         """A level-10 axe user sees the low skills; a level-99 one sees the rest."""
         self.equip_axe()
@@ -440,6 +490,38 @@ class WorldTest(unittest.TestCase):
         self.assertNotIn(391, ja_ids)   # Chakra is Monk-only; a fresh character is WAR.
         self.assertNotIn(190, ja_ids)   # Curing Waltz is Dancer-only.
 
+    def test_every_job_has_its_abilities_and_traits_in_the_command_data(self):
+        """Every playable job, at 99, reaches both 0x0AC blocks.
+
+        The menu was empty for every job when the host hook that rebuilds the client's
+        saved command list was compiled out, so this checks the server half of that path
+        across the whole job table rather than one hand-picked pair.  Blue Mage traits
+        depend on set spells and job 23 is the custom-job slot; neither has a trait table
+        yet, but both must still carry their job abilities.
+        """
+        self.session.equipped = {}
+        no_traits = {16, 23}
+        for job in range(1, 24):
+            with self.subTest(job=job):
+                self.session.char.update(main_job=job, main_level=99,
+                                         sub_job=0, sub_level=0)
+                self.session._trait_cache = None
+                ja_ids = self.service.job_ability_ids(job, 99)
+                self.assertGreater(len(ja_ids), 0,
+                                   "job %d has no abilities at 99" % job)
+                traits = self.session.job_traits()
+                if job not in no_traits:
+                    self.assertGreater(len(traits), 0,
+                                       "job %d has no traits at 99" % job)
+                bits = bytes(self.session.char_abilities()[4:])
+                self.assertEqual(len(bits), 224)
+                for ja_id in ja_ids:
+                    self.assertTrue(bits[64 + (ja_id >> 3)] & (1 << (ja_id & 7)),
+                                    "job %d ability %d is not in 0x0AC" % (job, ja_id))
+                for trait in traits:
+                    self.assertTrue(bits[192 + (trait.id >> 3)] & (1 << (trait.id & 7)),
+                                    "job %d trait %d is not in 0x0AC" % (job, trait.id))
+
     def test_auto_refresh_ticks_mp_and_reaches_the_trait_block(self):
         """A Paladin 35 has Auto Refresh I: 1 MP every three seconds, and bit 10 in 0x0AC."""
         self.session.char.update(main_job=7, main_level=35, sub_job=0, sub_level=0)
@@ -488,6 +570,40 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(int(self.session.char["mp_current"]),
                          min(int(self.session.char["mp"]), before + int(row["value"])))
 
+    def test_gear_swap_refreshes_the_maximum_the_tick_reads(self):
+        """Chirich/Stikini only tick when the stored maxima follow the outfit.
+
+        The passive tick compares HP/MP against ``char["hp"]``/``char["mp"]``.  A 0x050
+        batch used to save the outfit without recomputing them, so after a swap that
+        raised a maximum the character sat at the old cap and the tick saw "already
+        full" -- Chirich Ring +1's Regen and Stikini Ring +1's Refresh looked dead.
+        """
+        self.session.char.update(main_job=5, main_level=99, sub_job=13, sub_level=49)
+        self.session._trait_cache = None
+        self.session.equipped.clear()
+        self.session.refresh_vitals()
+        old_hp = int(self.session.char["hp"])
+        old_mp = int(self.session.char["mp"])
+        # Nyame Mail is HP+136/MP+88 and lifts both maxima above the bare values; the
+        # two rings carry the passive ticks (+2 HP and +1 MP every three seconds).
+        self.session.equipped.update({5: (0, 0, 23768),
+                                      13: (0, 0, 26182),   # Chirich Ring +1, Regen+2
+                                      14: (0, 0, 26184)})  # Stikini Ring +1, Refresh+1
+        self.session.char["hp_current"] = old_hp
+        self.session.char["mp_current"] = old_mp
+        self.session.equipment_changed = True
+        self.session.queue.clear()
+        self.session.flush_equipment()
+        sheet = self.session.stat_sheet()
+        self.assertGreater(int(sheet.max_hp), old_hp)
+        self.assertGreater(int(sheet.max_mp), old_mp)
+        self.assertEqual(int(self.session.char["hp"]), int(sheet.max_hp))
+        self.assertEqual(int(self.session.char["mp"]), int(sheet.max_mp))
+        self.session.next_regen_tick = 0.0
+        self.session.tick(time.time())
+        self.assertEqual(int(self.session.char["hp_current"]), old_hp + 2)
+        self.assertEqual(int(self.session.char["mp_current"]), old_mp + 1)
+
     def test_support_job_traits_use_the_support_level(self):
         """A support White Mage at 25 still has Auto Regen I from the sub-job."""
         self.session.char.update(main_job=1, main_level=60, sub_job=3, sub_level=25)
@@ -531,6 +647,20 @@ class WorldTest(unittest.TestCase):
         self.assertIn("Auto Refresh", joined)
         self.assertIn("Passive tick", joined)
         self.assertIn(0x0AC, msg_types(self.session))
+
+    def test_traits_command_shows_a_gear_only_tick(self):
+        """The diagnostic must include gear, not only the Auto Regen/Refresh traits."""
+        self.session.char.update(main_job=10, main_level=99, sub_job=13, sub_level=49)
+        self.session._trait_cache = None
+        self.service.save_equipment(int(self.character["id"]),
+                                    {13: (0, 0, 26182),    # Chirich Ring +1
+                                     14: (0, 0, 26184)})   # Stikini Ring +1
+        self.session.refresh_vitals()
+        self.session.queue.clear()
+        self.session.command(["traits"])
+        joined = "\n".join(self.chats())
+        self.assertIn("Regen 2 HP", joined)
+        self.assertIn("Refresh 1 MP", joined)
 
     def test_stats_request_resends_command_data(self):
         """The client builds the Abilities menu after 0x061, so 0x0AC belongs in its reply."""
@@ -824,6 +954,47 @@ class WorldTest(unittest.TestCase):
         packet = bytearray(12)
         struct.pack_into("<IHH", packet, 4, mob.id, mob.targid, packets.ACTION_ATTACK_OFF)
         self.session.action(bytes(packet))
+
+    def test_the_stance_is_drawn_again_after_the_client_sheathes(self):
+        """The client lowers the weapon about a second after a draw; the tick redraws it.
+
+        A cast or an equipment batch sheathes the client after the packet that drew it, so
+        the stance is refreshed twice a second while the player is engaged.
+        """
+        self.zone(100)
+        mob = next(entity for entity in self.session.entities if entity.kind == "mob")
+        self.attack(mob)
+        self.session.queue.clear()
+        self.session.assert_stance()
+        self.assertEqual(self.player_animation(), 1)
+        self.session.queue.clear()
+        # One second later the follow-up draws the weapon without the player pressing
+        # /attack again.
+        self.session.tick(time.time() + 0.6)
+        self.assertEqual(self.player_animation(), 1)
+        self.assertIn(0x00D, msg_types(self.session))
+        # A disengage cancels the refresh.
+        self.session.disengage()
+        self.session.queue.clear()
+        self.session.tick(time.time() + 3.0)
+        self.assertNotIn(0x00D, msg_types(self.session))
+
+    def test_a_dead_mob_keeps_its_claim_until_it_despawns(self):
+        """The corpse stays red: the claim owner survives the fight, the hate target does not."""
+        self.zone(100)
+        mob = next(entity for entity in self.session.entities if entity.kind == "mob")
+        char_id = int(self.character["char_id"])
+        mob.claim_char_id = char_id
+        body = packets.entity_update(mob, packets.SEND_HP)
+        self.assertTrue(body[6] & 0x02)  # ClaimStatus, so the client reads the owner
+        self.assertEqual(struct.unpack_from("<I", body, 40)[0], char_id)
+        mob.alive = False
+        mob.corpse_until = time.time() + 12.0
+        body = packets.entity_update(mob, packets.SEND_HP)
+        self.assertEqual(struct.unpack_from("<I", body, 40)[0], char_id)
+        mob.reset_mob(time.time())
+        body = packets.entity_update(mob, packets.SEND_HP)
+        self.assertEqual(struct.unpack_from("<I", body, 40)[0], 0)
 
     def test_range_disengage_keeps_the_engagement_and_the_stance(self):
         """The client's own /attack off at four yalms is not a request to stop fighting."""
@@ -1296,6 +1467,114 @@ class WorldTest(unittest.TestCase):
         self.assertIn("You start casting Monomi Ichi.", self.chats())
         self.assertEqual(int(self.session.char["mp_current"]), 0)
 
+    def test_trust_magic_calls_an_alter_ego(self):
+        """A Trust spell spends no MP and spawns a Trust-flagged 0x00E plus 0x067."""
+        self.zone(100)
+        self.session.char["main_level"] = 99
+        self.session.refresh_vitals()
+        packet = bytearray(16)
+        struct.pack_into("<IHHI", packet, 4, 0, 0, packets.ACTION_CAST_MAGIC, 896)
+        self.session.queue.clear()
+        self.session.cast_magic(bytes(packet), 0)
+        self.assertIn("You start casting Shantotto.", self.chats())
+        self.assertEqual(int(self.session.char["mp_current"]), int(self.session.char["mp"]))
+
+        self.session.resolve_casting(time.time() + 3)
+        self.assertEqual(len(self.session.trust_entities), 1)
+        trust = self.session.trust_entities[0]
+        self.assertEqual(trust.name, "Shantotto")
+        self.assertEqual(trust.kind, "trust")
+        self.assertEqual(trust.targid, 0x700)
+        self.assertEqual(trust.model, 3000)
+        self.assertEqual(trust.job, 4)
+        self.assertEqual(trust.level, 99)
+        self.assertIn(trust, self.world.entities_for_zone(100))
+        self.assertIn("Shantotto joins you.", self.chats())
+
+        spawned = [message for message in self.session.queue
+                   if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x00E
+                   and struct.unpack_from("<I", message, 4)[0] == trust.id]
+        self.assertTrue(spawned)
+        body = spawned[-1][4:]
+        self.assertEqual(body[36] & 0x45, 0x45)      # Trust + PetNew + Pet
+        self.assertEqual(body[37], 1)                 # player allegiance
+        self.assertEqual(struct.unpack_from("<I", body, 44)[0], 3000 << 16)
+        self.assertEqual(body[52:61], b"Shantotto")
+        self.assertIn(0x067, msg_types(self.session))
+
+        # Calling the same alter ego again is refused, and five is the party cap.
+        self.session.queue.clear()
+        self.session.cast_magic(bytes(packet), 0)
+        self.assertIsNone(self.session.casting)
+        self.assertEqual(len(self.session.trust_entities), 1)
+        self.assertIn("Shantotto is already called.", self.chats())
+
+    def test_trust_follows_and_attacks_the_owners_target(self):
+        self.zone(100)
+        self.session.char["main_level"] = 99
+        self.session.refresh_vitals()
+        trust = self.world.spawn_trust(self.session, self.service.trust(896))
+        self.assertIsNotNone(trust)
+        mob = next(entity for entity in self.session.entities
+                   if entity.kind == "mob" and entity.alive)
+        mob.hp_max = 50000
+        mob.hp = 50000
+        self.session.pos = [mob.x + 2.0, mob.y, mob.z, 0]
+        trust.x, trust.y, trust.z = self.session.pos[0], mob.y, self.session.pos[2]
+        self.session.engaged_id = int(mob.id)
+        self.session.queue.clear()
+        now = time.time() + 5
+        with mock.patch.object(self.world.rng, "random", return_value=0.0):
+            self.world._tick_trust(trust, self.world.sessions_in_zone(100), now)
+        self.assertLess(int(mob.hp), 50000)
+        actions = [message for message in self.session.queue
+                   if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x028
+                   and struct.unpack_from("<I", message, 5)[0] == trust.id]
+        self.assertTrue(actions)
+        self.assertEqual(trust.animation, 1)
+
+    def test_trust_command_lists_and_releases_by_spell_id(self):
+        """The HUD sends !trust release <spell id> when an active Trust tile is clicked."""
+        self.zone(100)
+        self.session.char["main_level"] = 99
+        self.session.refresh_vitals()
+        trust = self.world.spawn_trust(self.session, self.service.trust(896))
+        self.assertIsNotNone(trust)
+        self.session.queue.clear()
+        self.session.command("trust".split())
+        self.assertIn("Active alter egos: Shantotto (896)", self.chats())
+
+        self.session.queue.clear()
+        self.session.command("trust release 896".split())
+        self.assertIn("Shantotto leaves your party.", self.chats())
+        self.assertNotIn(trust, self.world.entities_for_zone(100))
+        self.assertEqual(self.session.trust_entities, [])
+        self.assertIn(0x00E, msg_types(self.session))
+
+    def test_release_menu_despawns_a_trust(self):
+        self.zone(100)
+        self.session.char["main_level"] = 99
+        self.session.refresh_vitals()
+        trust = self.world.spawn_trust(self.session, self.service.trust(896))
+        self.session.queue.clear()
+        self.talk(trust)
+        self.assertIn("Shantotto leaves your party.", self.chats())
+        self.assertNotIn(trust, self.world.entities_for_zone(100))
+        self.assertEqual(self.session.trust_entities, [])
+
+    def test_trusts_despawn_when_the_owner_zones(self):
+        self.zone(100)
+        self.session.char["main_level"] = 99
+        self.session.refresh_vitals()
+        trust = self.world.spawn_trust(self.session, self.service.trust(896))
+        self.assertIn(trust, self.world.entities_for_zone(100))
+        self.session.change_zone(246, list(self.world.zones.position(246)))
+        self.assertEqual(self.session.trust_entities, [])
+        self.assertNotIn(trust, self.world.entities_for_zone(100))
+        self.assertNotIn(trust, self.session.entities)
+        self.assertTrue(any((struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x00E
+                            for message in self.session.queue))
+
     def test_dawn_mulsum_heals_pet_percentage_and_refills(self):
         self.give(0, 50, 5411, 3)
         self.db.execute(
@@ -1304,10 +1583,9 @@ class WorldTest(unittest.TestCase):
         self.session.char["hp_current"] = 1
         self.session.char["pet_hp_max"] = 1000
         self.session.char["pet_hp"] = 100
-        packet = bytearray(20)
-        struct.pack_into("<I", packet, 8, 5411)
+        packet = item_use_packet(50, 0)
         self.session.queue.clear()
-        self.session.item_use(bytes(packet))
+        self.session.item_use(packet)
         restored = int(self.session.char["pet_hp"]) - 100
         self.assertGreaterEqual(restored, 250)
         self.assertLessEqual(restored, 500)
@@ -1324,10 +1602,9 @@ class WorldTest(unittest.TestCase):
             "INSERT INTO char_locker (character_id, item_id, quantity) VALUES (?, 5411, 33)",
             (int(self.character["id"]),))
         self.session.char["hp_current"] = 1
-        packet = bytearray(20)
-        struct.pack_into("<I", packet, 8, 5411)
+        packet = item_use_packet(50, 0)
         self.session.queue.clear()
-        self.session.item_use(bytes(packet))
+        self.session.item_use(packet)
         self.assertEqual(int(self.session.char["hp_current"]), 1)
         self.assertIn("You do not have a pet to heal.", self.chats())
         rows = [row for row in self.service.inventory(self.character["id"])
@@ -1339,10 +1616,9 @@ class WorldTest(unittest.TestCase):
         self.session.char["pet_hp_max"] = 1000
         self.session.char["pet_hp"] = 100
         self.session.char["pet_type"] = "luopan"
-        packet = bytearray(20)
-        struct.pack_into("<I", packet, 8, 5411)
+        packet = item_use_packet(50, 0)
         self.session.queue.clear()
-        self.session.item_use(bytes(packet))
+        self.session.item_use(packet)
         self.assertEqual(int(self.session.char["pet_hp"]), 100)
         self.assertIn("The Dawn Mulsum has no effect on the Luopan.", self.chats())
 
@@ -1683,6 +1959,16 @@ class CombatStatsTest(unittest.TestCase):
         landed = [damage for missed, damage, _critical in swings if not missed]
         return sum(landed) / max(1, len(landed))
 
+    def test_status_packet_reports_su5_and_the_level_119_item_level(self):
+        message = self.session.char_stats()
+        # 0x4E is the Superior equipment level; the 2,100-JP gift unlocks Su5 and
+        # every job here has its points maxed.
+        self.assertEqual(message[4 + 0x4E], 5)
+        # 0x51 is the item level *over 99*: the client draws 99 + 20 = iLv 119.
+        # 0x50 is the highest equipped item level (stored, not drawn).
+        self.assertEqual(message[4 + 0x51], 20)
+        self.assertEqual(message[4 + 0x50], 119)
+
     def test_status_packet_reports_real_attack_and_defense(self):
         message = self.session.char_stats()
         base = struct.unpack_from("<7H", message, 4 + 0x10)
@@ -1764,7 +2050,7 @@ class CombatStatsTest(unittest.TestCase):
         self.assertEqual(fists.attack_delay_ms, int(576 * 1000 / 60 * (1 - fists.haste)))
 
     def test_ninja_dual_wield_swings_main_then_off_hand(self):
-        """A NIN with two katanas sends an off-hand 0x028 in the same attack round."""
+        """A NIN with two katanas packs both hands into one 0x028, main hand first."""
         self.session.char.update(main_job=13, main_level=99, sub_job=0, sub_level=0)
         self.session._trait_cache = None
         # Two katanas from LSB's item table: delay 227/damage 127 and delay 190/damage 123.
@@ -1801,7 +2087,150 @@ class CombatStatsTest(unittest.TestCase):
         self.assertEqual(seen, [False, True])
         actions = [message for message in self.session.queue
                    if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x028]
-        self.assertEqual([action_sub_kind(message) for message in actions], [0, 1])
+        # One action for the round, two results: the client plays the main-hand swing
+        # and then the off-hand one from the result count.  Two separate packets in
+        # the same update made it drop the main hand entirely.
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(action_animations(actions[0]), [0, 1])
+
+    def test_dual_wield_kill_uses_the_hp_the_main_hand_left(self):
+        """Neither hand kills alone, but the round does; the off hand must see main's HP."""
+        self.session.char.update(main_job=13, main_level=99, sub_job=0, sub_level=0)
+        self.session._trait_cache = None
+        self.equip({0: 21904, 1: 21905})
+        self.session.zone = 100
+        self.session.pos = list(self.world.zones.position(100))
+        self.session.load_zone_entities()
+        self.session.zone_loaded = True
+        mob = next(entity for entity in self.session.entities
+                   if entity.kind == "mob" and entity.alive)
+        mob.hp = mob.hp_max = 1000
+        self.session.pos = [mob.x, mob.y, mob.z, 0]
+        self.session.engaged_id = mob.id
+        self.session.engaged_targid = mob.targid
+        self.session.next_attack_at = 0.0
+        self.session.queue.clear()
+        hits = iter([(False, 600, False), (False, 500, False)])
+        with mock.patch.object(self.world, "player_attack",
+                               side_effect=lambda *args, **kwargs: next(hits)):
+            self.session.tick(time.time())
+        self.assertFalse(mob.alive)
+        self.assertEqual(mob.hp, 0)
+        types = msg_types(self.session)
+        # The swinging action goes out before the defeat line, as it did when each hand
+        # was its own packet.
+        self.assertLess(types.index(0x028), types.index(0x029))
+
+    def test_multi_attack_rounds_carry_every_swing_in_one_action(self):
+        """Double/Triple/Quadruple add results to the same 0x028, hand by hand."""
+        self.session.char.update(main_job=13, main_level=99, sub_job=1, sub_level=49)
+        self.session._trait_cache = None
+        self.equip({0: 21904, 1: 21905})
+        self.session.zone = 100
+        self.session.pos = list(self.world.zones.position(100))
+        self.session.load_zone_entities()
+        self.session.zone_loaded = True
+        mob = next(entity for entity in self.session.entities
+                   if entity.kind == "mob" and entity.alive)
+        self.session.pos = [mob.x, mob.y, mob.z, 0]
+        self.session.engaged_id = mob.id
+        self.session.engaged_targid = mob.targid
+
+        for hits, expected in ((2, [0, 0, 1, 1]),
+                               (3, [0, 0, 0, 1, 1, 1]),
+                               (4, [0, 0, 0, 0, 1, 1, 1, 1])):
+            with self.subTest(hits=hits):
+                mob.alive = True
+                mob.hp = mob.hp_max = 10000
+                self.session.next_attack_at = 0.0
+                self.session.queue.clear()
+                calls = []
+
+                def attack(session, entity, **kwargs):
+                    calls.append(bool(kwargs.get("off_hand")))
+                    return False, 100, False
+
+                with mock.patch.object(combat, "multi_attack_hits", return_value=hits):
+                    with mock.patch.object(self.world, "player_attack", side_effect=attack):
+                        self.session.tick(time.time())
+                actions = [message for message in self.session.queue
+                           if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x028]
+                self.assertEqual(len(actions), 1)
+                self.assertEqual(action_animations(actions[0]), expected)
+                # Every extra hit belongs to the hand that rolled it: main first.
+                self.assertEqual(calls, [False] * hits + [True] * hits)
+
+    def test_double_attack_comes_from_the_trait_and_its_merit(self):
+        """NIN/WAR has the trait at 10%; a Warrior main also adds its bought merit."""
+        self.session.char.update(main_job=13, main_level=99, sub_job=1, sub_level=49)
+        self.session._trait_cache = None
+        sheet = self.session.stat_sheet()
+        self.assertEqual(int(sheet.fighter.mods.get(mod.DOUBLE_ATTACK, 0)), 10)
+        self.session.world.rng = mock.Mock(random=lambda: 0.0)
+        self.assertEqual(self.session._multi_attack_hits(sheet), 2)
+
+        self.service.save_merit(int(self.character["id"]), 0x0188, 5)
+        self.session._merit_counts = None
+        self.session.char.update(main_job=1, sub_job=0, sub_level=0)
+        self.session._trait_cache = None
+        warrior = self.session.stat_sheet()
+        # WAR 99's Double Attack trait is 18%, plus five 1% merit ranks.
+        self.assertEqual(int(warrior.fighter.mods.get(mod.DOUBLE_ATTACK, 0)), 23)
+
+        # The merit is the Warrior's: the Ninja main only gets the sub-job trait.
+        self.session.char.update(main_job=13, sub_job=1, sub_level=49)
+        self.session._trait_cache = None
+        self.assertEqual(int(self.session.combat_mods().get(mod.DOUBLE_ATTACK, 0)), 10)
+
+    def test_quadruple_attack_gear_reaches_the_round(self):
+        """Twilight Knife is Quadruple Attack +10; no job trait is involved."""
+        self.equip({0: 19132})
+        sheet = self.session.stat_sheet()
+        self.assertEqual(int(sheet.fighter.mods.get(mod.QUADRUPLE_ATTACK, 0)), 10)
+        self.session.world.rng = mock.Mock(random=lambda: 0.0)
+        self.assertEqual(self.session._multi_attack_hits(sheet), 4)
+
+    def test_damage_keeps_cumulative_and_volatile_enmity_separate(self):
+        mob = self.monster(level=60)
+        self.world.add_damage_hate(mob, 99, 100, now=1.0)
+        # level 60: 60*31//50 + 6 = 43.  First hate also claims 200 CE + 900 VE.
+        self.assertEqual(mob.enmity_ve[99], 900 + 240 * 100 // 43)
+        self.assertEqual(mob.enmity[99] - mob.enmity_ve[99], 200 + 80 * 100 // 43)
+
+    def test_volatile_enmity_decays_but_cumulative_does_not(self):
+        mob = self.monster(level=60)
+        self.world.add_mob_hate(mob, 99, now=1.0, ce=1000, ve=1000)
+        # First hate claims 200 CE + 900 VE; then two seconds drain 120 VE.
+        self.world.decay_mob_enmity(mob, 3.0)
+        self.assertEqual(mob.enmity_ve[99], 1780)
+        self.assertEqual(mob.enmity[99] - mob.enmity_ve[99], 1200)
+        self.assertEqual(mob.enmity[99], 2980)
+
+    def test_provoke_is_cumulative_enmity(self):
+        mob = self.monster(level=60)
+        self.world.add_mob_hate(mob, 99, now=1.0, ce=1800, ve=0)
+        self.world.decay_mob_enmity(mob, 6.0)
+        # Claim (200/900) rides on the first hate; the 900 VE drains 300 over 5 s,
+        # but Provoke's 1,800 CE and the 200 claim CE stay.
+        self.assertEqual(mob.enmity[99] - mob.enmity_ve[99], 2000)
+        self.assertEqual(mob.enmity_ve[99], 600)
+
+    def test_each_enmity_meter_is_capped_at_thirty_thousand(self):
+        mob = self.monster(level=60)
+        self.world.add_mob_hate(mob, 99, now=1.0, ce=40000, ve=40000)
+        self.assertEqual(mob.enmity_ve[99], 30000)
+        self.assertEqual(mob.enmity[99], 60000)
+
+    def test_volatile_decay_can_flip_the_highest_hate(self):
+        mob = self.monster(level=60)
+        # Player 1 claims the mob, so player 2 starts without the claim bonus.
+        self.world.add_mob_hate(mob, 1, now=1.0, ce=1000, ve=2000)
+        self.world.add_mob_hate(mob, 2, now=1.0, ce=2500, ve=0)
+        self.assertEqual(mob.enmity[1], 4100)          # 1200 CE + 2900 VE
+        self.assertEqual(mob.enmity[2], 2500)
+        self.world.decay_mob_enmity(mob, 31.0)         # 30 s -> -1800 VE
+        self.assertEqual(mob.enmity[1], 2300)
+        self.assertLess(mob.enmity[1], mob.enmity[2])
 
 
 if __name__ == "__main__":
