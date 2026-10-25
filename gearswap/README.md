@@ -30,20 +30,20 @@ Nyame paths, Sakpata's, Gleti's and Agwu's armour and the seven Odyssey weapons,
 | `BST.lua` | Beastmaster | pet melee, axe | 33 |
 | `BRD.lua` | Bard | songs, Macc support | 32 |
 | `RNG.lua` | Ranger | marksmanship, snapshot | 35 |
-| `SAM.lua` | Samurai | great katana, skillchains | 29 |
-| `NIN.lua` | Ninja | dual-wield katana, ninjutsu | 32 |
+| `SAM.lua` | Samurai | great katana, skillchains | 30 |
+| `NIN.lua` | Ninja | dual-wield katana, ninjutsu | 33 |
 | `DRG.lua` | Dragoon | polearm, jumps, wyvern | 32 |
 | `SMN.lua` | Summoner | avatars, blood pacts | 31 |
 | `BLU.lua` | Blue Mage | blue magic hybrid | 33 |
 | `COR.lua` | Corsair | gun, rolls, quick draw | 32 |
 | `PUP.lua` | Puppetmaster | hand-to-hand, automaton | 30 |
 | `DNC.lua` | Dancer | dual-wield dagger, waltzes | 34 |
-| `SCH.lua` | Scholar | healing/nuking, stratagems | 42 |
+| `SCH.lua` | Scholar | healing/nuking, stratagems | 46 |
 | `GEO.lua` | Geomancer | geomancy support/nukes | 31 |
 | `RUN.lua` | Rune Fencer | great-sword tank, runes | 42 |
 
 "Sets" is what the launcher lists after import (empty group tables are not
-counted). Together the folder defines **745 importable sets**, counted with the
+counted). Together the folder defines **751 importable sets**, counted with the
 launcher's own flatten pass.
 
 The same files also carry the five **Limbus** top-tier suits: a `local limbus`
@@ -135,6 +135,7 @@ not `sets.midcast["Enfeebling Magic"]`).
 | Magic burst (elemental) | `sets.midcast.Elemental Magic MB` | SCH only: Nyame C keeps Magic Burst Damage II +5–7 |
 | Helix | `sets.midcast.Helix` | SCH only: Indomitable head/body/legs, Arbatel Bracers +3 and Loafers +3 |
 | Cure | `sets.midcast.Healing Magic` | WHM, RDM, PLD, SCH, RUN |
+| Regen | `sets.midcast.Regen_Potency`, `sets.midcast.Regen_Duration` | SCH only: Telchine carries both `"Regen" potency +10` and `Enh. Mag. eff. dur. +10`; Bookworm's both; duration adds Arbatel Bracers +3 and Lugh's Cape |
 | Enmity+ | `sets.enmity.up` | PLD, RUN, WAR, DRK |
 | Enmity− | `sets.enmity.down` | WHM, BRD, RNG, COR |
 | Weaponskills | `sets.WS.<name>` | 3–6 per job, physical/hybrid/MAB variants |
@@ -228,8 +229,8 @@ Consequences:
 - **Import always works** — the importer never looks items up.
 - **Wear set** finds every library item that is in a bag after migration 0066 and a
   zone/relog. The control addon searches containers 0–17, so wardrobe items are
-  wearable. An item you deliberately put on a storage slip with `!storage store`
-  must be returned with `!storage grab <job|all>` first.
+  wearable. An item you deliberately put on a storage slip with `//storage store`
+  must be returned with `//storage grab <job|all>` first.
 - A database that has not run 0066 only has the seed slice (WAR, NIN, SCH, BST
   and a few weapons); there, Wear set reports the missing items as before.
 
@@ -295,7 +296,7 @@ exact build matters.
 4. Open an augmented set (for example `sets.idle.pdt`); items with an augment
    build are marked `*`, or `R30` for Nyame/Sakpata's, and the first one is selected so the augment line shows
    the R30 values. **Wear set** still equips by base name; items deliberately on
-   a storage slip are reported missing until `!storage grab <job|all>` returns
+   a storage slip are reported missing until `//storage grab <job|all>` returns
    them.
 5. **Save version…**; the `.lua` should appear in the chosen folder with a
    `-YYYYMMDD-HHMMSS` suffix, and a JSON copy under

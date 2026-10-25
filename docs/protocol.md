@@ -12,7 +12,7 @@ It is a developer reference, not a specification for the game.
 | 54230 | TCP | Login data connection |
 | 54001 | TCP | Lobby |
 | 54230 | UDP | Zone |
-| 54002 | UDP | Search (advertised; not implemented) |
+| 54002 | TCP | Search (`/sea all`, `/sea <name>`) |
 
 These are configurable with `FANXI_*_PORT`; the launcher passes the same values to `host64`.
 
@@ -143,8 +143,20 @@ On the clear `0x00A` login Fanxi:
 
 Zone sessions have no TCP connection to watch, so a client that sends nothing for sixty seconds
 is treated as disconnected: its character is despawned from the other clients, its player targid
-is freed and its last position is saved. A zone change gets a thirty-second window and keeps its
-advanced cipher; see [world](world.md#other-players).
+is freed and its last position is saved. A zone change gets a thirty-second window from the
+change itself (not the last packet); see [world](world.md#other-players). `0x00C` is accepted
+when it arrives with sync 0.
+
+On `0x00B` the client moves its zone key on by 2 (the last word), and the zone-in must be
+enciphered with that advanced key: the pre-change key decrypts to a packet the client ignores,
+which it answers by retrying `0x00A` every two seconds — the "Downloading" screen that never
+finishes. The server keeps both ciphers. A packet still in flight under the old key does **not**
+mean the client kept it; only `0x00C` proves which key the client uses, and the server switches
+to the old one when `0x00C` opens under it.
+
+A repeated `0x00A` before `0x00C` rebuilds the zone-in instead of replaying the packet the client
+is already ignoring, alternating the two ciphers; after four tries the session is dropped and the
+next `0x00A` starts a fresh one.
 
 When the client sends `0x00C` (game OK), Fanxi sends the rest of the zone state: zone bitmap
 (`0x008`), jobs (`0x01B`), status/HP (`0x037`), stats/EXP (`0x061`), exact HP/MP (`0x0DF`), the
@@ -167,15 +179,29 @@ Implemented client messages:
 | `0x016`, `0x017` | entity request | self `0x00D`/status, or re-sends an NPC/mob spawn |
 | `0x061` | status request | stats and exact HP/MP |
 | `0x05E` | zone line | changes zone if `zone_lines` has the rect; `zmrq` is the Mog House exit menu, modes 1–4 naming a city area |
-| `0x0B5` | chat | `!zone`, `!pos`, `!where`, `!entities`, `!heal`, `!hp`, `!warp`, `!time`, `!help` |
+| `0x0B5` | chat | `//zone`, `//pos`, `//where`, `//entities`, `//heal`, `//hp`, `//warp`, `//invite`, `//makeparty`, `//time`, `//help` |
 | `0x04B` | server message request | sends the MOTD in chunks |
 | `0x05A` | conquest | zeroed standings |
 | `0x03C` | blacklist | empty |
 | `0x0E8` | `/heal` | toggles rest; HP/MP recover on the three-second tick |
 | `0x0E7` | logout/shutdown | saves position, sends `0x00B` |
+| `0x06E` | party/alliance invite | finds the target by char id or targid and sends `0x0DC`; Kind 0 is a party, 5 an alliance |
+| `0x074` | invite answer | accept builds the party/alliance and reloads every member; decline tells the inviter |
+| `0x06F` | leave | removes the member, or the party from its alliance |
+| `0x070` | disband | leader-only; folds the party or the alliance |
+| `0x071` | kick | leader-only; removes a member or an allied party |
+| `0x076` | roster reload | re-sends `0x0C8` and its `0x0DD` rows |
+| `0x077` | leader change | passes party leadership (Kind 0) or alliance leadership (Kind 5) |
+| `0x078` | group id | replies with `0x0E1` while grouped; silent while solo, because id 0 crashes the client |
 
 `0x00F` (CLSTAT) and `0x00D` (NETEND) are ignored; `0x00D` is also the server's player-entity
 packet, so direction matters.
+
+The group menu is server-owned: `0x0C8` (GROUP_TBL) carries up to twenty rows of
+`char id, targid, flags, zone` and `0x0DD` (GROUP_LIST) one member's HP/MP/TP, job levels, name,
+member number and flags. A member in another zone gets its zone number instead of vitals. HP/MP/TP
+changes are sent as the same `0x0DF` the local player receives, so the client's native party bars
+and the Party Info hub both follow the server's state.
 
 ### 4.1 Entities
 
@@ -242,7 +268,7 @@ id (`canj` for ninjutsu, `cawh`, `cabk`, ...) and the spell id as its value.
   the same item (and same 24-byte extdata) in that container, then sends `0x020` for every
   changed slot and one all-bag `0x01D`.
 
-`!storage store|grab` and `!locker store|grab` never expose a destination bag. Store sends an
+`//storage store|grab` and `//locker store|grab` never expose a destination bag. Store sends an
 `0x020` with item id `0` for each vacated bag slot and one all-bag `0x01D`; the item is then only
 in the server-side `char_storage` or `char_locker` table. Grab sends an `0x020` for each returned
 item and one all-bag `0x01D`.
@@ -260,27 +286,32 @@ text. Quest state is persisted in `char_quests`, not in a client event.
 Chat commands:
 
 ```
-!zone <id> [x y z [rot]]   change zone, optional position
-!pos <x> <y> <z> [rot]     reposition in the current zone
-!where                     print zone and position
-!warp mark [alias]         save this zone/position as the next numbered warp
-!warp me|all <n|alias>     return, alone or with the account's online sub-characters
-!warp list [page]          print the saved places
-!warp delete <n|alias>     delete one
-!warp rename <n> <alias>   name or clear one
-!entities                  list live NPCs/monsters and targids
-!heal                      restore HP/MP
-!time <hour>               set Vana'diel hour (0-23, fractions allowed)
-!storage store <job>       move that job's storable gear onto its slips
-!storage grab <job|all>    take it back off the slips
-!locker store|grab <sel>   hidden 9999-item locker (all, ammo, back, materials, name)
-!locker list               list the locker's contents
-!help                      list commands
+//zone <id> [x y z [rot]]   change zone, optional position
+//pos <x> <y> <z> [rot]     reposition in the current zone
+//where                     print zone and position
+//warp mark [alias]         save this zone/position as the next numbered warp
+//warp me|all <n|alias>     return, alone or with the account's online sub-characters
+//warp all me               call those sub-characters to the sender's zone/position
+//warp list [page]          print the saved places
+//warp delete <n|alias>     delete one
+//warp rename <n> <alias>   name or clear one
+//invite [subs|all|<name>]  invite the online subs, or one player by name
+//makeparty                 drop every online sub from its party, then invite it
+//entities                  list live NPCs/monsters and targids
+//heal                      restore HP/MP
+//time <hour>               set Vana'diel hour (0-23, fractions allowed)
+//storage store <job>       move that job's storable gear onto its slips
+//storage grab <job|all>    take it back off the slips
+//locker store|grab <sel>   hidden 9999-item locker (all, ammo, back, materials, name)
+//locker list               list the locker's contents
+//help                      list commands
 ```
 
-`/!` lines are server chat commands, not client slash commands; the host sends them to the
-server as say lines. Tab completion for the whole `/!` command set is a host feature, not a
-protocol change (see `docs/control-panel.md#command-completion`). The saved warps live in
+`//` lines are server chat commands, not client slash commands. The host turns a known
+`//command` into the server's `!command` say line, so the wire keeps one `!` and the client's
+own slash parser never sees the second slash. The old `/!command` and bare `!command` forms
+still reach the same handler. Tab completion for the whole `//` command set is a host feature,
+not a protocol change (see `docs/control-panel.md#command-completion`). The saved warps live in
 `char_warps`, one row per character and slot 1-1000.
 
 ### 4.5 Emotes and style lock
@@ -306,6 +337,56 @@ Every later `0x051`, login `0x3C` look block and `0x00D` character update reads 
 models while the lock is on, so an equipment change cannot repaint the character (the "blink").
 A job change clears the lock, as in retail.
 
+## 5. Search (TCP)
+
+The lobby's `0x0B` reply carries two addresses: the zone server and the search server. The
+client opens a separate TCP connection to the search address when the `/sea` window needs it.
+Retail's search service is a TCP service; Fanxi advertises the same port and now binds it.
+
+A search packet is:
+
+```
+u16 size | 2 bytes zero | "IXFF" | encrypted body | 16-byte MD5 | 4-byte nonce
+```
+
+The body is encrypted with the client's Blowfish variant. For a request the key is
+`MD5(fixed 16-byte search key + nonce)`. A reply folds in the last four bytes of the request
+body as well: `MD5(fixed key + nonce + tail4)`. The MD5 covers bytes 8 through the end of the
+body, and does not cover the nonce. The fixed key is a protocol constant, the same one
+LandSandBoat's search service uses; it is not a login credential.
+
+The decrypted request has its type at `0x0B`, a one-byte packed-query length at `0x10`, and a
+bit-packed query at `0x11`. Fanxi implements the two player searches:
+
+| Type | Meaning |
+|---|---|
+| `0x00` | `/sea all` |
+| `0x03` | `/sea <name>` |
+
+Each query entry starts with a five-bit type, and most entries then carry a descending bit and
+an "is present" bit. Fanxi reads the name, area, nation, job, level, race and rank entries,
+which covers the filters the client's search window sends. Flag entries are parsed but not
+applied: Fanxi does not model search comments, away/seek-party flags or linkshells yet. The
+name entry is a five-bit length and seven-bit characters; matching is a case-insensitive
+prefix, as in retail. A name search ignores the area entry the client adds from its own
+current location, so `/sea twodough` still finds a character who has moved to another zone;
+an unnamed area search keeps that filter. The other types (auction house, friend list,
+linkshell and party lists, search comments) are ignored.
+
+The reply is the packed search list the client draws: a 24-byte header, then one entry per
+character. The header carries the packed-data size at `0x08`, a final-packet flag at `0x0A`,
+`0x80` at `0x0B`, and the total number of matches at `0x0E`. Each entry has a one-byte size,
+then name, area, nation, both jobs, both levels, race, rank, flags, the 20-bit character id, a
+zero word where retail puts linkshell ranks, flags again and the language mask. At most 20
+entries fit in a packet and at most 40 results are shown; more than that is reported in the
+total.
+
+Fanxi answers from its live zone sessions, so a result exists exactly while the character is
+logged in and the area is the one the session is in right now. Sleeping boxes (`//sleep`) stay
+logged in and remain listed. Fanxi sends no search comments, linkshell ranks or auction-house
+replies yet, and the search result id is the low 20 bits of Fanxi's content id (content ids
+are `0x01000000 + the database number`, so those bits are that number).
+
 ## Keys and secrets
 
 The Blowfish S-boxes, the view key and the Huffman algorithm are protocol constants, not
@@ -315,23 +396,26 @@ never hardcoded.
 
 ## Debugging
 
-- `FANXI_LOG_LEVEL=debug` enables lobby/data/zone debug logs.
+- `FANXI_LOG_LEVEL=debug` enables lobby/data/search/zone debug logs.
 - `FANXI_ZONE_DEBUG=1` logs every zone message type received.
 - The launcher writes each client's output to `…/Fanxi/logs/game-<account>.log`.
 - The server's `audit_log` records `game.login` and `game.token_login`.
 
 ## Known limits
 
-- No search server (`54002/udp` is advertised but not bound).
-- No friends list, linkshell, bazaar, auction house, mail, party or chat channels.
+- Search covers players only: `/sea all` and `/sea <name>` list online characters and their
+  areas. Search comments, linkshell ranks, friend-list refreshes, party search and every
+  auction-house request are ignored.
+- No friends list, linkshell, bazaar, auction house or mail; party and alliance groups exist,
+  but party chat, party search, level sync and treasure pools do not.
 - Client event cutscenes and DAT menus are not implemented; NPC dialogue uses chat and the shop
   uses the dedicated shop packets.
 - Combat is one melee target. Spells, weapon skills and the job-ability action (`0x01A` action
   `0x09`) are implemented. The `0x0AC` Weapon Skills block is filtered to the equipped weapon's
-  skill type and the character's skill value, and `!ws` enforces the same list. The 2025-07-03
+  skill type and the character's skill value, and `//ws` enforces the same list. The 2025-07-03
   client builds its Abilities submenu from a saved command-id list rather than the bitmap;
   host64 rebuilds that list from each `0x0AC` packet, so a restarted client shows the filtered
-  Weapon Skills and its Job Abilities submenu lists the advertised abilities. `!ja` remains a
+  Weapon Skills and its Job Abilities submenu lists the advertised abilities. `//ja` remains a
   shortcut. The fourth `0x0AC` block carries the current main/support job's trait ids, and the
   Auto Regen/Auto Refresh traits tick their HP/MP every three seconds. Still missing: ranged
   attacks, TP moves, skillchains, status effects, raise and an enmity list.

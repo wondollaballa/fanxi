@@ -50,48 +50,150 @@ export type SpellCategoryKey =
   | "enfeebles_duration"
   | "buff_potency"
   | "buff_duration"
-  | "helix_magic";
+  | "cure_potency"
+  | "cure_cast"
+  | "nuke_mab"
+  | "nuke_mdmg"
+  | "helix_magic"
+  | "helix_duration";
 
-export type SpellCategory = {
-  key: SpellCategoryKey;
+export type SpellGroupKey = "enfeebles" | "enhancing" | "curing" | "nuking" | "helix";
+
+export type SpellMode = {
+  key: string;
   label: string;
+  /** Short label for the in-game mode strip. */
+  short: string;
+  category: SpellCategoryKey;
   detail: string;
-  /** The other answer to the same question: a spell gets one set, not two. */
-  alternate?: SpellCategoryKey;
+};
+
+export type SpellGroup = {
+  key: SpellGroupKey;
+  label: string;
+  /** Short label for the in-game mode strip. */
+  short: string;
+  defaultMode: string;
+  modes: SpellMode[];
 };
 
 /** The spell groups the host classifies (`job_spells.categories`) and the Spells panel edits. */
-export const SPELL_CATEGORIES: SpellCategory[] = [
+export const SPELL_GROUPS: SpellGroup[] = [
   {
-    key: "enfeebles_macc",
-    label: "Enfeebles · Macc",
-    detail: "Magic Accuracy set for every Enfeebling Magic spell.",
-    alternate: "enfeebles_duration",
+    key: "enfeebles",
+    label: "Enfeebles",
+    short: "Enf",
+    defaultMode: "macc",
+    modes: [
+      {
+        key: "macc",
+        label: "Macc / landing",
+        short: "Macc",
+        category: "enfeebles_macc",
+        detail: "Magic Accuracy set for landing every Enfeebling Magic spell.",
+      },
+      {
+        key: "duration",
+        label: "Duration",
+        short: "Dur",
+        category: "enfeebles_duration",
+        detail: "Duration set for every Enfeebling Magic spell.",
+      },
+    ],
   },
   {
-    key: "enfeebles_duration",
-    label: "Enfeebles · Duration",
-    detail: "Duration set for every Enfeebling Magic spell.",
-    alternate: "enfeebles_macc",
+    key: "enhancing",
+    label: "Enhancing / buffs",
+    short: "Enh",
+    defaultMode: "potency",
+    modes: [
+      {
+        key: "potency",
+        label: "Potency",
+        short: "Pot",
+        category: "buff_potency",
+        detail: "Potency set for every Enhancing Magic spell.",
+      },
+      {
+        key: "duration",
+        label: "Duration",
+        short: "Dur",
+        category: "buff_duration",
+        detail: "Duration set for every Enhancing Magic spell.",
+      },
+    ],
   },
   {
-    key: "buff_potency",
-    label: "Buff potency",
-    detail: "Potency set for every Enhancing Magic spell.",
-    alternate: "buff_duration",
+    key: "curing",
+    label: "Curing / healing",
+    short: "Cure",
+    defaultMode: "potency",
+    modes: [
+      {
+        key: "potency",
+        label: "Potency",
+        short: "Pot",
+        category: "cure_potency",
+        detail: "Potency set for every Healing Magic spell.",
+      },
+      {
+        key: "cast",
+        label: "Cast time",
+        short: "Cast",
+        category: "cure_cast",
+        detail: "Fast-cast / cast-time set for every Healing Magic spell.",
+      },
+    ],
   },
   {
-    key: "buff_duration",
-    label: "Buff duration",
-    detail: "Duration set for every Enhancing Magic spell.",
-    alternate: "buff_potency",
+    key: "nuking",
+    label: "Nuking",
+    short: "Nuke",
+    defaultMode: "mab",
+    modes: [
+      {
+        key: "mab",
+        label: "Magic Attack",
+        short: "MAB",
+        category: "nuke_mab",
+        detail: "Magic Attack Bonus set for Elemental Magic nukes.",
+      },
+      {
+        key: "mdmg",
+        label: "Magic damage",
+        short: "M.Dmg",
+        category: "nuke_mdmg",
+        detail: "Magic Damage set for Elemental Magic nukes.",
+      },
+    ],
   },
   {
-    key: "helix_magic",
-    label: "Helix magic",
-    detail: "Set for every helix spell the job pair can cast.",
+    key: "helix",
+    label: "Helixes",
+    short: "Helix",
+    defaultMode: "mab",
+    modes: [
+      {
+        key: "mab",
+        label: "Magic Attack",
+        short: "MAB",
+        category: "helix_magic",
+        detail: "Magic Attack / Magic Damage set for helix spells.",
+      },
+      {
+        key: "duration",
+        label: "Duration",
+        short: "Dur",
+        category: "helix_duration",
+        detail: "Duration set for helix spells.",
+      },
+    ],
   },
 ];
+
+export const DEFAULT_SPELL_MODES: Record<SpellGroupKey, string> = Object.fromEntries(
+  SPELL_GROUPS.map((group) => [group.key, group.defaultMode]),
+) as Record<SpellGroupKey, string>;
 
 export type PhaseConfig = {
   engaged: string;
@@ -115,6 +217,8 @@ export type PhaseConfig = {
   spellOverrides: Record<string, string>;
   /** spell category key -> one set for every spell the host puts in that category */
   spellCategoryOverrides: Record<string, string>;
+  /** spell group key -> the mode whose set is worn */
+  spellModes: Record<string, string>;
 };
 
 export const FOCUS_MODES: { value: FocusMode; label: string }[] = [
@@ -144,6 +248,7 @@ export const DEFAULT_PHASE_CONFIG: PhaseConfig = {
   jaOverrides: {},
   spellOverrides: {},
   spellCategoryOverrides: {},
+  spellModes: { ...DEFAULT_SPELL_MODES },
 };
 
 function text(value: unknown, fallback = ""): string {
@@ -155,6 +260,25 @@ function objectMap(value: unknown): Record<string, string> {
   const out: Record<string, string> = {};
   for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
     if (typeof item === "string" && item) out[key] = item;
+  }
+  return out;
+}
+
+function normalizeSpellModes(
+  savedModes: Record<string, string>,
+  overrides: Record<string, string>,
+): Record<string, string> {
+  const out: Record<string, string> = { ...DEFAULT_SPELL_MODES };
+  for (const group of SPELL_GROUPS) {
+    const saved = savedModes[group.key];
+    if (saved && group.modes.some((mode) => mode.key === saved)) {
+      out[group.key] = saved;
+      continue;
+    }
+    // Old configs only had the category picks. Preserve the old effective choice when
+    // exactly one face of the pair was configured.
+    const configured = group.modes.filter((mode) => overrides[mode.category]);
+    if (configured.length === 1) out[group.key] = configured[0].key;
   }
   return out;
 }
@@ -176,6 +300,7 @@ export function loadPhaseConfig(): PhaseConfig {
   const legacyIdle = localStorage.getItem("fanxi.phase.idleTown") ?? localStorage.getItem("fanxi.phase.idle");
   const focus = (saved.focus ?? {}) as Record<string, unknown>;
   const mode = text(saved.focusMode, "auto");
+  const spellCategoryOverrides = objectMap(saved.spellCategoryOverrides);
   return {
     engaged: text(saved.engaged, localStorage.getItem("fanxi.phase.engaged") ?? "engaged.tp"),
     idleTown: text(saved.idleTown, legacyIdle ?? "idle.town"),
@@ -201,7 +326,8 @@ export function loadPhaseConfig(): PhaseConfig {
     wsOverrides: objectMap(saved.wsOverrides),
     jaOverrides: objectMap(saved.jaOverrides),
     spellOverrides: objectMap(saved.spellOverrides),
-    spellCategoryOverrides: objectMap(saved.spellCategoryOverrides),
+    spellCategoryOverrides,
+    spellModes: normalizeSpellModes(objectMap(saved.spellModes), spellCategoryOverrides),
   };
 }
 
@@ -232,6 +358,7 @@ export function phaseOptions(config: PhaseConfig): Record<string, unknown> {
     ja_overrides: config.jaOverrides,
     spell_overrides: config.spellOverrides,
     spell_category_overrides: config.spellCategoryOverrides,
+    spell_modes: config.spellModes,
   };
 }
 

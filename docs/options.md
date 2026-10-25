@@ -32,6 +32,13 @@ the Lighting and Atmosphere pages.
 | FPS counter | Display › [Performance] FPS Counter | `fps` | | | 1 shown |
 | GPU pick (Vulkan) | | | | | `FFXI_GPU` env |
 
+The Fanxi launcher's **Settings → Game window** card writes keys `0001`, `0002`, `0034`, `0037`
+and `0038` to `<launcher data dir>/display.reg` and passes that file as `--reg-final`. It offers
+Windowed (`0034` 1), Borderless window (2), Full screen (0) and Borderless full screen (3). The
+overlay is loaded after the game's saved registry, so the launcher's window mode, resolution and
+interface scale (menu resolution) win for that launch. A running client keeps its window until it
+is restarted.
+
 ## 2. Image quality and color
 
 | Setting | Menu | fx | Default / range |

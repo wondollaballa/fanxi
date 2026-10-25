@@ -114,6 +114,16 @@ local limbus = {
     },
 }
 
+local capes = {
+    pdt = { name = "Toutatis's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Toutatis's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Toutatis's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Toutatis's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Toutatis's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    dw = { name = "Toutatis's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", '"Dual Wield"+10', "Phys. dmg. taken-10%"} },
+    ws_dex = { name = "Toutatis's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+}
+
 function get_sets()
     sets = {}
     sets.engaged = {}
@@ -133,7 +143,7 @@ function get_sets()
         legs = "Pillager's Culottes +4",
         feet = "Pillager's Poulaines +4",
         neck = "Assassin's Gorget +2",
-        back = "Toutatis's Cape",
+        back = capes.ws_dex,
     }
     sets.JA.Collaborator = {
         main = "Mandau",
@@ -144,7 +154,7 @@ function get_sets()
         legs = "Pillager's Culottes +4",
         feet = "Pillager's Poulaines +4",
         neck = "Assassin's Gorget +2",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
     sets.JA.Feint = {
         main = "Mandau",
@@ -155,7 +165,7 @@ function get_sets()
         legs = "Plunderer's Culottes +4",
         feet = "Pillager's Poulaines +4",
         neck = "Assassin's Gorget +2",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
     sets.JA.Flee = {
         main = "Mandau",
@@ -166,7 +176,7 @@ function get_sets()
         legs = "Pillager's Culottes +4",
         feet = "Pillager's Poulaines +4",
         neck = "Assassin's Gorget +2",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
     sets.JA.Hide = {
         main = "Mandau",
@@ -177,7 +187,7 @@ function get_sets()
         legs = "Pillager's Culottes +4",
         feet = "Pillager's Poulaines +4",
         neck = "Assassin's Gorget +2",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
     sets.JA.Larceny = {
         main = "Mandau",
@@ -188,7 +198,7 @@ function get_sets()
         legs = "Pillager's Culottes +4",
         feet = "Skulker's Poulaines +3",
         neck = "Assassin's Gorget +2",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
     sets.JA["Sneak Attack"] = {
         main = "Mandau",
@@ -199,7 +209,7 @@ function get_sets()
         legs = "Pillager's Culottes +4",
         feet = "Pillager's Poulaines +4",
         neck = "Assassin's Gorget +2",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
     sets.JA["Trick Attack"] = {
         main = "Mandau",
@@ -210,7 +220,7 @@ function get_sets()
         legs = "Pillager's Culottes +4",
         feet = "Pillager's Poulaines +4",
         neck = "Assassin's Gorget +2",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
 
     -- ===== Odyssey =====
@@ -267,7 +277,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Epona's Ring",
         ring2 = "Ilabrat Ring",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
 
     -- ===== WS =====
@@ -286,7 +296,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Toutatis's Cape",
+        back = capes.ws_dex,
     }
     sets.WS.Exenterator = {
         main = "Mandau",
@@ -303,7 +313,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Toutatis's Cape",
+        back = capes.ws_dex,
     }
     sets.WS["Mandalic Stab"] = {
         main = "Mandau",
@@ -320,7 +330,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Toutatis's Cape",
+        back = capes.ws_dex,
     }
     sets.WS["Rudra's Storm"] = {
         main = "Mandau",
@@ -337,7 +347,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Toutatis's Cape",
+        back = capes.ws_dex,
     }
     sets.WS["Shark Bite"] = {
         main = "Mandau",
@@ -354,7 +364,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Toutatis's Cape",
+        back = capes.ws_dex,
     }
 
     -- ===== engaged =====
@@ -373,7 +383,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
     sets.engaged.dw = {
         main = "Mandau",
@@ -390,7 +400,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Toutatis's Cape",
+        back = capes.dw,
     }
     sets.engaged.hybrid = {
         main = "Mandau",
@@ -407,7 +417,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
     sets.engaged.tp = {
         main = "Mandau",
@@ -424,7 +434,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Toutatis's Cape",
+        back = capes.tp,
     }
 
     -- ===== Limbus Rank 30 sets =================================
@@ -448,7 +458,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Toutatis's Cape",
+        back = capes.dt,
     }
     sets.idle.maxhp = {
         main = "Mandau",
@@ -465,7 +475,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Toutatis's Cape",
+        back = capes.maxhp,
     }
     sets.idle.mdt = {
         main = "Mandau",
@@ -482,7 +492,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Toutatis's Cape",
+        back = capes.mdt,
     }
     sets.idle.movement = {
         main = "Mandau",
@@ -516,7 +526,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Toutatis's Cape",
+        back = capes.pdt,
     }
     sets.idle.town = {
         main = "Mandau",

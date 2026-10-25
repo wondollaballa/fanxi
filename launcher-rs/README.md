@@ -1,7 +1,7 @@
 # Fanxi Launcher (Rust + Tauri)
 
-A native desktop launcher for Fanxi, rebuilt in Rust with a Tauri 2 + React front end. It lives
-side by side with the original Python/Tkinter launcher in `../launcher/` while parity is finished.
+The Fanxi Launcher: Rust with a Tauri 2 + React front end. It is the project's only desktop
+launcher; the earlier Python/Tkinter app has been removed.
 
 ![Fanxi Launcher](docs/home.png)
 
@@ -11,9 +11,14 @@ side by side with the original Python/Tkinter launcher in `../launcher/` while p
 - browse characters, create a mule, pick the active character, and press Play;
 - a global **tenant** bar above every page: pick a main-account character or a sub-account box and
   Home, Design, Data, Gear and Warps follow it; the choice is saved in `launcher.json`;
-- create server-owned sub-account boxes on **Team** and launch the whole team without extra
-  passwords or tokens;
+- create server-owned sub-account boxes on **Team**, then launch a single box with a window or
+  headless, or launch the whole team, without extra passwords or tokens;
 - launch several clients, one per account, and watch live HP/MP, EXP/hr and DPS;
+- choose the game window in Settings — windowed, borderless, full screen or borderless full
+  screen, with width × height, display-fitting presets and an interface scale — and have the
+  launcher apply it to every visible client it starts;
+- call every other online box to the highlighted character with **Warp team to me** on the
+  Control room or **Warps** page (`//warp all me`);
 - send server commands and chat through the client's control port;
 - toggle four in-game HUD windows per account — **Abilities**, **Spells**, **Trusts** and
   **Weapon skills** — with real game icons, `/ja` / `/ma` / `/ws` buttons, clock-face recasts,
@@ -48,18 +53,21 @@ control protocol.
 
 ```bash
 cd launcher-rs
-npm install
+npm ci
 npm run tauri dev
 ```
 
-The app reads and writes the same `launcher.json` and data folder as the Python launcher:
+`../scripts/launcher.sh` starts the last release build when there is one and falls back to this
+development command; `../install.sh` builds and installs the app for this OS.
+
+The app reads and writes `launcher.json` in the platform data folder. The format is the one the
+earlier Python launcher used, so existing settings and accounts load unchanged:
 
 - macOS: `~/Library/Application Support/Fanxi/`
 - Linux: `~/.local/share/fanxi/` (or `$XDG_DATA_HOME/fanxi/`)
 - Windows: `%APPDATA%\Fanxi\`
 
-`FANXI_LAUNCHER_DIR` overrides the folder. The old and new launchers can share it, but avoid
-running both at once while testing account changes.
+`FANXI_LAUNCHER_DIR` overrides the folder (useful for testing).
 
 ## Build
 
@@ -83,6 +91,7 @@ src/lib/api.ts          typed wrappers around Tauri commands
 src-tauri/src/api.rs    Fanxi HTTP client (rustls)
 src-tauri/src/config.rs launcher.json + account vault
 src-tauri/src/control.rs local JSON-lines control port + process table
+src-tauri/src/display.rs game window overlay (mode, resolution, interface scale)
 src-tauri/src/game.rs   game discovery, build driver, host64 spawn
 src-tauri/src/gear.rs   GearSwap flatten/serialize/version helpers
 src-tauri/src/icons.rs  item-icon cache (control port RGBA -> PNG data URL)

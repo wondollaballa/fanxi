@@ -14,7 +14,7 @@
 -- This is exactly Odyssey's Rank 30 row, so the client can draw the augment
 -- lines from the item id, path and rank alone.  Nyame has four paths; the
 -- single-row sets (Sakpata's, Gleti's, Agwu's) and the seven weapons use Path A.
--- `!augment <A-D|off> <item>` changes a copy in game.  See docs/odyssey-r30.md.
+-- `//augment <A-D|off> <item>` changes a copy in game.  See docs/odyssey-r30.md.
 ALTER TABLE char_inventory ADD COLUMN extra BLOB NOT NULL DEFAULT X'';
 
 UPDATE char_inventory

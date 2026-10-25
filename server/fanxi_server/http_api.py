@@ -90,6 +90,7 @@ class Api:
         route("POST", r"/api/v1/auth/login")(self.login)
         # authenticated
         route("POST", r"/api/v1/auth/logout")(self.logout)
+        route("GET", r"/api/v1/world/online")(self.world_online)
         route("GET", r"/api/v1/me")(self.me)
         route("GET", r"/api/v1/characters")(self.characters)
         route("POST", r"/api/v1/characters")(self.create_character)
@@ -199,6 +200,21 @@ class Api:
     def status(self, request: Request) -> Response:
         return json_response(200, self.service.status())
 
+    def world_online(self, request: Request) -> Response:
+        """The characters with a live zone session: the same roster ``/sea all`` reads.
+
+        A running client is not the same as an online character.  This is the roster the
+        launcher compares its control-port state against when a box shows "in world" but the
+        server has already forgotten it (a server restart, a silent UDP drop).
+        """
+        assert request.account
+        characters = self.service.online_characters()
+        return json_response(200, {
+            "gateway": self.service.zone_world is not None,
+            "characters": characters,
+            "count": len(characters),
+        })
+
     def news(self, request: Request) -> Response:
         try:
             limit = int(request.arg("limit", "10") or 10)
@@ -286,7 +302,7 @@ class Api:
         row = self._data_character(request)
         return json_response(200, self.service.character_data(int(row["id"])))
 
-    # --- /!warp --------------------------------------------------------------------------------
+    # --- //warp --------------------------------------------------------------------------------
     def _warp_character(self, request: Request) -> dict:
         """A character this account may manage, including its sub-account characters.
 
@@ -352,7 +368,7 @@ class Api:
         return json_response(200, self.service.character_data(int(row["id"])))
 
     def character_progress(self, request: Request) -> Response:
-        """Ranks, fame, jobs, Exemplar Points, crafts, Trust re-issue and augment paths."""
+        """Ranks, fame, jobs, Exemplar Points, crafts, Trust re-issue and augment paths (Odyssey/Limbus/Unity/Oboro)."""
         row = self._data_character(request)
         cid = int(row["id"])
         body = request.json()
@@ -389,7 +405,7 @@ class Api:
         elif op == "trusts":
             # The zone-in burst already carries every Trust spell and cipher; the
             # endpoint only gives the launcher the refreshed snapshot and a place to
-            # hang the !reload that re-sends the bitmaps.
+            # hang the //reload that re-sends the bitmaps.
             pass
         elif op == "augment":
             try:

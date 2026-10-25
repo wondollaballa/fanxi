@@ -5,6 +5,7 @@ import type {
   BuildEvent,
   Character,
   ConfigView,
+  GameWindowMode,
   HudPatch,
   HudState,
   InstanceView,
@@ -14,7 +15,7 @@ import type {
   TeamView,
 } from "./types";
 import { backend, LauncherError } from "./lib/api";
-import { JOB_ABBRS } from "./lib/format";
+import { JOB_ABBRS, inWorld, serverSaysOffline } from "./lib/format";
 import { buildTenants, resolveTenant } from "./lib/tenant";
 import {
   loadPhaseConfig,
@@ -40,6 +41,17 @@ import { ConfirmDialog, Toast } from "./components/ui";
 import "./styles.css";
 
 type ToastState = { kind: "success" | "error" | "info"; message: string };
+
+/**
+ * How long a box has to report `login_status == 2` before the launcher pulls it to the leader.
+ *
+ * Two 3 s polls: the zone-in has finished and the client is answering again, so a
+ * `//warp call` lands on a live session instead of racing the login.
+ */
+const AUTO_WARP_SETTLE_MS = 6000;
+
+/** How long a relaunch stays armed while its client is stopped and started again. */
+const AUTO_WARP_ARM_WINDOW_MS = 10 * 60_000;
 
 // The plan's library is stored from the last session. When the character logs in on another
 // job, a job-named default (gearswap/NIN.lua) has to follow the live job, or the first push
@@ -362,6 +374,75 @@ export default function App() {
     };
   }, [session?.account.username]);
 
+  // A box that falls out of the world — a server restart, a silent UDP drop, a relog — keeps
+  // its process and control port, so the Control room still lists it. The server has no session
+  // for it, which is why //warp all me walks past it. Arm a warp when it leaves the world (or
+  // when Relaunch is pressed) and fire //warp call <name> from the leader once that same account
+  // has reported login_status 2 for AUTO_WARP_SETTLE_MS.
+  const autoWarpArmed = useRef<Map<string, number>>(new Map());
+  const autoWarpStatus = useRef<Map<string, number>>(new Map());
+  const autoWarpInGameSince = useRef<Map<string, number>>(new Map());
+  const autoWarpSending = useRef(false);
+
+  useEffect(() => {
+    if (!session) return;
+    const now = Date.now();
+    const alive = instances.filter((instance) => instance.alive);
+    const accounts = new Set(alive.map((instance) => instance.account.toLowerCase()));
+    // An armed account has no instance for the few seconds between Stop and Launch, so a
+    // relaunch must survive its own restart: expire by time instead of by absence.
+    for (const [key, armedAt] of [...autoWarpArmed.current]) {
+      if (now - armedAt > AUTO_WARP_ARM_WINDOW_MS) autoWarpArmed.current.delete(key);
+    }
+    for (const key of [...autoWarpStatus.current.keys()]) {
+      if (!accounts.has(key)) autoWarpStatus.current.delete(key);
+    }
+    for (const key of [...autoWarpInGameSince.current.keys()]) {
+      if (!accounts.has(key)) autoWarpInGameSince.current.delete(key);
+    }
+
+    const inGame = (instance: InstanceView) => inWorld(instance);
+    for (const instance of alive) {
+      const key = instance.account.toLowerCase();
+      const status = instance.state?.login_status;
+      if (typeof status !== "number") continue;
+      const previous = autoWarpStatus.current.get(key);
+      autoWarpStatus.current.set(key, status);
+      if (status === 2) {
+        if (!autoWarpInGameSince.current.has(key)) autoWarpInGameSince.current.set(key, now);
+        continue;
+      }
+      autoWarpInGameSince.current.delete(key);
+      // 0 is "no character block" (game.h): the client is out of the world, not zoning.
+      if (status === 0 && previous === 2) autoWarpArmed.current.set(key, now);
+    }
+
+    if (autoWarpSending.current || autoWarpArmed.current.size === 0) return;
+    const leaderKey = session.account.username.toLowerCase();
+    const leader =
+      alive.find((instance) => instance.account.toLowerCase() === leaderKey && inGame(instance)) ??
+      alive.find(inGame);
+    if (!leader) return;
+    const due = alive.find((instance) => {
+      const key = instance.account.toLowerCase();
+      if (instance.port === leader.port || !autoWarpArmed.current.has(key) || !inGame(instance)) {
+        return false;
+      }
+      return now - (autoWarpInGameSince.current.get(key) ?? now) >= AUTO_WARP_SETTLE_MS;
+    });
+    if (!due) return;
+
+    autoWarpArmed.current.delete(due.account.toLowerCase());
+    autoWarpSending.current = true;
+    void backend
+      .sendCommand(leader.port, `//warp call ${due.name}`)
+      .then(() => notify(`Pulled ${due.name} to ${leader.name}`, "info"))
+      .catch((error) => notify(messageOf(error), "error"))
+      .finally(() => {
+        autoWarpSending.current = false;
+      });
+  }, [instances, session, notify]);
+
   useEffect(() => {
     if (!session) {
       setTeam(null);
@@ -596,6 +677,30 @@ export default function App() {
     }
   }
 
+  async function launchHeadless() {
+    setBusy("launch-headless");
+    try {
+      const result = await backend.launchHeadlessParty();
+      await refreshInstances();
+      if (result.launched.length > 0) setPage("control");
+      if (result.failed.length > 0) {
+        notify(
+          `Started ${result.launched.length} headless; ${result.failed.length} failed. ${result.failed[0]?.account}: ${result.failed[0]?.error}`,
+          "error",
+        );
+      } else {
+        notify(
+          `Started ${result.launched.length} headless client${result.launched.length === 1 ? "" : "s"}`,
+          "success",
+        );
+      }
+    } catch (error) {
+      notify(messageOf(error), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function addSub(character: Record<string, unknown> | null): Promise<boolean> {
     setBusy("create-sub");
     try {
@@ -670,6 +775,55 @@ export default function App() {
     }
   }
 
+  /** Start one box with no window; stay on Team so the next box can be started right away. */
+  async function launchSubHeadless(sub: SubAccount) {
+    setBusy(`launch-sub-headless-${sub.id}`);
+    try {
+      const instance = await backend.launchSubHeadless(sub.id, sub.character?.id ?? null);
+      await refreshInstances();
+      notify(`${instance.name} is in game headless (control :${instance.port})`, "success");
+    } catch (error) {
+      await refreshInstances();
+      if (error instanceof LauncherError && error.unauthorized) {
+        await refreshAll();
+      }
+      notify(messageOf(error), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function setHeadlessSleep(port: number, sleeping: boolean) {
+    setBusy(`sleep-${port}`);
+    try {
+      await backend.setHeadlessSleep(port, sleeping);
+      await refreshInstances();
+      notify(sleeping ? "Client parked; character hidden until Wake" : "Client awake", "success");
+    } catch (error) {
+      notify(messageOf(error), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Explicit escape hatch for a stuck remote op: clear the account, then start fresh. */
+  async function forceRelaunchSubHeadless(sub: SubAccount) {
+    setBusy(`force-sub-${sub.id}`);
+    try {
+      const instance = await backend.forceRelaunchHeadless(sub.id, sub.character?.id ?? null);
+      await refreshInstances();
+      notify(`${instance.name}: stale session cleared; back in game headless (control :${instance.port})`, "success");
+    } catch (error) {
+      await refreshInstances();
+      if (error instanceof LauncherError && error.unauthorized) {
+        await refreshAll();
+      }
+      notify(messageOf(error), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function launchTeam() {
     setBusy("launch-team");
     try {
@@ -694,6 +848,21 @@ export default function App() {
     }
   }
 
+  async function launchRemoteTeam() {
+    setBusy("launch-remote-team");
+    try {
+      const summary = await backend.launchRemoteTeam();
+      await refreshInstances();
+      setPage("control");
+      notify(summary, "success");
+    } catch (error) {
+      await refreshInstances();
+      notify(messageOf(error), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
   async function stop(port: number) {
     setBusy(`stop-${port}`);
     try {
@@ -704,6 +873,79 @@ export default function App() {
       notify(messageOf(error), "error");
     } finally {
       setBusy(null);
+    }
+  }
+
+  /**
+   * Stop a box and start the same character again.
+   *
+   * A box that lost its zone session keeps its process and control port alive but is no longer
+   * in the world: the server cannot warp it, and its row still looks healthy. Relaunching is
+   * the only way back in, and the auto-warp below pulls it to the leader once it has a character
+   * block again.
+   */
+  async function relaunch(port: number) {
+    const instance = instances.find((item) => item.port === port);
+    if (!instance) return;
+    const key = instance.account.toLowerCase();
+    setBusy(`relaunch-${port}`);
+    autoWarpArmed.current.set(key, Date.now());
+    try {
+      const started = await backend.relaunchInstance(port);
+      await refreshInstances();
+      notify(
+        `${started.name} is relaunching; it will be warped to your leader once it is in game.`,
+        "info",
+      );
+    } catch (error) {
+      autoWarpArmed.current.delete(key);
+      if (error instanceof LauncherError && error.unauthorized) await refreshAll();
+      notify(messageOf(error), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /**
+   * Restart every box whose process still answers but whose server session is gone.
+   *
+   * This is the one-action recovery for a server restart: the clients stayed alive, so the
+   * launcher reuses their rows and relaunches each one with a fresh launch token. The
+   * auto-warp effect pulls each returning character to the leader once it reports in world.
+   */
+  async function reconcileTeam() {
+    const stale = instances.filter(
+      (instance) => instance.alive && serverSaysOffline(instance),
+    );
+    if (stale.length === 0) {
+      notify("No orphaned sessions to reconcile", "info");
+      return;
+    }
+    setBusy("reconcile");
+    let recovered = 0;
+    const failures: string[] = [];
+    for (const instance of stale) {
+      autoWarpArmed.current.set(instance.account.toLowerCase(), Date.now());
+      try {
+        await backend.relaunchInstance(instance.port);
+        recovered += 1;
+      } catch (error) {
+        autoWarpArmed.current.delete(instance.account.toLowerCase());
+        failures.push(`${instance.name}: ${messageOf(error)}`);
+      }
+    }
+    await refreshInstances();
+    setBusy(null);
+    if (failures.length > 0) {
+      notify(
+        `Reconciled ${recovered} of ${stale.length} box(es). ${failures.join("; ")}`,
+        "error",
+      );
+    } else {
+      notify(
+        `Reconciled ${recovered} box(es); each is pulled to the leader once it is in game.`,
+        "info",
+      );
     }
   }
 
@@ -756,9 +998,16 @@ export default function App() {
   async function saveSettings(input: {
     apiUrl: string;
     gameDir: string;
+    headlessGameDir: string;
+    remoteSsh: string;
     repoRoot: string;
     apiInsecure: boolean;
     autoLogin: boolean;
+    limitMainFps: boolean;
+    gameWindowMode: GameWindowMode;
+    gameWidth: number;
+    gameHeight: number;
+    gameUiScale: number;
   }) {
     const next = await backend.saveSettings(input);
     setBoot((current) => (current ? { ...current, config: next } : current));
@@ -889,7 +1138,12 @@ export default function App() {
         onActivate={activateSub}
         onCreateCharacter={createSubCharacter}
         onLaunchSub={launchSub}
+        onLaunchSubHeadless={launchSubHeadless}
+        onForceRelaunchHeadless={forceRelaunchSubHeadless}
+        onSetSleep={setHeadlessSleep}
         onLaunchTeam={launchTeam}
+        onLaunchRemoteTeam={launchRemoteTeam}
+        remoteEnabled={Boolean(boot.config.remoteSsh)}
         onViewTenant={(characterId) => chooseTenant(characterId)}
         onControl={() => setPage("control")}
       />
@@ -901,7 +1155,10 @@ export default function App() {
         instances={instances}
         onLaunch={launch}
         onStop={stop}
+        onRelaunch={relaunch}
+        onReconcileTeam={reconcileTeam}
         onLaunchAll={launchAll}
+        onLaunchHeadless={launchHeadless}
         onStopAll={() => setConfirmStopAll(true)}
         onCommand={sendCommand}
         onChat={sendChat}

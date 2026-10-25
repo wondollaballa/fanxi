@@ -102,7 +102,7 @@ export function DesignPage({
   const changed = saved ? !sameDesign(draft, saved) : false;
   const variant = variantOf(draft);
   const rawFace = (draft.face - 1) * 2 + draft.hair;
-  const command = `!character model ${RACE_COMMAND[draft.race] ?? "hume"} ${variant}`;
+  const command = `//character model ${RACE_COMMAND[draft.race] ?? "hume"} ${variant}`;
   const running = instances.some(
     (instance) =>
       instance.alive && Number(instance.character.id) === Number(character?.id),

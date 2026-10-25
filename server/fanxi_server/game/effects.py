@@ -30,6 +30,7 @@ SILENCE = 6
 PETRIFICATION = 7
 STUN = 10
 BIND = 11
+TRIPLE_SHOT = 467
 WEIGHT = 12
 SLOW = 13
 PLAGUE = 31
@@ -91,6 +92,17 @@ STORE_TP = 227
 ENMITY_BOOST = 289
 SUBTLE_BLOW_PLUS = 290
 MIGAWARI = 471
+# Passive Trust auras.  Retail gives each walking-Geomancy Trust a COLURE_ACTIVE effect
+# whose sub-effect is one of these ids and whose sub-icon is the matching GEO bubble.
+# They stack with the player's own Haste/Refresh/Regen, which is why a Trust's Haste is
+# an extra icon rather than a replacement for spell Haste.
+TRUST_AURA_CHR = 807
+TRUST_AURA_HASTE = 808
+TRUST_AURA_EXP = 809
+TRUST_AURA_ACC = 810
+TRUST_AURA_REFRESH = 811
+TRUST_AURA_REGEN = 812
+TRUST_AURA_MAGIC_ATTACK = 813
 
 # --- spell definitions ---------------------------------------------------------------------
 
@@ -363,9 +375,67 @@ SWEPT_EXTRAS: dict[str, SpellEffect] = {
 }
 
 
+_ROMAN_TIERS = {"i": 1, "ii": 2, "iii": 3, "iv": 4, "v": 5, "vi": 6,
+                "vii": 7, "viii": 8}
+
+
+def _song_tier(name: str) -> int:
+    words = str(name).casefold().split()
+    if words and words[-1] in _ROMAN_TIERS:
+        return _ROMAN_TIERS[words[-1]]
+    return 1
+
+
+def _bard_songs() -> dict[str, SpellEffect]:
+    """Give the bard song families their actual stat/tick values.
+
+    ``STATUS_SPELLS`` already supplies the icon and duration; this layer adds the
+    per-tier effect the party reads.  It is deliberately small and data-driven: a song
+    family with no number here still lands its icon.
+    """
+    out: dict[str, SpellEffect] = {}
+    for name, base in STATUS_SPELLS.items():
+        folded = " ".join(str(name).casefold().split())
+        tier = _song_tier(folded)
+        if "victory march" in folded:
+            tier = 2
+        elif "blade madrigal" in folded:
+            tier = 2
+        elif "dragonfoe mambo" in folded:
+            tier = 2
+        effect, kind, duration, _base_tick = base
+        mods: dict[int, int] = {}
+        tick = 0
+        if "minne" in folded:
+            mods[mod.DEF] = 10 * tier
+        elif "minuet" in folded or "mambo" in folded:
+            mods[mod.ATT] = 10 * tier
+        elif "madrigal" in folded:
+            mods[mod.ACC] = 5 * tier
+        elif "march" in folded:
+            mods[mod.HASTE_GEAR] = 3 * tier
+        elif "ballad" in folded:
+            mods[mod.REFRESH] = tier
+        elif "paeon" in folded:
+            mods[mod.REGEN] = tier
+        elif "requiem" in folded:
+            tick = tier
+        elif "prelude" in folded:
+            mods[mod.RACC] = 5 * tier
+        elif "carol" in folded:
+            mods[mod.MDEF] = 2 * tier
+        elif "threnody" in folded:
+            continue
+        else:
+            continue
+        out[folded] = SpellEffect(effect, kind, duration, tick=tick, mods=mods)
+    return out
+
+
 SPELLS: dict[str, SpellEffect] = {}
 SPELLS.update(_status_spells())     # every spell with an icon ...
 SPELLS.update(SWEPT_EXTRAS)         # ... the long tail LSB does not table ...
+SPELLS.update(_bard_songs())        # ... real song potency on top of the icons ...
 SPELLS.update(_ninjutsu())          # ... then the curated mechanics win over both
 SPELLS.update(_black_magic())
 SPELLS.update(_white_magic())
@@ -505,6 +575,7 @@ def buff_duration(
     elif int(skill) in SONG_SKILLS:
         duration *= 1.0 + int(mods.get(mod.SONG_DURATION_BONUS, 0)) / 100.0
     if enhancing:
+        duration += float(mods.get(mod.ENH_MAGIC_DURATION_FLAT, 0))
         duration *= 1.0 + int(mods.get(mod.ENH_MAGIC_DURATION, 0)) / 100.0
         duration *= 1.0 + int(mods.get(mod.ENH_MAGIC_DURATION_AUGMENT, 0)) / 100.0
     if perpetuance and white_enhancing:
@@ -517,6 +588,7 @@ def debuff_duration(spec: SpellEffect, *, skill: int,
     """An enfeebling/dark/ninjutsu/song spell's duration before the Magic Accuracy roll."""
     duration = float(spec.duration)
     if int(skill) == ENFEEBLING_SKILL:
+        duration += float(mods.get(mod.ENF_MAG_DURATION_FLAT, 0))
         duration *= 1.0 + int(mods.get(mod.ENF_MAG_DURATION, 0)) / 100.0
     elif int(skill) == DARK_MAGIC_SKILL:
         duration *= 1.0 + int(mods.get(mod.DARK_MAGIC_DURATION, 0)) / 100.0
@@ -546,20 +618,25 @@ def scholar_level(main_job: int, main_level: int, sub_job: int,
     return 0
 
 
-def helix_duration(scholar_level_value: int) -> float:
+def helix_duration(scholar_level_value: int, *, dark_arts: bool = False,
+                   jp_rank: int = 0) -> float:
     """How long a Helix's damage-over-time lasts.
 
     Retail ties the length to the Scholar level: 30 s at 20-39, 60 s at 40-59 and 90 s
     from 60.  A subbed Scholar caps at level 49, so a /SCH helix is 60 s at most.  Dark
-    Arts and Tabula Rasa add damage and duration in retail; this engine only draws the
-    arts' icons, so those bonuses are not applied here yet.
+    Arts adds its job-point duration (+3 s per rank) while it is active.  Tabula Rasa's
+    Helix bonus is not modelled yet.
     """
     level = int(scholar_level_value)
     if level >= 60:
-        return 90.0
-    if level >= 40:
-        return 60.0
-    return 30.0
+        duration = 90.0
+    elif level >= 40:
+        duration = 60.0
+    else:
+        duration = 30.0
+    if dark_arts:
+        duration += 3.0 * max(0, min(20, int(jp_rank)))
+    return duration
 
 
 def regen_tick(
@@ -573,12 +650,14 @@ def regen_tick(
 ) -> int:
     """HP per Regen tick after gear potency and the Light Arts/Tabula Rasa bonus.
 
-    Gear multiplies the spell's base tick; the flat bonuses come after, which is what
-    LandSandBoat's enhancing script does.
+    Percentage potency multiplies the spell's base tick, then flat ``"Regen" potency``
+    gear adds HP per tick, and the Light Arts/Tabula Rasa bonus is last.  That is the
+    order BG-wiki gives for Bookworm's Cape and the Telchine Duskdim augments.
     """
     tick = float(spec.tick)
     tick *= 1.0 + int(mods.get(mod.REGEN_MULTIPLIER, 0)) / 100.0
     tick = math.ceil(tick)
+    tick += int(mods.get(mod.REGEN_POTENCY, 0))
     if spec.effect == REGEN and int(main_job) == SCHOLAR:
         if tabula_rasa:
             tick += 36
@@ -629,6 +708,55 @@ def drain_amount(base: int, mods: Mapping[int, int]) -> int:
 # The Scholar kit is almost all status icons, so it is the one line modelled here.  The
 # ids are the client's own, from LandSandBoat's ``data/status_effects.yaml``.
 SUBLIMATION = 187
+TRANCE = 376
+# Finishing Move 1-5 and the 6+ icon.  The server stores the real count in the power
+# of FINISHING_MOVE and picks the icon from this tuple.
+FINISHING_MOVE = 381
+FINISHING_MOVES = (381, 382, 383, 384, 385, 588)
+GRAND_PAS = 507
+CONTRADANCE = 582
+SABER_DANCE = 410
+FAN_DANCE = 411
+BUILDING_FLOURISH = 375
+CLIMACTIC_FLOURISH = 443
+STRIKING_FLOURISH = 468
+TERNARY_FLOURISH = 472
+# Dancer step Daze families.  Each family has one client icon per level, capped at 5
+# on the bar; levels 6-10 share the level-5 icon but keep their real level in power.
+LETHARGIC_DAZE = (386, 387, 388, 389, 390)      # Quickstep: Evasion Down
+SLUGGISH_DAZE = (391, 392, 393, 394, 395)       # Box Step: Defense Down
+WEAKENED_DAZE = (396, 397, 398, 399, 400)       # Stutter Step: Magic Evasion Down
+BEWILDERED_DAZE = (448, 449, 450, 451, 452)     # Feather Step: Crit. Hit Evasion Down
+PRESTO = 442
+QUICKENING = 176                               # Chocobo Jig movement speed
+CHAINBOUND = 798                               # Wild Flourish skillchain window
+SNEAK_ATTACK = 65
+TRICK_ATTACK = 87
+ASTRAL_FLOW = 55
+ASTRAL_CONDUIT = 504
+AVATARS_FAVOR = 431
+UNLEASH = 498
+SPUR = 456
+OVERDRIVE = 166
+BOLSTER = 513
+BLAZE_OF_GLORY = 569
+ELEMENTAL_SFORZO = 522
+SWORDPLAY = 532
+EMBOLDEN = 534
+ODYLLIC_SUBTERFUGE = 509
+RETALIATION = 405
+RESTRAINT = 435
+INNER_STRENGTH = 491
+MANA_WALL = 437
+SENTINEL = 62
+PALISADE = 478
+BLOOD_WEAPON = 51
+SOUL_ENSLAVEMENT = 497
+NETHER_VOID = 439
+DOUBLE_SHOT = 433
+BIND = 11
+TRIPLE_SHOT = 467
+DECOY_SHOT = 482
 SUBLIMATION_COMPLETE = 188
 LIGHT_ARTS = 358
 DARK_ARTS = 359
@@ -650,6 +778,102 @@ EQUANIMITY = 415
 ENLIGHTENMENT = 416
 PERPETUANCE = 469
 IMMANENCE = 470
+# Non-Scholar ability statuses used by the job-point conditional layer.
+MIGHTY_STRIKES = 44
+HUNDRED_FISTS = 46
+MANAFONT = 47
+CHAINSPELL = 48
+BERSERK = 56
+DEFENDER = 57
+AGGRESSOR = 58
+FOCUS = 59
+DODGE = 60
+WARCRY = 68
+DIVINE_SEAL = 78
+ELEMENTAL_SEAL = 79
+MANAWELL = 229
+AFFLATUS_SOLACE = 417
+AFFLATUS_MISERY = 418
+COMPOSURE = 419
+MANA_WALL = 437
+SABOTEUR = 454
+DIVINE_CARESS = 453
+IMPETUS = 461
+SACROSANCTITY = 477
+BRAZEN_RUSH = 490
+ASYLUM = 492
+SUBTLE_SORCERY = 493
+STYMIE = 494
+VALLATION = 531
+SHARPSHOT = 72
+AZURE_LORE = 163
+BURST_AFFINITY = 165
+UNBRIDLED_LEARNING = 485
+SPIRIT_SURGE = 126
+SOUL_VOICE = 52
+PIANISSIMO = 409
+TENUTO = 455
+MARCATO = 231
+CLARION_CALL = 499
+NIGHTINGALE = 347
+TROUBADOUR = 348
+DRAIN_SAMBA = 368
+ASPIR_SAMBA = 369
+HASTE_SAMBA = 370
+SUBLIMATION = 187
+TRANCE = 376
+# Finishing Move 1-5 and the 6+ icon.  The server stores the real count in the power
+# of FINISHING_MOVE and picks the icon from this tuple.
+FINISHING_MOVE = 381
+FINISHING_MOVES = (381, 382, 383, 384, 385, 588)
+GRAND_PAS = 507
+CONTRADANCE = 582
+SABER_DANCE = 410
+FAN_DANCE = 411
+BUILDING_FLOURISH = 375
+CLIMACTIC_FLOURISH = 443
+STRIKING_FLOURISH = 468
+TERNARY_FLOURISH = 472
+# Dancer step Daze families.  Each family has one client icon per level, capped at 5
+# on the bar; levels 6-10 share the level-5 icon but keep their real level in power.
+LETHARGIC_DAZE = (386, 387, 388, 389, 390)      # Quickstep: Evasion Down
+SLUGGISH_DAZE = (391, 392, 393, 394, 395)       # Box Step: Defense Down
+WEAKENED_DAZE = (396, 397, 398, 399, 400)       # Stutter Step: Magic Evasion Down
+BEWILDERED_DAZE = (448, 449, 450, 451, 452)     # Feather Step: Crit. Hit Evasion Down
+PRESTO = 442
+QUICKENING = 176                               # Chocobo Jig movement speed
+CHAINBOUND = 798                               # Wild Flourish skillchain window
+SNEAK_ATTACK = 65
+TRICK_ATTACK = 87
+ASTRAL_FLOW = 55
+ASTRAL_CONDUIT = 504
+AVATARS_FAVOR = 431
+UNLEASH = 498
+SPUR = 456
+OVERDRIVE = 166
+BOLSTER = 513
+BLAZE_OF_GLORY = 569
+ELEMENTAL_SFORZO = 522
+SWORDPLAY = 532
+EMBOLDEN = 534
+ODYLLIC_SUBTERFUGE = 509
+RETALIATION = 405
+RESTRAINT = 435
+INNER_STRENGTH = 491
+MANA_WALL = 437
+SENTINEL = 62
+PALISADE = 478
+BLOOD_WEAPON = 51
+SOUL_ENSLAVEMENT = 497
+NETHER_VOID = 439
+DOUBLE_SHOT = 433
+BIND = 11
+TRIPLE_SHOT = 467
+DECOY_SHOT = 482
+PERFECT_COUNTER = 436
+FOOTWORK = 406
+COUNTERSTANCE = 61
+KONZEN_ITTAI = 320
 
 
 @dataclass(frozen=True)
@@ -665,7 +889,9 @@ class AbilityEffect:
 # addenda last two hours, the stratagems a minute or until the next spell, and Tabula
 # Rasa three minutes.  The arts also carry magic-cost and magic-accuracy bonuses in
 # retail; this engine only draws their icons for now, so the bar matches the client's
-# own Job Abilities menu while those bonuses are still missing.
+# own Job Abilities menu while those bonuses are still missing.  Two stratagems are not
+# icons only: Accession spreads the next white enhancing spell over the party
+# (``ZoneSession.resolve_party_spell``) and Perpetuance doubles its duration.
 ABILITY_EFFECTS: dict[int, AbilityEffect] = {
     210: AbilityEffect(TABULA_RASA, 180.0),
     # Light Arts takes down everything Dark Arts and its stratagems put up, and the other
@@ -694,4 +920,86 @@ ABILITY_EFFECTS: dict[int, AbilityEffect] = {
     244: AbilityEffect(ENLIGHTENMENT),
     316: AbilityEffect(PERPETUANCE),
     317: AbilityEffect(IMMANENCE),
+    # The job-point conditional layer needs the ability icon on the bar.  The base
+    # ability's own stat mods are still modelled by the ability's own handler; these
+    # entries exist so the matching category bonus can be active for their duration.
+    16: AbilityEffect(MIGHTY_STRIKES, 30.0),
+    17: AbilityEffect(HUNDRED_FISTS, 30.0),
+    19: AbilityEffect(MANAFONT, 30.0),
+    20: AbilityEffect(CHAINSPELL, 30.0),
+    31: AbilityEffect(BERSERK, 180.0),
+    32: AbilityEffect(WARCRY, 60.0),
+    33: AbilityEffect(DEFENDER, 180.0),
+    34: AbilityEffect(AGGRESSOR, 180.0),
+    36: AbilityEffect(FOCUS, 60.0),
+    37: AbilityEffect(DODGE, 60.0),
+    74: AbilityEffect(DIVINE_SEAL, 60.0),
+    75: AbilityEffect(ELEMENTAL_SEAL, 60.0),
+    245: AbilityEffect(AFFLATUS_SOLACE, 7200.0, (AFFLATUS_MISERY,)),
+    246: AbilityEffect(AFFLATUS_MISERY, 7200.0, (AFFLATUS_SOLACE,)),
+    247: AbilityEffect(COMPOSURE, 7200.0),
+    254: AbilityEffect(MANA_WALL, 30.0),
+    269: AbilityEffect(IMPETUS, 60.0),
+    270: AbilityEffect(DIVINE_CARESS, 60.0),
+    271: AbilityEffect(SACROSANCTITY, 60.0),
+    273: AbilityEffect(MANAWELL, 60.0),
+    274: AbilityEffect(SABOTEUR, 60.0),
+    323: AbilityEffect(BRAZEN_RUSH, 60.0),
+    325: AbilityEffect(ASYLUM, 30.0),
+    326: AbilityEffect(SUBTLE_SORCERY, 60.0),
+    327: AbilityEffect(STYMIE, 60.0),
+    93: AbilityEffect(AZURE_LORE, 60.0),
+    95: AbilityEffect(BURST_AFFINITY, 60.0),
+    298: AbilityEffect(UNBRIDLED_LEARNING, 120.0),
+    338: AbilityEffect(UNBRIDLED_LEARNING, 60.0),
+    29: AbilityEffect(SPIRIT_SURGE, 60.0),
+    40: AbilityEffect(COUNTERSTANCE, 180.0),
+    227: AbilityEffect(FOOTWORK, 60.0),
+    253: AbilityEffect(PERFECT_COUNTER, 60.0),
+    320: AbilityEffect(KONZEN_ITTAI, 60.0),
+    25: AbilityEffect(SOUL_VOICE, 30.0),
+    163: AbilityEffect(NIGHTINGALE, 60.0),
+    164: AbilityEffect(TROUBADOUR, 60.0),
+    229: AbilityEffect(PIANISSIMO, 60.0),
+    283: AbilityEffect(TENUTO, 60.0),
+    284: AbilityEffect(MARCATO, 60.0),
+    332: AbilityEffect(CLARION_CALL, 60.0),
+    # 120 s base plus the 20 Samba Duration ranks (+2 s each); Haste Samba is 90 s.
+    184: AbilityEffect(DRAIN_SAMBA, 160.0),
+    185: AbilityEffect(DRAIN_SAMBA, 160.0),
+    186: AbilityEffect(DRAIN_SAMBA, 160.0),
+    187: AbilityEffect(ASPIR_SAMBA, 160.0),
+    188: AbilityEffect(ASPIR_SAMBA, 160.0),
+    189: AbilityEffect(HASTE_SAMBA, 130.0),
+    181: AbilityEffect(TRANCE, 60.0),
+    237: AbilityEffect(SABER_DANCE, 300.0),
+    238: AbilityEffect(FAN_DANCE, 300.0),
+    341: AbilityEffect(GRAND_PAS, 60.0),
+    384: AbilityEffect(CONTRADANCE, 60.0),
+    44: AbilityEffect(SNEAK_ATTACK, 60.0),
+    76: AbilityEffect(TRICK_ATTACK, 60.0),
+    30: AbilityEffect(ASTRAL_FLOW, 60.0),
+    250: AbilityEffect(AVATARS_FAVOR, 60.0),
+    337: AbilityEffect(ASTRAL_CONDUIT, 60.0),
+    135: AbilityEffect(OVERDRIVE, 60.0),
+    281: AbilityEffect(SPUR, 60.0),
+    331: AbilityEffect(UNLEASH, 60.0),
+    343: AbilityEffect(BOLSTER, 60.0),
+    350: AbilityEffect(BLAZE_OF_GLORY, 60.0),
+    356: AbilityEffect(ELEMENTAL_SFORZO, 60.0),
+    367: AbilityEffect(SWORDPLAY, 60.0),
+    370: AbilityEffect(EMBOLDEN, 60.0),
+    378: AbilityEffect(ODYLLIC_SUBTERFUGE, 60.0),
+    226: AbilityEffect(RETALIATION, 60.0),
+    252: AbilityEffect(RESTRAINT, 60.0),
+    324: AbilityEffect(INNER_STRENGTH, 60.0),
+    254: AbilityEffect(MANA_WALL, 60.0),
+    48: AbilityEffect(SENTINEL, 60.0),
+    278: AbilityEffect(PALISADE, 60.0),
+    23: AbilityEffect(BLOOD_WEAPON, 60.0),
+    330: AbilityEffect(SOUL_ENSLAVEMENT, 60.0),
+    256: AbilityEffect(NETHER_VOID, 60.0),
+    257: AbilityEffect(DOUBLE_SHOT, 60.0),
+    286: AbilityEffect(DECOY_SHOT, 60.0),
+    301: AbilityEffect(TRIPLE_SHOT, 60.0),
 }

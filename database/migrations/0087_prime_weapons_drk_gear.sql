@@ -11,7 +11,7 @@
 -- factual game data from LandSandBoat's item_equipment/item_weapon tables and
 -- the FFXIclopedia Prime Weapons page.  Models 907-917 are the client's Prime
 -- models where they have been verified; the remaining ids fall back to the
--- REMA model so the weapon still draws, and can be corrected with !model.
+-- REMA model so the weapon still draws, and can be corrected with //model.
 --
 -- Existing Prime weapons (Laphria, Spalirisos, Dokoku, Opashoro) keep their
 -- rows; only their weapon stats are refreshed.  The new weapons go to the

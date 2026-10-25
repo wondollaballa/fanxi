@@ -37,6 +37,8 @@ MACC = 30
 MEVA = 31
 EVA = 68
 MAGIC_DAMAGE = 311       # flat magic damage, added after Magic Atk. Bonus
+MAGIC_BURST_BONUS_CAPPED = 487   # % added to a magic burst, capped at +40%
+MAGIC_BURST_BONUS_UNCAPPED = 274  # % added to a magic burst, uncapped
 DRAIN_ASPIR = 315        # "Drain" and "Aspir" potency
 
 # Percent-integer combat stats: 25 means +25%.
@@ -70,8 +72,15 @@ MAX_MP_BOOST = 1096        # flat maximum MP from the Max MP Boost trait
 # Values are percent-integers unless noted: 890=10 is +10%, 339 is flat seconds.
 ENH_MAGIC_DURATION = 890   # "Enhancing magic duration"+x% listed on the item
 ENH_MAGIC_DURATION_AUGMENT = 1222  # the same line as an augment; a separate multiplier
+ENH_MAGIC_DURATION_FLAT = 1224  # flat seconds from job points / ability effects
+ENF_MAG_DURATION_FLAT = 1225  # flat seconds of enfeebling duration from job points
+NINJUTSU_FASTCAST = 1226      # percent cast-time reduction for Ninjutsu only
+NINJUTSU_MAGIC_DAMAGE = 1227  # flat magic damage for elemental Ninjutsu only
+BLUE_MAGIC_POINTS = 1228      # Blue Magic Point pool bonus from job points
+RUNE_ENCHANTMENT = 1229       # Rune Enchantment effect bonus from job points
 REGEN_DURATION = 339       # flat seconds of Regen duration ("Regen" effect duration +15)
 REGEN_MULTIPLIER = 838     # "Regen" potency +x% (applies to the base tick before flats)
+REGEN_POTENCY = 1223       # flat HP/tick from "Regen" potency gear (Bookworm's +10, Telchine +3)
 PERPETUANCE = 1221         # "Perpetuance"+x%, hundredths over the 2.0x base (6500=+65%)
 
 # Spell potency and school-specific duration.

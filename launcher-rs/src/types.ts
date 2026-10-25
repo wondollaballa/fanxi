@@ -48,6 +48,25 @@ export interface AccountView {
   signedIn: boolean;
 }
 
+export type GameWindowMode = "windowed" | "borderless" | "fullscreen" | "borderless-fullscreen";
+
+/** One attached display, in the units the game's window API uses. */
+export interface DisplayMonitor {
+  name: string | null;
+  width: number;
+  height: number;
+  workWidth: number;
+  workHeight: number;
+  physicalWidth: number;
+  physicalHeight: number;
+  scaleFactor: number;
+  primary: boolean;
+}
+
+export interface DisplayInfo {
+  monitors: DisplayMonitor[];
+}
+
 export interface ConfigView {
   apiUrl: string;
   username: string;
@@ -55,10 +74,22 @@ export interface ConfigView {
   /** The character selected in the global tenant bar; may be a sub-account box. */
   tenantCharacterId: number | null;
   gameDir: string;
+  /** Optional separate install for windowless boxes; must match the host64-headless build. */
+  headlessGameDir: string;
+  /** SSH target of the Linux host that runs headless boxes; empty means local. */
+  remoteSsh: string;
   host64: string;
   repoRoot: string;
   apiInsecure: boolean;
   autoLogin: boolean;
+  /** Cap the visible main client at 30 fps. */
+  limitMainFps: boolean;
+  /** The window every visible client opens at. */
+  gameWindowMode: GameWindowMode;
+  gameWidth: number;
+  gameHeight: number;
+  /** Window size divided by this is the menu resolution: 2 draws menus larger. */
+  gameUiScale: number;
   lastPage: string;
   signedIn: boolean;
   accounts: AccountView[];
@@ -153,6 +184,7 @@ export interface ControlTarget {
 
 export interface ControlState {
   login_status?: number;
+  sleeping?: boolean;
   menu?: string | null;
   chat_input?: string | null;
   player?: ControlPlayer;
@@ -204,6 +236,8 @@ export interface HudItem {
 
 /** The in-game combat HUD state reported by the control addon. */
 export interface HudState {
+  /** The master switch (`//hud` / Ctrl+H); every window below is hidden while it is off. */
+  show_hud: boolean;
   show_abilities: boolean;
   show_spells: boolean;
   show_trusts: boolean;
@@ -227,6 +261,7 @@ export interface HudState {
 
 /** A partial HUD update. `type` names the tab the layout fields apply to. */
 export interface HudPatch {
+  show_hud?: boolean;
   show_abilities?: boolean;
   show_spells?: boolean;
   show_trusts?: boolean;
@@ -300,6 +335,12 @@ export interface InstanceView {
   metrics: Metrics | null;
   error: string;
   logPath: string;
+  remote: boolean;
+  host: string | null;
+  headless: boolean;
+  sleeping: boolean;
+  /** Server truth from `/world/online`; null/undefined means the roster could not be read. */
+  serverOnline?: boolean | null;
 }
 
 export interface JobInfo {
@@ -486,6 +527,15 @@ export interface FameEntry {
   value: number;
 }
 
+export interface AugmentCurrent {
+  path: string;
+  rank: number;
+  tier: number;
+  rp: number;
+  curve: number;
+  index: number;
+}
+
 export interface AugmentPath {
   key: string;
   label: string;
@@ -493,6 +543,8 @@ export interface AugmentPath {
   rank: number;
   tier: number;
   rp: number;
+  /** Lifetime RP for the cap, when the dataset tracks it (Oboro). */
+  total_rp?: number;
   curve: number;
   augments: string[];
 }
@@ -506,15 +558,45 @@ export interface AugmentItem {
   set: string;
   kind: string;
   quantity: number;
-  current: {
-    path: string;
-    rank: number;
-    tier: number;
-    rp: number;
-    curve: number;
-    index: number;
-  } | null;
+  current: AugmentCurrent | null;
   paths: AugmentPath[];
+}
+
+/** One bag copy of an Oboro weapon plus the block it currently carries. */
+export interface OboroCopy {
+  container: number;
+  slot: number;
+  current: AugmentCurrent | null;
+}
+
+/** One Oboro weapon at one quality (NQ R15, HQ1 R20 or HQ2 R25). */
+export interface OboroItem {
+  item_id: number;
+  name: string;
+  slot: string;
+  set: string;
+  kind: "oboro";
+  job: string;
+  weapon: string;
+  quality: string;
+  quality_key: "nq" | "hq1" | "hq2";
+  rank: number;
+  tier: number;
+  rp: number;
+  total_rp: number;
+  curve: number;
+  price: number;
+  owned: boolean;
+  copies: OboroCopy[];
+  paths: AugmentPath[];
+}
+
+/** The Data page's Oboro card: every family/quality, owned first. */
+export interface OboroCatalog {
+  source: string;
+  note: string;
+  max_rank: number;
+  items: OboroItem[];
 }
 
 export interface TrustSummary {
@@ -560,6 +642,7 @@ export interface CharacterData {
   craft_max: number;
   trusts: TrustSummary;
   augments: AugmentItem[];
+  oboro: OboroCatalog;
 }
 
 export interface ArmoryAddResult {
@@ -567,7 +650,7 @@ export interface ArmoryAddResult {
   data: CharacterData;
 }
 
-/** One saved place from `/!warp mark`, numbered 1-1000. */
+/** One saved place from `//warp mark`, numbered 1-1000. */
 export interface WarpPoint {
   slot: number;
   alias: string;
@@ -675,7 +758,7 @@ export type PhaseStatus = {
   resting?: boolean;
   /** 0 auto, 1 dt, 2 pdt, 3 mdt, 4 eva, 5 meva */
   focus?: number;
-  /** Equipment slot indices (main 0 ... back 15) pinned by /!gs lock. */
+  /** Equipment slot indices (main 0 ... back 15) pinned by //gs lock. */
   lockedSlots?: number[];
   locked?: boolean;
   /** "engaged" | "movement" | "idle.town" | "idle.field" | "locked" */
@@ -691,6 +774,8 @@ export type PhaseStatus = {
   kite_set?: string;
   rest_set?: string;
   focus_sets?: Record<string, string | null>;
+  /** spell group key -> armed mode, mirrored from the host after //modes. */
+  modes?: Record<string, string>;
   idle_town_set?: string;
   idle_field_set?: string;
   idle_set?: string;

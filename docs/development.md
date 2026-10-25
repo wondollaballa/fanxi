@@ -2,7 +2,9 @@
 
 ## Requirements
 
-- Python 3.9+ (the launcher and server use only the standard library; `tkinter` for the UI).
+- Python 3.9+ (the server uses only the standard library).
+- Node 18+ and Rust 1.85+ for the launcher (Tauri 2); on Linux also WebKitGTK 4.1 and the other
+  Tauri build packages.
 - macOS with Apple silicon and Clang for the client build.
 - `capstone` and `pefile` (installed into `.venv` by the launcher/build).
 - CMake and Ninja for the vendored SDL build.
@@ -12,10 +14,8 @@
 
 | Path | What lives there |
 |---|---|
-| `launcher/fanxi_launcher/` | `config.py` (settings), `api.py` (HTTP client), `game.py` (find/build/launch), `app.py` (Tk UI), `__main__.py` |
-| `launcher/tests/` | settings, HTTP client, game-folder and command-line tests |
-| `launcher/build_app.py` | macOS `.app` / Linux `.desktop` packaging |
-| `launcher-rs/` | Rust + Tauri 2 launcher preview: `src/` (React), `src-tauri/src/` (Rust core and commands) |
+| `launcher-rs/src/` | React pages and components; `lib/api.ts` wraps the Tauri commands |
+| `launcher-rs/src-tauri/` | Rust core (`config`, `api`, `game`, `control`, `gear`, `icons`, `commands`) and the Tauri app |
 | `server/fanxi_server/` | `config.py`, `db.py`, `security.py`, `service.py`, `http_api.py`, `cli.py` |
 | `server/fanxi_server/game/` | `cipher.py`, `world.py`, `zone.py`, `gateway.py`, `packets.py`, `entities.py`, `content.py` |
 | `server/tests/` | service, API, packet, world/combat/quest and live-gateway tests |
@@ -30,7 +30,8 @@
 ./scripts/test.sh
 
 python3 -m unittest discover -s server/tests -v
-python3 -m unittest discover -s launcher/tests -v
+(cd launcher-rs && npm run check)
+cargo test --manifest-path launcher-rs/src-tauri/Cargo.toml
 
 # game-free client checks
 python3 tools/build_posix.py vfstest
@@ -75,8 +76,9 @@ reference is [protocol.md](protocol.md) and the world design is [world.md](world
 ## Conventions
 
 - **Standard library only** on the Python side. If a dependency is unavoidable, make it optional
-  and document the fallback. The launcher and server must run from a fresh checkout with nothing
-  installed.
+  and document the fallback. The server must run from a fresh checkout with nothing installed;
+  the launcher pins its packages in `launcher-rs/package-lock.json` and
+  `launcher-rs/src-tauri/Cargo.lock`.
 - **No secrets in the tree.** Passwords are hashed, tokens are stored hashed, certificates are
   generated into `data/tls/` (git-ignored), admin keys come from the environment.
 - **Brand new things say Fanxi.** New UI strings, paths, environment variables and bundle IDs use
@@ -123,10 +125,15 @@ that selects `*` (SQLite returns the new column automatically; dicts are forgivi
 
 ## Launcher changes
 
-The UI is built fresh on every `show_view`; there are no long-lived widget references except
-`build_log` (the settings log text). Long work uses `run_bg()`, which queues results back to the
-Tk main loop; callbacks run on the main thread. Keep it that way: never touch Tk widgets from a
-worker thread.
+`launcher-rs/` is a Tauri 2 app: React in `src/`, Rust in `src-tauri/src/`. React talks to the
+Rust core through the typed wrappers in `src/lib/api.ts`. Anything that touches the machine —
+tokens, files, process spawning, control ports — belongs on the Rust side; the front end never
+sees a stored token.
+
+The Rust modules are split by concern: `config.rs` (`launcher.json`), `api.rs` (HTTP client),
+`game.rs` (checkout, build, `host64`), `control.rs` (control ports and the process table),
+`gear.rs`, `icons.rs`, and the Tauri command surface in `commands.rs`. `npm run check` type-checks
+the front end; `cargo test --manifest-path src-tauri/Cargo.toml` runs the Rust tests.
 
 The launch command is a pure function (`build_launch_command`) so it stays testable without
 spawning `host64`. If you add a client argument, add it there and to the test.
@@ -137,7 +144,7 @@ spawning `host64`. If you add a client argument, add it there and to the test.
 # Full macOS app bundle (the original setup path)
 python3 tools/setup.py --game ~/Games/FINAL\ FANTASY\ XI --no-install
 
-# host64 only, with the launcher's venv
+# host64 only, with the repository's venv
 .venv/bin/python tools/build_posix.py host64 --game ~/Games/FINAL\ FANTASY\ XI
 
 # game-free checks
@@ -162,7 +169,7 @@ Useful environment for development:
 
 ```bash
 FANXI_LOG_LEVEL=debug FANXI_ZONE_DEBUG=1 ./scripts/server.sh
-FANXI_LAUNCHER_DIR=/tmp/fanxi-test ./launcher/fanxi-launcher
+FANXI_LAUNCHER_DIR=/tmp/fanxi-test ./scripts/launcher.sh
 ```
 
 ## Pull requests
@@ -175,10 +182,10 @@ FANXI_LAUNCHER_DIR=/tmp/fanxi-test ./launcher/fanxi-launcher
 
 ## Release checklist
 
-1. Bump `server/fanxi_server/__init__.py`, `launcher/fanxi_launcher/__init__.py` and
-   `launcher/build_app.py` together.
+1. Bump `server/fanxi_server/__init__.py`, `launcher-rs/package.json`,
+   `launcher-rs/src-tauri/Cargo.toml` and `launcher-rs/src-tauri/tauri.conf.json` together.
 2. Run the full test suite.
-3. Build `python3 launcher/build_app.py` and launch it once.
+3. Build `cd launcher-rs && npm run tauri build` and launch it once.
 4. Run `python3 -m fanxi_server run` against a fresh database and play a full launch.
 5. Publish the launcher artifact and a `releases` row (platform, version, URL, SHA-256).
 6. Tag the repository (`v0.2.0` for the world slice); keep `data/` and certificates out of the

@@ -1,11 +1,13 @@
 import { useMemo, useState, type DragEvent, type ReactNode } from "react";
 import {
+  Activity,
   Crosshair,
   FileText,
   Gamepad2,
   LayoutGrid,
   List,
   MapPin,
+  MonitorOff,
   Play,
   Plus,
   RefreshCw,
@@ -19,6 +21,7 @@ import {
   Swords,
   Terminal,
   Trash2,
+  UserPlus,
   Users,
   Wand2,
 } from "lucide-react";
@@ -35,7 +38,9 @@ import type {
 import {
   formatDuration,
   formatNumber,
+  inWorld,
   pct,
+  serverSaysOffline,
   stateZone,
 } from "../lib/format";
 import { backend } from "../lib/api";
@@ -44,12 +49,12 @@ import { FollowCard } from "./FollowCard";
 import { Badge, Button, Card, EmptyState, Modal, Select, TextInput, cn } from "./ui";
 
 const QUICK_COMMANDS = [
-  ["Zone 100", "!zone 100"],
-  ["Port Jeuno", "!zone 246"],
-  ["Heal", "!heal"],
-  ["Merits 5", "!merits 5"],
-  ["Where", "!where"],
-  ["Help", "!help"],
+  ["Zone 100", "//zone 100"],
+  ["Port Jeuno", "//zone 246"],
+  ["Heal", "//heal"],
+  ["Merits 5", "//merits 5"],
+  ["Where", "//where"],
+  ["Help", "//help"],
 ];
 
 const HUD_TYPE_META: Array<{
@@ -189,6 +194,7 @@ function normalizeHud(raw: unknown): HudState {
       .filter((item): item is HudItem => item !== null),
   };
   return {
+    show_hud: source.show_hud !== false,
     show_abilities: source.show_abilities === true,
     show_spells: source.show_spells === true,
     show_trusts: source.show_trusts === true,
@@ -258,6 +264,14 @@ function HudControls({
   return (
     <div className="hud-inline">
       <HudToggle
+        label="Show HUD"
+        icon={<Sparkles size={12} />}
+        on={hud.show_hud}
+        busy={busy}
+        title="Master switch for every HUD window (same as //hud or Ctrl+H)"
+        onClick={() => onChange({ show_hud: !hud.show_hud })}
+      />
+      <HudToggle
         label="Show abilities"
         icon={<Swords size={12} />}
         on={hud.show_abilities}
@@ -302,19 +316,19 @@ function HudControls({
         onClick={() => onChange({ show_weapon_skills: !hud.show_weapon_skills })}
       />
       <HudToggle
-        label="Battle info"
-        icon={<Crosshair size={12} />}
+        label="Show battle info"
+        icon={<Activity size={12} />}
         on={hud.show_battle_info}
         busy={busy}
-        title="Show the battle statistics hub (DPS, accuracy, TP to 1000, FPS)"
+        title="Show the battle statistics hub: DPS, accuracy, TP to 1000 and FPS"
         onClick={() => onChange({ show_battle_info: !hud.show_battle_info })}
       />
       <HudToggle
-        label="Party info"
+        label="Show party info"
         icon={<Users size={12} />}
         on={hud.show_party_info}
         busy={busy}
-        title="Show the party and alliance hub"
+        title="Show the party and alliance hub with HP/MP/TP and status effects"
         onClick={() => onChange({ show_party_info: !hud.show_party_info })}
       />
       <button
@@ -562,7 +576,10 @@ export function ControlPage({
   instances,
   onLaunch,
   onStop,
+  onRelaunch,
+  onReconcileTeam,
   onLaunchAll,
+  onLaunchHeadless,
   onStopAll,
   onCommand,
   onChat,
@@ -578,7 +595,10 @@ export function ControlPage({
   instances: InstanceView[];
   onLaunch: (account: string, characterId: number | null) => Promise<void>;
   onStop: (port: number) => Promise<void>;
+  onRelaunch: (port: number) => Promise<void>;
+  onReconcileTeam: () => Promise<void>;
   onLaunchAll: () => Promise<void>;
+  onLaunchHeadless: () => Promise<void>;
   onStopAll: () => void | Promise<void>;
   onCommand: (port: number, line: string) => Promise<void>;
   onChat: (port: number, line: string) => Promise<void>;
@@ -590,11 +610,18 @@ export function ControlPage({
   busy: string | null;
 }) {
   const running = instances.filter((instance) => instance.alive);
+  const headlessRunning = running.filter((instance) => instance.headless).length;
+  /** Boxes the server has no session for but whose process/control port still answers. */
+  const staleSessions = running.filter((instance) => serverSaysOffline(instance));
+  const reconciling = busy === "reconcile";
   const [choices, setChoices] = useState<Record<string, number>>({});
   const [selectedPort, setSelectedPort] = useState<number | null>(null);
   const [mode, setMode] = useState<"command" | "chat">("command");
-  const [line, setLine] = useState("!zone 100");
+  const [line, setLine] = useState("//zone 100");
   const [sending, setSending] = useState(false);
+  const [warpingTeam, setWarpingTeam] = useState(false);
+  const [inviteOpen, setInviteOpen] = useState(false);
+  const [inviting, setInviting] = useState<string | null>(null);
   const [logPort, setLogPort] = useState<number | null>(null);
   const [logLines, setLogLines] = useState<string[]>([]);
   const [logLoading, setLogLoading] = useState(false);
@@ -606,6 +633,13 @@ export function ControlPage({
   const selected = useMemo(
     () => running.find((instance) => instance.port === selectedPort) ?? running[0] ?? null,
     [running, selectedPort],
+  );
+  /** A live process can still be at the character-select screen; the warp needs it in world. */
+  const selectedInGame = inWorld(selected);
+  /** Other clients that are actually in game, so a per-member invite is answerable. */
+  const inviteCandidates = useMemo(
+    () => running.filter((instance) => instance.port !== selected?.port && inWorld(instance)),
+    [running, selected?.port],
   );
 
   const chosenCharacter = (username: string, accountId: number | null | undefined) => {
@@ -652,6 +686,33 @@ export function ControlPage({
     }
   }
 
+  /** Call every other online box in the selected character's account family to its spot. */
+  async function warpTeamToMe() {
+    if (!selected || !selectedInGame || warpingTeam) return;
+    setWarpingTeam(true);
+    try {
+      await onCommand(selected.port, "//warp all me");
+    } catch {
+      // onCommand already reported the control-port failure in a toast.
+    } finally {
+      setWarpingTeam(false);
+    }
+  }
+
+  /** Invite all online subs, or one named teammate, through the selected client. */
+  async function invite(target: string) {
+    if (!selected || !selectedInGame || inviting) return;
+    setInviting(target);
+    try {
+      await onCommand(selected.port, target === "subs" ? "//invite subs" : `//invite ${target}`);
+      setInviteOpen(false);
+    } catch {
+      // onCommand already reported the failure; leave the picker open so it can be retried.
+    } finally {
+      setInviting(null);
+    }
+  }
+
   function openHud(account: string) {
     setHudType("spells");
     setHudAccount(account);
@@ -660,10 +721,13 @@ export function ControlPage({
   /** Apply a patch to the local copy so a switch answers before the addon replies. */
   function mergeHud(current: HudState, patch: HudPatch): HudState {
     const next: HudState = { ...current, types: { ...current.types } };
+    if (patch.show_hud !== undefined) next.show_hud = patch.show_hud;
     if (patch.show_abilities !== undefined) next.show_abilities = patch.show_abilities;
     if (patch.show_spells !== undefined) next.show_spells = patch.show_spells;
     if (patch.show_trusts !== undefined) next.show_trusts = patch.show_trusts;
     if (patch.show_weapon_skills !== undefined) next.show_weapon_skills = patch.show_weapon_skills;
+    if (patch.show_battle_info !== undefined) next.show_battle_info = patch.show_battle_info;
+    if (patch.show_party_info !== undefined) next.show_party_info = patch.show_party_info;
     if (patch.edit !== undefined) next.edit = patch.edit;
     if (patch.opacity !== undefined) next.opacity = patch.opacity;
     if (patch.menu_hide !== undefined) next.menu_hide = patch.menu_hide;
@@ -756,7 +820,17 @@ export function ControlPage({
             onClick={() => void onLaunchAll()}
             disabled={config.accounts.length === 0}
           >
-            Launch all
+            Launch all clients
+          </Button>
+          <Button
+            variant="secondary"
+            icon={<MonitorOff size={15} />}
+            loading={busy === "launch-headless"}
+            onClick={() => void onLaunchHeadless()}
+            disabled={headlessRunning >= 5}
+            title={headlessRunning >= 5 ? "The five headless boxes are already running" : "Launch any missing sub-account boxes headlessly"}
+          >
+            Launch headless
           </Button>
         </div>
       </div>
@@ -792,7 +866,9 @@ export function ControlPage({
                       <strong>@{account.username}</strong>
                       <span>
                         {instance
-                          ? `online · control :${instance.port}`
+                          ? inWorld(instance)
+                            ? `online · control :${instance.port}`
+                            : `logged out · control :${instance.port}`
                           : account.signedIn
                             ? "offline"
                             : "sign in again"}
@@ -846,7 +922,7 @@ export function ControlPage({
                       disabled={!choice || !account.signedIn}
                       onClick={() => void launch(account.username, account.characterId)}
                     >
-                      Launch
+                      Launch client
                     </Button>
                   )}
                 </div>
@@ -904,6 +980,50 @@ export function ControlPage({
         <div className="card-topline">
           <span className="eyebrow">Live party</span>
           <div className="inline-actions">
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<UserPlus size={13} />}
+              disabled={!selectedInGame}
+              onClick={() => setInviteOpen(true)}
+              title={
+                selectedInGame && selected
+                  ? `Invite sub-accounts or one character from ${selected.name}`
+                  : "Wait for the inviter to enter the world"
+              }
+            >
+              Invite
+            </Button>
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={<Users size={13} />}
+              loading={warpingTeam}
+              disabled={!selectedInGame || warpingTeam}
+              onClick={() => void warpTeamToMe()}
+              title={
+                selectedInGame && selected
+                  ? `Send //warp all me from ${selected.name}; every other online box in the account family is called to that character`
+                  : selected
+                    ? "Wait for this character to enter the world"
+                    : "Launch a client and select its row first"
+              }
+            >
+              Warp team to me
+            </Button>
+            {staleSessions.length > 0 && (
+              <Button
+                size="sm"
+                variant="secondary"
+                icon={<RotateCcw size={13} />}
+                loading={reconciling}
+                disabled={reconciling}
+                onClick={() => void onReconcileTeam()}
+                title={`${staleSessions.length} client process(es) have no live server session; restart them and log in again`}
+              >
+                Reconcile {staleSessions.length}
+              </Button>
+            )}
             <button className="link-btn" onClick={onWarps}>
               <MapPin size={13} /> Warps
             </button>
@@ -951,6 +1071,10 @@ export function ControlPage({
                   const kpi = instance.metrics?.kpi;
                   const hp = pct(player?.hp, player?.hpmax);
                   const mp = pct(player?.mp, player?.mpmax);
+                  const live = inWorld(instance);
+                  const login = state?.login_status;
+                  const orphaned = login === 2 && serverSaysOffline(instance);
+                  const relaunching = busy === `relaunch-${instance.port}`;
                   return (
                     <tr
                       key={instance.port}
@@ -987,10 +1111,50 @@ export function ControlPage({
                       <td>{formatNumber(kpi?.exp_per_hour)}</td>
                       <td>{formatNumber(kpi?.dps, 1)}</td>
                       <td>
-                        {player ? (
+                        {orphaned ? (
+                          <span className="stale-client">
+                            <Badge tone="warning" dot>
+                              orphaned
+                            </Badge>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={<RotateCcw size={14} />}
+                              loading={relaunching}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void onRelaunch(instance.port);
+                              }}
+                            >
+                              Reconcile
+                            </Button>
+                          </span>
+                        ) : live ? (
                           <Badge tone="success" dot>
                             {formatDuration(instance.uptimeSeconds)}
                           </Badge>
+                        ) : login === 1 ? (
+                          <Badge tone="neutral" dot>
+                            zoning
+                          </Badge>
+                        ) : login === 0 && instance.uptimeSeconds > 20 ? (
+                          <span className="stale-client">
+                            <Badge tone="warning" dot>
+                              logged out
+                            </Badge>
+                            <Button
+                              variant="secondary"
+                              size="sm"
+                              icon={<RotateCcw size={14} />}
+                              loading={relaunching}
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                void onRelaunch(instance.port);
+                              }}
+                            >
+                              Relaunch
+                            </Button>
+                          </span>
                         ) : instance.error ? (
                           <Badge tone="warning" dot>
                             waiting
@@ -1085,7 +1249,7 @@ export function ControlPage({
             onKeyDown={(event) => {
               if (event.key === "Enter") void send();
             }}
-            placeholder={mode === "command" ? "!zone 100" : "Say something…"}
+            placeholder={mode === "command" ? "//zone 100" : "Say something…"}
             disabled={!selected}
           />
           <Button
@@ -1120,8 +1284,8 @@ export function ControlPage({
           ))}
         </div>
         <p className="console-hint">
-          Commands start with <code>!</code> or <code>/</code>. Chat sends a line through the game;
-          the client's control addon executes commands as if typed.
+          Commands start with <code>//</code> (or <code>/</code> for the game's own). Chat sends a
+          line through the game; the client's control addon executes commands as if typed.
         </p>
       </Card>
 
@@ -1351,8 +1515,11 @@ export function ControlPage({
                   }
                 />
                 <span>
-                  Hide the HUD on the game-menu side
-                  <em>The client's Commands/Status menu is on the right and is drawn above the overlay.</em>
+                  Hide the HUD when a menu or chat is open
+                  <em>
+                    All overlay windows hide while a client menu or the chat line is open; combat
+                    keeps the HUD usable.
+                  </em>
                 </span>
               </label>
 
@@ -1392,6 +1559,60 @@ export function ControlPage({
               onChange={(patch) => void applyHud(hudInstance, patch)}
             />
           )}
+        </Modal>
+      )}
+
+      {inviteOpen && selected && (
+        <Modal
+          title="Invite to party"
+          subtitle={`From ${selected.name} · @${selected.account}`}
+          onClose={() => setInviteOpen(false)}
+        >
+          <div className="invite-panel">
+            <Button
+              icon={<Users size={14} />}
+              loading={inviting === "subs"}
+              disabled={!selectedInGame || Boolean(inviting)}
+              onClick={() => void invite("subs")}
+            >
+              Invite all online subs
+            </Button>
+            <p className="invite-note">
+              Sends <strong>//invite subs</strong> from {selected.name}. Every online sub-account
+              in the team joins immediately; the inviter must be the party leader.
+            </p>
+            <div className="party-manager-list">
+              {inviteCandidates.length === 0 ? (
+                <p className="muted">No other characters are in game.</p>
+              ) : (
+                inviteCandidates.map((instance) => (
+                  <div className="party-manager-row" key={instance.port}>
+                    <div className="party-manager-name">
+                      <span className="avatar small">
+                        {instance.name.slice(0, 1).toUpperCase()}
+                      </span>
+                      <div>
+                        <strong>{instance.name}</strong>
+                        <span>
+                          @{instance.account}
+                          {instance.headless ? " · headless" : ""}
+                        </span>
+                      </div>
+                    </div>
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      loading={inviting === instance.name}
+                      disabled={Boolean(inviting) || !selectedInGame}
+                      onClick={() => void invite(instance.name)}
+                    >
+                      Invite
+                    </Button>
+                  </div>
+                ))
+              )}
+            </div>
+          </div>
         </Modal>
       )}
 

@@ -4,7 +4,7 @@ The dataset lives in ``data/limbus_r30.json`` -- the top tier of the five
 Limbus families at Superior 5, with every Rank 30 augment row and the client
 augment bundle index for each piece.  The bundle names the four augment lines
 in the client's own table, so a piece with the block below prints its Rank 30
-tooltip; ``!r30`` remains the chat view of the same rows, and ``!rp30``
+tooltip; ``//r30`` remains the chat view of the same rows, and ``//rp30``
 re-stamps the pieces a character is carrying.
 """
 

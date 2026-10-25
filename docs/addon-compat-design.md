@@ -342,7 +342,8 @@ written against the upstream APIs' documentation and source, not derived from Va
 - `xi.packets` — `inject_in(bytes)`, `inject_out(bytes)`, `last(dir, id)`.
 - `xi.res` — items, abilities, spells, statuses, key items, zones, jobs, strings, straight from the
   DATs (section 10.3).
-- `xi.ui` — text objects, rects, images (overlay renderer), `imgui` (section 11).
+- `xi.ui` — text objects, rects, images (overlay renderer), `imgui` (section 11), `focused()` (the
+  game window has keyboard focus).
 - `xi.input` — binds, key state, capture flags.
 - `xi.fs`, `xi.config`, `xi.encoding` (Shift-JIS ↔ UTF-8 via our own tables, not iconv, so UWP
   works), `xi.time`, `xi.paths`, `xi.system.open_url`, `play_sound` (through dsound shim).

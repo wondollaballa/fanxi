@@ -170,7 +170,7 @@ Goal: one playable custom job, one ability, one weapon, one zone, no new art pip
 - Pick a job fantasy that can reuse an existing animation set and weapon type.
 - Server: add job 23 to `base_stats`, `skills`, `JOB_NAMES`; seed `character_jobs`,
   `job_abilities`, one trait and one weapon skill; allow 23 in the API and launcher.
-- Client: `!job 23`, 24-slot `0x01B`, name/icon fallback, ability list, equip mask for one
+- Client: `//job 23`, 24-slot `0x01B`, name/icon fallback, ability list, equip mask for one
   existing weapon.
 - UI: a Fanxi job-change page (overlay) for v1; leave the retail Moogle menu alone.
 - Art: one icon and one texture recolor, delivered as a texture pack.

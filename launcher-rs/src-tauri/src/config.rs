@@ -1,7 +1,7 @@
 //! The launcher's local settings and account vault.
 //!
-//! The format is deliberately identical to the Python launcher's `launcher.json`: a player can move
-//! between the two applications without losing accounts, and tokens stay in a mode-0600 file.
+//! `launcher.json` keeps the format the earlier Python launcher wrote, so an existing install
+//! opens with its accounts and settings intact, and tokens stay in a mode-0600 file.
 
 use std::collections::BTreeMap;
 use std::fs;
@@ -11,6 +11,7 @@ use std::path::{Path, PathBuf};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
+use crate::display::{GameDisplay, WindowMode};
 use crate::error::AppResult;
 
 pub const DEFAULT_API: &str = "http://127.0.0.1:8080";
@@ -56,10 +57,21 @@ pub struct LauncherConfig {
     pub username: String,
     pub character_id: Option<i64>,
     pub game_dir: String,
+    /// The game folder for headless boxes, when it differs from the main client's (a box may run
+    /// an older, hook-complete build than the rendered client). Empty: use `game_dir`.
+    pub headless_game_dir: String,
+    /// SSH target of the Linux host that runs the headless boxes (`scripts/linux_boxes.py`).
+    /// Empty: boxes launch locally on this Mac.
+    pub remote_ssh: String,
     pub host64: String,
     pub repo_root: String,
     pub api_insecure: bool,
     pub auto_login: bool,
+    /// Cap the visible main client at 30 fps so the Mac has headroom for the box pollers and the
+    /// rest of the desktop. Headless boxes are always capped separately.
+    pub limit_main_fps: bool,
+    /// The window every visible client opens at: mode, size and interface scale (display.rs).
+    pub game_display: GameDisplay,
     pub last_page: String,
     /// The character the launcher's tenant bar has selected. It may belong to the main
     /// account or to one of its sub-account boxes, so it is separate from `character_id`
@@ -79,10 +91,14 @@ impl Default for LauncherConfig {
             username: String::new(),
             character_id: None,
             game_dir: String::new(),
+            headless_game_dir: String::new(),
+            remote_ssh: String::new(),
             host64: String::new(),
             repo_root: String::new(),
             api_insecure: env_flag("FANXI_API_INSECURE"),
             auto_login: true,
+            limit_main_fps: false,
+            game_display: GameDisplay::default(),
             last_page: "home".to_string(),
             tenant_character_id: None,
             accounts: Vec::new(),
@@ -94,14 +110,31 @@ impl Default for LauncherConfig {
 impl LauncherConfig {
     pub fn load() -> Self {
         let path = config_path();
-        let mut config = match fs::read_to_string(&path) {
-            Ok(raw) => serde_json::from_str::<LauncherConfig>(&raw).unwrap_or_default(),
-            Err(_) => Self::default(),
+        let (mut config, had_game_display) = match fs::read_to_string(&path) {
+            Ok(raw) => match serde_json::from_str::<Value>(&raw) {
+                Ok(value) => {
+                    let had = value.get("game_display").is_some();
+                    (
+                        serde_json::from_value::<LauncherConfig>(value).unwrap_or_default(),
+                        had,
+                    )
+                }
+                Err(_) => (Self::default(), false),
+            },
+            Err(_) => (Self::default(), false),
         };
+        if !had_game_display {
+            // An older launcher.json has no Game window card: keep whatever display the game
+            // itself saved instead of dropping the player into a fresh default size.
+            if let Some(saved) = crate::display::read_saved_display() {
+                config.game_display = saved;
+            }
+        }
         if config.api_url.trim().is_empty() {
             config.api_url = DEFAULT_API.to_string();
         }
         config.api_url = config.api_url.trim().trim_end_matches('/').to_string();
+        config.game_display = config.game_display.sanitized();
         config.load_legacy_account();
         config
     }
@@ -327,10 +360,22 @@ pub struct ConfigView {
     pub character_id: Option<i64>,
     pub tenant_character_id: Option<i64>,
     pub game_dir: String,
+    /// The game folder for headless boxes, when it differs from the main client's (a box may run
+    /// an older, hook-complete build than the rendered client). Empty: use `game_dir`.
+    pub headless_game_dir: String,
+    /// SSH target of the Linux host that runs the headless boxes (`scripts/linux_boxes.py`).
+    pub remote_ssh: String,
     pub host64: String,
     pub repo_root: String,
     pub api_insecure: bool,
     pub auto_login: bool,
+    /// Cap the visible main client at 30 fps.
+    pub limit_main_fps: bool,
+    /// The window every visible client opens at.
+    pub game_window_mode: WindowMode,
+    pub game_width: u32,
+    pub game_height: u32,
+    pub game_ui_scale: f64,
     pub last_page: String,
     pub signed_in: bool,
     pub accounts: Vec<AccountView>,
@@ -344,10 +389,17 @@ impl From<&LauncherConfig> for ConfigView {
             character_id: config.character_id,
             tenant_character_id: config.tenant_character_id,
             game_dir: config.game_dir.clone(),
+            headless_game_dir: config.headless_game_dir.clone(),
+            remote_ssh: config.remote_ssh.clone(),
             host64: config.host64.clone(),
             repo_root: config.repo_root.clone(),
             api_insecure: config.api_insecure,
             auto_login: config.auto_login,
+            limit_main_fps: config.limit_main_fps,
+            game_window_mode: config.game_display.mode,
+            game_width: config.game_display.width,
+            game_height: config.game_display.height,
+            game_ui_scale: config.game_display.ui_scale,
             last_page: config.last_page.clone(),
             signed_in: !config.token.is_empty(),
             accounts: config
@@ -556,6 +608,28 @@ mod tests {
         let json = serde_json::to_string(&view).unwrap();
         assert!(!json.contains("secret"));
         assert!(view.signed_in);
+    }
+
+    #[test]
+    fn config_view_exposes_the_game_window_in_camel_case() {
+        let mut config = temp_config();
+        config.game_display = GameDisplay {
+            mode: WindowMode::Borderless,
+            width: 1600,
+            height: 900,
+            ui_scale: 1.5,
+        };
+        let value = serde_json::to_value(ConfigView::from(&config)).unwrap();
+        assert_eq!(value["gameWindowMode"], "borderless");
+        assert_eq!(value["gameWidth"], 1600);
+        assert_eq!(value["gameHeight"], 900);
+        assert_eq!(value["gameUiScale"], 1.5);
+    }
+
+    #[test]
+    fn an_older_launcher_json_gets_the_default_game_window() {
+        let config: LauncherConfig = serde_json::from_str(r#"{"api_url":"http://127.0.0.1:8080"}"#).unwrap();
+        assert_eq!(config.game_display, GameDisplay::default());
     }
 
     #[test]

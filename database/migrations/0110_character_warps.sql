@@ -1,4 +1,4 @@
--- /!warp: places a character saved with a number and an optional alias.
+-- //warp: places a character saved with a number and an optional alias.
 --
 -- The in-game command marks the character's current zone and position in slot 1..1000.
 -- The launcher's Warps page edits the alias and lists the same rows.  A blank alias is

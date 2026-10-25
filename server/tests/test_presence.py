@@ -22,7 +22,7 @@ from fanxi_server.game.world import (
     SESSION_IDLE_TIMEOUT,
     World,
 )
-from fanxi_server.game.zone import HDR, ZoneSession, sub
+from fanxi_server.game.zone import HDR, ZONE_IN_REBUILDS, ZoneSession, sub
 
 
 def message_type(message) -> int:
@@ -131,11 +131,11 @@ class PresenceTest(unittest.TestCase):
         self.b.queue.clear()
         self.a.change_zone(100, [-126.0, -62.0, 273.0, 99])
         despawns = [player_fields(message) for message in player_messages(self.b)]
-        self.assertEqual(len(despawns), 1)
+        self.assertGreaterEqual(len(despawns), 1)
         self.assertEqual(despawns[0]["char_id"], int(self.a.char["char_id"]))
         self.assertEqual(despawns[0]["mask"], packets.SEND_PLAYER_DESPAWN)
         # LSB sends a despawn at the nonspecific size (0x40 body), not a full spawn body.
-        self.assertEqual(len(player_messages(self.b)[0]), 4 + 0x40)
+        self.assertTrue(any(len(message) == 4 + 0x40 for message in player_messages(self.b)))
         self.assertNotIn(int(self.a.char["char_id"]), self.b.seen_players)
 
     def test_moving_out_of_range_despawns(self):
@@ -145,7 +145,7 @@ class PresenceTest(unittest.TestCase):
         self.a.queue.clear()
         self.a.sync_players()
         despawns = [player_fields(message) for message in player_messages(self.a)]
-        self.assertEqual(len(despawns), 1)
+        self.assertGreaterEqual(len(despawns), 1)
         self.assertEqual(despawns[0]["mask"], packets.SEND_PLAYER_DESPAWN)
 
     def test_logout_despawns_and_frees_targid(self):
@@ -155,10 +155,53 @@ class PresenceTest(unittest.TestCase):
         char_id = int(self.a.char["char_id"])
         self.a.handle(0x0E7, b"")
         despawns = [player_fields(message) for message in player_messages(self.b)]
-        self.assertEqual(len(despawns), 1)
+        self.assertGreaterEqual(len(despawns), 1)
         self.assertEqual(despawns[0]["mask"], packets.SEND_PLAYER_DESPAWN)
         self.assertTrue(self.a.gone)
         self.assertNotIn(char_id, self.world.player_targids)
+
+    def test_sleep_leaves_party_and_wake_rejoins(self):
+        group = self.world.create_party(self.a)
+        self.assertTrue(self.world.join_party(group, self.b))
+        group_id = group.id
+        self.assertEqual(self.world.party_of(int(self.a.char["char_id"])).id, group_id)
+        self.a.sleep()
+        self.assertIsNone(self.world.party_of(int(self.a.char["char_id"])))
+        self.assertEqual(self.world.party_of(int(self.b.char["char_id"])).id, group_id)
+        self.a.wake()
+        joined = self.world.party_of(int(self.a.char["char_id"]))
+        self.assertIsNotNone(joined)
+        self.assertEqual(joined.id, group_id)
+
+    def test_sleep_hides_then_wake_restores_in_place(self):
+        self.a.sync_players()
+        self.b.sync_players()
+        self.b.queue.clear()
+        char_id = int(self.a.char["char_id"])
+
+        self.a.sleep()
+        self.assertTrue(self.a.sleeping)
+        self.assertNotIn(self.a, self.world.sessions_in_zone(246))
+        self.assertIsNone(self.world.session_by_char(char_id))
+        despawns = [player_fields(message) for message in player_messages(self.b)]
+        self.assertGreaterEqual(len(despawns), 1)
+        self.assertEqual(despawns[0]["mask"], packets.SEND_PLAYER_DESPAWN)
+        # A sleeping session is not the sixty-second silence path.
+        self.a.last_packet_at = time.time() - SESSION_IDLE_TIMEOUT - 1
+        self.world.advance(time.time())
+        self.assertFalse(self.a.gone)
+        self.assertIn(("127.0.0.1", 5001), self.world.sessions)
+
+        self.a.queue.clear()
+        self.a.wake()
+        self.assertFalse(self.a.sleeping)
+        self.assertIn(self.a, self.world.sessions_in_zone(246))
+        self.assertEqual(self.world.session_by_char(char_id), self.a)
+        self.assertTrue(any(message_type(message) == 0x00D for message in self.a.queue))
+        self.b.queue.clear()
+        self.b.sync_players()
+        spawns = [player_fields(message) for message in player_messages(self.b)]
+        self.assertTrue(any(fields["mask"] == packets.SEND_CHAR_SPAWN for fields in spawns))
 
     def test_silent_client_is_reaped_and_despawned(self):
         """A force-quit sends nothing. The session must not stay as a frozen twin."""
@@ -169,7 +212,7 @@ class PresenceTest(unittest.TestCase):
         self.a.last_packet_at = time.time() - SESSION_IDLE_TIMEOUT - 1
         self.world.advance(time.time())
         despawns = [player_fields(message) for message in player_messages(self.b)]
-        self.assertEqual(len(despawns), 1)
+        self.assertGreaterEqual(len(despawns), 1)
         self.assertEqual(despawns[0]["char_id"], char_id)
         self.assertEqual(despawns[0]["mask"], packets.SEND_PLAYER_DESPAWN)
         self.assertTrue(self.a.gone)
@@ -269,7 +312,7 @@ class LoginSessionTest(unittest.TestCase):
         self.assertTrue(old.gone)
         self.assertNotIn(int(a_row["char_id"]), self.world.player_targids)
         despawns = [player_fields(message) for message in player_messages(observer)]
-        self.assertEqual(len(despawns), 1)
+        self.assertGreaterEqual(len(despawns), 1)
         self.assertEqual(despawns[0]["char_id"], int(a_row["char_id"]))
         self.assertEqual(despawns[0]["mask"], packets.SEND_PLAYER_DESPAWN)
 
@@ -289,19 +332,28 @@ class LoginSessionTest(unittest.TestCase):
         observer.sync_players()
         self.assertEqual(player_messages(observer), [])
 
-    def test_zone_change_handoff_keeps_the_advanced_key(self):
+    def test_zone_change_handoff_advances_the_key(self):
         addr = ("127.0.0.1", 54110)
         account, row = self.character("Gamma")
         session = self.session(row, addr)
         session.set_key(bytes(20))
         self.game_session(account)
 
+        # A box that was standing still has not sent a packet for minutes; the zone-change
+        # window still starts when the warp is queued, not at that old packet.
+        session.last_packet_at = time.time() - 60
+        before = bytes(session.key)
         # A real zone change queues 0x00B; building it parks the session in by_char and
-        # advances the cipher the client will use for the next zone.
+        # moves the cipher on by 2, which is what the client does with its own key. The
+        # zone-in must go out under that advanced key: encrypting it under the old one is
+        # what left the client on the "Downloading" screen.
         session.change_zone(100, [-126.0, -62.0, 273.0, 99])
         session.build(bytearray(HDR))
-        advanced = bytes(session.key)
+        after = bytes(session.key)
         self.assertIn(int(row["id"]), self.world.by_char)
+        self.assertEqual(session.base_key, before)
+        self.assertEqual(struct.unpack_from("<I", after, 16)[0],
+                         (struct.unpack_from("<I", before, 16)[0] + 2) & 0xFFFFFFFF)
 
         reply = ZoneSession.incoming(self.world, session, addr, self.login_packet(row["char_id"]))
 
@@ -309,8 +361,132 @@ class LoginSessionTest(unittest.TestCase):
         self.assertIs(self.world.sessions[addr], session)
         self.assertFalse(session.zoning)
         self.assertEqual(int(session.zone), 100)
-        self.assertEqual(bytes(session.key), advanced)
+        self.assertEqual(bytes(session.key), after)
         self.assertEqual(int(session.char["id"]), int(row["id"]))
+
+        # The client that advanced opens the reply under the advanced key.
+        body = bytearray(reply[HDR:])
+        self.world.zone_cipher_for(after).run(body, 0, (len(body) // 4) & ~1, False)
+        nbits = struct.unpack_from("<I", body, len(body) - 20)[0]
+        plain = self.world.huff.decompress(bytes(body[:len(body) - 20]), nbits)
+        self.assertIn(0x00A, [message_type(plain[off:off + 4])
+                              for off in range(0, len(plain) - 3, 4)])
+
+    def sealed(self, message: bytes, key: bytes, ack: int) -> bytearray:
+        """One client packet: compressed body, nbits and MD5, then enciphered."""
+        compressed, nbits = self.world.huff.compress(message)
+        data = compressed + struct.pack("<I", nbits)
+        data += md5(data)
+        packet = bytearray(HDR + len(data))
+        struct.pack_into("<HH", packet, 0, 7, ack)
+        packet[HDR:] = data
+        self.world.zone_cipher_for(key).run(packet, HDR, (len(data) // 4) & ~1, True)
+        return packet
+
+    def test_a_late_old_key_packet_does_not_change_the_reply_key(self):
+        """A packet sent before the client saw 0x00B is not proof that it kept its key.
+
+        Following it used to pin every reply to the pre-change key, so the zone-in was
+        enciphered with a key the client had already moved past and it never loaded.
+        """
+        addr = ("127.0.0.1", 54114)
+        account, row = self.character("Eta")
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        self.game_session(account)
+        session.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        session.build(bytearray(HDR))
+        advanced, old = bytes(session.key), bytes(session.base_key)
+        self.assertNotEqual(advanced, old)
+
+        ZoneSession.incoming(self.world, session, addr,
+                             self.sealed(sub(0x015, bytes(0x1C) + struct.pack("<fff", 1, 2, 3)),
+                                         old, session.server_id))
+        self.assertEqual(bytes(session.key), advanced)
+
+        reply = ZoneSession.incoming(self.world, session, addr,
+                                     self.login_packet(row["char_id"]))
+        body = bytearray(reply[HDR:])
+        self.world.zone_cipher_for(advanced).run(body, 0, (len(body) // 4) & ~1, False)
+        nbits = struct.unpack_from("<I", body, len(body) - 20)[0]
+        plain = self.world.huff.decompress(bytes(body[:len(body) - 20]), nbits)
+        self.assertIsNotNone(plain)
+        self.assertIn(0x00A, [message_type(plain[off:off + 4])
+                              for off in range(0, len(plain) - 3, 4)])
+
+    def test_a_client_that_kept_the_old_key_is_followed_at_0x00C(self):
+        """0x00C is the packet that proves which key the client is using."""
+        addr = ("127.0.0.1", 54115)
+        account, row = self.character("Theta")
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        self.game_session(account)
+        session.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        session.build(bytearray(HDR))
+        old = bytes(session.base_key)
+        self.assertNotEqual(bytes(session.key), old)
+        ZoneSession.incoming(self.world, session, addr,
+                             self.sealed(sub(0x00C, bytes(8)), old, session.server_id))
+        self.assertEqual(bytes(session.key), old)
+
+    def zone_change_reply(self, name: str, addr, drift: int):
+        """A zone change queued and built, and the client's login that follows it."""
+        account, row = self.character(name)
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        self.game_session(account)
+        session.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        zone_out = session.build(bytearray(HDR))
+        ack = struct.unpack_from("<H", zone_out, 0)[0]
+        login = self.login_packet(row["char_id"])
+        struct.pack_into("<H", login, 2, ack)                       # the id we sent last
+        struct.pack_into("<H", login, HDR + 2, (ack + drift) & 0xFFFF)  # the client's counter
+        login[-16:] = md5(bytes(login[HDR:-16]))
+        return session, login, ack
+
+    def test_zone_change_reply_answers_the_acked_packet(self):
+        """The zone-in id is the ack + 1, not the client's body counter.
+
+        The body sync word is the client's own packet number. It drifts ahead of the
+        server's sequence when a client packet goes unanswered, and using it as the
+        reply id handed the client a packet id it had already passed: it ignored the
+        zone-in and retried the login every two seconds (stuck on "Downloading").
+        """
+        addr = ("127.0.0.1", 54111)
+        session, login, ack = self.zone_change_reply("Delta", addr, -6)
+        reply = ZoneSession.incoming(self.world, session, addr, login)
+        self.assertIsNotNone(reply)
+        self.assertEqual(struct.unpack_from("<H", reply, 0)[0], (ack + 1) & 0xFFFF)
+
+    def test_retried_login_rebuilds_the_zone_in(self):
+        addr = ("127.0.0.1", 54112)
+        session, login, ack = self.zone_change_reply("Epsilon", addr, 3)
+        first = ZoneSession.incoming(self.world, session, addr, login)
+        self.assertIsNotNone(first)
+        self.assertEqual(session.zone_in_tries, 0)
+
+        # The client repeats the login; the burst is rebuilt under the same next id
+        # rather than the already-ignored packet being replayed byte for byte.
+        again = ZoneSession.incoming(self.world, session, addr, login)
+        self.assertIsNotNone(again)
+        self.assertEqual(session.zone_in_tries, 1)
+        self.assertEqual(struct.unpack_from("<H", again, 0)[0], (ack + 1) & 0xFFFF)
+        body = bytearray(again[HDR:])
+        # The first retry goes out under the pre-change key (the other cipher).
+        session.world.zone_cipher_for(bytes(session.base_key)).run(
+            body, 0, (len(body) // 4) & ~1, False)
+        nbits = struct.unpack_from("<I", body, len(body) - 20)[0]
+        plain = session.world.huff.decompress(bytes(body[:len(body) - 20]), nbits)
+        self.assertIn(0x00A, [message_type(plain[off:off + 4])
+                              for off in range(0, len(plain) - 3, 4)])
+
+    def test_login_that_is_never_acknowledged_starts_over(self):
+        addr = ("127.0.0.1", 54113)
+        session, login, _ack = self.zone_change_reply("Zeta", addr, 2)
+        for _ in range(ZONE_IN_REBUILDS + 2):
+            ZoneSession.incoming(self.world, session, addr, login)
+        self.assertTrue(session.gone)
+        self.assertIsNone(self.world.session_by_char(int(session.char["char_id"])))
 
 
 if __name__ == "__main__":

@@ -170,7 +170,7 @@ export function CharactersPage({
                     onClick={() => onPlay(character)}
                     loading={playBusy}
                   >
-                    {running ? "In game" : "Play"}
+                    {running ? "In game" : "Launch client"}
                   </Button>
                   <Button
                     variant="ghost"

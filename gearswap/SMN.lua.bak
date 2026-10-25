@@ -54,7 +54,7 @@ local capes = {
     mabws = { name = "Campestres's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", "Weapon skill damage +10%", "Phys. dmg. taken-10%"} },
     pet_mab = { name = "Campestres's Cape", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Mag. Acc+20 /Mag. Dmg.+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
     pet_tp = { name = "Campestres's Cape", augments = {"Pet: Acc.+20 Pet: R.Acc.+20 Pet: Atk.+20 Pet: R.Atk.+20", "Pet: Attack+10 Pet: Rng.Atk.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
-    pet_dt = { name = "Campestres's Cape", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Pet: Accuracy+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
+    pet_dt = { name = "Campestres's Cape", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Pet: Accuracy+20 Pet: Rng. Acc.+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
 }
 
 -- Unity accessories: fixed max-rank Odyssey augments.

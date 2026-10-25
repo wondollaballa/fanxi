@@ -8,6 +8,7 @@ import type {
   CharacterData,
   ConfigView,
   ControlState,
+  DisplayInfo,
   EquipIcons,
   FollowEvent,
   FollowStatus,
@@ -18,6 +19,7 @@ import type {
   GearSetResult,
   GearVersion,
   GearWeapon,
+  GameWindowMode,
   HudPatch,
   HudState,
   InstanceView,
@@ -130,10 +132,18 @@ export const backend = {
   saveSettings: (input: {
     apiUrl: string;
     gameDir: string;
+    headlessGameDir: string;
+    remoteSsh: string;
     repoRoot: string;
     apiInsecure: boolean;
     autoLogin: boolean;
+    limitMainFps: boolean;
+    gameWindowMode: GameWindowMode;
+    gameWidth: number;
+    gameHeight: number;
+    gameUiScale: number;
   }) => call<ConfigView>("save_settings", input),
+  displayInfo: () => call<DisplayInfo>("display_info"),
 
   detectGameDir: (configured: string) =>
     call<string | null>("detect_game_dir", { configured }),
@@ -147,6 +157,7 @@ export const backend = {
   launch: (account: string, characterId: number | null) =>
     call<InstanceView>("launch", { account, characterId }),
   launchAll: () => call<LaunchAllResult>("launch_all"),
+  launchHeadlessParty: () => call<LaunchAllResult>("launch_headless_party"),
   team: () => call<TeamView>("team"),
   createSub: (character: Record<string, unknown> | null) =>
     call<TeamMutation>("create_sub", { character }),
@@ -156,10 +167,18 @@ export const backend = {
     call<Character>("create_sub_character", { subId, data }),
   launchSub: (subId: number, characterId: number | null) =>
     call<InstanceView>("launch_sub", { subId, characterId }),
+  launchSubHeadless: (subId: number, characterId: number | null) =>
+    call<InstanceView>("launch_sub_headless", { subId, characterId }),
+  forceRelaunchHeadless: (subId: number, characterId: number | null) =>
+    call<InstanceView>("force_relaunch_headless", { subId, characterId }),
+  setHeadlessSleep: (port: number, sleeping: boolean) =>
+    call<ControlState>("set_headless_sleep", { port, sleeping }),
   launchTeam: () => call<LaunchAllResult>("launch_team"),
+  launchRemoteTeam: () => call<string>("launch_remote_team"),
   deleteSub: (subId: number, purge: boolean) =>
     call<{ sub: SubAccount }>("delete_sub", { subId, purge }),
   listInstances: () => call<InstanceView[]>("list_instances"),
+  relaunchInstance: (port: number) => call<InstanceView>("relaunch_instance", { port }),
   stopInstance: (port: number) => call<void>("stop_instance", { port }),
   stopAll: () => call<number>("stop_all"),
 

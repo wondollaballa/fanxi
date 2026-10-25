@@ -100,11 +100,13 @@ def rank_cap(rank: str, level: int) -> int:
     return int(value) + max(0, level - top) * 5
 
 
-def caps_for(main_job: int, main_level: int, sub_job: int, sub_level: int) -> dict[int, int]:
+def caps_for(main_job: int, main_level: int, sub_job: int, sub_level: int,
+             bonus: dict[int, int] | None = None) -> dict[int, int]:
     """Skill id -> value for the current job pair.
 
     A skill is the better of the main job at its level and the sub job at its level, the
-    way retail lets a subjob carry a skill you are better at on the other job.
+    way retail lets a subjob carry a skill you are better at on the other job.  ``bonus``
+    is the main job's job-point gift skill layer, applied after the job caps.
     """
     out: dict[int, int] = {}
     for skill_id in SKILL_IDS:
@@ -114,4 +116,8 @@ def caps_for(main_job: int, main_level: int, sub_job: int, sub_level: int) -> di
             best = sub
         if best:
             out[skill_id] = best
+    for skill_id, value in (bonus or {}).items():
+        skill_id = int(skill_id)
+        if skill_id in out:
+            out[skill_id] += int(value)
     return out

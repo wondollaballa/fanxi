@@ -15,11 +15,11 @@ Face 2 / Hair A is look 2.  Before migration `0093_character_design.sql` the
 ## In game
 
 ```
-!character model hume 8              Face 2, Hair A, Medium (the 8th of 48)
-!character model mithra random       random face/hair/size inside Mithra
-!character model random              random race and design
-!character model elvaan face 3 hair b size l
-!character                            show the current design
+//character model hume 8              Face 2, Hair A, Medium (the 8th of 48)
+//character model mithra random       random face/hair/size inside Mithra
+//character model random              random race and design
+//character model elvaan face 3 hair b size l
+//character                            show the current design
 ```
 
 Races are `hume`, `humef`, `elvaan`, `elvaanf`, `tarutaru`, `tarutaruf`,

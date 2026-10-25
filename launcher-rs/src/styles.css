@@ -1823,6 +1823,27 @@ code {
   font-size: 9.5px;
 }
 
+.invite-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.invite-panel .party-manager-list {
+  margin-top: 2px;
+}
+
+.invite-note {
+  margin: 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.6;
+}
+
+.invite-note strong {
+  color: var(--text);
+}
+
 .character-select {
   width: 170px;
   padding-top: 6px;
@@ -2524,6 +2545,14 @@ code {
   font-size: 10.5px;
 }
 
+/* A box that lost its zone session: the process still answers, so say so and offer the way back. */
+.stale-client {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
 .bar-cell {
   display: flex;
   flex-direction: column;
@@ -3054,6 +3083,58 @@ code {
 
 .gearswap-settings {
   grid-column: 1 / -1;
+}
+
+.game-window-settings {
+  grid-column: 1 / -1;
+}
+
+.resolution-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.resolution-row .input {
+  flex: 1;
+  min-width: 0;
+}
+
+.resolution-times {
+  flex: none;
+  color: var(--muted-2);
+  font-size: 11px;
+}
+
+.display-presets {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.display-presets .btn {
+  flex: none;
+}
+
+.display-note {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0;
+  color: var(--muted-2);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.display-note svg {
+  flex: none;
+  color: var(--muted);
+}
+
+.display-warning,
+.display-warning svg {
+  color: var(--gold);
 }
 
 .gearswap-settings .check-row {
@@ -4641,6 +4722,47 @@ button.ev-cell:hover {
   white-space: nowrap;
 }
 
+.phase-mode-row,
+.phase-mode-set {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.phase-mode-row {
+  margin: 0 0 4px;
+}
+
+.phase-mode-set {
+  margin-top: 4px;
+}
+
+.phase-mode-label,
+.phase-mode-name {
+  flex: 0 0 62px;
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-overflow: ellipsis;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.phase-mode-name {
+  flex-basis: 46px;
+  font-weight: 500;
+  letter-spacing: 0;
+  text-transform: none;
+}
+
+.phase-mode-row .phase-inline-select,
+.phase-mode-set .phase-inline-select {
+  flex: 1;
+}
+
 .phase-category-spells {
   margin-top: 6px;
 }
@@ -5844,6 +5966,10 @@ button.ev-cell:hover {
   margin-top: 12px;
 }
 
+.data-paths-3 {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+}
+
 .data-path {
   display: flex;
   flex-direction: column;
@@ -5852,6 +5978,11 @@ button.ev-cell:hover {
   border: 1px solid var(--border-soft);
   border-radius: 10px;
   background: rgba(255, 255, 255, 0.018);
+}
+
+.data-path.is-current {
+  border-color: rgba(89, 216, 242, 0.42);
+  background: rgba(89, 216, 242, 0.06);
 }
 
 .data-path-head {
@@ -5884,8 +6015,15 @@ button.ev-cell:hover {
   align-self: flex-start;
 }
 
+@media (max-width: 1180px) {
+  .data-paths-3 {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
 @media (max-width: 980px) {
   .data-paths,
+  .data-paths-3,
   .data-craft-grid {
     grid-template-columns: 1fr;
   }
@@ -6018,6 +6156,19 @@ button.ev-cell:hover {
   margin-right: 2px;
   color: var(--accent);
   font-weight: 700;
+}
+
+.warp-current-actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  margin-top: 14px;
+}
+
+.warp-current-actions .muted {
+  font-size: 9.5px;
+  line-height: 1.4;
 }
 
 .warp-mark-panel {

@@ -336,7 +336,7 @@ static void wrap_write_line(Guest* g)
     const char* p = probe;
     while (*p == ' ')
         ++p;
-    /* Fanxi sends /! commands as say lines so the server sees them; keep that
+    /* Fanxi sends // commands as "!" say lines so the server sees them; keep that
      * command echo out of the chat log. */
     if (*p == '!' || strstr(probe, " : !") != NULL)
     {

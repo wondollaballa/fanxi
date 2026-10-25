@@ -1,13 +1,17 @@
 import { useState } from "react";
 import {
+  AlertTriangle,
   Crown,
   Eye,
   Gamepad2,
+  MonitorOff,
+  Moon,
   Plus,
   Play,
   RefreshCw,
   RotateCcw,
   ShieldCheck,
+  Sun,
   Trash2,
   UserPlus,
   UserRound,
@@ -21,7 +25,7 @@ import type {
   TeamView,
   Tenant,
 } from "../types";
-import { JOBS, jobName } from "../lib/format";
+import { JOBS, inWorld, jobName, orphanedSession } from "../lib/format";
 import {
   Badge,
   Button,
@@ -50,7 +54,12 @@ export function TeamPage({
   onActivate,
   onCreateCharacter,
   onLaunchSub,
+  onLaunchSubHeadless,
+  onForceRelaunchHeadless,
+  onSetSleep,
   onLaunchTeam,
+  onLaunchRemoteTeam,
+  remoteEnabled,
   onViewTenant,
   onControl,
 }: {
@@ -68,7 +77,13 @@ export function TeamPage({
   onActivate: (sub: SubAccount) => Promise<void>;
   onCreateCharacter: (sub: SubAccount) => Promise<void>;
   onLaunchSub: (sub: SubAccount) => Promise<void>;
+  onLaunchSubHeadless: (sub: SubAccount) => Promise<void>;
+  onForceRelaunchHeadless: (sub: SubAccount) => Promise<void>;
+  onSetSleep: (port: number, sleeping: boolean) => Promise<void>;
   onLaunchTeam: () => Promise<void>;
+  onLaunchRemoteTeam: () => Promise<void>;
+  /** True when a remote Linux host is configured in Settings. */
+  remoteEnabled: boolean;
   onViewTenant: (characterId: number) => void;
   onControl: () => void;
 }) {
@@ -79,11 +94,13 @@ export function TeamPage({
 
   const subs = team?.subs ?? [];
   const limit = team?.limit ?? 5;
-  const runningAccounts = new Set(
-    instances.filter((instance) => instance.alive).map((instance) => instance.account.toLowerCase()),
+  const runningByAccount = new Map(
+    instances
+      .filter((instance) => instance.alive)
+      .map((instance) => [instance.account.toLowerCase(), instance] as const),
   );
   const openSlots = Math.max(0, limit - subs.length);
-  const mainRunning = runningAccounts.has(session.account.username.toLowerCase());
+  const mainInstance = runningByAccount.get(session.account.username.toLowerCase());
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -127,8 +144,18 @@ export function TeamPage({
             loading={busy === "launch-team"}
             onClick={() => void onLaunchTeam()}
           >
-            Launch team
+            Launch all clients
           </Button>
+          {remoteEnabled && (
+            <Button
+              variant="secondary"
+              icon={<MonitorOff size={15} />}
+              loading={busy === "launch-remote-team"}
+              onClick={() => void onLaunchRemoteTeam()}
+            >
+              Launch headless team
+            </Button>
+          )}
         </div>
       </div>
 
@@ -149,9 +176,9 @@ export function TeamPage({
                     Viewing
                   </Badge>
                 )}
-              {mainRunning && (
+              {mainInstance && (
                 <Badge tone="success" dot>
-                  In game
+                  In game{mainInstance.headless ? " · headless" : ""}
                 </Badge>
               )}
             </div>
@@ -258,7 +285,11 @@ export function TeamPage({
         <div className="team-grid">
           {subs.map((sub, index) => {
             const character = sub.character;
-            const running = runningAccounts.has(sub.username.toLowerCase());
+            const runningInstance = runningByAccount.get(sub.username.toLowerCase());
+            const running = Boolean(runningInstance);
+            const sleeping = Boolean(runningInstance?.sleeping);
+            const inGame = inWorld(runningInstance);
+            const orphaned = orphanedSession(runningInstance);
             const suspended = sub.status !== "active";
             return (
               <Card
@@ -277,9 +308,21 @@ export function TeamPage({
                       <Badge tone="warning" dot>
                         Suspended
                       </Badge>
-                    ) : running ? (
+                    ) : sleeping ? (
+                      <Badge tone="warning" dot>
+                        Sleeping{runningInstance?.headless ? " · headless" : ""}
+                      </Badge>
+                    ) : orphaned ? (
+                      <Badge tone="warning" dot>
+                        Orphaned session
+                      </Badge>
+                    ) : inGame ? (
                       <Badge tone="success" dot>
-                        In game
+                        In game{runningInstance?.headless ? " · headless" : ""}
+                      </Badge>
+                    ) : running ? (
+                      <Badge tone="neutral" dot>
+                        Logged out
                       </Badge>
                     ) : character ? (
                       <Badge tone="neutral" dot>
@@ -326,13 +369,63 @@ export function TeamPage({
                     </Button>
                   )}
                   {!suspended && character && !running && (
+                    <>
+                      <Button
+                        size="sm"
+                        icon={<Play size={13} fill="currentColor" />}
+                        loading={busy === `launch-sub-${sub.id}`}
+                        onClick={() => void onLaunchSub(sub)}
+                      >
+                        Launch client
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="secondary"
+                        icon={<MonitorOff size={13} />}
+                        loading={busy === `launch-sub-headless-${sub.id}`}
+                        onClick={() => void onLaunchSubHeadless(sub)}
+                        title="Start this box with no visible game window"
+                      >
+                        Launch headless
+                      </Button>
+                    </>
+                  )}
+                  {character && !suspended && (
                     <Button
                       size="sm"
-                      icon={<Play size={13} fill="currentColor" />}
-                      loading={busy === `launch-sub-${sub.id}`}
-                      onClick={() => void onLaunchSub(sub)}
+                      variant="ghost"
+                      icon={<AlertTriangle size={13} />}
+                      loading={busy === `force-sub-${sub.id}`}
+                      onClick={() => void onForceRelaunchHeadless(sub)}
+                      title="Kill any stuck local/remote session for this account, remove its registry row, and launch fresh"
                     >
-                      Launch
+                      Force relaunch
+                    </Button>
+                  )}
+                  {running && character && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={<MonitorOff size={13} />}
+                      loading={busy === `launch-sub-headless-${sub.id}`}
+                      onClick={() => void onLaunchSubHeadless(sub)}
+                      title="If this box is sleeping, wake it in place; never restart a live client"
+                    >
+                      Launch headless
+                    </Button>
+                  )}
+                  {running && runningInstance && (
+                    <Button
+                      size="sm"
+                      variant="secondary"
+                      icon={sleeping ? <Sun size={13} /> : <Moon size={13} />}
+                      loading={busy === `sleep-${runningInstance.port}`}
+                      onClick={() => void onSetSleep(runningInstance.port, !sleeping)}
+                      title={sleeping
+                        ? "Resume this client in place; no process start and no new login"
+                        : "Park this client without stopping it; the character is hidden from other clients"}
+                    >
+                      {sleeping ? "Wake" : "Sleep"}
                     </Button>
                   )}
                   {running && (

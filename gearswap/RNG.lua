@@ -8,6 +8,17 @@
     to add a variant, copy an existing set and give it a new path.
 ]]
 
+local capes = {
+    pdt = { name = "Belenus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Belenus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Belenus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Belenus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    ranged_tp = { name = "Belenus's Cape", augments = {"AGI+20", "Rng.Acc.+20 Rng.Atk.+20", "AGI+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    ws_agi = { name = "Belenus's Cape", augments = {"AGI+20", "Accuracy+20 Attack+20", "AGI+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    mabws = { name = "Belenus's Cape", augments = {"AGI+20", "Mag. Acc+20 /Mag. Dmg.+20", "AGI+10", "Weapon skill damage +10%", "Phys. dmg. taken-10%"} },
+    snapshot = { name = "Belenus's Cape", augments = {"AGI+20", "Rng.Acc.+20 Rng.Atk.+20", "AGI+10", '"Snapshot"+10', "Phys. dmg. taken-10%"} },
+}
+
 function get_sets()
     sets = {}
     sets.engaged = {}
@@ -31,7 +42,7 @@ function get_sets()
         legs = "Orion Braccae +4",
         feet = "Orion Socks +4",
         neck = "Scout's Gorget +2",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.JA["Decoy Shot"] = {
         main = "Tauret",
@@ -43,7 +54,7 @@ function get_sets()
         legs = "Orion Braccae +4",
         feet = "Amini Bottillons +3",
         neck = "Scout's Gorget +2",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.JA["Double Shot"] = {
         main = "Tauret",
@@ -55,7 +66,7 @@ function get_sets()
         legs = "Orion Braccae +4",
         feet = "Orion Socks +4",
         neck = "Scout's Gorget +2",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.JA["Eagle Eye Shot"] = {
         main = "Tauret",
@@ -67,7 +78,7 @@ function get_sets()
         legs = "Orion Braccae +4",
         feet = "Orion Socks +4",
         neck = "Scout's Gorget +2",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.JA.Shadowbind = {
         main = "Tauret",
@@ -79,7 +90,7 @@ function get_sets()
         legs = "Orion Braccae +4",
         feet = "Orion Socks +4",
         neck = "Scout's Gorget +2",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.JA.Sharpshot = {
         main = "Tauret",
@@ -91,7 +102,7 @@ function get_sets()
         legs = "Orion Braccae +4",
         feet = "Orion Socks +4",
         neck = "Scout's Gorget +2",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.JA["Velocity Shot"] = {
         main = "Tauret",
@@ -103,7 +114,7 @@ function get_sets()
         legs = "Orion Braccae +4",
         feet = "Orion Socks +4",
         neck = "Scout's Gorget +2",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
 
     -- ===== Limbus =====
@@ -174,7 +185,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.WS.Coronach = {
         main = "Tauret",
@@ -191,7 +202,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Belenus's Cape",
+        back = capes.ws_agi,
     }
     sets.WS["Jishnu's Radiance"] = {
         main = "Tauret",
@@ -208,7 +219,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Belenus's Cape",
+        back = capes.ws_agi,
     }
     sets.WS["Last Stand"] = {
         main = "Tauret",
@@ -225,7 +236,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Belenus's Cape",
+        back = capes.ws_agi,
     }
     sets.WS["Namas Arrow"] = {
         main = "Tauret",
@@ -242,7 +253,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Belenus's Cape",
+        back = capes.ws_agi,
     }
     sets.WS.Trueflight = {
         main = "Tauret",
@@ -259,7 +270,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Belenus's Cape",
+        back = capes.mabws,
     }
 
     -- ===== engaged =====
@@ -278,7 +289,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.engaged.hybrid = {
         main = "Tauret",
@@ -295,7 +306,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.engaged.tp = {
         main = "Tauret",
@@ -312,7 +323,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
 
     -- ===== enmity =====
@@ -342,7 +353,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Belenus's Cape",
+        back = capes.dt,
     }
     sets.idle.maxhp = {
         main = "Tauret",
@@ -359,7 +370,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Belenus's Cape",
+        back = capes.maxhp,
     }
     sets.idle.mdt = {
         main = "Tauret",
@@ -376,7 +387,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Belenus's Cape",
+        back = capes.mdt,
     }
     sets.idle.movement = {
         main = "Tauret",
@@ -410,7 +421,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Belenus's Cape",
+        back = capes.pdt,
     }
     sets.idle.town = {
         main = "Tauret",
@@ -446,7 +457,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
     sets.ranged.snapshot = {
         main = "Tauret",
@@ -463,7 +474,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Belenus's Cape",
+        back = capes.snapshot,
     }
     sets.ranged.tp = {
         main = "Tauret",
@@ -480,7 +491,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Belenus's Cape",
+        back = capes.ranged_tp,
     }
 
     -- ===== weaponset =====

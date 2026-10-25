@@ -1,4 +1,4 @@
-import type { Character, ControlState } from "../types";
+import type { Character, ControlState, InstanceView } from "../types";
 
 export const RACES = [
   { value: 1, label: "Hume male" },
@@ -245,6 +245,40 @@ export function playerName(state?: ControlState | null): string {
 
 export function stateZone(state?: ControlState | null): string {
   return state?.zone?.name ?? (state?.zone?.id ? `Zone ${state.zone.id}` : "—");
+}
+
+/**
+ * The server has answered authoritatively that this client has no zone session.
+ *
+ * A client keeps its last `login_status` and zone after a server restart, so its own state
+ * cannot see the difference. `serverOnline` is only false when the server's live roster said
+ * so; null/undefined (older server, gateway off, network failure) must never mark a box stale.
+ */
+export function serverSaysOffline(instance?: InstanceView | null): boolean {
+  const status = instance?.state?.login_status;
+  if (instance?.serverOnline !== false) return false;
+  const uptime = instance?.uptimeSeconds ?? 0;
+  if (status === 2) return uptime > 15;
+  // At the title/login screens a box is legitimately absent from the roster; only call it
+  // stale once a normal sign-in (or a client that noticed the restart) has had time to finish.
+  return status === 0 && uptime > 60;
+}
+
+/** A client that says it is in world while the server has no session for it. */
+export function orphanedSession(instance?: InstanceView | null): boolean {
+  return instance?.state?.login_status === 2 && serverSaysOffline(instance);
+}
+
+/**
+ * A running process is not a running character. Only `login_status === 2` backed by the
+ * server (or unverifiable) counts as in world; an orphaned session does not.
+ */
+export function inWorld(instance?: InstanceView | null): boolean {
+  if (!instance || orphanedSession(instance)) return false;
+  const status = instance.state?.login_status;
+  if (typeof status === "number") return status === 2;
+  // Before the addon reported the status, the character block was the only signal.
+  return Boolean(instance.state?.player && instance.state.zone?.id);
 }
 
 export function slotLabel(slot: string): string {

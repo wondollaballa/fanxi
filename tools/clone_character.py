@@ -26,7 +26,7 @@ repairs every known item from ``tools/item_models.json`` (migration 95's
 triggers do the same as the inventory rows go in) and reports any worn or owned
 piece that still has no model.  ``--strict-models`` rolls the copy back instead.
 
-    tools/clone_character.py --source Onedough --target Twodough --force --dry-run
+    tools/clone_character.py --source Onedough --target Twodough --force
     tools/clone_character.py --source Onedough --target Twodough --force --apply
 """
 from __future__ import annotations
@@ -49,7 +49,7 @@ CHARACTER_TABLES = {
     "char_equip": ("kind", "container", "slot", "item_id"),
     "char_inventory": ("container", "slot", "item_id", "quantity", "extra"),
     "char_storage": ("item_id", "quantity", "slip", "stored_at"),
-    "char_locker": ("item_id", "quantity", "stored_at"),
+    "char_locker": ("item_id", "extra", "quantity", "stored_at"),
     "char_merits": ("merit_id", "upgrades"),
     "char_quests": ("quest_id", "state", "progress", "updated_at"),
     "char_home_points": ("hp_index", "registered_at"),

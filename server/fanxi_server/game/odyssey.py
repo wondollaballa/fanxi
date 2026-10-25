@@ -1,10 +1,10 @@
-"""Odyssey Rank 30 lookup for the ``!r30`` chat command.
+"""Odyssey Rank 30 lookup for the ``//r30`` chat command.
 
 The dataset lives in ``data/odyssey_r30.json`` (the same file the gearswap
 generator reads), so the server and the libraries cannot disagree about an
 augment.  The client draws item tooltips from its own DAT files and cannot show
 these rows yet -- that needs retail's 24-byte ``extdata`` augment encoding --
-so ``!r30`` is the in-game view of the table.
+so ``//r30`` is the in-game view of the table.
 """
 
 from __future__ import annotations

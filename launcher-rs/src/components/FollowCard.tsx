@@ -82,6 +82,9 @@ export function FollowCard({
   const recoveryAt = useRef<Map<string, number>>(new Map());
   const assignmentsRef = useRef(assignments);
   const enabledRef = useRef(enabled);
+  /** Re-apply the saved graph once to each new/restarted client, without spamming a broken one. */
+  const reapplying = useRef<Set<string>>(new Set());
+  const lastApplyAttempt = useRef<Map<string, number>>(new Map());
 
   const running = useMemo(() => instances.filter((instance) => instance.alive), [instances]);
   const byAccount = useMemo(() => {
@@ -99,6 +102,31 @@ export function FollowCard({
   const anyFollowing = Object.entries(enabled).some(
     ([key, on]) => on && Boolean(assignments[key]) && byAccount.has(key),
   );
+
+  // A saved graph must survive a box restart. The control addon starts with follow off,
+  // while localStorage still says the box should follow. Re-send the assignment whenever
+  // the saved state is on and the live client reports it is off (or has not reported yet).
+  useEffect(() => {
+    const now = Date.now();
+    for (const [key, on] of Object.entries(enabled)) {
+      if (!on || !assignments[key]) continue;
+      const instance = byAccount.get(key);
+      const leader = byAccount.get(assignments[key]);
+      if (!instance || !leader) continue;
+      const status = statuses[key];
+      if (status?.enabled) continue;
+      if (reapplying.current.has(key)) continue;
+      if (now - (lastApplyAttempt.current.get(key) ?? 0) < 3000) continue;
+      lastApplyAttempt.current.set(key, now);
+      reapplying.current.add(key);
+      const leaderName = leader.character?.name ?? leader.name;
+      backend
+        .setFollow(instance.port, true, leaderName, 1)
+        .then((next) => setStatuses((current) => ({ ...current, [key]: next })))
+        .catch((caught) => setError(messageOf(caught)))
+        .finally(() => reapplying.current.delete(key));
+    }
+  }, [assignments, enabled, byAccount, statuses]);
 
   useEffect(() => {
     assignmentsRef.current = assignments;
@@ -280,8 +308,8 @@ export function FollowCard({
       recoveryAt.current.set(key, now);
       const line =
         zone !== myZone
-          ? `!zone ${zone} ${px.toFixed(2)} ${py.toFixed(2)} ${pz.toFixed(2)}`
-          : `!pos ${px.toFixed(2)} ${py.toFixed(2)} ${pz.toFixed(2)}`;
+          ? `//zone ${zone} ${px.toFixed(2)} ${py.toFixed(2)} ${pz.toFixed(2)}`
+          : `//pos ${px.toFixed(2)} ${py.toFixed(2)} ${pz.toFixed(2)}`;
       try {
         await backend.sendCommand(instance.port, line);
         void backend

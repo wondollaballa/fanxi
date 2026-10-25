@@ -6,7 +6,7 @@ Rank 30 rows from [BG Wiki's Odyssey page](https://www.bg-wiki.com/ffxi/Odyssey)
 and each item's page.
 
 The same data drives `gearswap/*.lua` (`local odyssey` and the `sets.Odyssey`
-container), `data/odyssey_r30.json`, and the server's `!r30` chat command.
+container), `data/odyssey_r30.json`, and the server's `//r30` chat command.
 
 ## Nyame Armor Set
 
@@ -75,8 +75,8 @@ container), `data/odyssey_r30.json`, and the server's `!r30` chat command.
 ## In game
 
 The armour pieces are granted to the character's wardrobes by
-`database/migrations/0072_odyssey_r30.sql`. Use `!r30 <item>` in the chat
-log to print an item's Rank 30 rows, and `!r30` alone to list every
+`database/migrations/0072_odyssey_r30.sql`. Use `//r30 <item>` in the chat
+log to print an item's Rank 30 rows, and `//r30` alone to list every
 Odyssey item the server knows.
 
 Each item's `extdata` now carries its real **augment bundle index**
@@ -93,6 +93,6 @@ and the rest reach combat rather than only the tooltip.
 
 Nyame is one Rare piece, not four: it carries Path A, and migration 103
 removed the Path B/C/D duplicates so the character stays within retail's
-one-copy limit. `!augment <index> <item>` rewrites that copy to any bundle;
-`!augment <A-D> <item>` looks the index up, so switching paths is a chat
+one-copy limit. `//augment <index> <item>` rewrites that copy to any bundle;
+`//augment <A-D> <item>` looks the index up, so switching paths is a chat
 command rather than a wardrobe row.

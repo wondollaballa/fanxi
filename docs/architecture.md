@@ -4,7 +4,7 @@ Fanxi is four pieces that share one repository and one vocabulary:
 
 ```
 ┌──────────────────────────────┐        HTTP/JSON         ┌──────────────────────────────┐
-│  Fanxi Launcher (Tkinter)    │ ───────────────────────► │  Fanxi HTTP API              │
+│  Fanxi Launcher (Tauri)      │ ───────────────────────► │  Fanxi HTTP API              │
 │  account, character, Play    │ ◄─────────────────────── │  auth, characters, news,     │
 └──────────────┬───────────────┘    launch token          │  releases, launch tokens     │
                │                                          └──────────────┬───────────────┘
@@ -26,9 +26,10 @@ Fanxi is four pieces that share one repository and one vocabulary:
 
 ## Components
 
-### Launcher (`launcher/`)
+### Launcher (`launcher-rs/`)
 
-A Python/Tkinter desktop app. It is the only piece a player normally touches:
+A Rust + Tauri 2 desktop app with a React front end. It is the only piece a player normally
+touches:
 
 - talks to the HTTP API with a Bearer token;
 - stores its settings and token under the platform data folder;
@@ -48,7 +49,7 @@ stored in the database.
 
 ### Game gateway (`server/fanxi_server/game/`)
 
-The FINAL FANTASY XI-facing side. Four listeners:
+The FINAL FANTASY XI-facing side. Five listeners:
 
 | Listener | Default | Protocol |
 |---|---|---|
@@ -56,11 +57,12 @@ The FINAL FANTASY XI-facing side. Four listeners:
 | data | `54230/tcp` | 0xFE + session hash, then the zone key (0xA2) |
 | lobby | `54001/tcp` | 28-byte size header, `IXFF`, command |
 | zone | `54230/udp` | the zone packet format, Blowfish + Huffman |
-| search | `54002/udp` | advertised in the lobby; reserved |
+| search | `54002/tcp` | the player search list (`/sea`), Blowfish |
 
 The gateway is a small world: unlimited characters per account (one online at a time), zone-in, movement,
 zone changes, chat commands, NPCs, monsters, basic melee combat, inventory, a shop and a hunt
-quest. It is a real subset of the client protocol, not a full retail simulation. The design and
+quest. Monsters walk a navigation grid derived from the player's own zone collision mesh, cached
+under `data/nav/`; no zone geometry ships with the server. It is a real subset of the client protocol, not a full retail simulation. The design and
 limits are in [world.md](world.md); the LandSandBoat research notes are in
 [landsandboat-study.md](landsandboat-study.md).
 

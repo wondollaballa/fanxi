@@ -6,7 +6,9 @@
  *      (load, unload, reload, list, command), //exec and /exec, //bind /bind //unbind /unbind,
  *      //alias /alias, //input (a line for the game), //echo (to the chat log);
  *   3. the addons' command event (every addon sees the line; one may block it);
- *   4. a line nobody handled that starts with // is an error, never chat the server would see;
+ *   4. a // line a host command did not claim: a Fanxi chat command (//warp, //job, //gs, ...) goes
+ *      to the server as a "!cmd" say line; anything else is an error, never chat the server would
+ *      see;
  *   5. otherwise text_out (addons may change the line), then the game.
  *
  * Scripts (xi/scripts/boot.txt, ashita/scripts/default.txt, windower/scripts/init.txt on the first
@@ -18,6 +20,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "complete.h"
 #include "host.h"
 #include "plat.h"
 
@@ -536,11 +539,27 @@ int xi_command(const char* in, int mode, int injected)
         return 1;
     if (line[0] == '/' && line[1] == '/')
     {
+        /* Fanxi's chat commands are typed //cmd.  The game's own slash parser must not see the
+         * slashes, so hand it the server's "!cmd" say form instead; the server runs the command.
+         * A // line that is not a known command stays a local error, never chat the server would
+         * see.  complete.c owns the command table, so new server commands are forwarded here. */
+        char word[64];
+        size_t n = 0;
+        while (line[n + 2] && line[n + 2] != ' ' && line[n + 2] != '\t' && n + 1 < sizeof word)
+            word[n] = (char)tolower((unsigned char)line[n + 2]), ++n;
+        word[n] = 0;
+        if (n && xi_complete_is_command(word))
+        {
+            /* The server's command words are lower case; the arguments keep their case. */
+            char command[1200];
+            snprintf(command, sizeof command, "!%s%s", word, line + 2 + n);
+            xi_chat_queue_game(mode, command);
+            return 1;
+        }
         chatf("unknown command: %.200s", line);
         return 1;
     }
-    /* Fanxi's chat commands: /!cmd is sent to the server as a say line.  The game's
-     * own slash parser does not know "!cmd", so hand it the line without the slash. */
+    /* The legacy /!cmd spelling: still forwarded for macros saved before the // switch. */
     if (line[0] == '/' && line[1] == '!')
     {
         xi_chat_queue_game(mode, line + 1);

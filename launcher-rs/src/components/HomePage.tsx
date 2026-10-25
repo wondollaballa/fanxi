@@ -137,7 +137,7 @@ export function HomePage({
                   icon={<Play size={17} fill="currentColor" />}
                   onClick={onPlay}
                 >
-                  {thisCharacterRunning ? "Launch another client" : "Play"}
+                  {thisCharacterRunning ? "Launch another client" : "Launch client"}
                 </Button>
                 <Button variant="secondary" size="lg" icon={<Gamepad2 size={17} />} onClick={onControl}>
                   Control room

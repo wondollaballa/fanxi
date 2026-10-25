@@ -17,12 +17,18 @@ use tokio::process::{Child, Command};
 use tokio::sync::mpsc;
 
 use crate::config;
+use crate::display;
 use crate::error::{AppError, AppResult};
 
 pub const HOST64: &str = if cfg!(windows) {
     "host64.exe"
 } else {
     "host64"
+};
+pub const HOST64_HEADLESS: &str = if cfg!(windows) {
+    "host64-headless.exe"
+} else {
+    "host64-headless"
 };
 const BUILD_LOG: &str = "build.log";
 
@@ -73,7 +79,7 @@ pub fn resolve_repo_root(configured: &str) -> Option<PathBuf> {
     None
 }
 
-/// The checkout for a running config. This also understands the old launcher's `host64` path
+/// The checkout for a running config. This also understands the earlier launcher's `host64` path
 /// (`<checkout>/build/host64`) and `FANXI_HOST64`, which matters when a release bundle lives deep
 /// inside the checkout instead of next to it.
 pub fn resolve_repo_root_for(config: &crate::config::LauncherConfig) -> Option<PathBuf> {
@@ -175,6 +181,7 @@ pub fn host64_candidates(config: &crate::config::LauncherConfig) -> Vec<PathBuf>
     }
     if let Some(root) = resolve_repo_root_for(config) {
         candidates.push(root.join("build").join(HOST64));
+        candidates.push(root.join("build").join(HOST64_HEADLESS));
         candidates.push(
             root.join("build")
                 .join("Fanxi.app")
@@ -190,6 +197,12 @@ pub fn find_host64(config: &crate::config::LauncherConfig) -> Option<PathBuf> {
     host64_candidates(config)
         .into_iter()
         .find(|candidate| candidate.is_file())
+}
+
+pub fn find_host64_headless(config: &crate::config::LauncherConfig) -> Option<PathBuf> {
+    let root = resolve_repo_root_for(config)?;
+    let candidate = root.join("build").join(HOST64_HEADLESS);
+    candidate.is_file().then_some(candidate)
 }
 
 pub fn build_launch_command(
@@ -231,13 +244,20 @@ pub async fn spawn_host64(
     login_token: &str,
     control_port: u16,
     log_name: &str,
+    headless: bool,
 ) -> AppResult<Child> {
     let root = resolve_repo_root_for(config).ok_or_else(|| {
         AppError::Config("the Fanxi checkout was not found; set it in Settings".into())
     })?;
-    let host64 = find_host64(config).ok_or_else(|| {
-        AppError::Game("host64 is not built yet; build the game in Settings".into())
-    })?;
+    let host64 = if headless {
+        find_host64_headless(config).ok_or_else(|| {
+            AppError::Game("host64-headless is not built yet; run tools/build_posix.py host64-headless".into())
+        })?
+    } else {
+        find_host64(config).ok_or_else(|| {
+            AppError::Game("host64 is not built yet; build the game in Settings".into())
+        })?
+    };
     if !is_game_dir(game_dir) {
         return Err(AppError::Game(format!(
             "{} is not a FINAL FANTASY XI folder: FFXiMain.dll, FFXi.dll and ROM are needed",
@@ -245,8 +265,38 @@ pub async fn spawn_host64(
         )));
     }
 
-    let command = build_launch_command(&host64, game_dir, client, login_token);
-    let log_path = config::log_dir()?.join(format!("game-{}.log", safe_name(log_name)));
+    let mut command = build_launch_command(&host64, game_dir, client, login_token);
+    if headless {
+        let data = config::data_dir().join("headless").join(safe_name(log_name));
+        std::fs::create_dir_all(&data)?;
+        command.extend([
+            "--fps-divisor".to_string(),
+            "2".to_string(),
+            "--data-dir".to_string(),
+            data.to_string_lossy().into_owned(),
+        ]);
+    } else {
+        // The display overlay is loaded after the host's saved.reg, so the size and mode chosen in
+        // Settings win over whatever a previous run left in the game's own settings.
+        let overlay = display::write_overlay(&config.game_display).map_err(|error| {
+            AppError::Game(format!(
+                "cannot write the game window settings ({}): {error}",
+                display::overlay_path().display()
+            ))
+        })?;
+        command.extend([
+            "--reg-final".to_string(),
+            overlay.to_string_lossy().into_owned(),
+        ]);
+        if config.limit_main_fps {
+            command.extend(["--fps-divisor".to_string(), "2".to_string()]);
+        }
+    }
+    let log_path = config::log_dir()?.join(format!(
+        "game-{}{}.log",
+        safe_name(log_name),
+        if headless { "-headless" } else { "" }
+    ));
     let mut log = std::fs::OpenOptions::new()
         .create(true)
         .append(true)
@@ -263,6 +313,12 @@ pub async fn spawn_host64(
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(log_err))
         .env("FFXI_CONTROL", control_port.to_string());
+    if headless {
+        process
+            .env("SDL_VIDEO_DRIVER", "dummy")
+            .env("SDL_AUDIO_DRIVER", "dummy")
+            .env("FFXI_FX", "0");
+    }
     #[cfg(unix)]
     {
         // A new process group lets "Stop" take the host and any helper it starts together.

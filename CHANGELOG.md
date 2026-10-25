@@ -1,5 +1,704 @@
 # Changelog
 
+## Unreleased — orphaned sessions and one-click reconcile
+
+- **`//warp all me` moves the team instead of only reporting success.** A same-zone warp used a
+  self `0x00D` position update; the client treats its own position as authoritative and ignored
+  it, so every box stayed put while the server said "Warped N characters". Warps now always use
+  the `0x00B` hand-off, including inside one zone, and the boxes zone in at the leader.
+- **The launcher now checks the server's live zone roster.** A client that outlives a server
+  restart keeps answering its control port and can still report `login_status` 2, so the Control
+  room used to show a green row while `/sea`, invites and `//warp` saw nobody. Each poll compares
+  the row with `GET /api/v1/world/online` (the same roster `/sea all` reads), marks the mismatch
+  **orphaned**, and disables Invite / Warp for it.
+- **Reconcile.** One row's button relaunches that client; **Reconcile N** restarts every stale box
+  with a fresh launch token (remote boxes through `linux_boxes.py restart --only`, locals through
+  the normal path) and pulls each back to the leader once it is in world.
+- **Local clients are adopted after a launcher restart.** The launcher deliberately leaves
+  `host64` running when its window closes; the next run now discovers those processes by their
+  control port instead of losing their rows.
+- **`/status` counts live zone sessions**, not `game_sessions` rows that survive a server restart,
+  while the game gateway is attached. The new authenticated `GET /world/online` is the same
+  roster and reports `gateway: false` on an API-only server.
+- **The Control room has the HUD master switch.** Per-window switches keep their state while the
+  master is off, so turning on Abilities/Spells alone used to change nothing visible; the new
+  **Show HUD** switch is the same one `//hud` and Ctrl+H use.
+
+## Unreleased — retail /attack off
+
+- **`/attack off` now always ends the engagement.** The server used to swallow a single
+  press while the target stood outside melee reach, and because each swallow re-armed a
+  1.5-second window, pressing it again seconds later was swallowed too — an engagement
+  the player could not drop.  The handler follows retail now: every press disengages, at
+  any distance; only the client's own range-drop packet is absorbed, exactly once per
+  engagement, and the allowance never re-arms.  `/attack` also draws at any distance
+  (the 30-yalm leash ends the fight instead of refusing the engage), the first swing
+  comes 3 s after the draw, and the leash message is retail's "You lose sight of the
+  target."
+
+## Unreleased — complete category coverage
+
+- **All 220 job-point category rows are now represented.** The last RUN row
+  (Rune Enchantment Effect) is a state/modifier.  Remaining limitations are simulation
+  depth, not unclassified JP rows; see `docs/remaining.md`.
+
+## Unreleased — last job rows
+
+- Wyvern breath, COR Bust Evasion/Optimal Range/Ammo, PUP Heady Artifice, SCH
+  Stratagem IV, GEO Life Cycle/Indicolure duration and pet/support rows are wired.
+- One row remains: RUN Rune Enchantment, which has no rune-enchantment state to attach
+  to.
+
+## Unreleased — Charm, bar spells and parry
+
+- Beastmaster **Charm** now converts a mob into a pet using its model/name, with the
+  Charm Success Rate job-point chance; **Run Wild** boosts the active pet.
+- WHM Bar Spell Effect is a passive Magic Defense row; Ninja Tactical Parry adds Counter.
+
+## Unreleased — PUP burden and GEO pulse
+
+- Puppetmaster Activate/Cooldown/Deactivate now maintain a pet burden value; Geomancer
+  Concentric Pulse deals its job-point-scaled direct damage.
+
+## Unreleased — remaining job statuses and utility
+
+- WAR Retaliation/Restraint, MNK Inner Strength, BLM Mana Wall, PLD Sentinel/Palisade,
+  DRK Blood Weapon/Soul Enslavement/Nether Void, RNG Double Shot/Decoy Shot and
+  Shadowbind, COR Wild Card/Random Deal/Cutting Cards/Triple Shot/Quick Draw,
+  PUP Tactical Switch/Deus Ex recast, GEO Bolster/Blaze of Glory, RUN Elemental
+  Sforzo/Swordplay/Embolden/Odyllic Subterfuge/Swipe/Vivacious Pulse, and THF
+  Mug/Despoil/Steal recast/Larceny/Bully are wired.
+
+## Unreleased — pet support, BLU points and DNC rows
+
+- Pet job-point rows now feed pet HP/accuracy/damage/delay; Reward/Repair/Spirit Link
+  heal the pet, Elemental Siphon/Mana Cede restore MP, and Blood Pact Rage/Ward act
+  through the avatar.
+- Blue Magic Point Bonus and Unbridled Wisdom are wired at the data/status layer.
+- Dancer Jig Duration and Flourish I/II/III rows now feed their abilities.
+
+## Unreleased — Quick Magic, Caper and Modus
+
+- **Blue Magic Point Bonus** and **Unbridled Wisdom** are wired at the data/status layer;
+  **DNC Jig Duration and Flourish I/II/III** rows now feed their abilities.
+
+- **Red Mage Quick Magic** procs at 5% plus the job-point row and finishes the cast
+  immediately.
+- **SCH Caper Emissarius** heals by its base plus job-point percentage; **Modus Veritas**
+  adds its bonus to an existing damage-over-time tick.
+- **BLU Unbridled Learning II** runs 120 s and Physical Blue Magic Effect Accuracy is a
+  passive accuracy row.
+
+## Unreleased — Dancer
+
+- **Dancer steps build Finishing Moves** and apply their debuffs; Step Duration extends
+  the moves.  Animated/Reverse/Building Flourish consume a move for damage, TP or a
+  status; No Foot Rise grants three moves; Spectral Jig grants Sneak/Invisible.
+- Trance, Grand Pas, Saber Dance, Fan Dance and Contradance put up their statuses.
+
+## Unreleased — Sublimation and instant abilities
+
+- **Scholar Sublimation** toggles, stores 1 MP per tick (draining 1 HP), caps at the
+  job-point-extended 360 MP, and releases the stored MP on the second use even during
+  recast.  Verified in the client.
+- **Shield Bash, Eagle Eye Shot and Weapon Bash** now apply their job-point-scaled direct
+  damage to the current target.
+
+## Unreleased — Bard songs
+
+- **Bard songs now apply to the party** instead of only the caster, with their family
+  status icons and per-tier values: Minne (Defense), Minuet/Mambo (Attack), Madrigal
+  (Accuracy), March (Haste), Ballad (Refresh), Paeon (Regen), Requiem (DoT), Prelude
+  (Ranged Accuracy) and Carol (Magic Defense).
+- Minne/Minuet job-point potency and Song Accuracy are wired; Valor Minuet was verified
+  in the client.
+
+## Unreleased — Bard support and DNC sambas
+
+- Bard **Soul Voice** and **Pianissimo** now put their statuses up and add their
+  job-point Fast Cast rows; Song Accuracy is a passive magic-accuracy row.
+- Dancer **Drain/Aspir/Haste Samba** now show their status icons with the 100 s
+  job-point duration row.  Step/jig/flourish jobs are still separate work.
+
+## Unreleased — Corsair rolls
+
+- **Fourteen Corsair rolls show their status icon and apply their rolled modifier.**
+  Snake Eye forces an 11, Double-Up increments the active roll, Fold removes it, and the
+  Phantom Roll Duration job-point row extends the roll to 100 s.  `docs/rolls.md` lists
+  the implemented rolls and the remaining COR systems.
+
+## Unreleased — pet foundation
+
+- **BST/DRG/PUP pets can be called and rendered.** Call Beast, Call Wyvern and Activate
+  spawn a Tiger familiar, wyvern or automaton using the retail pet models; Release,
+  Dismiss and Deactivate remove it.  Fight/Sic/Ready, Heel and Stay set its state, and
+  the pet follows its owner and attacks the owner's engaged target.
+- Pets use the Trust spawnable packet path, with the pet flag set and the spawnable
+  name/model block fixed so the client draws them.
+- Pet HP/accuracy/attack read the relevant job-point rows for BST, DRG and PUP.
+- **Summoner avatars** spawn from the Summon spells using the retail Pet_* models; they
+  follow and auto-attack like the other pets.  Carbuncle and Ifrit are verified in the
+  client.  Astral Flow/Blood Pact and the rest of the Summoner kit are separate work.
+- Other pet systems (charm, Reward, Ready/Sic damage, wyvern breath, automaton
+  frames/attachments) are not built yet; see `docs/pets.md`.
+
+## Unreleased — a crowded zone no longer floods the client
+
+- **Entity movement is now ambient traffic with a budget.** The server queued a position
+  update for every monster in view on every tick. In a dense zone (King Ranperres Tomb
+  has 55 spawns within 60 yalms of the arrival point) that was several kilobytes a
+  second printed into the session's FIFO, against a client built for roughly 3 kB/s.
+  The client's receive loop fell behind, which is what made a job ability pressed in the
+  middle of the stream appear a minute later. Only the newest position per entity is kept
+  now, real events (actions, status, chat, equipment) are packed before the entity
+  stream, and the stream itself is capped by a 900 B/s token bucket
+  (`AMBIENT_BYTES_PER_SECOND` in `game/zone.py`). On the King Ranperres Tomb bench the
+  downlink fell from ~1.4 kB/s to ~0.4-0.8 kB/s depending on how many mobs are walking.
+- **Monsters are interpolated, not re-sent every tick.** The client walks an entity from
+  the `moving` flag and the speed byte in its `0x00E`, so the packet is a correction, not
+  the animation. A walker now carries speed byte 12 and is corrected four times a second
+  (`MOB_SYNC_INTERVAL`); a chasing runner carries 36 and is corrected every 100 ms
+  (`MOB_SYNC_INTERVAL_RUN`). A real corner (about 45 degrees walking, 22 running) and
+  every stop go out immediately, but only within `MOB_URGENT_RANGE` (30 yalms); a distant
+  corner waits for the ambient budget. Steady movement beyond `MOB_SYNC_RANGE` (45 yalms)
+  is not streamed at all, though spawns still reach 60. The nav/roam layer made all 55
+  in-range spawns walk, which is why the old per-tick stream only became a problem now.
+- **The zone loop flushes on a timer.** `flush()` only ran when the UDP socket timed out,
+  and one busy box kept the socket readable, so the other boxes' queues never drained.
+  It now also runs every `FLUSH_INTERVAL` (200 ms), one packet per session, and a packet
+  with nothing to say is not sent at all.
+- **A retransmit no longer holds back a fresh reply.** A GearSwap batch sends its
+  equipment packets before the server's answer arrives, so the old "resend the last
+  packet until it is acknowledged" path fired for every packet of the batch and the
+  queue stood still. A retry is limited to once per 250 ms and is skipped while real
+  events are waiting.
+
+## Unreleased — job-point gifts and passive category stats
+
+- **Every job's static job-point layer is live.** `data/job_points.json` now carries the
+  BG-wiki table for all 22 jobs (10 categories and 61 gift rows each). Gift Attack,
+  Defense, Accuracy, Evasion, Magic Attack/Defense/Accuracy/Evasion, Magic Damage, Cure
+  Potency, Regen, Fast Cast, Subtle Blow, Double/Triple Attack, Martial Arts, Counter,
+  Critical hit/damage, Weapon Skill Damage, Skillchain, Fencer, Store TP, Dual Wield and
+  skill bonuses all feed `combat_mods()` or `skills.caps_for()` at 2,100 JP spent.
+- **Passive category rows are applied at rank 20.** WHM Regen Duration and Magic
+  Accuracy; BLM Magic Damage and Magic Accuracy; RDM Magic Attack, Magic Accuracy,
+  Enhancing and Enfeebling Duration; BLU/GEO Magic Accuracy; GEO Magic Attack; PUP
+  Martial Arts; COR Ranged Accuracy; NIN Ninjutsu Accuracy.  The two new flat-duration
+  modifiers feed the enhancing and enfeebling duration formulas.
+- **SCH Light Arts** remains the separately handled conditional example: its +3 s/rank
+  is already in the Regen duration formula.  Dark Arts adds its Helix duration, and
+  Stratagem Effects I/II/III add M.Acc, Fast Cast and Magic Damage while the matching
+  stratagem icon is up.
+- **Magic Burst gifts and categories** now feed the capped Magic Burst bonus (BLM/SCH),
+  and Enlight/Endark, Azure Lore, Burst Affinity, Unbridled Learning and Spirit Surge
+  have their conditional stat rows.
+- **NIN Ninjutsu Cast Time/Elemental Ninjutsu**, **MNK Perfect Counter/Footwork/
+  Counterstance**, **SAM Konzen-ittai**, and **SAM Meditate TP** are now applied.
+- **A generic ability-category layer** now maps 114 category rows to their client status
+  ids (`data/job_ability_status.json`) and parses their plain stat/duration/recast text.
+  This covers the remaining simple rows for PLD, DRK, THF, SAM, NIN, DRG, BLU, COR, DNC,
+  GEO, RUN and others.  Pet/avatar/automaton, chance/rate/potency and song rows are
+  deliberately left off and counted in `docs/job-points.md` (125 rows).
+- **Non-Scholar conditional rows** now have their ability statuses: WAR Mighty Strikes/
+  Brazen Rush/Berserk/Defender/Warcry/Aggressor; MNK Hundred Fists/Dodge/Focus/Impetus;
+  WHM Asylum/Divine Seal/Afflatus Solace/Misery/Sacrosanctity; BLM Manafont/Subtle
+  Sorcery/Elemental Seal/Manawell; RDM Chainspell/Stymie/Composure/Saboteur.  Convert
+  restores 20% max HP, Tabula Rasa 40% max MP, Chakra +200 HP and Curing Waltz +40 from
+  their job-point rows.
+- `docs/job-points.md` lists the remaining ability-conditional categories and the gift
+  rows that are flags/systems rather than stats (Capacity Points, Superior, new spells,
+  pet/avatar/automaton bonuses, etc.).
+
+## Unreleased — job point Light Arts duration
+
+- **The maxed Job Point block now feeds Regen duration.** The client already sends every
+  job-point category at rank 20, but the duration formula was still passed
+  `light_arts_jp_rank=0`. The Light Arts Effect rank now contributes its +3 s per rank
+  (+60 s) before the enhancing-duration and Perpetuance multipliers. With the full
+  Regen_Duration set, Regen V goes from 10:51 to **15:40** under Light Arts and from
+  12:47 to **17:36** under Tabula Rasa.
+- `job_points_detail` and the duration call now share one `JOB_POINT_RANK` constant, so the
+  menu's 20/20 and the formula cannot disagree again.
+
+## Unreleased — monsters respect walls and cliffs
+
+- **Monsters can no longer walk through zone geometry.** The server reads the zone's collision
+  mesh from the player's own FINAL FANTASY XI folder (`FANXI_GAME_DIR`), rasterises its floors
+  into a walkable grid and keeps walls, cliffs and fences as barriers. Roam legs and chase paths
+  are planned with A* on that grid, the monster's `y` follows the floor under it, and a step off
+  the mesh or up a cliff face is refused.
+- **Aggro and swings need a walkable line.** A player on a ledge, a bridge deck or the far side of
+  a wall is no longer noticed or hit through the geometry. A monster with no route stops at the
+  last reachable point instead of climbing the wall.
+- **The grid is built once and cached** under `data/nav/<zone>.nav`, with the source model's size
+  and mtime in the header. Building starts in the background on zone-in; `python3 -m fanxi_server
+  nav --zone N` (or `--all`) prebuilds it. `FANXI_NAV=0` disables the layer, and zones whose
+  interiors live in separate sub-region files keep the old movement with a four-yalm vertical
+  guard.
+
+## Unreleased — a stuck box is visible, relaunchable and pulled back
+
+- **The Control room no longer calls a dead session "online".** `state.login_status` is the only
+  signal that counts (0 no character block, 1 logging in or zoning, 2 in world). A box whose zone
+  session died — a server restart, a silent UDP drop on a remote host — keeps its process, its
+  control port and its last zone, so the green row and the **Warp team to me** button promised a
+  character the server did not have. The row now reads **logged out** (or `zoning`), keeps the
+  uptime badge only for the ones that are actually in world, and holds back the actions that need
+  a character (**Invite**, **Warp team to me**).
+- **A logged-out row has a Relaunch button.** An attached Linux box is restarted through the same
+  helper that started it (`linux_boxes.py restart --only <id>`, same tunnel port, so the launcher
+  adopts it again); a local client is stopped and launched again through the normal token path.
+- **A box that comes back is warped to the leader by itself.** The launcher arms the warp when a
+  client goes from 2 to 0, or when Relaunch is pressed, and sends `//warp call <name>` from the
+  main account's in-game client once that account has reported 2 for two 3 s polls. Only the
+  returning box moves; a team already in place is not teleported again. A box that was never in
+  world this session is not armed, so a normal Launch still starts where the character stands.
+- **`//warp call <name>` is the one-box form of `//warp all me`.** The name is resolved on the
+  server (`session_by_name`), so a box in another zone — or one whose client has not drawn the
+  leader yet — still answers; `call all` is the whole team. It only moves characters on your own
+  account family, and a parked (`//sleep`) box is refused with "wake it first" instead of being
+  sent a zone-in its client would never acknowledge.
+- **`//warp all`, `//warp all me` and `//invite subs` skip parked boxes.** A sleeping client only
+  parses chat, so the zone-in/position packet was dropped and the session stayed `zoning` for good,
+  which is how a `//sleep` plus a team warp used to wedge a box. Wake it first.
+
+## Unreleased — the combat HUD stays visible around the launcher
+
+- **A menu or chat line no longer hides the HUD while the game window is out of focus.** The
+  layout editor's **Done** now leaves the windows on screen, and `//hud on` shows them as soon as
+  the player is back in the game. The hide applies only while the game has keyboard focus.
+- **An open but empty chat line no longer counts as typing.** The HUD steps aside once text is
+  entered, not merely because the game kept the input line open in the background.
+- **Addons can ask `xi.ui.focused()`** whether the game window has keyboard focus; the control
+  port's `state` also reports `focused` and `chat_open`.
+
+## Unreleased — the launcher chooses the game window
+
+- **Settings has a Game window card.** Pick Windowed, Borderless window, Full screen or
+  Borderless full screen; type a width × height or use **Fit this display** and the presets that
+  fit the primary monitor's usable area; and set the interface scale (menu resolution) that keeps
+  the UI legible on large displays.
+- **The choice is applied to every visible client.** The launcher writes the five display keys
+  to `display.reg` in its data folder and passes it to `host64` as `--reg-final`, which is loaded
+  after the game's saved registry. The game folder is never touched; a running client keeps its
+  window until it is relaunched.
+
+## Unreleased — `//` commands
+
+- **Fanxi commands are now typed with two slashes.** `//warp`, `//job`, `//gs`, `//follow`,
+  `//modes`, `//hud`, `//sleep` and the rest replace the old `/!` spelling and share the host's
+  `//` console namespace (`//addon`, `//lua` and `//exec` are unchanged). A known `//command` is
+  forwarded to the server as its `!command` say line, so the wire format and the saved-warp data
+  do not change; an unknown `//` line is still a local error and never chat. The old `/!...` and
+  bare `!...` spellings keep working for saved macros.
+- **Docs, Tab completion, the launcher and the server's help all show `//`.** `//wa` + Tab still
+  completes `//warp `, and `//w` is still left alone. `runtime.json` is bumped so the launcher
+  rebuilds the client host with the new addon.
+
+## Unreleased — /sea finds online players
+
+- **The search port is bound.** The lobby has always advertised `54002` as the search address,
+  but nothing listened there, so `/sea all` and `/sea <name>` failed before they left the
+  client. The gateway now runs a TCP search service on that port using the client's own
+  encrypted search packet format.
+- **Results come from the live zone sessions.** `/sea twodough` matches names by
+  case-insensitive prefix and `/sea all` lists the online roster; each result carries the
+  character's current area, job, level, race, nation, rank and 20-bit id. A name search
+  ignores the area condition the client adds from its own current location, so
+  `/sea twodough` finds the character in another zone too. A character stops appearing when
+  it logs out, and its area is the session's zone rather than a stale database row. Sleeping
+  boxes (`//sleep`) remain listed because they are still logged in.
+- **The rest of the search window is still out of scope:** search comments, linkshell ranks,
+  friend-list refreshes, party search and auction-house requests are ignored, and the result
+  id is the low 20 bits of Fanxi's content id.
+
+## Unreleased — Ctrl+H hides the whole HUD
+
+- **One key clears every Fanxi HUD window.** `//hud on|off|toggle` drives a master switch over the
+  four action windows, Battle Info, Party Info and the native FPS readout; Ctrl+H does the same,
+  with the chat line open or closed. The six per-window switches keep their state, so showing the
+  HUD again restores exactly what was visible. The master switch is saved with the character's HUD
+  file and exposed as `show_hud` on the control port and in `metrics.hud`. `runtime.json` is bumped
+  so the launcher rebuilds the client host with the new addon.
+- **Menus and chat now hide every HUD window, not just the right-hand ones.** The menu-hide switch
+  used to skip windows on the left half, so only the abilities panel stepped aside; now all four
+  action windows and both hubs hide together. The chat line is treated as a menu too. Combat still
+  keeps the menu hide suppressed, but the chat line hides the HUD there as well.
+
+## Unreleased — Oboro weapon augments on the Data page
+
+- **The Data page has a dedicated Oboro card.** It lists every Dynamis-Divergence
+  crafted JSE weapon family at NQ (R15), HQ1 (R20) and HQ2 (R25), shows whether a
+  copy is in a bag and which path/rank it already carries, and caps Path A, B or C
+  in one click. An item that is not in a bag can be bought into the first free
+  inventory slot from the same card, then capped; a live client gets `//reload`.
+- **The card uses the client's real bundle rows.** `data/oboro_r25.json` and
+  `server/fanxi_server/game/oboro.py` table all 22 families (66 item/quality
+  entries, bundles 1-198) with the same 24-byte `AugmentBundle` block Odyssey and
+  Limbus use: rank 15/20/25, tier 0/1/2, RP curve A and the family's bundle.
+  Path C is job-specific; HQ2 Paths A and B add the weapon's DMG row.
+- **Oboro augments feed the stat sheet.** `augment_stats` reads the block through
+  the merged registry: Musa Path C is `"Regen" potency +25`, `"Cure" potency
+  +25%` and `"Fast Cast"+10%`; Path A turns on Store TP+25 and Path B Subtle
+  Blow II+25. Chance-based rows (double damage, follow-up attack) are in the
+  client table but not modelled yet.
+- **Migration 120 retires Musa's static Path C rows.** It deletes the three
+  temporary `item_mods` lines and stamps the real R25 Path C block (bundle 189)
+  onto every existing Musa bag and locker copy, so the SCH Regen set keeps the
+  same 25 flat HP/tick, 25% Cure potency and 10% Fast Cast.
+- The generic RP card now excludes `kind = "oboro"` entries; the new card owns
+  them. `tools/gen_oboro.py --check` keeps the data file, the docs page and the
+  migration in step.
+
+## Unreleased — zone changes complete the zone-in again
+
+- **The zone key advance on `0x00B` is back.** The client does move its key on by 2 when
+  it changes zones; the working tree had stopped doing it, so every zone-in was enciphered
+  under a key the client had already left — it ignored the packet and retried its login
+  every two seconds, which is the "Downloading" screen that never finishes. Only a fresh
+  process (which starts from the account key again) got through.
+- **A late packet from before the change no longer pins the old key.** A packet still in
+  flight under the pre-change key used to flip the session back to it, undoing the advance
+  before the zone-in went out. The server now keeps both ciphers and only follows the old
+  one when the client's `0x00C` proves that is the key it is using.
+- **A repeated `0x00A` before `0x00C` rebuilds the zone-in** under the next packet id and
+  alternates both ciphers, instead of replaying the packet the client is already ignoring;
+  after four tries the session is dropped and the next login starts fresh. Tests cover the
+  advance, the in-flight packet, the `0x00C` follow, the rebuild and the give-up.
+
+## Unreleased — spell mode groups
+
+- **A spell group can hold both sets now.** The Gear page's Spells panel keeps a set for every
+  mode in a group instead of releasing the other face when one is picked. The groups are
+  Enfeebles (Macc / Duration), Enhancing (Potency / Duration), Curing (Potency / Cast time),
+  Nuking (Magic Attack / Magic damage) and Helixes (Magic Attack / Duration).
+- **A Mode dropdown arms the set the host wears.** The plan gives each spell one group and wears
+  that group's armed mode; a missing set for the armed mode falls through to the midcast default.
+  Per-spell cards still win over the group. Old configs with only category picks migrate to the
+  one configured mode, or the group default when both were set.
+- **The in-game spells HUD has one button per group.** Clicking cycles the armed mode and reports
+  the new set in chat. `//modes` lists the armed modes, `//modes <group>` lists that group's
+  modes, and `//modes <group> <mode>` arms one, e.g. `//modes enhancing duration` or
+  `//modes enfeebles macc`. The host mirrors the armed modes in `phase_status`, so a `//modes`
+  switch is folded back into the launcher config on the next poll.
+- `job_spells` returns the group key in each spell's `categories` array; the host classifies
+  Helix before Elemental Magic so a helix never takes the nuke set by accident.
+
+## Unreleased — SCH Regen sets and mule gear clone
+
+- **`gearswap/SCH.lua` carries the Community Scholar Guide's two Regen sets.**
+  `sets.midcast.Regen_Potency` wears Musa Path C, Arbatel Bonnet +3, four
+  Telchine pieces and Bookworm's Cape; `sets.midcast.Regen_Duration` wears four
+  Telchine pieces, Arbatel Bracers +3 and Lugh's Cape. Every Telchine piece and
+  Bookworm's carries both max lines: `"Regen" potency +10` and
+  `Enh. Mag. eff. dur. +10`.
+- **Migration 118 stocks Onedough's missing pieces.** It grants Musa, Khonsu,
+  the five Telchine pieces, Embla Sash, Bookworm's Cape, and the Malignance and
+  Mimir earrings, fills Musa Path C and Embla Sash, and skips anything already
+  owned.
+- **Migration 119 writes the two-line augment blocks and flat Regen math.**
+  All five Telchine pieces and Bookworm's get `"Regen" potency +10` (id 0x173)
+  and `Enh. Mag. eff. dur. +10%` (id 0x4E0) in the same 24-byte block. The flat
+  `"Regen"` lines are now `REGEN_POTENCY` (spare id 1223), added after the
+  percent multiplier and before the Light Arts bonus. With the potency set that
+  is 75 flat HP/tick (Musa 25 + four Telchine 40 + Bookworm 10) plus Arbatel's
+  25%, giving 149 HP/tick under Light Arts instead of a second percentage.
+- **The clone tool now keeps the locker's per-copy augment block.** Migration
+  116 added `char_locker.extra`, but `CHARACTER_TABLES` still copied only
+  `(item_id, quantity, stored_at)`, so two capes of the same job collapsed into
+  one row. The clone copies `extra` and has a regression test.
+- **Twodough through Sixdough were refreshed from Onedough.** They now carry the
+  same inventory, storage, locker, worn outfit and gear tables, including the new
+  Regen pieces and all 282 locker cape builds.
+
+## Unreleased — a returning main rejoins the team party
+
+- **A main account that logs out, freezes or is force-relaunched no longer loses its team.**
+  Logging out removes the main from the party and promotes a sub to leader; the subs stay grouped,
+  so inviting them again was refused with "already in a party". On the main's next fresh login,
+  Fanxi now finds the party made only of that account family, joins it and gives the main the lead
+  back. The subs get one roster update; nothing is disbanded and nobody has to answer an invite.
+- **`//invite subs` uses the same recovery first.** If the main is solo and the subs are still
+  grouped, the command rejoins that party and takes the lead, then invites only the online subs
+  that are missing. A second run is harmless.
+- **Only family-only parties are touched.** If a friend joined the subs' party, recovery leaves it
+  alone rather than demoting someone outside the team; a deliberate `/pcmd leave` followed by a
+  zone line also does not re-add the main (recovery runs on a fresh login, not every zone change).
+  `//invite subs` is the explicit way to take the party back.
+- Tests cover rejoin-and-lead, the zoned-in roster copy, a party with an outsider, a sub login, an
+  already-grouped main, and `//invite subs` rejoining and filling in a missing sub.
+
+## Unreleased — one-click make party with your subs
+
+- **The Party Info window has a Make party button.** It runs `//makeparty`, which takes every
+  online sub-account out of whatever party it is in and invites it to the button's character.
+  The subs accept automatically, so a half-broken team becomes one party in a click.
+- **`//makeparty` is the chat form.** It is the destructive sibling of `//invite subs`: a sub in
+  another party leaves it first instead of being skipped. The main must be the party leader.
+- **Tab completion knows `//makeparty`.** `//makep` completes to `//makeparty `.
+
+## Unreleased — Accession spreads the next white enhancing spell to the party
+
+- **Accession + Regen V now lands on every party member in range.** The stratagem only put
+  its icon on the bar; the next spell still resolved through the self-buff path, so the
+  caster got Regen V and nobody else did. `cast_magic` now marks the cast, and
+  `resolve_party_spell` applies the caster's rolled duration/tick/power to every live
+  party member within Accession's ten-yalm radius — the whole box team when they are
+  stacked. Each member gets its own gain-effect `0x028` result and `0x037`/`0x063` icon
+  list, so a boxed client draws the buff without waiting for another party sync.
+- **The stratagem is spent when the spell lands, not when the cast starts.** A cancelled
+  cast leaves it up, and only a white enhancing spell consumes it: black enhancing spikes
+  and the other spell schools leave the icon alone. Retail's Haste and Reraise exceptions
+  are honoured as well.
+- Tests: `test_effects` covers a two-character party, the out-of-range member, the
+  no-Accession control and the Cure-does-not-spend case; all use real sessions and the
+  real cast handler.
+
+## Unreleased — persistent headless sleep/wake
+
+- **Headless boxes are now parked, not stopped.** `//sleep` hides the character from every other
+  client, despawns its Trusts, skips its world tick and stops processing movement/actions while
+  keeping the process, UDP session, control port and tunnel alive. A 10-second status heartbeat
+  keeps the client's connection from timing out. `//wake` restores the character in place; no new
+  launch token, no process start and no zone reload.
+- **Team page Sleep/Wake.** Each running box shows **Sleep**; a parked box shows **Sleeping** and
+  **Wake**. The same **Launch headless** button now wakes a parked box instead of reporting it as
+  already running. The sleeping flag is stored in the box registry, so it survives a launcher
+  restart.
+- **Stop means park for headless/remote boxes.** The Control room's Stop now sends `//sleep` for
+  those instances instead of killing the process. Use **Force relaunch** when a process really
+  needs to be replaced.
+- Server tests cover hide/despawn, no sixty-second reap while sleeping, and wake restoring the
+  same session/targid. Live test: slept Threedough for 65 seconds and woke it with no relog.
+
+## Unreleased — force relaunch a stuck headless box
+
+- **Force relaunch** on each Team box bypasses the in-memory "remote box operation is already
+  running" guard. It kills the stuck `linux_boxes.py` helper, stops the tracked/remote/local
+  session for that account, removes its registry row and tunnel, then starts a fresh client with a
+  new launch token. This is the explicit escape hatch; normal launch keeps the healthy-client
+  protections.
+- The force path is deliberately allowed to stop a client that still answers `login_status == 2`
+  for the selected account; the other accounts are untouched.
+
+## Unreleased — conservative headless orphan cleanup
+
+- **Every headless launch reaps orphans first, without killing a good client.** Local
+  `host64`/`host64-headless` processes that are tracked by the launcher, visible (`host64`),
+  alive on a control port with `login_status == 2`, or younger than 120 s are kept. Automatic
+  cleanup is headless-only; a visible client is never reaped. Untracked processes that are older and
+  no longer answer control are stopped, and registry entries whose tunnel has been dead or
+  unanswered for 120 s are dropped so their ports are freed.
+- **A launch attaches an account that is already in game** instead of stopping and restarting it.
+  Per-box **Launch headless** returns the existing view; the team flow restarts only boxes that
+  are not in game (`login_status == 2`), not merely boxes whose control socket answers.
+- **Remote helper `reap`** protects every user in `~/.fanxi-linux-boxes.json` and stops only
+  untracked `host64-headless` processes older than the grace period (120 s). It runs automatically
+  at the start of `up`/`restart`; `--dry-run`, `--no-reap` and `--orphan-grace` are available for
+  manual runs. A dry run against the live five boxes kept every tracked box.
+- The `Stop` and targeted `restart --only` paths still stop the account the user explicitly asked
+  to replace; only the automatic pre-launch cleanup is conservative.
+
+## Unreleased — job changes refresh the combat HUD
+
+- **The four HUD windows follow a job change without reopening them.** `//job` sends the new
+  job block before the new outfit, and the client's `0x0AC` command list — the source of the
+  Abilities and Weapon Skills windows — arrives only after the gear is on. The HUD rebuilt on
+  the job number alone, so it kept the previous weapon's skills (after swapping back from WAR
+  to SCH it still listed only `Combo`) until another job change. The rebuild signature now
+  includes a fingerprint of the command list, so the lists rebuild again when the new weapon
+  and its commands settle. The same path covers the Mog House Moogle's Change Job menu, which
+  reaches `0x01B`/`0x0AC` through `0x0100` instead of the chat command.
+- **Abilities that survive the rebuild keep their cooldown bars.** A rebuild is also a weapon
+  swap, not only a job change; the timer moves to the new item key instead of being cleared.
+- **The launcher sees the refreshed counts while the windows are hidden.** `metrics.hud` now
+  checks the same signature on every snapshot, so a job change at the Moogle reaches the
+  Control room even when no HUD frame is drawn.
+
+## Unreleased — invite the whole team at once
+
+- **`//invite subs` invites the whole box team in one command.** Also `//invite all` / `//invite team`.
+  The server resolves the online sub-accounts in the inviter's family itself, so distance and zone
+  do not matter; every sub accepts automatically. `//invite <name>` invites one online player from
+  the server-side name list, and a non-family player still gets the normal prompt.
+- **The Control room has an Invite button.** The **Live party** header's **Invite** opens a picker
+  for the highlighted client: **Invite all online subs** runs `//invite subs`, and every other
+  running character has its own **Invite** row. It uses the existing control command bridge, so no
+  new backend path.
+- **Tab completion knows `//invite`.** `//inv` completes to `//invite `, and `//invite su` to
+  `//invite subs `.
+
+## Unreleased — warp and zone hand-off hardening
+
+- **Same-zone warps no longer zone.** `//warp all me` and the launcher's **Warp team to me**
+  now send a position update (`0x00D`) when the team is already in the leader's zone, instead of
+  `0x00B` + a full client zone-in. No reload, no login retry, and no dropped boxes: verified with
+  all five remote boxes and the main, then nudged the leader and confirmed the boxes followed to
+  the new position. `//warp me <slot>` and `//warp all <slot>` use the same fast path.
+- **The zone-change window starts when the change is queued**, not at the client's last packet.
+  An idle box that had not moved for minutes used to look like a stale hand-off and was reset to
+  the base key; that was the root of the "two boxes drop after a warp" pattern.
+- **A repeated `0x00A` re-sends the zone-in** instead of evicting the session that just logged in.
+  This stops the two-second login-retry storm; the server also accepts `0x00C` when it arrives
+  with sync 0, and follows the pre-zone key when the 2026 client keeps it. The 2025-07-03 key
+  advance is no longer applied. Cross-zone warps still use the client's zone load; the launcher's
+  team warp uses the no-reload path whenever the team is together.
+- **Per-packet world ticks are capped at 30 Hz.** Every client packet used to run the full
+  mob/trust/party/combat tick; six boxes at 30 fps meant ~180 full ticks a second during a fight.
+  Movement packets still flush immediately, but the shared AI/event clock runs at most thirty
+  times a second, which is above the client frame rate. This is the main combat/event headroom
+  change behind the warp work.
+- Tests: `test_presence` covers the idle window and the unchanged key; `test_warps` covers the
+  same-zone teleport and the existing family warp.
+
+## Unreleased — the multibox team runs on the Linux host
+
+- **Launch headless team** on the Team page starts the main client on this Mac and restarts the
+  five sub-account boxes on the configured Linux host. It stops local duplicates first, runs
+  `scripts/linux_boxes.py` (mint launch tokens, start `host64-headless`, rebuild the ssh tunnels,
+  wait for a zone), attaches the tunnels, and lands in the Control room with all six online.
+- **Remote Linux host (SSH)** is a launcher setting. Once set, each box's **Launch headless** uses
+  the same helper and leaves the Mac running only the main; with it empty the launcher keeps the
+  local cleanup path.
+- **Main and boxes share one game install.** `host64-headless` is rebuilt for the same
+  **2026-10-05** build as the main client, and the helper points at `FFXI2026`; there is no
+  2025-07-03 split. It kills the remote `host64` by account (the recorded pid was the `bash -c`
+  wrapper), and a new `restart --only` action restarts just the selected boxes.
+- **Optional 30 fps cap for the main client** (Settings) leaves headroom for the box pollers and
+  the rest of the desktop; relaunch the main to apply. The five remote boxes measured ~0.3 core
+  and ~764 MB total on the Linux host, so the Mac no longer pays for them.
+
+## Unreleased — sub-account invitations accept themselves
+
+- **Inviting one of your own sub-accounts no longer needs a click on the box.** When the invitee is
+  a server-owned sub-account in the inviter's account family, the server applies the party or
+  alliance invitation directly: the roster (`0x0C8`/`0x0DD`) arrives without a `0x0DC` prompt.
+  A headless box has no UI to answer the prompt, and a windowed sub is still driven from the main
+  account's launcher, so both accept the same way. A main account, or another player's character,
+  keeps the normal prompt.
+- **`FANXI_AUTO_ACCEPT_SUB_INVITES=0`** restores the prompt for every invitee when a server wants
+  retail behaviour. The default is on.
+- Tests: `test_party` covers a main inviting its sub, a sibling sub, an alliance invite, another
+  player's sub, a main account, and the configuration switch.
+
+## Unreleased — Tauri launcher becomes the launcher
+
+- **The Python/Tkinter launcher is gone.** `launcher/` (the app, its tests and the `.app`
+  packager) has been removed. `launcher-rs/` — the Rust + Tauri 2 app with a React front end — is
+  the launcher, and `make launcher`, `scripts/launcher.sh`, `scripts/dev.sh`, `setup.command` and
+  `install.sh` all run or build it.
+- **Settings carry over.** `launcher.json` keeps its format, so accounts, characters, the game
+  folder and the tenant selection survive the switch. `install.sh` records the checkout as
+  `repo_root` so an installed `.app` can still find `tools/build_posix.py`.
+- **CI and docs follow.** The Python workflow no longer runs launcher tests; the separate
+  `launcher-rs` workflow type-checks the front end, runs the Rust tests and compiles the Tauri
+  app. README, `docs/launcher.md`, `docs/development.md` and `docs/architecture.md` describe the
+  Rust launcher.
+
+## Unreleased — headless launch on every Team card
+
+- **Each box card on the Team page has its own Launch headless button.** It starts just that
+  sub-account with no visible game window, using the same headless launch path as the Control
+  room's whole-party action. The launcher stays on Team so the next box can be started straight
+  away, and the card's **In game** badge appends **· headless** while that client is windowless.
+  A normal **Launch client** button sits beside it.
+- **A launch clears the account's old processes first.** Before spawning, the launcher stops the
+  instance it tracks, any local `host64`/`host64-headless` naming the account, and the remote box
+  recorded by `scripts/linux_boxes.py` (including the stuck case where its ssh tunnel died). It
+  then waits for the character to actually reach a zone, nudging the title screen with Enter, and
+  only reports success then; a timeout stops the new client and reports its log path.
+- **Headless boxes can use their own game folder.** Settings gains **Headless game folder** for
+  the older hook-complete install the `host64-headless` binary was built against; leaving it empty
+  keeps using the main game folder.
+
+## Unreleased — Trusts cast their spells and passive auras
+
+- **Alter egos now use their own spell lists.** `0117_trust_spells.sql`, generated by
+  `tools/import_lsb_trusts.py`, carries the 1,259 `mob_spell_lists` rows behind the 62
+  Trusts that have one.  Kupipi casts Protectra/Shellra/Cure, Shantotto nukes, Koru-Moru
+  puts up Protect/Shell and enfeebles, and the melee-only Trusts keep swinging.
+- **The AI casts instead of only meleeing.** A Trust cures its owner below 85% HP, keeps
+  missing or expiring buffs up, lands a missing debuff on the owner's target, then nukes.
+  Casts send the real Magic Start and Magic Finish actions (`0x028`) from the Trust's id,
+  spend the Trust's MP and resolve on the tick after the cast time.  Melee Trusts still
+  swing; pure casters hold their distance.
+- **Passive Trust auras exist and have their own icons.** Cornelia applies
+  `TRUST_AURA_HASTE` (808) with the GEO Haste icon (580), so the extra Haste icon sits
+  beside ordinary Haste instead of being hidden by it.  Sakura, Moogle, Star Sibyl,
+  Kuyin Hathdenna, Brygid and Kupofried carry their Regen, Refresh, Magic Attack,
+  Accuracy, CHR and Dedication auras with the matching GEO icons.  The aura is removed
+  when the Trust is released or despawns.
+- Tests: `test_world` covers a Kupipi cast and status icon, Cornelia's separate Haste
+  icon with no auto-attack, and Shantotto's nuke; the importer's `--check` covers both
+  generated migrations.
+
+## Unreleased — Parties and alliances
+
+- **`/pcmd add`, the party menu's invite, `/acmd add` and alliance invites now work.** All four
+  entry points send the client's `C2S 0x06E` (Kind 0 for a party, 5 for an alliance). Fanxi did
+  not handle that packet, and because it arrives with sync 0 the dispatcher dropped it before the
+  "first packet" log line, so the command silently did nothing. It is now answered: `0x0DC`
+  prompts the invitee, `C2S 0x074` accepts or declines, and an accepted invite builds the group.
+- **The roster is server-owned.** A member receives `0x0C8` (the party table: up to 20 rows with
+  party number, leader/alliance-leader flags and zone) followed by one `0x0DD` per member (HP/MP/TP,
+  job/sub-job, level, member number and name). Members in another zone are sent their zone number
+  instead of vitals, the shape retail uses.
+- **Vitals follow the party.** Each member's `0x0DF` (the packet the player already received for
+  themselves) is copied to the other group members when HP/MP/TP changes, at most twice a second,
+  so the native party bars and the Party Info hub stay current.
+- **Leaders, leaving, kicking, disbanding and alliances.** `C2S 0x06F` (leave), `0x070` (disband),
+  `0x071` (kick), `0x076` (reload), `0x077` (leader) and `0x078` (group id) are handled. A leader
+  who leaves passes leadership to the next member; the last member folds the party. An alliance
+  invite needs two party leaders; up to three parties form an alliance, led by the main party's
+  leader, and `0x0C8` switches to Kind 5 with each row carrying its party number. `0x0E1`
+  (the group id) is only sent while grouped: id 0 makes the retail client follow a null group
+  pointer and crash.
+- **Not in this pass:** party/alliance chat (`/p`, `/a`), party search, level sync, treasure pools,
+  Trusts in the roster, and persistence across a server restart. A relog starts solo.
+
+## Unreleased — all 198 Ambuscade JSE capes, stored in the locker
+
+- **Every job now has its full Ambuscade cape set.** `capes.py` grows from four jobs
+  (BST/NIN/DRK/BLM) to all 22 — 198 builds, one `tp`/defensive/WS/pet/fast-cast set per
+  job, with the same augment block the gearswap libraries name. `tools/gen_capes.py`
+  writes the `0116_all_capes_locker.sql` migration and [docs/capes.md](docs/capes.md)
+  from it; the page lists every build and block.
+- **The builds live in the hidden 9999-item locker, not in a bag.** 198 copies of 22
+  item ids only fit there. `char_locker` gains a 24-byte `extra` block and a primary
+  key that includes it (`character_id, item_id, extra`), so nine Taranus's Capes or
+  eleven Andartia's Mantles can sit side by side without losing their augments.
+  `//locker store|grab jsecapes` is the new selector; `//locker list` shows each cape's
+  build.
+- **`//job` grabs the new job's capes and the tidy puts them in the wardrobes.** After
+  the new job's slips are pulled, the command takes that job's cape builds out of the
+  locker and the existing tidy moves the loose copies into the Mog Wardrobes; the
+  other 21 jobs' capes stay stored. `//locker grab jsecapes` takes all 198 out and
+  `//locker store jsecapes` returns them. The equipped cape keeps its block through the
+  move, and `equipped_mods()` still counts its augments.
+- **Old bag/wardrobe cape copies are cleaned up by the migration** (an equipped cape
+  stays and is re-encoded to its job's default build), so the first `//job` has room for
+  all 198. The four earlier per-job migrations remain historical.
+- **Gearswap libraries:** the 11 files whose `local capes` table had been flattened by
+  the launcher (RDM, THF, BRD, RNG, SAM, NIN, SMN, DNC, SCH, RUN, DRK) have their build
+  tables back, and every `back = "<job cape>"` now points at `capes.<build>`. The other
+  11 already carried theirs.
+- Tests: `test_capes` covers all 22/198 and the generated migration/docs;
+  `test_world` covers two same-id capes surviving store/grab and `//job` pulling them.
+
+## Unreleased — Warp team to me
+
+- **`//warp all me` calls the team to the sender.** It keeps the leader where they stand and
+  moves every other online character in the account family (the main account and its
+  sub-accounts) to the leader's zone, position and heading. `here` and `self` are accepted too,
+  and a saved warp whose alias is "me" no longer shadows the built-in target.
+- **The launcher has the same button.** **Warp team to me** sits in the Warps page's current
+  position card and in the Control room's **Live party** header, where it acts on the highlighted
+  row. All of them send `//warp all me` through the character's control port, so the server still
+  owns the zone hand-off and the position it read from the client.
+- The Warps help grid and command docs list the new form; the leader is never re-zoned by its own
+  call.
+
 ## Unreleased — Battle Info and Party Info hubs
 
 - **Battle Info** is a new in-game window with Start, Pause, Stop and Reset controls. It
@@ -44,9 +743,9 @@
   Trust-flagged spawnables against the `0x067` master targid, so another player's Trust
   with the same name does not light up your tile. An active alter ego gets a cyan border,
   a left stripe and an active dot. Clicking an active button sends the new
-  `!trust release <spell id>` command, which releases that Trust immediately instead of
-  trying to call it a second time. `!trust` lists active alter egos and
-  `!trust release all` clears them.
+  `//trust release <spell id>` command, which releases that Trust immediately instead of
+  trying to call it a second time. `//trust` lists active alter egos and
+  `//trust release all` clears them.
 - **Not in this pass:** Trust spell/job-ability AI, party-window rows, and monsters
   choosing a Trust as their hate target.
 
@@ -94,7 +793,7 @@
 ## Unreleased — augment rows reach the stat sheet
 
 - **Rank 30 augments were tooltips only.** The server wrote every augment block
-  (`!r30`, `!rp30`, `!cape`, the launcher card) but never read one back: `equipped_mods()`
+  (`//r30`, `//rp30`, `//cape`, the launcher card) but never read one back: `equipped_mods()`
   summed `item_mods`, which holds only the base item. A Ninja in the full Revelation set
   therefore had DA 13 (WAR-sub trait 10 + Cessance 3) instead of DA 47, and an eight-round
   kill showed two hits a round and no `multi-attack` line. `equipped_mods()` now joins each
@@ -213,7 +912,7 @@
 - **The grant follows the weapon, not the skill type.** A negative `skill_level` marks a skill as
   item-granted: the normal weapon-type/value filter skips it, and
   `ZoneSession.equipped_weapon_skills()` adds the ids the current outfit grants through 355. Dokoku
-  now shows Zesho Meppo, while Kikoku (or any other katana) still does not, and `!ws "Zesho Meppo"`
+  now shows Zesho Meppo, while Kikoku (or any other katana) still does not, and `//ws "Zesho Meppo"`
   obeys the same check.
 
 ## Unreleased — ability and spell HUD on every account
@@ -274,7 +973,7 @@
   retail way too: everything up to 3000, keeping any excess on the bar.
 - **Campaign-only skills are no longer advertised.** Uriel Blade, Glory Slash and Tartarus
   Torpor were in the staff/sword menus at 350 skill because the import leaves their requirement
-  at 0; they need a Campaign Battle and a Campaign weapon, so the `0x0AC` list and `!ws` now
+  at 0; they need a Campaign Battle and a Campaign weapon, so the `0x0AC` list and `//ws` now
   refuse them.
 - **Still not modelled:** weapon-skill aftermath (Empyrean/Relic/Mythic), each skill's own
   fTP/WSC table, skillchains and magic bursts, and the job traits the engine still does not
@@ -313,27 +1012,27 @@
   **View** button on the others. Switching accounts clears the tenant and falls back to the new
   account's active character.
 
-## Unreleased — /!warp, the Warps page and /! Tab completion
+## Unreleased — //warp, the Warps page and // Tab completion
 
-- **`/!warp` remembers places by name instead of a zone id.** Migration 110 adds `char_warps`
-  (character, slot 1-1000, optional unique alias, zone, position, rotation). `!warp mark [alias]`
-  stores the sender's current in-memory position under the next number; `!warp me <n|alias>` and
-  `!warp all <n|alias>` return alone or with every online character on the sender's main account
-  and its sub-accounts (the multibox group). `!warp list [page]` prints eight per page,
-  `!warp delete <n|alias>` removes one, and `!warp rename <n> <alias>` names one from chat.
+- **`//warp` remembers places by name instead of a zone id.** Migration 110 adds `char_warps`
+  (character, slot 1-1000, optional unique alias, zone, position, rotation). `//warp mark [alias]`
+  stores the sender's current in-memory position under the next number; `//warp me <n|alias>` and
+  `//warp all <n|alias>` return alone or with every online character on the sender's main account
+  and its sub-accounts (the multibox group). `//warp list [page]` prints eight per page,
+  `//warp delete <n|alias>` removes one, and `//warp rename <n> <alias>` names one from chat.
   Numbers and case-insensitive aliases/prefixes both work, with an exact alias winning and an
-  ambiguous prefix listing the candidates. `!hp` keeps the Home Point menu; `!warp` no longer
+  ambiguous prefix listing the candidates. `//hp` keeps the Home Point menu; `//warp` no longer
   aliases it.
 - **The launcher has a Warps page.** It lists the selected character's saved places with number,
   alias, zone and coordinates; **Mark** reads the live client's current position, **Warp** sends
   `me`/`all`, and aliases can be renamed or rows deleted inline. A main-account token can manage
   the family's sub-account characters too. The page is also linked from the Control room.
-- **`/!` commands complete with Tab.** The host now sees Tab while the chat line starts `/!` and
-  rewrites the input from `host/addons/complete.c`: `/!wa` -> `/!warp `, `/!warp ma` ->
-  `/!warp mark `. An ambiguous prefix never guesses: the line is left as typed and Tab is consumed,
-  so `/!w` does nothing and `/!wh` -> `/!where `. An exact command name wins over a longer one that
-  shares it (`/!home` -> `/!home `). The table covers every server command plus `/!gs` and
-  `/!follow`, and `tests/chat_complete_test.py` compiles and checks the pure completion source.
+- **`//` commands complete with Tab.** The host now sees Tab while the chat line starts `//` and
+  rewrites the input from `host/addons/complete.c`: `//wa` -> `//warp `, `//warp ma` ->
+  `//warp mark `. An ambiguous prefix never guesses: the line is left as typed and Tab is consumed,
+  so `//w` does nothing and `//wh` -> `//where `. An exact command name wins over a longer one that
+  shares it (`//home` -> `//home `). The table covers every server command plus `//gs` and
+  `//follow`, and `tests/chat_complete_test.py` compiles and checks the pure completion source.
   `xi_chat_set_input` also moves the input caret/display counter to the new end and asks the chat
   manager to redraw its line, so the completion appears on the first Tab instead of the next key
   press and the next typed character does not land inside the completed command.
@@ -510,7 +1209,7 @@
   crafting block instead of zeroes.
 - The RP registry merges Odyssey (Nyame paths A-D, the other sets/weapons single),
   Limbus (single Rank 30, curve B, 55,800 RP) and Unity (single Rank 15, curve A,
-  1,110 RP). Capping writes the 24-byte bundle and `!reload` re-sends the item attribute
+  1,110 RP). Capping writes the 24-byte bundle and `//reload` re-sends the item attribute
   so the tooltip updates.
 - Trusts: all 122 Trust spell ids and the cipher key items are already in the zone-in
   bitmaps, and the card re-issues them. Trust summoning itself is not implemented yet,
@@ -523,7 +1222,7 @@
   gil, Home Point registration, a named currency ledger, the permanent key-item tables and an
   Armory that searches weapons, armour, accessories and ammo and adds them to the inventory,
   with a purchase history that flags what the character still holds. Values are written
-  through the HTTP API; when the character is online the page sends `!reload`, which re-reads
+  through the HTTP API; when the character is online the page sends `//reload`, which re-reads
   the row and re-sends `0x01B`, merits, job points, key items and the inventory in one burst.
 - **The Armory now covers the whole equipment catalogue, with a typeahead.** Migration `0111`
   joins the retail client's item names to LandSandBoat's `item_basic` / `item_equipment` /
@@ -563,7 +1262,7 @@
   full, so `Chirich Ring +1` (Regen+2) and `Stikini Ring +1` (Refresh+1) looked inert while the
   client still drew the missing HP/MP. The three-second tick also re-derives the maxima from the
   stat sheet, so an older save cannot stall it either.
-- **`!traits` reports gear Regen/Refresh too.** The "Passive tick" line now uses the merged
+- **`//traits` reports gear Regen/Refresh too.** The "Passive tick" line now uses the merged
   trait-and-gear modifiers and prints for a job pair with no Auto Regen/Auto Refresh trait, which
   is what made a gear-only tick (Chirich/Stikini) invisible to the diagnostic.
 
@@ -584,8 +1283,8 @@
   matched to the Rank 30 row in `docs/limbus-r30.md` by content. The block also records
   55,800 RP on curve B, the rank-30 total (rank 1 is 1,600), so the client can draw the
   rank and the four augment lines.
-- **`!rp30` re-stamps the Limbus pieces a character carries**, and migration
-  `0104_limbus_rp30.sql` applies the same block to every copy already in a bag. `!r30 <piece>`
+- **`//rp30` re-stamps the Limbus pieces a character carries**, and migration
+  `0104_limbus_rp30.sql` applies the same block to every copy already in a bag. `//r30 <piece>`
   now prints the bundle beside the rows. Bundle indices 477-481 are Duty,
   472-476 Revelation, 487-491 Sworn, 482-486 Indomitable and 492-496 Clemency.
 - **The five Shard → Jewel furnace pairs are granted to Onedough and Twodough.** Justice →
@@ -599,7 +1298,7 @@
 - **Black Mage's Taranus's Cape now has all nine builds the library uses.** `capes.py`
   gains `BLM_BUILDS` (`tp`, `pdt`, `mdt`, `maxhp`, `dt`, `fcmp`, `macc`, `nuke`, `mabws`);
   migration 101 puts the existing wardrobe copy on `tp` and adds the other eight in
-  wardrobe 6 slots 66-73. `!cape` lists the job and can re-encode any copy. The cape is
+  wardrobe 6 slots 66-73. `//cape` lists the job and can re-encode any copy. The cape is
   Ex-only (not Rare), so the one-copy rule does not touch the builds.
 - **`gearswap/BLM.lua` is back to the augmented library.** The launcher's flatten pass had
   dropped the `capes`, `unity` and `odyssey` tables. The file again points each set at its
@@ -672,7 +1371,7 @@
   Mercy → Grace → Clemency: 25 pieces (items 24122–24194) in migration 99, with the base
   modifiers parsed from each piece's stat line, granted to Onedough and Twodough carrying the
   rank-30 / tier-3 augment block — the same exdata shape Odyssey uses.
-- **`!r30` answers for Limbus as well as Odyssey.** `data/limbus_r30.json` holds the top tier and
+- **`//r30` answers for Limbus as well as Odyssey.** `data/limbus_r30.json` holds the top tier and
   every Rank 30 row; the server lookup, `docs/limbus-r30.md` and the migration are rendered from
   it by `tools/gen_limbus_r30.py`, whose `--check` fails when they drift.
 - **The libraries now carry the suits where the community actually wears them.** Every
@@ -698,7 +1397,7 @@
   reach, even though retail keeps the engagement out to draw range. The server now ignores that
   first distance-driven packet, re-sends the `0x058` target and the `0x00D` battle stance, and
   keeps swinging whenever the target comes back. A second `/attack off` within 1.5 seconds, the
-  new `!disengage` command, a dead target, or the target going beyond 30 yalms still ends the
+  new `//disengage` command, a dead target, or the target going beyond 30 yalms still ends the
   fight. `/attack` now refuses a target beyond 30 yalms instead of engaging across the zone.
 - **The phase engine no longer wears the idle set on that automatic `/attack off`.** Engagement
   is still immediate on `/attack`, but disengagement follows the server's own `0x00D` animation,
@@ -713,9 +1412,9 @@
   weapons have their own model block, 782-797, and 796 is the one number in it nothing used, so
   the rod takes 796 (a distinct model in the install, ROM/365/126.DAT).
 
-## Unreleased — `/!job` cleans up after itself
+## Unreleased — `//job` cleans up after itself
 
-- **A `/!job` change now slips the old outfit, pulls the new job's set and tidies the bags.**
+- **A `//job` change now slips the old outfit, pulls the new job's set and tidies the bags.**
   It takes every worn piece off first (the slips only accept loose gear), runs the storage store
   for the old main job, clears room while keeping gear the new job can wear, pulls every item on
   the new job's slips, auto-equips the best set it can find -- including wardrobe pieces such as
@@ -768,7 +1467,7 @@
 
 ## Unreleased — character designs you can change in game
 
-- **`!character model` changes a character's race, face, hair colour and size, live.** The 48
+- **`//character model` changes a character's race, face, hair colour and size, live.** The 48
   designs of each race are numbered with size fastest: Hume 8 is Face 2 / Hair A / Medium, and
   `mithra random` picks face/hair/size inside that race. `face 2 hair a size m` names the parts.
   The server writes `characters.race/face/hair/size` (migration 93 splits the old combined face
@@ -1017,7 +1716,7 @@
   two-handed Main; off-hand weapons and shields only with a one-handed or empty Main, and a
   saved Sub that no longer fits is cleared. Ammo shows its stack quantity, and every picker
   includes items already worn. The list comes from the new `weapons` control command; the
-  hidden `!locker` is not a client bag.
+  hidden `//locker` is not a client bag.
 - **The Weaponskills card spans its own row**, so its per-WS set names are readable instead of
   clipped in a half-width card.
 
@@ -1050,7 +1749,7 @@
   to `characters.home_*`, and a K.O. without a Raise returns there too.
 - **Home Point crystals open their menu on a fresh database.** Only the live database had
   `world_npcs.hp_index` filled in, so a newly initialised one treated every crystal as
-  "set your home point here".  Migration 0084 restores the menu indexes, and `!hp` now
+  "set your home point here".  Migration 0084 restores the menu indexes, and `//hp` now
   numbers destinations by the same `hp_index` the client's menu uses (it accepted a
   different `home_points.idx` before) and also accepts a zone name.
 - Tests: `server/tests/test_effects.py` drives the real handlers and decodes the `0x028`
@@ -1064,13 +1763,13 @@
   and Idle modes cards are gone.
 - **Kiting and resting are forced states.** Kiting wins over engagement and movement until it is
   switched off; resting is a manual state because this server has no rest packet. The host tracks
-  both (`xi.phase.kiting`, `xi.phase.resting`) and the UI/`/!gs` drive them.
+  both (`xi.phase.kiting`, `xi.phase.resting`) and the UI/`//gs` drive them.
 - **Weaponsets and per-slot pins.** A weapon set is main/sub/ranged/ammo, written with a new
   weapon-only editor form, worn with **Wear**, and pinned with **Wear & lock**. Pinned slots are
   filtered out of every set the engine sends (precast, midcast, engaged, idle, kiting, resting,
   focus); the EquipViewer draws a red border on each pinned cell. The same is available in game:
-  `/!gs lock main, sub, ranged, ammo`, `/!gs unlock …`, `/!gs rest on|off`, `/!gs kite on|off`,
-  `/!gs focus auto|dt|pdt|mdt|eva|meva`. The control addon blocks the line before the server sees
+  `//gs lock main, sub, ranged, ammo`, `//gs unlock …`, `//gs rest on|off`, `//gs kite on|off`,
+  `//gs focus auto|dt|pdt|mdt|eva|meva`. The control addon blocks the line before the server sees
   it and confirms in chat. Job changes answer with the pins, kiting, resting and focus cleared.
 - **Per-WS cards and a default.** Every `sets.WS.*` WS gets its own set picker; empty uses the
   library's WS set, then the default card. The TP set returns on the WS result packet, whether it
@@ -1129,12 +1828,12 @@
   consumes its fuda and refills from the locker.
 - Ninja's eleven Andartia's Mantle builds now carry their real augment blocks.
   `0082_nin_capes.sql` turns the wardrobe copy into the TP build and adds the other ten to the
-  first free bag slots; `!cape` reads the item's job, so `!cape dw Andartia` works.
+  first free bag slots; `//cape` reads the item's job, so `//cape dw Andartia` works.
   [docs/capes.md](docs/capes.md) lists every build.
 - Unity gear is augmented too. The five Unity items in the default libraries (Unmoving Collar +1,
   Odnowa Earring +1, Gelatinous Ring +1, Ghastly Tathlum +1, Loess Barbuta +1) carry the client's
   Rank 15 single-path `AugmentBundle` block in `char_inventory.extra`; `0083_unity_augments.sql`
-  writes them, `!augment A <item>` rewrites one, and
+  writes them, `//augment A <item>` rewrites one, and
   [docs/unity-augments.md](docs/unity-augments.md) lists the bundle indices.
 
 ## Unreleased — equipment
@@ -1179,7 +1878,7 @@
   into the equipment modifier dict, so Attack Bonus, Defense Bonus, Accuracy/Evasion Bonus and
   Max HP/MP Boost reach the stat sheet, the status packet and combat through the existing path.
 - `0x0AC`'s fourth block (bytes 192..223) now carries the client's job-trait ids instead of
-  always being zero, and a new `!traits` command prints the current pair's traits, their ranks
+  always being zero, and a new `//traits` command prints the current pair's traits, their ranks
   and modifier values and re-sends the command data.
 - The client's Abilities menu is built from a saved command-id list, not the `0x0AC` bitmap.
   `host/addons/hooks.c` now appends the trait ids to that list as `0x600 + trait id`, which is
@@ -1272,7 +1971,7 @@
 ### Control room
 
 - New **Control** page: party roster, Launch / Launch all / Stop, live zone/HP/MP/EXP/hr/DPS table,
-  and a command console for `!zone`, `!merits`, `!heal`, `!where`, `!help`.
+  and a command console for `//zone`, `//merits`, `//heal`, `//where`, `//help`.
 - Each client starts with its own `FFXI_CONTROL` port and `game-<account>.log`; one client per
   account is enforced by the launcher.
 - The built-in control addon gained `metrics`, `command`, `gear`, `equip`, `equip_set` and
@@ -1320,14 +2019,14 @@
   413-422, Gleti's 413-417, Agwu's 428-432 and the weapons 393-412.
 - `0077_odyssey_bundles.sql` writes those indices into every Odyssey item's exdata and adds the
   Path B/C/D copies of the five Nyame pieces (each with its own bundle), so all four tooltips
-  differ. `!augment <index|A-D|off> <item>` rewrites a copy in game.
+  differ. `//augment <index|A-D|off> <item>` rewrites a copy in game.
 - Ambuscade JSE capes now carry their real augment block too, not just a label in the Lua file.
   The nine Beastmaster `Artio's Mantle` builds are standard five-slot augments (kind `02`,
   subkind `03`, `id:11 | value:5` words), so the client prints `HP+60`, `Eva.+20/Mag. Eva.+20`,
   `Accuracy+20 Attack+20`, `Weapon skill damage+10%`, the pet lines and the rest. The ids are
   the client's own augment table (the one Magian items use); `HP+60` is id 2 with value 27
   because the value field is five bits. `0078_bst_capes.sql` turns the bag copy into the TP
-  build and adds eight wardrobe copies; `!cape <build|list|off> <item>` rewrites one.
+  build and adds eight wardrobe copies; `//cape <build|list|off> <item>` rewrites one.
   [docs/capes.md](docs/capes.md) lists every build and block, and `tools/gen_capes.py` writes the
   page and the migration from `server/fanxi_server/game/capes.py`.
 
@@ -1349,20 +2048,20 @@
   Migration `0076_item_weapon_skill.sql` adds the item `skill` column and maps the 72 weapons in
   the item table to their skill types. The server also rejects a weapon skill that is not on the
   advertised list. A BST 99 with Aymur's `0x0AC` block now carries 14 axe skills instead of all
-  210 (verified in client memory as bytes `FF 3F` at the axe offset), and `!ws` refuses the rest.
+  210 (verified in client memory as bytes `FF 3F` at the axe offset), and `//ws` refuses the rest.
   The 2025-07-03 client's Abilities menu does not read those bits directly: it keeps a separate
   command-id list (at `[0x106323a8]+0x160`, count at `+0x1760`) that it saves in `aix.dat`, so an
   existing profile kept drawing every saved weapon skill and a fresh profile drew nothing.
   `host/addons/hooks.c` now rebuilds that list from each `0x0AC` packet on the game thread, which
   makes both the field/engaged menu and the Mog House Abilities menu show exactly the advertised
-  weapon skills and job abilities. The list is rebuilt at zone-in, after `!abilities`, and after
+  weapon skills and job abilities. The list is rebuilt at zone-in, after `//abilities`, and after
   a weapon change; a client started before this change needs one restart to load the new host64.
-- Added `!ja <name>`, `!job <job> [sub]` and `!abilities`. C2S action `0x09` is handled: the
+- Added `//ja <name>`, `//job <job> [sub]` and `//abilities`. C2S action `0x09` is handled: the
   response is a `0x028` Ability Finish (kind 2, the ability's animation, message 100), and
   Provoke, Benediction, Chakra, Meditate, Convert and the Curing/Healing/Divine Waltzes have
   effects. Recasts are tracked by recast id in `0x119`. The command-list rebuild above also
   fills the 2025-07-03 client's Job Abilities submenu: with the rebuilt list it lists the main
-  and support job's abilities instead of "No abilities available." `!ja` remains a shortcut.
+  and support job's abilities instead of "No abilities available." `//ja` remains a shortcut.
 
 ### Combat
 
@@ -1375,7 +2074,7 @@
 
 ### Server
 
-- New `!r30 [item]` chat command: with no argument it lists the 27 Odyssey items, with a name it
+- New `//r30 [item]` chat command: with no argument it lists the 27 Odyssey items, with a name it
   prints that item's Rank 30 rows (every Nyame path, or the single row for the other sets and
   weapons). `server/fanxi_server/game/odyssey.py` reads `data/odyssey_r30.json`.
 - `create_character()` returns the character it created (important with several mules).
@@ -1391,28 +2090,28 @@
   instead of always showing and using Jeuno's exits.
 - The HP/MP gauges (party line `0x0DF`, status `0x037`, self `0x00D` and login `0x00A`) now divide
   by the character's current maximum, so a partial 7240/10149 no longer reads as a full bar.
-- Added `!storage store <job>` and `!storage grab <job|all>`. Store sweeps job-exclusive gear that
+- Added `//storage store <job>` and `//storage grab <job|all>`. Store sweeps job-exclusive gear that
   is listed on a Storage Slip off the character into `char_storage`, the same server-side record a
   Porter Moogle keeps, so it never appears in a bag; grab returns it to the inventory first, then
   the wardrobes. Gear with no slip (RMEA weapons, job accessories) stays in the bags, worn pieces
-  stay equipped, and `!storage` with no verb lists the slip totals. Both directions work in any
+  stay equipped, and `//storage` with no verb lists the slip totals. Both directions work in any
   zone and keep the client in step with `0x020`/`0x01D`. Migration `0065_storage_slips.sql` seeds
-  the 33-slip item map; `0067_slip_storage.sql` moves the earlier `!locker` and visible-Storage
+  the 33-slip item map; `0067_slip_storage.sql` moves the earlier `//locker` and visible-Storage
   rows onto the server-side slips.
-- Added the hidden 9999-item `!locker` for gear and materials that slip storage does not accept.
-  `!locker store|grab` takes `all`, a slot (`ammo`, `back`, `head`, `ear`, `ring`...),
-  `materials` (non-wearables) or a name substring; `!locker list` and `!locker` show what is
+- Added the hidden 9999-item `//locker` for gear and materials that slip storage does not accept.
+  `//locker store|grab` takes `all`, a slot (`ammo`, `back`, `head`, `ear`, `ring`...),
+  `materials` (non-wearables) or a name substring; `//locker list` and `//locker` show what is
   inside. The client cannot draw 9999 slots, so this is a server-side table and the items leave
   every bag until grabbed. Migration `0069_generic_locker.sql`.
 - Added the Beastmaster consumable catalogue and all 97 Call Beast jugs (ammo, BST-only).
   Character 1 receives Pet Food Theta, a full stack of Inoshishinofuda/Shikanofuda/Chonofuda,
   and 99 of every jug in the hidden locker via migration `0070_bst_consumables.sql`.
-- Added working-stock auto-refill (`!stock`) for the consumables the client must see: Utsusemi
+- Added working-stock auto-refill (`//stock`) for the consumables the client must see: Utsusemi
   tools (Ichi/San/Ni), Pet Food Theta and Dawn Mulsum. Zone-in tops them up from the hidden
   locker; Utsusemi consumes its tool and refills immediately. Dawn Mulsum restores 25–50% of the
   pet's maximum HP (GEO Luopans are unaffected) and refills; without a pet HP model it reports no
   pet to heal. Migration `0071_working_stock.sql` adds Dawn Mulsum and the refill stock. Call
-  Beast/Reward still need their pet logic, so jugs remain a manual `!locker grab`.
+  Beast/Reward still need their pet logic, so jugs remain a manual `//locker grab`.
 - Sorting a bag (`C2S 0x03A`) now actually stacks duplicates instead of doing nothing. The client
   still orders the slots; the server merges partial ammo, food and tool stacks up to the item's
   stack limit, clears the emptied slots with `0x020` item id `0`, and sends the all-bag `0x01D`.
@@ -1428,7 +2127,7 @@ content remain original. The license boundary is recorded in `docs/landsandboat-
 - Added three Port Jeuno NPCs, a Moogle shop and the persistent **Pest Control** hunt quest.
 - Added six West Ronfaure monsters with roaming, aggro, melee combat, death and respawn.
 - Added EXP, gil, level-ups (max HP/MP growth and heal), starter inventory and quest rewards.
-- Added `!entities` and `!heal`; `!zone 100` is the field camp and `!zone 246` is town.
+- Added `//entities` and `//heal`; `//zone 100` is the field camp and `//zone 246` is town.
 
 ### Protocol
 

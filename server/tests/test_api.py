@@ -3,12 +3,29 @@ from __future__ import annotations
 
 import json
 import tempfile
+import threading
+import time
 import unittest
 from pathlib import Path
+from types import SimpleNamespace
 
 from support import make_service
 
 from fanxi_server.http_api import Api, Request
+
+
+class _StubZones:
+    def name(self, zone):
+        return {190: "King Ranperre's Tomb"}.get(int(zone), "zone %d" % int(zone))
+
+
+class _StubWorld:
+    """Only what search.online_characters and the roster's zone names read."""
+
+    def __init__(self, sessions):
+        self.lock = threading.RLock()
+        self.sessions = sessions
+        self.zones = _StubZones()
 
 
 class ApiTest(unittest.TestCase):
@@ -68,6 +85,54 @@ class ApiTest(unittest.TestCase):
         self.assertTrue(payload["login_token"])
         self.assertEqual(payload["world"]["name"], "Fanxi")
         self.assertEqual(payload["client"]["username"], "tester")
+
+    def test_world_online_needs_a_token_and_reports_an_unattached_gateway(self):
+        response = self.call("GET", "/api/v1/world/online")
+        self.assertEqual(response.status, 401)
+        token = self.register()["token"]
+        response = self.call("GET", "/api/v1/world/online", token=token)
+        self.assertEqual(response.status, 200)
+        payload = json.loads(response.payload)
+        self.assertFalse(payload["gateway"])
+        self.assertEqual(payload["characters"], [])
+
+    def test_world_online_lists_the_live_sessions(self):
+        token = self.register()["token"]
+        account_id = self.service.authenticate(token)["id"]
+        character = self.service.create_character(account_id, {
+            "name": "Fanxi", "race": 1, "face": 1, "size": 1, "nation": 0,
+        })
+        other = self.service.register("other", "password123", ip="127.0.0.1")
+        outsider = self.service.create_character(other.account["id"], {
+            "name": "Outsider", "race": 1, "face": 1, "size": 1, "nation": 0,
+        })
+        now = time.time()
+
+        def session(char, account, zone):
+            return SimpleNamespace(
+                logged_in=True, gone=False, key=b"key", zone=zone, last_packet_at=now,
+                char={"id": char["id"], "char_id": char["char_id"],
+                      "account_id": account, "name": char["name"]},
+            )
+
+        self.service.attach_world(_StubWorld({
+            ("127.0.0.1", 1): session(character, account_id, 190),
+            ("127.0.0.1", 2): session(outsider, other.account["id"], 190),
+        }))
+        self.addCleanup(self.service.detach_world)
+        response = self.call("GET", "/api/v1/world/online", token=token)
+        self.assertEqual(response.status, 200)
+        payload = json.loads(response.payload)
+        self.assertTrue(payload["gateway"])
+        self.assertEqual(payload["count"], 2)
+        self.assertEqual([item["name"] for item in payload["characters"]],
+                         ["Fanxi", "Outsider"])
+        self.assertEqual(payload["characters"][0], {
+            "id": character["id"], "char_id": character["char_id"], "name": "Fanxi",
+            "zone": 190, "zone_name": "King Ranperre's Tomb",
+        })
+        status = json.loads(self.call("GET", "/api/v1/status").payload)
+        self.assertEqual(status["online"], 2)
 
     def test_bad_json(self):
         response = self.call("POST", "/api/v1/auth/login", b"{not json")
@@ -185,6 +250,33 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(capped.status, 200, capped.payload)
         current = json.loads(capped.payload)["augments"][0]["current"]
         self.assertEqual((current["path"], current["rank"]), ("D", 30))
+
+    def test_oboro_card_and_path_cap(self):
+        token = self.register()["token"]
+        character = json.loads(self.call(
+            "POST", "/api/v1/characters",
+            {"name": "Oboro", "race": 1, "face": 1, "size": 1, "nation": 0},
+            token=token).payload)["character"]
+        base = "/api/v1/characters/%d" % character["id"]
+        self.assertEqual(self.call("POST", base + "/gil", {"top_off": True},
+                                   token=token).status, 200)
+        bought = self.call("POST", base + "/armory", {"item_id": 22099}, token=token)
+        self.assertEqual(bought.status, 201, bought.payload)
+        data = json.loads(self.call("GET", base + "/data", token=token).payload)
+        musa = next(item for item in data["oboro"]["items"] if item["item_id"] == 22099)
+        self.assertTrue(musa["owned"])
+        self.assertEqual(len(musa["paths"]), 3)
+        copy = musa["copies"][0]
+        capped = self.call("POST", base + "/progress", {
+            "op": "augment", "container": copy["container"],
+            "slot": copy["slot"], "path": "C",
+        }, token=token)
+        self.assertEqual(capped.status, 200, capped.payload)
+        payload = json.loads(capped.payload)
+        musa = next(item for item in payload["oboro"]["items"] if item["item_id"] == 22099)
+        current = musa["copies"][0]["current"]
+        self.assertEqual((current["path"], current["rank"], current["index"]),
+                         ("C", 25, 189))
 
     def test_armory_full_catalogue_and_purchases(self):
         self.assertGreater(

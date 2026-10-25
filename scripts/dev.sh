@@ -8,4 +8,4 @@ cd "$ROOT/server"
 SERVER=$!
 trap 'kill $SERVER 2>/dev/null || true' EXIT INT TERM
 sleep 1
-"$ROOT/launcher/fanxi-launcher"
+"$ROOT/scripts/launcher.sh"

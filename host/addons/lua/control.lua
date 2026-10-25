@@ -11,7 +11,9 @@ The protocol is JSON, one object per line each way:
 Requests run as tasks on the game thread (one frame at a time, so a request may wait on frames:
 key holds, frame captures, waits). Commands:
 
-  state                      sign-in state, the player, zone, position, target, menu, chat input
+  state                      sign-in state, the player, zone, position, target, menu, chat input,
+                              sleeping (parked, hidden from other clients)
+  sleep / wake               park this box without logging out, or resume it in place
   chat_send {line}           a line as if typed: /commands, //commands; other text is said (/say)
   chat_log {since, limit}    chat lines after sequence number `since`: what the chat log shows
                              (UTF-8, codes removed)
@@ -25,7 +27,7 @@ key holds, frame captures, waits). Commands:
   target {index}             target an entity as the game does
   wait {ms | frames}         returns after that long
   lua {code}                 Lua run in this addon (xi.* available): what it returns, as JSON
-  command {line}             run a line as if typed, without the /say fallback: !zone, !merits, /heal
+  command {line}             run a line as if typed, without the /say fallback: //zone, //merits, /heal
   metrics                    state + EXP/hr, DPS, damage and the active gear of this client
   gear                       the item, count and encumbrance bit in every equipment slot
   equip {slot, item}         wear the named item from this character's bags
@@ -35,28 +37,31 @@ key holds, frame captures, waits). Commands:
   gearswap {path}            read a GearSwap Lua file and return its sets as data (read-only)
   phase {path|sets, enabled, engaged, idle_town, idle_field, move, kite, rest,
          precast, midcast, default_ws, default_ja, focus, ws_overrides, ja_overrides,
-         spell_overrides, spell_category_overrides}
+         spell_overrides, spell_category_overrides, spell_modes}
                              precast / midcast / state engine: the host holds the action packet,
                              wears the precast set, sends it, then wears the midcast set behind
-                             it, and returns to the state set. spell_category_overrides keys
-                             are enfeebles_macc, enfeebles_duration, buff_potency,
-                             buff_duration and helix_magic; a spell uses its category's set
-                             unless a per-spell override names one
-  phase_status               the engine's rules, counters, state, active set and slot pins
+                             it, and returns to the state set. spell_category_overrides holds one
+                             set per mode (enfeebles_macc, enfeebles_duration, buff_potency,
+                             buff_duration, cure_potency, cure_cast, nuke_mab, nuke_mdmg,
+                             helix_magic, helix_duration); spell_modes arms one mode per group
+                             (enfeebles, enhancing, curing, nuking, helix). A spell uses its
+                             group's armed set unless a per-spell override names one
+  phase_status               the engine's rules, counters, state, active set, armed modes and
+                             slot pins
   phase_lock {locked}        hold the set that is worn now (true) or resume auto-swaps (false)
   phase_kiting {on}          forced kiting state, on until switched off
   phase_resting {on}         manual resting state (this server has no rest packet)
   phase_focus {mode}         idle focus: auto, dt, pdt, mdt, eva or meva
   phase_lock_slots {mask}    pin equipment slots (bit 0 main .. bit 15 back) out of every set
   job_spells                 the current job pair's spell list for the override form, with the
-                             override categories (enfeebles_macc, buff_duration, ...) of each
+                             spell group (enfeebles, enhancing, curing, nuking or helix) of each
   job_abilities              the current main/sub job abilities the client's menu lists
-  hud {show_abilities, show_spells, show_trusts, show_weapon_skills, edit, type,
+  hud {show_hud, show_abilities, show_spells, show_trusts, show_weapon_skills, edit, type,
        layout, columns, size, labels, font, tabs, group, custom_groups, assign_key,
        assign_group, opacity, menu_hide, reset_positions}
-                             the four in-game HUD windows: toggle, per-type re-layout/grouping,
-                             edit/drag mode, menu-side hiding and position reset; returns the
-                             saved state (also in metrics.hud)
+                             the whole HUD (show_hud) and its four in-game windows: toggle,
+                             per-type re-layout/grouping, edit/drag mode, menu-side hiding and
+                             position reset; returns the saved state (also in metrics.hud)
   weapons                    equipment in the bags for main/sub/ranged/ammo the main job can use
   bag_items {container}      every item in one client container (diagnostic; scans slots 1..80)
   icons {ids}                item icons as top-down RGBA hex, decoded from the game's DATs
@@ -274,6 +279,23 @@ local function menu_name()
     return name
 end
 
+-- Whether the player is looking at (and typing in) the game window. A HUD that hides for a menu or
+-- a chat line does not need to step aside while the launcher is in front: that is when the player
+-- is arranging the HUD, not reading the menu.
+local function game_focused()
+    if not (xi.ui and xi.ui.focused) then return true end
+    local ok, focused = pcall(xi.ui.focused)
+    return not ok or focused ~= false
+end
+
+-- The chat line is its own "menu" for the HUD. Hide only while it has text: an open but empty
+-- line (or one the game left open in the background) must not make the HUD look gone.
+local function hud_chat_input_open()
+    if not xi.chat or not xi.chat.input then return false end
+    local text, open = xi.chat.input()
+    return open == true and type(text) == 'string' and text ~= ''
+end
+
 local function position(i)
     local x, z, y = game.entity(i, 'Movement.LocalPosition.X'), game.entity(i, 'Movement.LocalPosition.Z'),
         game.entity(i, 'Movement.LocalPosition.Y')
@@ -281,10 +303,14 @@ local function position(i)
     return { x = x, y = y, z = z, heading = game.entity(i, 'Heading') }
 end
 
+local sleeping = false
+
 local function state()
-    local s = { login_status = game.login_status(), menu = menu_name() }
-    local text = xi.chat.input()
+    local s = { login_status = game.login_status(), menu = menu_name(), sleeping = sleeping }
+    local text, open = xi.chat.input()
     s.chat_input = text and plain(text) or nil
+    s.chat_open = open == true
+    s.focused = game_focused()
     local pi = game.player_index()
     if pi and pi >= 0 and game.entity(pi, 'Name') then
         local zone = game.party_member(0, 'Zone')
@@ -479,6 +505,10 @@ end
 -- The on-screen combat HUD is defined further down (it needs job_spells/job_abilities);
 -- metrics carries its current switch/layout state so the launcher's toggles reflect the client.
 local hud
+
+-- Ctrl+H toggles the whole HUD.  It is a global bind, including while the chat line is open: the
+-- key is consumed, so it never types an H.  Declared out here so the unload handler can remove it.
+local HUD_HOTKEY = '^h'
 
 local function metrics()
     local now = os.clock()
@@ -737,33 +767,105 @@ local MIDCAST_SKILL = {
     [44] = 'Geomancy', [45] = 'Handbell',
 }
 
--- The Gear page's spell categories, in the order the host resolves them. A spell can be in both
--- faces of a group (every Enfeebling Magic spell is a macc target and a duration target, every
--- Enhancing Magic spell a potency and a duration target), so the first configured category wins
--- when a saved plan carries both. The launcher keeps the two faces of a group exclusive.
-local SPELL_CATEGORY_ORDER = {
-    'enfeebles_macc', 'enfeebles_duration', 'buff_potency', 'buff_duration', 'helix_magic',
+-- The Gear page's spell groups and the modes each can be in.  The launcher configures one
+-- set per mode; the armed mode decides which one the plan wears.  A spell belongs to one
+-- group, so the same category rule cannot be claimed twice.
+local SPELL_GROUPS = {
+    enfeebles = {
+        key = 'enfeebles', label = 'Enfeebles', short = 'Enf', default = 'macc',
+        modes = {
+            { key = 'macc', label = 'Macc / landing', short = 'Macc', category = 'enfeebles_macc' },
+            { key = 'duration', label = 'Duration', short = 'Dur', category = 'enfeebles_duration' },
+        },
+    },
+    enhancing = {
+        key = 'enhancing', label = 'Enhancing / buffs', short = 'Enh', default = 'potency',
+        modes = {
+            { key = 'potency', label = 'Potency', short = 'Pot', category = 'buff_potency' },
+            { key = 'duration', label = 'Duration', short = 'Dur', category = 'buff_duration' },
+        },
+    },
+    curing = {
+        key = 'curing', label = 'Curing / healing', short = 'Cure', default = 'potency',
+        modes = {
+            { key = 'potency', label = 'Potency', short = 'Pot', category = 'cure_potency' },
+            { key = 'cast', label = 'Cast time', short = 'Cast', category = 'cure_cast' },
+        },
+    },
+    nuking = {
+        key = 'nuking', label = 'Nuking', short = 'Nuke', default = 'mab',
+        modes = {
+            { key = 'mab', label = 'Magic Attack', short = 'MAB', category = 'nuke_mab' },
+            { key = 'mdmg', label = 'Magic damage', short = 'M.Dmg', category = 'nuke_mdmg' },
+        },
+    },
+    helix = {
+        key = 'helix', label = 'Helixes', short = 'Helix', default = 'mab',
+        modes = {
+            { key = 'mab', label = 'Magic Attack', short = 'MAB', category = 'helix_magic' },
+            { key = 'duration', label = 'Duration', short = 'Dur', category = 'helix_duration' },
+        },
+    },
 }
+local SPELL_GROUP_ORDER = { 'enfeebles', 'enhancing', 'curing', 'nuking', 'helix' }
 local function spell_name(spell)
     local name = spell and spell.name
     if type(name) == 'table' then name = name.en or name[2] or name[1] end
     return type(name) == 'string' and name or ''
 end
 
--- The switch the plan builder uses: which override categories a spell belongs to. The launcher
--- groups the same way in job_spells, so the cards and the rules cannot disagree.
-local function spell_categories(spell)
-    local out = {}
-    local skill = spell and MIDCAST_SKILL[spell.skill]
-    if skill == 'Enfeebling Magic' then
-        out[#out + 1] = 'enfeebles_macc'
-        out[#out + 1] = 'enfeebles_duration'
-    elseif skill == 'Enhancing Magic' then
-        out[#out + 1] = 'buff_potency'
-        out[#out + 1] = 'buff_duration'
+-- The one group a spell belongs to.  Helix is checked first because a helix is also an
+-- Elemental Magic spell; otherwise the skill decides.
+local function spell_group(spell)
+    if not spell then return nil end
+    local name = spell_name(spell):lower()
+    if name:find('helix', 1, true) then return 'helix' end
+    local skill = MIDCAST_SKILL[spell.skill]
+    if skill == 'Enfeebling Magic' then return 'enfeebles' end
+    if skill == 'Enhancing Magic' then return 'enhancing' end
+    if skill == 'Healing Magic' then return 'curing' end
+    if skill == 'Elemental Magic' then return 'nuking' end
+    return nil
+end
+
+local function group_mode(group_key, mode_key)
+    local group = SPELL_GROUPS[group_key]
+    if not group then return nil end
+    for _, mode in ipairs(group.modes) do
+        if mode.key == mode_key then return mode end
     end
-    if spell_name(spell):lower():find('helix', 1, true) then out[#out + 1] = 'helix_magic' end
+    return nil
+end
+
+-- Old plans have only category picks.  Prefer the armed mode, then the one configured face of
+-- a pair, then the group's default.  The launcher sends spell_modes; this keeps a hand-written
+-- plan working too.
+local function normalize_spell_modes(requested, category_override)
+    local out = {}
+    for _, group_key in ipairs(SPELL_GROUP_ORDER) do
+        local group = SPELL_GROUPS[group_key]
+        local chosen = type(requested) == 'table' and tostring(requested[group_key] or '') or ''
+        if not group_mode(group_key, chosen) then chosen = nil end
+        if not chosen then
+            local configured = {}
+            for _, mode in ipairs(group.modes) do
+                if category_override[mode.category] then configured[#configured + 1] = mode.key end
+            end
+            chosen = #configured == 1 and configured[1] or group.default
+        end
+        out[group_key] = chosen
+    end
     return out
+end
+
+local function mode_label(group_key, mode_key)
+    local mode = group_mode(group_key, mode_key)
+    return mode and mode.label or tostring(mode_key)
+end
+
+local function mode_short(group_key, mode_key)
+    local mode = group_mode(group_key, mode_key)
+    return mode and mode.short or tostring(mode_key)
 end
 
 -- The action packet carries a job ability's id minus 0x200 (the resource id's low 9 bits).
@@ -1084,9 +1186,9 @@ phase = function(a)
             if key and index then spell_override[key] = index end
         end
     end
-    -- A category rule is still a per-spell rule once the plan is built: the host looks up the
-    -- action id and sees the set chosen for the category the spell belongs to. This is the
-    -- switch the page's category cards configure.
+    -- A group rule is a per-spell rule once the plan is built: the host looks up the action id
+    -- and sees the set for the armed mode of the spell's group. Each spell belongs to one group,
+    -- so the two modes never claim the same action.
     local category_override = {}
     if type(a.spell_category_overrides) == 'table' then
         for name, path in pairs(a.spell_category_overrides) do
@@ -1094,26 +1196,21 @@ phase = function(a)
             if index then category_override[tostring(name)] = index end
         end
     end
-    -- A spell gets at most one category rule and never a duplicate of a direct override.
+    local spell_modes = normalize_spell_modes(a.spell_modes, category_override)
     local claimed = {}
     for id in pairs(spell_override) do claimed[id] = true end
-    for _, category in ipairs(SPELL_CATEGORY_ORDER) do
-        local mid = category_override[category]
-        if mid then
-            for index = 0, 1023 do
-                if not claimed[index] then
-                    local spell = res.spell(index)
-                    if spell_is_known(spell) then
-                        for _, key in ipairs(spell_categories(spell)) do
-                            if key == category then
-                                rules[#rules + 1] = {
-                                    category = PHASE_MAGIC, action = index, pre = precast, mid = mid,
-                                }
-                                claimed[index] = true
-                                break
-                            end
-                        end
-                    end
+    for index = 0, 1023 do
+        if not claimed[index] then
+            local spell = res.spell(index)
+            if spell_is_known(spell) then
+                local group_key = spell_group(spell)
+                local mode = group_key and group_mode(group_key, spell_modes[group_key])
+                local mid = mode and category_override[mode.category]
+                if mid then
+                    rules[#rules + 1] = {
+                        category = PHASE_MAGIC, action = index, pre = precast, mid = mid,
+                    }
+                    claimed[index] = true
                 end
             end
         end
@@ -1208,6 +1305,7 @@ phase = function(a)
         default_ja = a.default_ja, ws_overrides = a.ws_overrides,
         ja_overrides = a.ja_overrides, spell_overrides = a.spell_overrides,
         spell_category_overrides = a.spell_category_overrides, focus = a.focus,
+        spell_modes = spell_modes, sets = sets,
     }
     phase_job_seen = nil
     inject_plan(xi.phase.apply())
@@ -1232,6 +1330,7 @@ phase = function(a)
             eva = focus_sets[4].name, meva = focus_sets[5].name,
         },
         zone = zone, town = zone_town(zone), job = job,
+        modes = spell_modes,
     }
 end
 
@@ -1308,7 +1407,7 @@ local function phase_lock_slots(a)
     }
 end
 
--- /!gs: the in-game side of the launcher's state controls. The host sees the line before it is
+-- //gs: the in-game side of the launcher's state controls. The host sees the line before it is
 -- sent, so a handled line is blocked and never reaches the server.
 local function gs_slots(words, action)
     local mask = locked_slots_mask()
@@ -1336,6 +1435,107 @@ local function gs_slots(words, action)
     return (action == 'lock' and 'locked ' or 'unlocked ') .. table.concat(names, ', ')
 end
 
+local MODE_GROUP_ALIASES = {
+    enhancing = 'enhancing', enhance = 'enhancing', buff = 'enhancing', buffs = 'enhancing',
+    enfeebles = 'enfeebles', enfeeble = 'enfeebles', enfeebling = 'enfeebles',
+    debuff = 'enfeebles', debuffs = 'enfeebles', enfeeb = 'enfeebles',
+    curing = 'curing', cure = 'curing', healing = 'curing', heals = 'curing',
+    nuking = 'nuking', nuke = 'nuking', nukes = 'nuking', elemental = 'nuking',
+    helix = 'helix', helixes = 'helix',
+}
+
+local MODE_ALIASES = {
+    accuracy = 'macc', acc = 'macc', skill = 'macc', landing = 'macc', macc = 'macc',
+    duration = 'duration', time = 'duration', dur = 'duration',
+    potency = 'potency', potent = 'potency', pot = 'potency',
+    cast = 'cast', casttime = 'cast', fastcast = 'cast', speed = 'cast',
+    mab = 'mab', magicattack = 'mab', attack = 'mab',
+    mdmg = 'mdmg', magicdamage = 'mdmg', damage = 'mdmg', dmg = 'mdmg',
+}
+
+local function current_spell_modes()
+    return phase_plan and phase_plan.spell_modes or {}
+end
+
+local function spell_mode_summary()
+    local parts = {}
+    for _, group_key in ipairs(SPELL_GROUP_ORDER) do
+        local mode = current_spell_modes()[group_key] or SPELL_GROUPS[group_key].default
+        parts[#parts + 1] = SPELL_GROUPS[group_key].short .. ': ' .. mode_short(group_key, mode)
+    end
+    return table.concat(parts, ', ')
+end
+
+local function resolve_mode_key(group_key, text)
+    local group = SPELL_GROUPS[group_key]
+    local key = tostring(text or ''):lower():gsub('[^%w]', '')
+    if key == '' then return nil end
+    for _, mode in ipairs(group.modes) do
+        if mode.key == key then return mode.key end
+        if mode.label:lower():gsub('[^%w]', '') == key then return mode.key end
+        if mode.short:lower():gsub('[^%w]', '') == key then return mode.key end
+    end
+    local alias = MODE_ALIASES[key]
+    if alias then
+        for _, mode in ipairs(group.modes) do
+            if mode.key == alias then return alias end
+        end
+    end
+    return nil
+end
+
+local function set_spell_mode(group_key, mode_key)
+    if not phase_plan or not phase_plan.spell_modes then
+        return nil, 'GearSwap is off; turn it on in the launcher first'
+    end
+    local group = SPELL_GROUPS[group_key]
+    if not group then return nil, 'unknown spell group: ' .. tostring(group_key) end
+    if not group_mode(group_key, mode_key) then
+        return nil, 'unknown ' .. group.label .. ' mode: ' .. tostring(mode_key)
+    end
+    local previous = phase_plan.spell_modes[group_key]
+    phase_plan.spell_modes[group_key] = mode_key
+    local ok, err = pcall(phase, phase_plan)
+    if not ok then
+        phase_plan.spell_modes[group_key] = previous
+        return nil, tostring(err)
+    end
+    return true
+end
+
+local function modes_command(body)
+    local words = {}
+    for word in tostring(body or ''):gmatch('[^%s]+') do words[#words + 1] = word end
+    if #words == 0 then
+        if not phase_plan then return 'GearSwap is off; turn it on in the launcher first' end
+        return spell_mode_summary() ..
+            '  |  //modes <group> <mode>  (enhancing, enfeebles, curing, nuking, helix)'
+    end
+    local group_key = MODE_GROUP_ALIASES[tostring(words[1]):lower()]
+    if not group_key then
+        return 'unknown group "' .. tostring(words[1]) ..
+            '"; use enhancing, enfeebles, curing, nuking or helix'
+    end
+    local group = SPELL_GROUPS[group_key]
+    if #words < 2 then
+        local options = {}
+        for _, mode in ipairs(group.modes) do options[#options + 1] = mode.key end
+        local current = current_spell_modes()[group_key] or group.default
+        return group.label .. ' modes: ' .. table.concat(options, ', ') ..
+            ' (current: ' .. current .. ')'
+    end
+    local mode_key = resolve_mode_key(group_key, words[2])
+    if not mode_key then
+        local options = {}
+        for _, mode in ipairs(group.modes) do options[#options + 1] = mode.key end
+        return 'unknown ' .. group.label .. ' mode "' .. tostring(words[2]) ..
+            '"; use ' .. table.concat(options, ', ')
+    end
+    local ok, err = set_spell_mode(group_key, mode_key)
+    if not ok then return tostring(err) end
+    return spell_mode_summary()
+end
+
 local function gs_command(body)
     local words = {}
     for word in tostring(body):gmatch('[^,%s]+') do words[#words + 1] = word end
@@ -1354,7 +1554,7 @@ local function gs_command(body)
         local status = xi.phase.status()
         return tostring(status.state) .. (status.set and (' - ' .. tostring(status.set)) or '')
     end
-    return 'usage: /!gs lock|unlock <slots>, rest on|off, kite on|off, focus auto|dt|pdt|mdt|eva|meva'
+    return 'usage: //gs lock|unlock <slots>, rest on|off, kite on|off, focus auto|dt|pdt|mdt|eva|meva'
 end
 
 if xi.phase and xi.events and xi.events.on then
@@ -1362,7 +1562,8 @@ if xi.phase and xi.events and xi.events.on then
         if e.blocked then return end
         local line = e.data
         if type(line) ~= 'string' then return end
-        local body = line:match('^/%!gs%s+(.+)$') or line:match('^%!gs%s+(.+)$')
+        local body = line:match('^//gs%s+(.+)$') or line:match('^/%!gs%s+(.+)$') or
+            line:match('^%!gs%s+(.+)$')
         if not body then return end
         e.blocked = true
         local ok, result = pcall(gs_command, body)
@@ -1370,6 +1571,26 @@ if xi.phase and xi.events and xi.events.on then
             xi.chat.write('GS: ' .. result, 1)
         elseif not ok then
             xi.chat.write('GS: ' .. tostring(result), 1)
+        end
+    end)
+end
+
+if xi.phase and xi.events and xi.events.on then
+    xi.events.on('command', function(e)
+        if e.blocked then return end
+        local line = e.data
+        if type(line) ~= 'string' then return end
+        local body = line:match('^//modes%s+(.+)$') or line:match('^/%!modes%s+(.+)$') or
+            line:match('^%!modes%s+(.+)$')
+        local bare = line:match('^//modes%s*$') or line:match('^/%!modes%s*$') or
+            line:match('^%!modes%s*$')
+        if not body and not bare then return end
+        e.blocked = true
+        local ok, result = pcall(modes_command, body or '')
+        if ok and type(result) == 'string' then
+            xi.chat.write('Modes: ' .. result, 1)
+        elseif not ok then
+            xi.chat.write('Modes: ' .. tostring(result), 1)
         end
     end)
 end
@@ -1388,7 +1609,7 @@ local function equip_set(a)
         if slot == nil then
             errors[#errors + 1] = 'unknown slot ' .. tostring(entry.slot)
         elseif locked[slot] then
-            skipped = skipped + 1 -- pinned by /!gs lock: no set may override it
+            skipped = skipped + 1 -- pinned by //gs lock: no set may override it
         else
             local bag, at, id = find_item(by_id, entry.item, claimed)
             if not bag then
@@ -1481,6 +1702,7 @@ local function job_spells()
                     -- in quarter seconds; the HUD learns the live value from game.spell_recast.
                     local icon = tonumber(spell.icon_hq) or 0
                     if icon <= 0 or icon == 65535 then icon = tonumber(spell.icon_nq) or 0 end
+                    local group = spell_group(spell)
                     out[#out + 1] = {
                         id = id, name = type(name) == 'string' and name or tostring(id),
                         skill = skill or '', skill_id = tonumber(spell.skill) or 0,
@@ -1488,7 +1710,7 @@ local function job_spells()
                         level = level,
                         icon = icon, recast = (tonumber(spell.recast_delay) or 0) / 4,
                         targets = tonumber(spell.targets) or 0,
-                        categories = spell_categories(spell),
+                        categories = group and { group } or {},
                     }
                 end
             end
@@ -2485,6 +2707,7 @@ local function hud_defaults()
     for _, key in ipairs(HUD_TYPES) do types[key] = hud_default_type(key) end
     local battle, party = hub_sanitize(nil)
     return {
+        show_hud = true,
         show_abilities = false,
         show_spells = false,
         show_trusts = false,
@@ -2580,6 +2803,7 @@ end
 local function hud_sanitize(raw)
     local state = hud_defaults()
     if type(raw) ~= 'table' then return state end
+    if type(raw.show_hud) == 'boolean' then state.show_hud = raw.show_hud end
     if type(raw.show_abilities) == 'boolean' then state.show_abilities = raw.show_abilities end
     if type(raw.show_spells) == 'boolean' then state.show_spells = raw.show_spells end
     if type(raw.show_trusts) == 'boolean' then state.show_trusts = raw.show_trusts end
@@ -2663,6 +2887,7 @@ local function hud_save(state, path)
     if not file then return end
     file:write(json.encode({
         version = HUD_FILE_VERSION,
+        show_hud = state.show_hud,
         show_abilities = state.show_abilities,
         show_spells = state.show_spells,
         show_trusts = state.show_trusts,
@@ -2840,9 +3065,9 @@ local function hud_click(hud, item)
     end
     if item.kind == 'trust' and hud_trust_active(item) then
         -- The client's own Remove/Release menu is an entity action no chat command exposes;
-        -- the server's !trust release finds the alter ego by its spell id and despawns it.
+        -- the server's //trust release finds the alter ego by its spell id and despawns it.
         local ok, err = pcall(xi.chat.run,
-            string.format('/say !trust release %d', tonumber(item.id) or 0), 1)
+            string.format('//trust release %d', tonumber(item.id) or 0), 1)
         if not ok then
             xi.chat.write('HUD: ' .. tostring(err), 1)
             return
@@ -2951,7 +3176,7 @@ hud = {
     sc_step = nil,
     main_item = 0,
     main_skill = 0,
-    job_signature = nil,
+    refresh_signature = nil, -- job pair plus the 0x0AC command-list fingerprint
     main_job = 0,
     sub_job = 0,
     imgui = nil,
@@ -2982,7 +3207,7 @@ function hud.ensure()
     hud.active_trusts = {}
     hud.next_trust_scan = 0
     hud.page = {}
-    hud.job_signature = nil
+    hud.refresh_signature = nil
     hud.main_job, hud.sub_job = 0, 0
     hud.last_tp = nil
     hud.sc_start = nil
@@ -3019,15 +3244,41 @@ local function hud_sch_art(name)
     return 'Other'
 end
 
+-- The four windows are built from two sources: the job pair (abilities, spells, trusts) and
+-- the client's 0x0AC command list (abilities and weapon skills).  A job change sends the new
+-- 0x01B block before the final equipment, and the command list follows only once the new
+-- weapon is on.  A signature of the job alone therefore rebuilt once, too early, and left the
+-- old weapon's skills in the HUD until the next job change.  Fingerprint the command list as
+-- well, so the rebuild that matters happens when the list actually settles; this covers both
+-- `//job` and the Moogles' Change Job menu, which take different packet paths to the same pair.
+local function hud_command_fingerprint()
+    local ok, ids = pcall(game.ability_commands)
+    if not ok or type(ids) ~= 'table' then return '0' end
+    local count, hash = 0, 5381
+    for i = 1, #ids do
+        local id = tonumber(ids[i]) or 0
+        if id > 0 then
+            count = count + 1
+            hash = (hash * 33 + id) % 4294967296
+        end
+    end
+    return string.format('%d:%d', count, hash)
+end
+
 function hud.rebuild(force)
     local main = game.party_member(0, 'MainJob') or 0
     local main_level = game.party_member(0, 'MainJobLevel') or 0
     local sub = game.party_member(0, 'SubJob') or 0
     local sub_level = game.party_member(0, 'SubJobLevel') or 0
-    local signature = string.format('%d:%d:%d:%d', main, main_level, sub, sub_level)
-    if not force and hud.job_signature == signature then return end
-    hud.job_signature = signature
+    local signature = string.format('%d:%d:%d:%d|%s', main, main_level, sub, sub_level,
+                                    hud_command_fingerprint())
+    if not force and hud.refresh_signature == signature then return end
+    hud.refresh_signature = signature
     hud.main_job, hud.sub_job = main, sub
+    -- A rebuild is often a weapon swap rather than a job change, and the abilities that
+    -- survive it keep running recasts.  Move the timers to the new keys below instead of
+    -- clearing them, so the bar does not reset to ready until the next poll.
+    local previous_cool = hud.cool or {}
     hud.abilities, hud.spells, hud.trusts, hud.weapon_skills = {}, {}, {}, {}
     hud.by_key, hud.cool = {}, {}
 
@@ -3098,6 +3349,9 @@ function hud.rebuild(force)
     hud_sort_name(hud.spells)
     hud_sort_name(hud.trusts)
     hud_sort_name(hud.weapon_skills)
+    for key, cool in pairs(previous_cool) do
+        if hud.by_key[key] then hud.cool[key] = cool end
+    end
 end
 
 local function hud_contains_any(text, list)
@@ -3308,10 +3562,14 @@ end
 
 function hud.snapshot()
     hud.ensure()
-    if hud.job_signature == nil and (game.player_index() or -1) >= 0 then hud.rebuild() end
+    -- The launcher's Control room reads the HUD counts even while the windows are off.
+    -- Rebuild on a changed signature here too, so a job change at the Moogle (where no HUD
+    -- frame runs because nothing is shown) still reaches the next metrics poll.
+    if (game.player_index() or -1) >= 0 then hud.rebuild(false) end
     local types = {}
     for _, key in ipairs(HUD_TYPES) do types[key] = hud_copy_type(hud.state.types[key]) end
     return {
+        show_hud = hud.state.show_hud,
         show_abilities = hud.state.show_abilities,
         show_spells = hud.state.show_spells,
         show_trusts = hud.state.show_trusts,
@@ -3384,6 +3642,7 @@ end
 function hud.command(args)
     hud.ensure()
     local state = hud.state
+    if type(args.show_hud) == 'boolean' then state.show_hud = args.show_hud end
     if type(args.show_abilities) == 'boolean' then state.show_abilities = args.show_abilities end
     if type(args.show_spells) == 'boolean' then state.show_spells = args.show_spells end
     if type(args.show_trusts) == 'boolean' then state.show_trusts = args.show_trusts end
@@ -3988,15 +4247,62 @@ local function hud_layout(api, key, spec, groups)
     end
     local ws_header_h = key == 'weapon_skills' and hud_ws_header_height(width) or 0
     local height = ws_header_h + tab_h + body_h + (hud.state.edit and 72 or 12)
-    return width, height, body_h, cell_h, list_row, tabs_on, active_index, tab_h, scroll_x, ws_header_h
+    return width, height, body_h, cell_h, list_row, tabs_on, active_index, tab_h, scroll_x,
+        ws_header_h, content_h <= body_h
+end
+
+local function hud_mode_strip_height(spec)
+    return math.max(18, hud_font_size(spec) + 8) + 4
+end
+
+local function hud_spell_modes(api, width, spec)
+    if not phase_plan or not phase_plan.spell_modes then return 0 end
+    local modes = phase_plan.spell_modes
+    local n = #SPELL_GROUP_ORDER
+    local gap = 4
+    local font = hud_font_size(spec)
+    local button_h = hud_mode_strip_height(spec) - 4
+    local button_w = math.max(48, math.floor((width - 8 - gap * (n - 1)) / n))
+    api.PushFont(nil, font)
+    for index, group_key in ipairs(SPELL_GROUP_ORDER) do
+        local group = SPELL_GROUPS[group_key]
+        local mode_key = modes[group_key] or group.default
+        local label = group.short .. ':' .. mode_short(group_key, mode_key)
+        if api.Button(label .. '##spell-mode-' .. group_key, { button_w, button_h }) then
+            local mode_index = 1
+            for i, mode in ipairs(group.modes) do
+                if mode.key == mode_key then mode_index = i break end
+            end
+            local next_mode = group.modes[(mode_index % #group.modes) + 1].key
+            xi.tasks.spawn(function()
+                local ok, err = set_spell_mode(group_key, next_mode)
+                if ok then
+                    xi.chat.write('Modes: ' .. spell_mode_summary(), 1)
+                else
+                    xi.chat.write('Modes: ' .. tostring(err), 1)
+                end
+            end)
+        end
+        if index < n then api.SameLine(0, gap) end
+    end
+    api.NewLine()
+    api.PopFont()
+    return button_h + 4
 end
 
 local function hud_window(api, key, title, groups)
     local state = hud.state
     local spec = state.types[key]
     local edit = state.edit
-    local width, height, body_h, cell_h, list_row, tabs_on, active_index, tab_h, scroll_x, ws_header_h =
-        hud_layout(api, key, spec, groups)
+    local width, height, body_h, cell_h, list_row, tabs_on, active_index, tab_h, scroll_x,
+        ws_header_h, content_fits = hud_layout(api, key, spec, groups)
+    -- The mode strip lives above the scrolling body. Grow the window by its height so the
+    -- window itself never scrolls; only the spell body keeps its scrollbar.
+    local mode_strip_h = 0
+    if key == 'spells' and phase_plan and phase_plan.spell_modes then
+        mode_strip_h = hud_mode_strip_height(spec)
+        height = height + mode_strip_h + 4
+    end
     local screen_w, screen_h = hud_screen_size(api)
     local position = state.positions[key] or HUD_DEFAULT_POSITIONS[key]
     if edit and hud.reposition then
@@ -4010,7 +4316,9 @@ local function hud_window(api, key, title, groups)
     api.SetNextWindowPos({ position.x, position.y }, edit and not hud.reposition and 4 or 1)
     api.SetNextWindowSize({ width, height }, 1)
     api.SetNextWindowBgAlpha(state.opacity)
-    local flags = edit and (2 + 32 + 256) or (1 + 2 + 4 + 32 + 256)
+    -- The window is fixed-size; a window scrollbar would only duplicate the body's or show
+    -- over empty space. Let the body own scrolling.
+    local flags = edit and (2 + 8 + 32 + 256) or (1 + 2 + 4 + 8 + 32 + 256)
     local count = 0
     for _, group in ipairs(groups) do count = count + #group.items end
     local shown_title = title .. '  (' .. count .. ')'
@@ -4043,9 +4351,13 @@ local function hud_window(api, key, title, groups)
                 hud.page[key] = selected
             end
         end
+        if key == 'spells' then hud_spell_modes(api, width, spec) end
         local child_flags = scroll_x and 2048 or 0
+        -- Content that already fits should not draw a scrollbar just because the child is one
+        -- item-spacing taller than its contents.
+        if content_fits and not scroll_x then child_flags = child_flags + 8 end
         api.PushStyleVar(2, { 0, 0 }) -- cell rows use the window's 4 px padding, not another 8
-        api.BeginChild('hud-body-' .. key, { 0, body_h }, 0, child_flags)
+        api.BeginChild('hud-body-' .. key, { 0, math.max(40, body_h) }, 0, child_flags)
         local list_groups = tabs_on and { { title = nil, items = active.items } } or groups
         if spec.layout == 'list' then
             local cell_width = width - 8
@@ -4298,12 +4610,13 @@ local function hub_fps_tick()
 end
 
 -- The native overlay is a renderer setting ("fps").  Battle Info carries its own readout, so when
--- the window is shown and the user has not asked to keep the native one, turn that one off; when
--- the window goes away put back whatever was there.
+-- the window is shown and the user has not asked to keep the native one, turn that one off; the
+-- whole HUD being hidden takes it down too.  Either way, put back whatever was there afterwards.
 local hub_native_fps_prior = nil
 local function hub_native_fps_sync()
     if not xi.fx then return end
-    local hide = hud.state.show_battle_info and not hud.state.battle.native_fps
+    local hide = not hud.state.show_hud
+        or (hud.state.show_battle_info and not hud.state.battle.native_fps)
     if hide then
         if hub_native_fps_prior == nil then
             local ok, value = pcall(xi.fx, 'fps')
@@ -5386,6 +5699,11 @@ local function party_window(api)
         state.names = names_on[1] and true or false
         hud_save(hud.state, hud.path)
     end
+    -- One click: drop every online sub from any old party, then invite it here.
+    api.SameLine(0, 12)
+    if hub_button(api, 'Make party##party-make', HUB_C.green, 100) then
+        xi.chat.run('//makeparty', 1)
+    end
     if state.replace then
         hub_text(api, HUB_C.gold, "Replaces the game's party list while shown.")
     end
@@ -5435,12 +5753,9 @@ local function hub_tick()
     hub_native_fps_sync()
 end
 
-local function hub_draw(api, menu_open, screen_w)
-    local function under_menu(x)
-        return menu_open and (tonumber(x) or 0) >= (screen_w or 0) * 0.5
-    end
-    if hud.state.show_battle_info and not under_menu(hud.state.battle.x) then battle_window(api) end
-    if hud.state.show_party_info and not under_menu(hud.state.party.x) then party_window(api) end
+local function hub_draw(api)
+    if hud.state.show_battle_info then battle_window(api) end
+    if hud.state.show_party_info then party_window(api) end
 end
 
 local function hub_battle_command(args)
@@ -5523,8 +5838,27 @@ xi.events.on('command', function(e)
     if type(line) ~= 'string' then return end
     local command, rest = line:match('^//([%w_]+)%s*(.*)$')
     if not command then command, rest = line:match('^%!([%w_]+)%s*(.*)$') end
+    if not command then command, rest = line:match('^/!([%w_]+)%s*(.*)$') end
     if not command then return end
     command = command:lower()
+    if command == 'hud' then
+        e.blocked = true
+        hud.ensure()
+        rest = (rest or ''):lower()
+        if rest == '' or rest == 'toggle' then
+            hud.state.show_hud = not hud.state.show_hud
+        elseif rest == 'on' or rest == 'show' then
+            hud.state.show_hud = true
+        elseif rest == 'off' or rest == 'hide' then
+            hud.state.show_hud = false
+        else
+            xi.chat.write('HUD: //hud [on|off|toggle] (Ctrl+H)', 1)
+            return
+        end
+        hud_save(hud.state, hud.path)
+        xi.chat.write('HUD: ' .. (hud.state.show_hud and 'shown' or 'hidden'), 1)
+        return
+    end
     if command ~= 'battleinfo' and command ~= 'battle' and command ~= 'info' and
         command ~= 'partyinfo' and command ~= 'party' then return end
     e.blocked = true
@@ -5602,12 +5936,15 @@ xi.events.on('command', function(e)
     end
 end)
 
+-- Ctrl+H is the same as //hud toggle, with the chat line open or closed.
+if xi.input and xi.input.bind then xi.input.bind(HUD_HOTKEY, '//hud toggle') end
 
 function hud.frame()
     if (game.player_index() or -1) < 0 then return end
     if not hud_character() then return end
     hud.ensure()
     hub_tick()
+    if not hud.state.show_hud then return end
     if hud.imgui == nil then
         local ok, api = pcall(xi.ui.imgui)
         hud.imgui = ok and api or false
@@ -5626,29 +5963,28 @@ function hud.frame()
         if next(hud.cool) then hud_update_cool(hud) end
     end
 
-    local menu_open = false
-    if state.menu_hide and not state.edit and not hud_in_battle() then
-        local name = menu_name()
-        -- `battle`/`attack` are combat menus, not the right-hand Commands/Status stack; never let
-        -- them hide the HUD even if the target dropped before the engagement flag did.
-        local lower = type(name) == 'string' and name:lower() or ''
-        menu_open = lower ~= '' and lower ~= 'battle' and lower ~= 'attack'
+    -- Every window steps aside for a menu or the chat line when menu_hide is on, while the player
+    -- is actually in the game. In combat the client's battle/ability menus are part of play, so the
+    -- HUD stays up there; the chat line still hides it.
+    local hide_hud = false
+    if state.menu_hide and not state.edit and game_focused() then
+        hide_hud = hud_chat_input_open()
+        if not hide_hud and not hud_in_battle() then
+            local name = menu_name()
+            -- `battle`/`attack` are combat menus, not the right-hand Commands/Status stack; never let
+            -- them hide the HUD even if the target dropped before the engagement flag did.
+            local lower = type(name) == 'string' and name:lower() or ''
+            hide_hud = lower ~= '' and lower ~= 'battle' and lower ~= 'attack'
+        end
     end
-    local screen_w = hud_screen_size(api)
-    if action_on then
+    if action_on and not hide_hud then
         for _, key in ipairs(HUD_TYPES) do
             if state['show_' .. key] then
-                local display = HUD_TYPE_INFO[key].title
-                local position = state.positions[key] or HUD_DEFAULT_POSITIONS[key]
-                -- The client's main menu is the right-hand Commands/Status/Magic stack.
-                -- Hiding the right half keeps that menu readable; a HUD moved to the left stays.
-                if not (menu_open and position.x >= screen_w * 0.5) then
-                    hud_window(api, key, display, hud_grouped(key))
-                end
+                hud_window(api, key, HUD_TYPE_INFO[key].title, hud_grouped(key))
             end
         end
     end
-    if hubs_on then hub_draw(api, menu_open, screen_w) end
+    if hubs_on and not hide_hud then hub_draw(api) end
     if hud.reposition then hud.reposition = false end
 end
 
@@ -5924,6 +6260,10 @@ local follow = {
     last_dir_x = nil,
     last_dir_y = nil,
     leader_found = false,
+    last_leader_x = nil,
+    last_leader_y = nil,
+    lost_at = nil,
+    follow_through = 3.0,
 }
 local follow_events = {}
 
@@ -6028,15 +6368,33 @@ local function follow_tick()
     local li = follow_find(now)
     if not li then
         follow.leader_found = false
+        local pp = position(pi)
+        if not follow.lost_at then follow.lost_at = now end
+        -- The leader may have just crossed a zone line and vanished from this zone. Keep
+        -- walking through the last seen point for a few seconds so the client reaches the
+        -- line and sends its own zone request instead of stopping one yalm short.
+        if pp and follow.last_leader_x and now - follow.lost_at <= follow.follow_through then
+            local dx, dy = follow.last_leader_x - pp.x, follow.last_leader_y - pp.y
+            local span = math.sqrt(dx * dx + dy * dy)
+            if span > 0.1 then
+                local tx = follow.last_leader_x + dx / span * 2.5
+                local ty = follow.last_leader_y + dy / span * 2.5
+                local moving = follow_drive(pp, tx, ty)
+                follow.state = moving and 'following' or 'close'
+                return
+            end
+        end
         follow.state = 'waiting'
         follow_auto_off()
         follow.trail = {}
         follow.last_dir_x, follow.last_dir_y = nil, nil
         return
     end
+    follow.lost_at = nil
     follow.leader_found = true
     local lp, pp = position(li), position(pi)
     if not lp or not pp then return end
+    follow.last_leader_x, follow.last_leader_y = lp.x, lp.y
     follow_record(now, lp)
     local tx, ty = follow_target(lp)
     local distance, moving = follow_drive(pp, tx, ty)
@@ -6090,13 +6448,14 @@ local function follow_take_events()
     return out
 end
 
--- `!follow` is ours: block it before the server sees an unknown command and queue it for
+-- `//follow` is ours: block it before the server sees an unknown command and queue it for
 -- the launcher, which owns the graph. With no launcher the queue simply waits.
 xi.events.on('command', function(e)
     if e.blocked then return end
     local line = e.data
     if type(line) ~= 'string' then return end
-    local body = line:match('^/%!follow%s*(.*)$') or line:match('^%!follow%s*(.*)$')
+    local body = line:match('^//follow%s*(.*)$') or line:match('^/%!follow%s*(.*)$') or
+        line:match('^%!follow%s*(.*)$')
     if body == nil then return end
     e.blocked = true
     follow_events[#follow_events + 1] = { line = body, at = xi.clock() }
@@ -6107,6 +6466,18 @@ xi.events.on('frame', follow_tick)
 
 local commands = {
     state = function() return state() end,
+    sleep = function()
+        sleeping = true
+        -- The server hides the character and parks its tick; the client and control socket
+        -- stay alive, so wake is a command rather than a process launch.
+        xi.chat.run("//sleep", 1)
+        return state()
+    end,
+    wake = function()
+        sleeping = false
+        xi.chat.run("//wake", 1)
+        return state()
+    end,
     metrics = function() return metrics() end,
     gear = function() return gear() end,
     follow = follow_config,
@@ -6114,7 +6485,7 @@ local commands = {
     follow_events = follow_take_events,
     command = function(a)
         if type(a.line) ~= 'string' or a.line == '' then error('command: line') end
-        if not a.line:match('^[/!]') then error('command: the line must start with / or !') end
+        if not a.line:match('^[/!]') then error('command: the line must start with / or //') end
         xi.chat.run(a.line, 1)
         return true
     end,
@@ -6126,7 +6497,11 @@ local commands = {
     equip_set = equip_set,
     gearswap = gearswap,
     phase = phase,
-    phase_status = function() return xi.phase and xi.phase.status() or { enabled = false } end,
+    phase_status = function()
+        local status = xi.phase and xi.phase.status() or { enabled = false }
+        if phase_plan and phase_plan.spell_modes then status.modes = phase_plan.spell_modes end
+        return status
+    end,
     phase_lock = phase_lock,
     phase_kiting = phase_kiting,
     phase_resting = phase_resting,
@@ -6279,6 +6654,7 @@ server = listen()
 xi.events.on('frame', poll)
 xi.events.on('unload', function()
     release_keys()
+    if xi.input and xi.input.unbind then pcall(xi.input.unbind, HUD_HOTKEY) end
     if hud then
         if hud.cleanup_hubs then hud.cleanup_hubs() end
         hud.save(hud.state, hud.path)

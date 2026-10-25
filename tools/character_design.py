@@ -10,9 +10,9 @@ Use this when the game is not running, or when you want to script a change:
 
 The in-game form is faster when the character is online::
 
-    !character model hume 8          -- Face 2, Hair A, Medium
-    !character model mithra random   -- random face/hair/size
-    !character model random          -- random race too
+    //character model hume 8          -- Face 2, Hair A, Medium
+    //character model mithra random   -- random face/hair/size
+    //character model random          -- random race too
 
 Variants are numbered 1-48 per race: size fastest, then hair A/B, then face 1-8.
 A change here is only read when the client next logs in or zones; the zone
@@ -164,7 +164,7 @@ def main(argv: list[str] | None = None) -> int:
             print("\nThis character has a live session. The database %s, but" % (
                 "would be updated" if args.dry_run else "is updated now"))
             print("the client keeps the old model until it zones or logs in.  For an")
-            print("immediate change use: !character model %s %d" % (
+            print("immediate change use: //character model %s %d" % (
                 {1: "hume", 2: "humef", 3: "elvaan", 4: "elvaanf",
                  5: "tarutaru", 6: "tarutaruf", 7: "mithra", 8: "galka"}[blueprint["race"]],
                 blueprint["variant"]))

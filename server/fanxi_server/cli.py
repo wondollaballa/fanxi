@@ -50,15 +50,59 @@ def cmd_doctor(args) -> int:
     print("database:     %s" % config.db_path)
     print("HTTP:         http://%s:%d" % (config.bind, config.http_port))
     print("public host:  %s" % config.public_host)
-    print("game ports:   auth %(auth_port)d, data %(data_port)d, lobby %(view_port)d, zone %(zone_port)d/udp"
-          % config.ports)
+    print("game ports:   auth %(auth_port)d, data %(data_port)d, lobby %(view_port)d, "
+          "search %(search_port)d, zone %(zone_port)d/udp" % config.ports)
     game = config.find_game_dir()
     print("game folder:  %s" % (game or "not found (set FANXI_GAME_DIR)"))
+    cached = sorted(config.nav_dir.glob("*.nav")) if config.nav_dir.exists() else []
+    print("navigation:   %s (%d zone grid%s, %s)" % (
+        config.nav_dir, len(cached), "" if len(cached) == 1 else "s",
+        "on" if config.nav_enabled else "off"))
     huffman = config.find_huffman_dir()
     print("compress.dat: %s" % (huffman / "compress.dat" if huffman else "not found (zone gateway off)"))
     print("registration: %s" % ("open" if config.registration_open else "closed"))
     print("admin key:    %s" % ("set" if config.admin_key else "not set (admin role only)"))
     return 0
+
+
+def cmd_nav(args) -> int:
+    config = Config.from_env()
+    if args.game_dir:
+        config = replace(config, game_dir=Path(args.game_dir).resolve())
+    if args.nav_dir:
+        config = replace(config, nav_dir=Path(args.nav_dir).resolve())
+    from .game.nav import NavCache
+
+    game = config.find_game_dir()
+    if game is None:
+        print("no FINAL FANTASY XI folder (set FANXI_GAME_DIR or pass --game-dir)", file=sys.stderr)
+        return 1
+    zones = list(args.zone or [])
+    if args.all:
+        db, _service_obj = _service(config)
+        zones.extend(int(row["zone"]) for row in db.all(
+            "SELECT DISTINCT zone FROM monster_spawns ORDER BY zone"))
+    if not zones:
+        print("name a --zone, or use --all", file=sys.stderr)
+        return 1
+    cache = NavCache(config.nav_dir, game, keep=1)
+    built = skipped = 0
+    for zone in zones:
+        path = cache._cache_path(zone)
+        if path.exists() and args.force:
+            path.unlink()
+        started = time.time()
+        grid = cache.grid(int(zone))
+        if grid is None:
+            print("zone %d: no walkable collision mesh" % zone, file=sys.stderr)
+            skipped += 1
+            continue
+        built += 1
+        print("zone %d: %s (%dx%d cells, %d barrier triangles) in %.1fs" % (
+            zone, path, grid.width, grid.height, len(grid.walls) // 9,
+            time.time() - started))
+    print("cache: %s (%d built, %d skipped)" % (config.nav_dir, built, skipped))
+    return 0 if built else 1
 
 
 def cmd_cert(args) -> int:
@@ -195,6 +239,15 @@ def main(argv=None) -> int:
     p.add_argument("password", nargs="?")
     p.add_argument("--email")
     p.set_defaults(func=cmd_create_admin)
+
+    p = sub.add_parser("nav", help="build walkable zone grids from the player's game files")
+    p.add_argument("--zone", type=int, action="append",
+                   help="zone id to build (repeatable)")
+    p.add_argument("--all", action="store_true", help="every zone that has monster spawns")
+    p.add_argument("--force", action="store_true", help="rebuild a grid that is already cached")
+    p.add_argument("--game-dir", help="the FINAL FANTASY XI folder")
+    p.add_argument("--nav-dir", help="where the zone grids are cached")
+    p.set_defaults(func=cmd_nav)
 
     p = sub.add_parser("cert", help="make the auth port's self-signed certificate")
     p.set_defaults(func=cmd_cert)

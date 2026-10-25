@@ -1,17 +1,20 @@
-/* /! command completion for the game's chat input.
+/* // command completion for the game's chat input.
  *
- * keys.c calls xi_complete_line when Tab is pressed while the chat line starts with /! or !.
- * The function is deliberately free of host/SDL dependencies so tests/chat_complete_test.py can
- * compile it on its own.  A unique match completes with a trailing space; an exact command name
- * wins over longer names that start with it (`!home` -> `!home `, not `!homepoint`).
+ * keys.c calls xi_complete_line when Tab is pressed while the chat line starts with //, or with
+ * the legacy /! and ! spellings.  The function is deliberately free of host/SDL dependencies so
+ * tests/chat_complete_test.py can compile it on its own.  A unique match completes with a trailing
+ * space; an exact command name wins over longer names that start with it (`//home` -> `//home `,
+ * not `//homepoint`).
  *
  * An ambiguous word never picks a command: the line is copied to `out` unchanged and 1 is still
  * returned so the caller consumes Tab without touching the input.  The typist adds letters and
- * presses Tab again (`!w` does nothing; `!wh` -> `!where `).  A line that is not a /! command, or
+ * presses Tab again (`//w` does nothing; `//wh` -> `//where `).  A line that is not a command, or
  * a word nothing matches, returns 0 and lets the game see Tab.
  *
  * Keep this table in step with `ZoneSession.command` (server/fanxi_server/game/zone.py) and
- * control.lua's /!gs and /!follow handlers.  The names are the command words, not the help text.
+ * control.lua's //gs, //modes, //follow, //hud, //battleinfo and //partyinfo handlers.  The names
+ * are the command words, not the help text.  cmd.c also consults it to decide whether a // line
+ * is a server command to forward or a local "unknown command" error.
  */
 #include "complete.h"
 
@@ -26,8 +29,12 @@ static const char* const TOP[] = {
     "character", "job", "cast", "ws", "ja", "abilities", "traits", "equip", "unequip",
     "model", "event", "door", "time", "entities", "storage", "locker", "stock", "r30",
     "odyssey", "rp30", "augment", "cape", "moghouse", "reload", "disengage", "gs",
-    "follow", "trust", "help",
+    "follow", "trust", "makeparty", "invite", "help",
 };
+/* Server commands that are not completed in chat: `wake` would make `//wa` ambiguous with
+ * `//warp`, and both are for the launcher's park/resume path rather than everyday typing.
+ * cmd.c still forwards them. */
+static const char* const FORWARD_ONLY[] = { "sleep", "wake" };
 static const char* const WARP_ACTIONS[] = {
     "mark", "list", "me", "all", "delete", "rename", "help",
 };
@@ -49,6 +56,7 @@ static const char* const STORAGE_ACTIONS[] = { "store", "grab" };
 static const char* const AUGMENT_ACTIONS[] = { "A", "B", "C", "D", "list", "off" };
 static const char* const CAPE_ACTIONS[] = { "build", "list", "off" };
 static const char* const TRUST_ACTIONS[] = { "list", "release" };
+static const char* const INVITE_ACTIONS[] = { "subs", "all", "team" };
 static const char* const JOBS[] = {
     "WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST", "BRD", "RNG",
     "SAM", "NIN", "DRG", "SMN", "BLU", "COR", "PUP", "DNC", "SCH", "GEO", "RUN",
@@ -191,6 +199,9 @@ static int command_matches(const char* body, const char* token, size_t token_len
         if (equal_ci(first, "trust"))
             return collect(TRUST_ACTIONS, sizeof TRUST_ACTIONS / sizeof *TRUST_ACTIONS,
                            token, token_len, output);
+        if (equal_ci(first, "invite"))
+            return collect(INVITE_ACTIONS, sizeof INVITE_ACTIONS / sizeof *INVITE_ACTIONS,
+                           token, token_len, output);
         if (equal_ci(first, "job"))
             return collect(JOBS, sizeof JOBS / sizeof *JOBS, token, token_len, output);
         return 0;
@@ -220,10 +231,12 @@ int xi_complete_line(const char* line, char* out, size_t cap)
     if (!line || !out || cap < 2)
         return 0;
     size_t prefix = 0;
-    if (line[0] == '/' && line[1] == '!')
+    if (line[0] == '/' && line[1] == '/')
         prefix = 2;
+    else if (line[0] == '/' && line[1] == '!')
+        prefix = 2; /* legacy spelling: kept so old macros and habits still complete */
     else if (line[0] == '!')
-        prefix = 1;
+        prefix = 1; /* legacy spelling */
     else
         return 0;
 
@@ -255,4 +268,17 @@ int xi_complete_line(const char* line, char* out, size_t cap)
     if (written < 0 || (size_t)written >= cap)
         return 0;
     return 1;
+}
+
+int xi_complete_is_command(const char* word)
+{
+    if (!word || !*word)
+        return 0;
+    const char* const* found = NULL;
+    int count = collect(TOP, sizeof TOP / sizeof *TOP, word, strlen(word), &found);
+    if (count == 1 && equal_ci(found[0], word))
+        return 1;
+    count = collect(FORWARD_ONLY, sizeof FORWARD_ONLY / sizeof *FORWARD_ONLY,
+                    word, strlen(word), &found);
+    return count == 1 && equal_ci(found[0], word);
 }

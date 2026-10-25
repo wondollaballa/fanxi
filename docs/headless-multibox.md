@@ -10,6 +10,13 @@ from this machine while one client was live.
 
 - **The control half is already built.** Every client has a loopback JSON control port; the launcher
   can already command, key, follow, gear and inspect all of them. Headless needs no new control path.
+- **Headless boxes can be invited to a party without a click.** The server accepts a party or
+  alliance invitation to a family sub-account itself (`FANXI_AUTO_ACCEPT_SUB_INVITES`, default on),
+  so `/pcmd add` works when there is no prompt to answer. `//invite subs` invites the whole box team
+  at once (it resolves the names server-side, so distance does not matter), and `//makeparty` — or
+  the Party Info window's **Make party** button — first drops the boxes out of any old parties. The
+  Control room's **Invite** button offers the same invite choice from the launcher. A main account
+  still gets the prompt.
 - **"Headless" on macOS means no visible window, not no GUI session.** A hidden window that renders
   into its own back buffer, with the Metal layer created only while it is on screen, is the stable
   shape. Showing it later is a one-call screen swap with no streaming latency.
@@ -44,7 +51,7 @@ matter here:
 | Control protocol | `host/addons/lua/control.lua` | `state`, `metrics`, `command`, `keys`, `target`, `entities`, `capture`, `follow`, `gear`, `equip_set`, `phase`, `hud`, … |
 | Key injection | `host/addons/lua/control.lua` (`keys`) | Actions reach the game's input queue without the window being focused |
 | Screen capture | `capture` → `runtime/portable/d3d8.c` `capture_frame` | The next frame as an `XIF1` file (raw BGRA + 16-byte header), read from the back buffer |
-| Sub-accounts | `server/fanxi_server/config.py` (`FANXI_MAX_SUBS`, default 5) | Server-owned boxes; main + five is the supported shape. Separate saved accounts are not capped this way |
+| Sub-accounts | `server/fanxi_server/config.py` (`FANXI_MAX_SUBS`, default 5) | Server-owned boxes; main + five is the supported shape. A party/alliance invite from the family is auto-accepted, so a box joins without a click. Separate saved accounts are not capped this way |
 | Frame control | `--fps-divisor`, `--fps-limit`, `FFXI_FPS_LIMIT` | 60 / 30 fps now; low uncapped rates only on builds with frame sites |
 | A null renderer | `runtime/portable/gfx_null.c`, `host64-headless` on Windows | Game logic with no GPU at all |
 | Offscreen Metal | `tests/gfx_test.c` (`gfx_init(NULL)`) | The Metal backend already renders with no window and no drawable |
@@ -136,9 +143,17 @@ the panel's polling all exist and work without a visible window.
   a reduced feature set, and 3D applications are reported as unreliable. More here than the
   hypervisor cost alone.
 
-Also prevent display sleep while boxes are running (`caffeinate -d` or `pmset noidle`); App Nap
-prevention does not keep the display awake, and a sleeping display is fine for rendering but a
-sleeping *system* is not.
+Also prevent **system** sleep while boxes are running. `caffeinate -d` only stops the display from
+sleeping; the Mac can still idle-sleep and the Linux boxes then keep running with no server on the
+other end. Use `caffeinate -dimsu` (or `caffeinate -simsu` on AC), and check
+`pmset -g log | grep -E 'Sleep|Wake'` after a session that lost its boxes. App Nap prevention does
+not keep the display awake, and a sleeping display is fine for rendering but a sleeping *system*
+is not.
+
+A sleep longer than the zone idle timeout is exactly the silent UDP drop the server reaps after 60
+seconds of silence. The clients keep their last zone and keep answering their control ports, so
+without the live-roster check in [control-panel.md](control-panel.md#a-stuck-box) the launcher still
+shows them in game. Waking the Mac does not reconnect them; relaunch or **Reconcile** them.
 
 
 ## The macOS behaviour that decides the design
@@ -381,6 +396,71 @@ and no `nextDrawable` stall in the logs after a show/hide/show cycle.
 - **The server supports five sub-accounts** (`FANXI_MAX_SUBS`), so main + five is six boxes if the
   boxes are server-owned subs. Six separate saved accounts also work and are not subject to that
   cap. More than six needs either a configuration change or more accounts, plus more headroom.
+
+## Implementation status (2026-10-23)
+
+> **Update 2026-10-24:** the launcher now builds `host64-headless` for the same **2026-10-05**
+> install as the main client and points the helper at `FFXI2026`; there is no 2025-07-03 split.
+> The 2025-07-03 measurements below are the original research run.
+
+This plan was run against the home-lab Linux box: **Ryzen AI Max+ 395, 62 GB, Ubuntu 24.04,
+x86_64**, reachable at `100.83.60.18` (Tailscale) and `192.168.7.201` (LAN).
+
+- `tools/build_posix.py host64-headless` builds the null-renderer client (`gfx_null.c`); the Linux
+  binary was built in the `tools/linux` Docker image, originally against the `2025-07-03` game
+  build and now against the same `2026-10-05` install as the main.
+- Five subs run as `host64-headless` with `SDL_VIDEO_DRIVER=dummy`, `SDL_AUDIO_DRIVER=dummy`,
+  30 fps and 128 MB RSS each. Measured together: **~30 % of one core (0.3 core) and 764 MB RSS** for
+  all five. They are in game (West Ronfaure and Southern San d'Oria).
+- The Mac runs the main (60 fps, or 30 fps with the launcher's cap) and the server now binds
+  `0.0.0.0` with `FANXI_PUBLIC_HOST=100.86.137.114`; the five remote control ports are `ssh -L`
+  tunnels (54400–54404) to the Linux box's loopback.
+- The launcher was extended to **attach** those boxes (`InstanceManager::attach_linux`, reading
+  `~/.fanxi-linux-boxes.json`), so the Control room lists six rows and the existing command, gear,
+  follow and stop paths use them unchanged. A remote restart keeps the same tunnel port, so
+  `attach_linux` now refreshes the recorded pid instead of ignoring the existing row.
+- **Launch headless team** in the launcher's Team page starts the main locally and runs the helper's
+  `restart` action for the five subs, then attaches and opens the Control room. Only boxes that are
+  not in game are restarted; a healthy team and a pressed-twice button are no-ops. Per-box
+  **Launch headless** uses the same remote path when **Remote Linux host (SSH)** is set and returns
+  the existing view when that box is already in game.
+- Helper: `scripts/linux_boxes.py up|restart|reap|status|down` mints the sub launch tokens, starts
+  the five processes and the tunnels, and records their PIDs in `~/.fanxi-linux-boxes.json`. Its
+  defaults use the `2026-10-05` `FFXI2026` folder, the same install as the main, and `restart
+  --only` kills the remote `host64` by account before starting it again.
+- **Orphan cleanup** runs before `up`/`restart`: every user named in the state file is protected;
+  an untracked `host64-headless` older than `--orphan-grace` (120 s by default) is stopped. Run
+  `python3 scripts/linux_boxes.py reap --dry-run` to see the decision, or pass `--no-reap` to
+  skip it. The launcher does the same locally, protecting tracked pids, visible `host64` clients,
+  anything answering control with `login_status == 2`, and processes younger than 120 s.
+- **Sleep keeps the service running.** `//sleep` hides the character, despawns its Trusts, skips
+  its world tick and only reads chat; a status heartbeat keeps the client connected. `//wake`
+  restores it in place with no new token or process. The Team page switches the badge to
+  **Sleeping** and the button to **Wake**; the **Launch headless** button also wakes it.
+- **Force relaunch** is the explicit escape hatch when a remote helper is stuck: it kills the
+  helper, stops that account's local/remote session and removes its registry row/tunnel before
+  starting a fresh client. It is the only path allowed to stop a control-healthy client for the
+  selected account.
+
+Restart notes:
+
+- Start the server with the remote-play environment:
+  `FANXI_BIND=0.0.0.0 FANXI_PUBLIC_HOST=100.86.137.114 .venv/bin/python -m server.fanxi_server run`.
+  Without it, the Linux clients cannot reach the auth/lobby ports.
+- The Linux clients survive a launcher restart; the launcher rebuilds its rows from
+  `~/.fanxi-linux-boxes.json` (and now also adopts local `host64` clients it did not spawn in this
+  run). A box that lost its session — the server restarted, its UDP path went quiet, the helper
+  reaped it — keeps answering its control port. The launcher checks the server's
+  `/api/v1/world/online` roster, so the row shows **orphaned** as soon as the session is gone
+  (before the client itself notices), or **logged out** once its `login_status` reaches 0.
+  **Reconcile** runs the helper's `restart --only` for that one sub and re-attaches it on the same
+  tunnel port; **Reconcile N** does every stale box in one action. Once an account reports 2 for two
+  polls the launcher sends `//warp call <name>` from the leader, so the box comes back next to the
+  main without touching the rest of the team. The Team page's **Launch headless team** still runs
+  `restart` for all five. A reconnect-only action (no relog) is still the next improvement.
+- The `2026-10-05` headless build has the same four wraps and the same `login_control` patch as
+  the `2025-07-03` build it replaces, so the control commands, keys, state, gear and follow used
+  here work unchanged. HUD toggles on a headless box have still not been exercised.
 
 ## Sources
 

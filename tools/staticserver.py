@@ -16,10 +16,10 @@ then start the game against it:
 Ports (a LandSandBoat server's): 54231 auth (TLS, needs the openssl command for its certificate),
 54230 login data (TCP), 54001 lobby (TCP), 54230 zone (UDP).
 
-In the zone, chat commands (say them, e.g. "!zone 245"):
-  !zone <id> [x y z [rot]]   change zone (to a known position for the zone, or the one given)
-  !pos <x> <y> <z> [rot]     move within the zone (re-enters the zone at that position)
-  !where                     print the zone and position
+In the zone, chat commands (say them, e.g. "//zone 245"):
+  //zone <id> [x y z [rot]]   change zone (to a known position for the zone, or the one given)
+  //pos <x> <y> <z> [rot]     move within the zone (re-enters the zone at that position)
+  //where                     print the zone and position
 FFXI_STATIC_DEBUG=1 logs every zone packet the client sends.
 Zone lines work when --sql points at a LandSandBoat sql/ folder (zonelines.sql); its
 zone_settings.sql adds each zone's music.
@@ -59,7 +59,7 @@ def md5(b):
 
 # --- the character ------------------------------------------------------------------------------
 
-# Where a character can stand in a few zones (x, y = height, z, rotation 0-255), for !zone without a
+# Where a character can stand in a few zones (x, y = height, z, rotation 0-255), for //zone without a
 # position when there is no zonelines.sql to find one.
 KNOWN_POSITIONS = {
     50: (-11.0, 2.0, -142.0, 192),   # Aht Urhgan Whitegate
@@ -308,7 +308,7 @@ class Server:
         self.host_ip = args.public_ip
         self.hash = bytes.fromhex(args.session_hash)
         hour = getattr(args, 'hour', None)
-        self.clock = vana_offset(hour) if hour is not None else 0  # added to the game clock (--hour, !time)
+        self.clock = vana_offset(hour) if hour is not None else 0  # added to the game clock (--hour, //time)
         # The key the client's zone cipher starts from: 16 bytes of the account service's session
         # value, md5(session hash) as LSB's profile service gives it, then the view key with the
         # client's own adjustment (+9).
@@ -588,8 +588,11 @@ class ZoneSession:
                 self.queue.append(sub(0x052, bytes(4)))  # release the client's controls
         elif t == 0x0B5:  # chat
             text = bytes(p[6:]).split(b'\0')[0].decode('ascii', 'replace')
-            if text.startswith('!'):
-                self.command(text[1:].split())
+            # "//cmd" is what the player types; the host forwards it as the "!cmd" say form.
+            if text.startswith('//'):
+                self.command(text[2:].split())
+            elif text.lstrip('/').startswith('!'):
+                self.command(text.lstrip('/')[1:].split())
         elif t == 0x04B:  # the server message, which the client asks for until it has all of it
             kind, lang = p[6], p[7]
             stamp, offset = struct.unpack_from('<i', p, 8)[0], struct.unpack_from('<i', p, 16)[0]
@@ -624,7 +627,7 @@ class ZoneSession:
                 self.srv.clock = vana_offset(float(words[1]))  # the client reads the clock at a zone-in
                 self.change_zone(self.zone, list(self.pos))
             else:
-                self.say('commands: !zone <id> [x y z [rot]], !pos <x> <y> <z> [rot], !where, !time <hour>')
+                self.say('commands: //zone <id> [x y z [rot]], //pos <x> <y> <z> [rot], //where, //time <hour>')
         except ValueError:
             self.say('numbers, please')
 
@@ -676,7 +679,7 @@ class ZoneSession:
             q.append(sub(0x01D, struct.pack('<BB2xI', 0, cid, flags)))
         q.append(sub(0x01D, struct.pack('<BB2xI', 1, 18, flags)))
         self.queue += q
-        self.say(f'{self.srv.zones.name(self.zone)} ({self.zone}). Say !help for commands.')
+        self.say(f'{self.srv.zones.name(self.zone)} ({self.zone}). Say //help for commands.')
 
     def server_message(self, lang, stamp, offset):
         """0x04D: the server message (the login message), up to 236 bytes of it at offset"""
@@ -903,7 +906,7 @@ def main():
     ap.add_argument('--zone', type=int)
     ap.add_argument('--pos', help='x,y,z[,rot]')
     ap.add_argument('--hour', type=float, help="Vana'diel's hour at sign-in (0-23); the clock runs on from it")
-    ap.add_argument('--motd', default='Static server: no NPCs, no monsters. Say !help for commands.')
+    ap.add_argument('--motd', default='Static server: no NPCs, no monsters. Say //help for commands.')
     ap.add_argument('--bind', default='0.0.0.0')
     ap.add_argument('--public-ip', default='127.0.0.1', help='the address the client reaches this server at')
     ap.add_argument('--session-hash', default='5354415449435345535349304e000001', help='32 hex digits')

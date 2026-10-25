@@ -291,6 +291,10 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
             shield_skill=shield_skill, shield_size=0)
 
     delay = max(1, int(weapon.delay or UNARMED_DELAY))
+    if weapon.skill == combat.H2H_SKILL:
+        # Martial Arts is a flat hand-to-hand delay reduction; job-point and trait
+        # rows add to the same modifier.
+        delay = max(1, delay - max(0, int(mods.get(mod.MARTIAL_ARTS, 0))))
     if dual_wield:
         # (main + sub) x (1 - Dual Wield%) / 2: both hands swing once per round, so
         # the round interval is the average of the two reduced delays.

@@ -114,6 +114,19 @@ local limbus = {
     },
 }
 
+local capes = {
+    fc = { name = "Ankou's Mantle", augments = {"MP+60", "Mag. Acc+20 /Mag. Dmg.+20", "MP+20", '"Fast Cast"+10', "Phys. dmg. taken-10%"} },
+    pdt = { name = "Ankou's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Ankou's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Ankou's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Ankou's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Ankou's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    macc = { name = "Ankou's Mantle", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "Mag. Acc.+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    ws_str = { name = "Ankou's Mantle", augments = {"STR+20", "Accuracy+20 Attack+20", "STR+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    ws_int = { name = "Ankou's Mantle", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", "Weapon skill damage +10%", "Phys. dmg. taken-10%"} },
+    enmity = { name = "Ankou's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity+10", "Phys. dmg. taken-10%"} },
+}
+
 function get_sets()
     sets = {}
     sets.engaged = {}
@@ -142,7 +155,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.JA["Blood Weapon"] = {
         main = "Apocalypse",
@@ -159,7 +172,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.JA["Consume Mana"] = {
         main = "Apocalypse",
@@ -176,7 +189,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.JA["Last Resort"] = {
         main = "Apocalypse",
@@ -193,7 +206,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.JA["Nether Void"] = {
         main = "Apocalypse",
@@ -210,7 +223,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.JA["Scarlet Delirium"] = {
         main = "Apocalypse",
@@ -227,7 +240,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.JA.Souleater = {
         main = "Apocalypse",
@@ -244,7 +257,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ankou's Mantle",
+        back = capes.dt,
     }
     sets.JA["Weapon Bash"] = {
         main = "Apocalypse",
@@ -261,7 +274,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ankou's Mantle",
+        back = capes.dt,
     }
 
     -- ===== Odyssey =====
@@ -320,7 +333,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.WS["Cross Reaper"] = {
         main = "Apocalypse",
@@ -337,7 +350,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.WS.Entropy = {
         main = "Apocalypse",
@@ -354,7 +367,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_int,
     }
     sets.WS.Quietus = {
         main = "Apocalypse",
@@ -371,7 +384,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.WS.Resolution = {
         main = "Apocalypse",
@@ -388,7 +401,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
     sets.WS.Torcleaver = {
         main = "Apocalypse",
@@ -405,7 +418,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ankou's Mantle",
+        back = capes.ws_str,
     }
 
     -- ===== engaged =====
@@ -424,7 +437,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Ankou's Mantle",
+        back = capes.tp,
     }
     sets.engaged.hybrid = {
         main = "Apocalypse",
@@ -441,7 +454,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Ankou's Mantle",
+        back = capes.tp,
     }
     sets.engaged.tp = {
         main = "Apocalypse",
@@ -458,7 +471,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Ankou's Mantle",
+        back = capes.tp,
     }
 
     -- ===== enmity =====
@@ -477,7 +490,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ankou's Mantle",
+        back = capes.enmity,
     }
 
     -- ===== Limbus Rank 30 sets =================================
@@ -502,7 +515,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Ankou's Mantle",
+        back = capes.dt,
     }
     sets.idle.maxhp = {
         main = "Apocalypse",
@@ -519,7 +532,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Ankou's Mantle",
+        back = capes.maxhp,
     }
     sets.idle.mdt = {
         main = "Apocalypse",
@@ -536,7 +549,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Ankou's Mantle",
+        back = capes.mdt,
     }
     sets.idle.movement = {
         main = "Apocalypse",
@@ -570,7 +583,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Ankou's Mantle",
+        back = capes.pdt,
     }
     sets.idle.refresh = {
         main = "Apocalypse",
@@ -587,7 +600,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Chirich Ring +1",
         ring2 = "Stikini Ring +1",
-        back = "Ankou's Mantle",
+        back = capes.fc,
     }
     sets.idle.town = {
         main = "Apocalypse",
@@ -623,7 +636,7 @@ function get_sets()
         ear2 = "Enchntr. Earring +1",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Ankou's Mantle",
+        back = capes.macc,
     }
     sets.midcast["Enfeebling Magic"] = {
         main = "Apocalypse",
@@ -640,7 +653,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Ankou's Mantle",
+        back = capes.macc,
     }
 
     -- ===== precast =====
@@ -657,7 +670,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = "Ankou's Mantle",
+        back = capes.fc,
     }
 
     -- ===== weaponset =====

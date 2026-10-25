@@ -1,7 +1,9 @@
 mod api;
+mod boxes;
 mod commands;
 mod config;
 mod control;
+mod display;
 mod error;
 mod game;
 mod gear;
@@ -44,6 +46,7 @@ pub fn run() {
             commands::set_last_page,
             commands::select_tenant,
             commands::save_settings,
+            commands::display_info,
             commands::detect_game_dir,
             commands::find_host64,
             commands::defaults_dir,
@@ -52,14 +55,20 @@ pub fn run() {
             commands::open_data_dir,
             commands::launch,
             commands::launch_all,
+            commands::launch_headless_party,
             commands::team,
             commands::create_sub,
             commands::activate_sub,
             commands::create_sub_character,
             commands::launch_sub,
+            commands::launch_sub_headless,
+            commands::force_relaunch_headless,
+            commands::set_headless_sleep,
             commands::launch_team,
+            commands::launch_remote_team,
             commands::delete_sub,
             commands::list_instances,
+            commands::relaunch_instance,
             commands::stop_instance,
             commands::stop_all,
             commands::send_command,

@@ -114,6 +114,17 @@ local limbus = {
     },
 }
 
+local capes = {
+    maccfc = { name = "Intarabus's Cape", augments = {"CHR+20", "Mag. Acc+20 /Mag. Dmg.+20", "Mag. Acc.+10", '"Fast Cast"+10', "Damage taken-5%"} },
+    pdt = { name = "Intarabus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Intarabus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Intarabus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Intarabus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Intarabus's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    dexws = { name = "Intarabus's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    chrws = { name = "Intarabus's Cape", augments = {"CHR+20", "Accuracy+20 Attack+20", "CHR+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+}
+
 function get_sets()
     sets = {}
     sets.engaged = {}
@@ -136,7 +147,7 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = "Intarabus's Cape",
+        back = capes.tp,
     }
     sets.JA.Marcato = {
         main = "Carnwenhan",
@@ -147,7 +158,7 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = "Intarabus's Cape",
+        back = capes.tp,
     }
     sets.JA.Nightingale = {
         main = "Carnwenhan",
@@ -158,7 +169,7 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = "Intarabus's Cape",
+        back = capes.tp,
     }
     sets.JA.Pianissimo = {
         main = "Carnwenhan",
@@ -169,7 +180,7 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = "Intarabus's Cape",
+        back = capes.tp,
     }
     sets.JA["Soul Voice"] = {
         main = "Carnwenhan",
@@ -180,7 +191,7 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = "Intarabus's Cape",
+        back = capes.tp,
     }
     sets.JA.Troubadour = {
         main = "Carnwenhan",
@@ -191,7 +202,7 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = "Intarabus's Cape",
+        back = capes.tp,
     }
 
     -- ===== Odyssey =====
@@ -242,7 +253,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Intarabus's Cape",
+        back = capes.dexws,
     }
     sets.WS.Exenterator = {
         main = "Carnwenhan",
@@ -258,7 +269,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Intarabus's Cape",
+        back = capes.dexws,
     }
     sets.WS["Mordant Rime"] = {
         main = "Carnwenhan",
@@ -274,7 +285,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Intarabus's Cape",
+        back = capes.chrws,
     }
     sets.WS["Rudra's Storm"] = {
         main = "Carnwenhan",
@@ -290,7 +301,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Intarabus's Cape",
+        back = capes.dexws,
     }
 
     -- ===== engaged =====
@@ -309,7 +320,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Intarabus's Cape",
+        back = capes.tp,
     }
     sets.engaged.hybrid = {
         main = "Carnwenhan",
@@ -326,7 +337,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Intarabus's Cape",
+        back = capes.tp,
     }
     sets.engaged.tp = {
         main = "Carnwenhan",
@@ -343,7 +354,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Intarabus's Cape",
+        back = capes.tp,
     }
 
     -- ===== enmity =====
@@ -378,7 +389,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Intarabus's Cape",
+        back = capes.dt,
     }
     sets.idle.maxhp = {
         main = "Carnwenhan",
@@ -395,7 +406,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Intarabus's Cape",
+        back = capes.maxhp,
     }
     sets.idle.mdt = {
         main = "Carnwenhan",
@@ -412,7 +423,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Intarabus's Cape",
+        back = capes.mdt,
     }
     sets.idle.movement = {
         main = "Carnwenhan",
@@ -446,7 +457,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Intarabus's Cape",
+        back = capes.pdt,
     }
     sets.idle.refresh = {
         main = "Carnwenhan",
@@ -463,7 +474,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Chirich Ring +1",
         ring2 = "Stikini Ring +1",
-        back = "Intarabus's Cape",
+        back = capes.maccfc,
     }
     sets.idle.town = {
         main = "Carnwenhan",
@@ -499,7 +510,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Intarabus's Cape",
+        back = capes.maccfc,
     }
     sets.midcast["Singing Duration"] = {
         main = "Carnwenhan",
@@ -516,7 +527,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Intarabus's Cape",
+        back = capes.maccfc,
     }
 
     -- ===== precast =====
@@ -533,7 +544,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = "Intarabus's Cape",
+        back = capes.maccfc,
     }
 
     -- ===== weaponset =====

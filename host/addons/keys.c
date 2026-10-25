@@ -279,7 +279,7 @@ static int mouse(int msg, float px, float py, int delta)
 /* A press the overlay took is the overlay's until it is released. */
 static uint8_t g_mouse_taken;
 
-/* Tab in the chat line completes /! commands.  The game's own command assist does not know
+/* Tab in the chat line completes // commands.  The game's own command assist does not know
  * them (they are server chat commands, not client slash commands), so the host rewrites the
  * input line and keeps Tab away from the game.  An ambiguous prefix comes back unchanged:
  * keep the key, leave the input and its caret alone, and let the typist add letters. */

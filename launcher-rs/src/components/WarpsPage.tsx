@@ -215,7 +215,7 @@ export function WarpsPage({
     try {
       await backend.sendCommand(
         liveInstance.port,
-        `!warp ${target === "all" ? "all" : "me"} ${warp.slot}`,
+        `//warp ${target === "all" ? "all" : "me"} ${warp.slot}`,
       );
       const label = warpLabel(warp);
       notify(
@@ -224,6 +224,25 @@ export function WarpsPage({
               familyOnline.length === 1 ? "" : "s"
             } to ${label}`
           : `Warping to ${label}`,
+        "success",
+      );
+    } catch (problem) {
+      notify(messageOf(problem), "error");
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  async function warpTeamToMe() {
+    if (!selectedCharacter || !liveInstance || !inGame || isActing) return;
+    setBusy("warp-team");
+    try {
+      await backend.sendCommand(liveInstance.port, "//warp all me");
+      const others = Math.max(0, familyOnline.length - 1);
+      notify(
+        others > 0
+          ? `Calling ${others} team character${others === 1 ? "" : "s"} to ${selectedCharacter.name}`
+          : `Calling the team to ${selectedCharacter.name} — no other boxes are online`,
         "success",
       );
     } catch (problem) {
@@ -307,7 +326,7 @@ export function WarpsPage({
       <SectionHeader
         eyebrow="Travel"
         title="Warps"
-        subtitle="Mark a camp once, name it, and warp yourself or your whole team back without remembering a zone id or a coordinate."
+        subtitle="Mark a camp once, name it, and warp yourself or your whole team back — or call the team to wherever you stand — without remembering a zone id or a coordinate."
         actions={
           <>
             <Button variant="ghost" icon={<Gamepad2 size={15} />} onClick={onControl}>
@@ -403,6 +422,31 @@ export function WarpsPage({
               <b>Rot</b> {rotation ?? "—"}
             </span>
           </div>
+          <div className="warp-current-actions">
+            <Button
+              variant="secondary"
+              icon={<UsersRound size={15} />}
+              loading={busy === "warp-team"}
+              disabled={!inGame || isActing}
+              onClick={() => void warpTeamToMe()}
+              title={
+                inGame
+                  ? "Send //warp all me from this character"
+                  : "Launch this character and wait for it to enter the world"
+              }
+            >
+              Warp team to me
+            </Button>
+            <span className="muted">
+              {!inGame
+                ? "Launch this character to call the team"
+                : familyOnline.length > 1
+                  ? `Calls ${familyOnline.length - 1} other online team character${
+                      familyOnline.length === 2 ? "" : "s"
+                    } here`
+                  : "No other team characters are online right now"}
+            </span>
+          </div>
         </div>
         <div className="warp-mark-panel">
           <div className="warp-mark-title">
@@ -488,7 +532,8 @@ export function WarpsPage({
         {target === "all" && (
           <p className="warp-target-hint">
             Everyone means this character's main account and its online sub-account characters —
-            the same group <code>!warp all</code> moves in game.
+            the same group <code>//warp all</code> moves in game. To move that group to this
+            character instead, use <b>Warp team to me</b> above.
           </p>
         )}
 
@@ -591,25 +636,27 @@ export function WarpsPage({
           </div>
         </div>
         <div className="warp-command-grid">
-          <code>/!warp mark [alias]</code>
+          <code>//warp mark [alias]</code>
           <span>Save your current zone and position; the next number is assigned.</span>
-          <code>/!warp me 3</code>
+          <code>//warp me 3</code>
           <span>Warp yourself to number 3 (or type its alias instead of the number).</span>
-          <code>/!warp all 3</code>
+          <code>//warp all 3</code>
           <span>Warp your main and sub-account characters that are online.</span>
-          <code>/!warp list</code>
+          <code>//warp all me</code>
+          <span>Call every other online team character to your zone and position.</span>
+          <code>//warp list</code>
           <span>Print the numbered list; add a page number for more.</span>
-          <code>/!warp delete 3</code>
+          <code>//warp delete 3</code>
           <span>Remove a saved place.</span>
-          <code>/!warp rename 3 Camp</code>
+          <code>//warp rename 3 Camp</code>
           <span>Set or clear the alias from chat.</span>
         </div>
         <p className="warp-tab-hint">
-          Type <code>/!wa</code> in chat and press <kbd>Tab</kbd> — the client completes the
+          Type <code>//wa</code> in chat and press <kbd>Tab</kbd> — the client completes the
           command when the prefix is unique. If more than one command matches, Tab leaves the line
-          alone; add a letter and press Tab again (<code>/!w</code> does nothing, <code>/!wh</code>{' '}
-          becomes <code>/!where</code>). That also works for <code> /!warp ma</code>,{' '}
-          <code>/!warp li</code> and the rest of the command set.
+          alone; add a letter and press Tab again (<code>//w</code> does nothing, <code>//wh</code>{' '}
+          becomes <code>//where</code>). That also works for <code> //warp ma</code>,{' '}
+          <code>//warp li</code> and the rest of the command set.
         </p>
       </Card>
 

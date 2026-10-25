@@ -1,4 +1,4 @@
-"""The Data page: the 0x01B mastery byte, the snapshot and !reload."""
+"""The Data page: the 0x01B mastery byte, the snapshot and //reload."""
 from __future__ import annotations
 
 import struct
@@ -78,6 +78,9 @@ class CharacterDataTest(unittest.TestCase):
         self.assertEqual(self.db.scalar("SELECT COUNT(*) FROM trusts"), 122)
         self.assertEqual(self.service.trust(896)["job"], 4)
         self.assertEqual(self.service.trust(896)["model"], 3000)
+        self.assertEqual(len(self.service.trust_spells(896, 99)), 30)
+        self.assertEqual(len(self.service.trust_spells(898, 1)), 1)
+        self.assertEqual(self.service.trust_spells(1002, 99), [])
         self.assertEqual(data["ranks"]["sandoria"], 1)
 
         self.service.set_all_jobs(self.character["id"], 99)

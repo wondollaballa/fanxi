@@ -147,7 +147,7 @@ def npc_talk(session, entity) -> None:
         if state is None:
             service.start_quest(character["id"], quest["id"])
             _say(session, entity, "You look capable. Orcish Fodder are troubling the west road.")
-            _say(session, entity, "Go to West Ronfaure with !zone 100 and defeat three of them. Return to me after.")
+            _say(session, entity, "Go to West Ronfaure with //zone 100 and defeat three of them. Return to me after.")
             session.say("Quest started: %s." % quest["name"])
             return
         if state.get("state") == "complete":

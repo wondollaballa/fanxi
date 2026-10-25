@@ -51,7 +51,7 @@ local capes = {
     ws_dex = { name = "Visucius's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", "Weapon skill damage +10%", "Damage taken-5%"} },
     pet_tp = { name = "Visucius's Mantle", augments = {"Pet: Acc.+20 Pet: R.Acc.+20 Pet: Atk.+20 Pet: R.Atk.+20", "Pet: Attack+10 Pet: Rng.Atk.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
     pet_mab = { name = "Visucius's Mantle", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Mag. Acc+20 /Mag. Dmg.+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
-    pet_dt = { name = "Visucius's Mantle", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Pet: Accuracy+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
+    pet_dt = { name = "Visucius's Mantle", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Pet: Accuracy+20 Pet: Rng. Acc.+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
 }
 
 -- Unity accessories: fixed max-rank Odyssey augments.

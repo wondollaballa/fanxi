@@ -25,7 +25,7 @@ AUTO_REGEN = 9
 AUTO_REFRESH = 10
 TICK_SECONDS = 3.0
 
-# Human labels for the !traits command.  Unknown modifier ids still print their id so a
+# Human labels for the //traits command.  Unknown modifier ids still print their id so a
 # missing label never hides a trait row.
 MOD_LABELS = {
     mod.DEF: "Defense",
@@ -90,7 +90,7 @@ MOD_LABELS = {
     1082: "Shield Barrier",
 }
 
-# Killer and resist traits use one modifier id per family; name them so !traits reads
+# Killer and resist traits use one modifier id per family; name them so //traits reads
 # like the client's trait menu instead of printing raw modifier numbers.
 MOD_LABELS.update({
     224: "Vermin Killer", 225: "Bird Killer", 226: "Amorph Killer",
@@ -124,7 +124,7 @@ class Trait:
     mods: tuple[tuple[int, int], ...] = ()
 
     def describe(self) -> str:
-        """The name plus its tier and effects, for ``!traits``."""
+        """The name plus its tier and effects, for ``//traits``."""
         parts = ["%s+%d" % (MOD_LABELS.get(mod_id, "mod %d" % mod_id), value)
                  for mod_id, value in self.mods]
         detail = ", ".join(parts) if parts else "no direct stat change"

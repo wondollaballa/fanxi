@@ -114,6 +114,17 @@ local limbus = {
     },
 }
 
+local capes = {
+    pdt = { name = "Senuna's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Senuna's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Senuna's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Senuna's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Senuna's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    dw = { name = "Senuna's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", '"Dual Wield"+10', "Phys. dmg. taken-10%"} },
+    ws_dex = { name = "Senuna's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    waltz = { name = "Senuna's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", '"Waltz" potency+10%', "Phys. dmg. taken-10%"} },
+}
+
 function get_sets()
     sets = {}
     sets.engaged = {}
@@ -133,7 +144,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Maxixi Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
     sets.JA["Curing Waltz III"] = {
         main = "Terpsichore",
@@ -144,7 +155,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Maxixi Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
     sets.JA["Fan Dance"] = {
         main = "Terpsichore",
@@ -155,7 +166,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Maxixi Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
     sets.JA["Grand Pas"] = {
         main = "Terpsichore",
@@ -166,7 +177,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Maxixi Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
     sets.JA["Haste Samba"] = {
         main = "Terpsichore",
@@ -177,7 +188,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Horos Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
     sets.JA["No Foot Rise"] = {
         main = "Terpsichore",
@@ -188,7 +199,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Maxixi Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
     sets.JA.Presto = {
         main = "Terpsichore",
@@ -199,7 +210,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Maxixi Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.tp,
     }
     sets.JA["Reverse Flourish"] = {
         main = "Terpsichore",
@@ -210,7 +221,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Maxixi Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.tp,
     }
     sets.JA["Saber Dance"] = {
         main = "Terpsichore",
@@ -221,7 +232,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Maxixi Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.tp,
     }
     sets.JA.Trance = {
         main = "Terpsichore",
@@ -232,7 +243,7 @@ function get_sets()
         legs = "Maxixi Tights +4",
         feet = "Maxixi Toe Shoes +4",
         neck = "Etoile Gorget +2",
-        back = "Senuna's Mantle",
+        back = capes.tp,
     }
 
     -- ===== Odyssey =====
@@ -291,7 +302,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
     sets.WS.Exenterator = {
         main = "Terpsichore",
@@ -308,7 +319,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
     sets.WS["Pyrrhic Kleos"] = {
         main = "Terpsichore",
@@ -325,7 +336,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
     sets.WS["Rudra's Storm"] = {
         main = "Terpsichore",
@@ -342,7 +353,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Senuna's Mantle",
+        back = capes.ws_dex,
     }
 
     -- ===== engaged =====
@@ -361,7 +372,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Senuna's Mantle",
+        back = capes.tp,
     }
     sets.engaged.dw = {
         main = "Terpsichore",
@@ -378,7 +389,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Senuna's Mantle",
+        back = capes.dw,
     }
     sets.engaged.hybrid = {
         main = "Terpsichore",
@@ -395,7 +406,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Senuna's Mantle",
+        back = capes.tp,
     }
     sets.engaged.tp = {
         main = "Terpsichore",
@@ -412,7 +423,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Senuna's Mantle",
+        back = capes.tp,
     }
 
     -- ===== Limbus Rank 30 sets =================================
@@ -436,7 +447,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Senuna's Mantle",
+        back = capes.dt,
     }
     sets.idle.maxhp = {
         main = "Terpsichore",
@@ -453,7 +464,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Senuna's Mantle",
+        back = capes.maxhp,
     }
     sets.idle.mdt = {
         main = "Terpsichore",
@@ -470,7 +481,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Senuna's Mantle",
+        back = capes.mdt,
     }
     sets.idle.movement = {
         main = "Terpsichore",
@@ -504,7 +515,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Senuna's Mantle",
+        back = capes.pdt,
     }
     sets.idle.town = {
         main = "Terpsichore",

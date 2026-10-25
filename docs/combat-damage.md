@@ -601,7 +601,8 @@ they are easy to revisit:
   LandSandBoat leaves every shield's absorption at zero.
 - **Augments are read, with a short list of exceptions.** `equipped_mods()` joins each
   equipped row to its inventory copy and `augment_stats` decodes both block families:
-  bundled rows for Odyssey (Nyame A-D), Limbus Rank 30 and Unity Rank 15, and the
+  bundled rows for Odyssey (Nyame A-D), Limbus Rank 30, Unity Rank 15 and
+  Oboro Dynamis-Divergence weapons (NQ/HQ1/HQ2), and the
   five-slot standard block for the Ambuscade job capes. The engine has no model only for
   pet stats, Snapshot, block rate, magic-burst II, spell interruption, the weapon `DMG:`
   rating and the Phalanx/Blood Pact lines; they are listed in

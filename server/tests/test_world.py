@@ -10,7 +10,9 @@ from unittest import mock
 
 from support import make_service
 
-from fanxi_server.game import base_stats, combat, content, merits, modifiers as mod, packets
+from fanxi_server.game import (
+    base_stats, capes, combat, content, effects, merits, modifiers as mod, packets,
+)
 from fanxi_server.game.world import SYNC_RANGE, World
 from fanxi_server.game.zone import ALL_CONTAINERS, ZoneSession, job_id, sub
 
@@ -943,6 +945,8 @@ class WorldTest(unittest.TestCase):
         self.zone(100)
         mob = next(entity for entity in self.session.entities if entity.kind == "mob")
         self.attack(mob)
+        # In melee reach there is nothing to absorb: this press is the player's own.
+        self.session.pos = [mob.x + 1.0, mob.y, mob.z, 0]
         self.session.queue.clear()
         packet = bytearray(12)
         struct.pack_into("<IHH", packet, 4, mob.id, mob.targid, packets.ACTION_ATTACK_OFF)
@@ -996,8 +1000,13 @@ class WorldTest(unittest.TestCase):
         body = packets.entity_update(mob, packets.SEND_HP)
         self.assertEqual(struct.unpack_from("<I", body, 40)[0], 0)
 
-    def test_range_disengage_keeps_the_engagement_and_the_stance(self):
-        """The client's own /attack off at four yalms is not a request to stop fighting."""
+    def test_the_client_range_drop_is_absorbed_once_per_engagement(self):
+        """The client's own /attack off at four yalms is not a request to stop fighting.
+
+        It sends that packet by itself when its first swing finds the target out of
+        reach.  Exactly one per engagement is absorbed and the stance re-asserted; the
+        client never repeats it, so this cannot trap the player.
+        """
         self.zone(100)
         mob = next(entity for entity in self.session.entities if entity.kind == "mob")
         self.attack(mob)
@@ -1005,10 +1014,11 @@ class WorldTest(unittest.TestCase):
         self.session.queue.clear()
         self.attack_off(mob)
         self.assertEqual(self.session.engaged_id, mob.id)
+        self.assertFalse(self.session.client_range_drop)
         self.assertEqual(self.player_animation(), 1)
         self.assertIn(0x058, msg_types(self.session))
-        self.assertNotIn("You disengage.", self.chats())
-        self.assertIn("You stay engaged at range; use !disengage to break it.", self.chats())
+        # Retail has no chat line for a kept engagement.
+        self.assertEqual(self.chats(), [])
 
     def test_reengaging_the_same_target_is_quiet(self):
         self.zone(100)
@@ -1019,34 +1029,19 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(self.chats().count("You engage %s." % mob.name), 0)
         self.assertEqual(self.session.engaged_id, mob.id)
 
-    def test_the_range_hint_is_not_repeated_every_crossing(self):
+    def test_reengaging_the_same_target_does_not_rearm_the_client_drop(self):
+        """The client re-picks a target it dropped; that is one engagement, not a new one."""
         self.zone(100)
         mob = next(entity for entity in self.session.entities if entity.kind == "mob")
         self.attack(mob)
         self.session.pos = [mob.x + 10.0, mob.y, mob.z, 0]
-        self.attack_off(mob)
-        # A later crossing is still the same engagement, so the hint stays quiet.
-        self.session.range_disengage_at = 0.0
-        self.attack_off(mob)
-        self.assertEqual(self.session.engaged_id, mob.id)
-        self.assertEqual(
-            self.chats().count("You stay engaged at range; use !disengage to break it."), 1)
-
-    def test_a_quick_reengage_does_not_turn_the_next_crossing_into_a_double_tap(self):
-        self.zone(100)
-        mob = next(entity for entity in self.session.entities if entity.kind == "mob")
-        self.attack(mob)
-        self.session.pos = [mob.x + 10.0, mob.y, mob.z, 0]
-        self.attack_off(mob)
-        # The client draws again as soon as the target is back in reach; that must clear
-        # the second-press window so the next automatic attack-off is ignored too.
-        self.attack(mob)
-        self.session.pos = [mob.x + 10.0, mob.y, mob.z, 0]
-        self.attack_off(mob)
-        self.assertEqual(self.session.engaged_id, mob.id)
-        self.assertEqual(self.player_animation(), 1)
+        self.attack_off(mob)                 # the client's own drop, absorbed
+        self.attack(mob)                     # the client picks the target back up
+        self.attack_off(mob)                 # the player: must break the engagement
+        self.assertIsNone(self.session.engaged_id)
 
     def test_a_second_attack_off_at_range_breaks_the_engagement(self):
+        """The 01:26 trap: every press out of range used to be swallowed."""
         self.zone(100)
         mob = next(entity for entity in self.session.entities if entity.kind == "mob")
         self.attack(mob)
@@ -1057,20 +1052,11 @@ class WorldTest(unittest.TestCase):
         self.attack_off(mob)
         self.assertIsNone(self.session.engaged_id)
         self.assertEqual(self.player_animation(), 0)
-        self.assertIn("You disengage.", self.chats())
+        # Retail says nothing on /attack off; the sheathe is the only feedback.
+        self.assertEqual(self.chats(), [])
 
-    def test_attack_off_beyond_engage_range_disengages(self):
-        self.zone(100)
-        mob = next(entity for entity in self.session.entities if entity.kind == "mob")
-        self.attack(mob)
-        self.session.pos = [mob.x + 31.0, mob.y, mob.z, 0]
-        self.session.queue.clear()
-        self.attack_off(mob)
-        self.assertIsNone(self.session.engaged_id)
-        self.assertEqual(self.player_animation(), 0)
-        self.assertIn("You disengage.", self.chats())
-
-    def test_attack_beyond_engage_range_is_refused(self):
+    def test_attack_beyond_engage_range_draws_then_loses_sight(self):
+        """Retail draws on any target; the 30-yalm leash ends it on the next tick."""
         self.zone(100)
         mob = next(entity for entity in self.session.entities if entity.kind == "mob")
         self.session.pos = [mob.x + 31.0, mob.y, mob.z, 0]
@@ -1078,9 +1064,13 @@ class WorldTest(unittest.TestCase):
         struct.pack_into("<IHH", packet, 4, mob.id, mob.targid, packets.ACTION_ATTACK)
         self.session.queue.clear()
         self.session.action(bytes(packet))
+        self.assertEqual(self.session.engaged_id, mob.id)
+        self.assertEqual(self.player_animation(), 1)
+        self.session.queue.clear()
+        self.session.tick(time.time())
         self.assertIsNone(self.session.engaged_id)
         self.assertEqual(self.player_animation(), 0)
-        self.assertIn("You are too far away.", self.chats())
+        self.assertIn("You lose sight of the target.", self.chats())
 
     def test_engaged_target_past_draw_range_is_dropped(self):
         self.zone(100)
@@ -1091,7 +1081,7 @@ class WorldTest(unittest.TestCase):
         self.session.tick(time.time())
         self.assertIsNone(self.session.engaged_id)
         self.assertEqual(self.player_animation(), 0)
-        self.assertIn("You lose your target.", self.chats())
+        self.assertIn("You lose sight of the target.", self.chats())
 
     def test_disengage_command_breaks_a_range_engagement(self):
         self.zone(100)
@@ -1252,7 +1242,7 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(flags, ALL_CONTAINERS)
 
     def test_job_command_swaps_sets_and_tidies_the_bags(self):
-        """!job stores the old job, pulls the new one and leaves a clean inventory."""
+        """//job stores the old job, pulls the new one and leaves a clean inventory."""
         self.session.char["jobs"] = {4: (99, 0), 22: (99, 0)}
         self.session.char["main_job"] = 4   # BLM
         self.session.char["main_level"] = 99
@@ -1296,8 +1286,112 @@ class WorldTest(unittest.TestCase):
         self.assertTrue(any("Stored 4 BLM items" in line for line in self.chats()))
         self.assertTrue(any("Pulled 5 RUN items" in line for line in self.chats()))
 
+    def test_job_command_pulls_jse_capes_from_the_locker(self):
+        """Capes with distinct augment blocks come out together and keep their block."""
+        self.session.char["jobs"] = {1: (99, 0), 22: (99, 0)}
+        self.session.char["main_job"] = 1
+        self.session.char["main_level"] = 99
+        self.db.execute("DELETE FROM char_inventory WHERE character_id = ?",
+                        (int(self.character["id"]),))
+        blocks = {
+            26267: capes.encode("dd", "RUN"),
+            26246: capes.encode("tp", "WAR"),
+        }
+        for item_id, block in blocks.items():
+            self.db.execute(
+                "INSERT INTO char_locker (character_id, item_id, extra, quantity) "
+                "VALUES (?, ?, ?, 1)",
+                (int(self.character["id"]), item_id, block))
+        self.session.queue.clear()
+
+        self.session.command("job run".split())
+
+        rows = {int(row["item_id"]): row for row in self.service.inventory(
+            int(self.character["id"])) if int(row["item_id"]) in blocks}
+        self.assertEqual(set(rows), {26267})
+        self.assertEqual(bytes(rows[26267]["extra"]), blocks[26267])
+        self.assertEqual(int(self.db.one(
+            "SELECT quantity FROM char_locker WHERE character_id = ? AND item_id = 26246",
+            (int(self.character["id"]),))["quantity"]), 1)
+        self.assertTrue(any("Pulled 1 RUN cape out of the locker." in line
+                            for line in self.chats()))
+
+    def test_job_command_resends_command_data_after_the_new_gear(self):
+        """The final 0x0AC follows the new outfit, so the HUD can rebuild on it.
+
+        The HUD's weapon-skill and ability windows are built from the client's 0x0AC
+        command-list update.  `//job` has to send that update again after the storage pull
+        and auto-equip; sending only the job bundle's early copy leaves the window on the
+        old weapon's skills.
+        """
+        self.session.char["jobs"] = {4: (99, 0), 22: (99, 0)}
+        self.session.char["main_job"] = 4
+        self.session.char["main_level"] = 99
+        self.give(8, 60, 21685)   # RUN great sword in a wardrobe
+        self.session.queue.clear()
+
+        self.session.command("job run".split())
+
+        types = msg_types(self.session)
+        self.assertIn(0x01B, types)
+        self.assertIn(0x0AC, types)
+        last_equip = max(index for index, kind in enumerate(types) if kind == 0x050)
+        last_commands = max(index for index, kind in enumerate(types) if kind == 0x0AC)
+        self.assertLess(last_equip, last_commands)
+        info = next(message for message in self.session.queue
+                    if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x01B)
+        self.assertEqual(int(info[4 + 4]), 22)
+
+    def test_moogle_job_change_resends_command_data_after_the_gear(self):
+        """The Moogles' Change Job path sends the same gear-then-commands order."""
+        self.session.char["jobs"] = {19: (99, 0), 22: (99, 0)}
+        self.session.char["main_job"] = 19
+        self.session.char["main_level"] = 99
+        self.session.equipped = {}
+        self.give(0, 10, 21685)   # RUN great sword, in the inventory
+        self.session.queue.clear()
+
+        self.session.myroom_job(bytes((0x00, 0x10, 0, 0, 22, 0)))
+
+        types = msg_types(self.session)
+        self.assertIn(0x01B, types)
+        self.assertIn(0x0AC, types)
+        last_equip = max(index for index, kind in enumerate(types) if kind == 0x050)
+        last_commands = max(index for index, kind in enumerate(types) if kind == 0x0AC)
+        self.assertLess(last_equip, last_commands)
+        info = next(message for message in self.session.queue
+                    if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x01B)
+        self.assertEqual(int(info[4 + 4]), 22)
+
+    def test_locker_keeps_distinct_cape_builds_apart(self):
+        """Two copies of one item id survive store/grab with their own extdata."""
+        tank = capes.encode("tank", "RUN")
+        dd = capes.encode("dd", "RUN")
+        self.give(0, 50, 26267)
+        self.give(0, 51, 26267)
+        self.db.execute(
+            "UPDATE char_inventory SET extra = ? WHERE character_id = ? "
+            "AND container = 0 AND slot = 50",
+            (tank, int(self.character["id"])))
+        self.db.execute(
+            "UPDATE char_inventory SET extra = ? WHERE character_id = ? "
+            "AND container = 0 AND slot = 51",
+            (dd, int(self.character["id"])))
+        self.session.queue.clear()
+
+        self.session.command("locker store jsecapes".split())
+        locker = [(bytes(row["extra"]), int(row["quantity"])) for row in self.db.all(
+            "SELECT extra, quantity FROM char_locker WHERE character_id = ? "
+            "AND item_id = 26267", (int(self.character["id"]),))]
+        self.assertEqual(sorted(locker), sorted([(tank, 1), (dd, 1)]))
+
+        self.session.command("locker grab jsecapes".split())
+        rows = [(bytes(row["extra"]), int(row["quantity"])) for row in self.service.inventory(
+            int(self.character["id"])) if int(row["item_id"]) == 26267]
+        self.assertEqual(sorted(rows), sorted([(tank, 1), (dd, 1)]))
+
     def test_storage_stores_only_slipped_job_gear(self):
-        """!storage store nin moves NIN gear onto its slip and out of every bag."""
+        """//storage store nin moves NIN gear onto its slip and out of every bag."""
         for container, slot, item_id in ((0, 50, 23907), (1, 5, 23975), (8, 9, 23566)):
             self.give(container, slot, item_id)
         self.give(0, 51, 21906)  # Kikoku: NIN, but no storage slip
@@ -1356,7 +1450,7 @@ class WorldTest(unittest.TestCase):
         self.assertIn("Left 1 equipped NIN piece on.", self.chats())
 
     def test_storage_grab_returns_gear_to_the_bags(self):
-        """!storage grab nin puts the set back in the inventory, ready to wear."""
+        """//storage grab nin puts the set back in the inventory, ready to wear."""
         self.give(0, 50, 23907)
         self.give(8, 5, 23975)
         self.session.command("storage store nin".split())
@@ -1407,12 +1501,25 @@ class WorldTest(unittest.TestCase):
         self.session.queue.clear()
         self.session.command("storage".split())
         self.assertIn("Storage slips: 1 item (32:1).", self.chats())
-        self.assertIn("Use !storage grab <job|all> to take them back.", self.chats())
+        self.assertIn("Use //storage grab <job|all> to take them back.", self.chats())
 
-    def test_storage_accepts_the_slash_bang_chat_form(self):
-        """/!storage reaches the same command as !storage (the client sends the slash)."""
+    def test_storage_accepts_the_double_slash_chat_form(self):
+        """//storage reaches the same command as the host's "!storage" say form."""
         self.give(0, 50, 23907)
-        text = "/!storage store nin"
+        text = "//storage store nin"
+        payload = bytearray(2 + len(text) + 1)
+        payload[2:2 + len(text)] = text.encode("ascii")
+        header = bytearray(28)
+        struct.pack_into("<H", header, 0, 0x0B5)
+        self.session.queue.clear()
+        self.session.parse(header, bytes(sub(0x0B5, bytes(payload))))
+        self.assertEqual(self.stored(), {23907: (1, 32)})
+        self.assertIn("Stored 1 NIN item on storage slips (1 total).", self.chats())
+
+    def test_storage_accepts_the_host_wire_form(self):
+        """The host forwards //commands as "!command" say lines, which must still run."""
+        self.give(0, 50, 23907)
+        text = "!storage store nin"
         payload = bytearray(2 + len(text) + 1)
         payload[2:2 + len(text)] = text.encode("ascii")
         header = bytearray(28)
@@ -1534,7 +1641,7 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(trust.animation, 1)
 
     def test_trust_command_lists_and_releases_by_spell_id(self):
-        """The HUD sends !trust release <spell id> when an active Trust tile is clicked."""
+        """The HUD sends //trust release <spell id> when an active Trust tile is clicked."""
         self.zone(100)
         self.session.char["main_level"] = 99
         self.session.refresh_vitals()
@@ -1574,6 +1681,109 @@ class WorldTest(unittest.TestCase):
         self.assertNotIn(trust, self.session.entities)
         self.assertTrue(any((struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x00E
                             for message in self.session.queue))
+
+    def test_trust_casts_a_buff_the_owner_can_see(self):
+        """Kupipi's spell list is real: she starts Protectra and the icon reaches 0x037."""
+        self.zone(100)
+        self.session.char["main_level"] = 99
+        self.session.refresh_vitals()
+        self.session.char["hp_current"] = int(self.session.char["hp"])
+        self.session.char["mp_current"] = int(self.session.char.get("mp", 0))
+        trust = self.world.spawn_trust(self.session, self.service.trust(898))
+        self.assertIsNotNone(trust)
+        self.assertEqual(len(trust.spells), 27)
+        self.session.queue.clear()
+
+        now = time.time()
+        self.world._tick_trust(trust, self.world.sessions_in_zone(100), now + 1)
+        self.assertIsNotNone(trust.casting)
+        self.assertEqual(trust.casting["kind"], "buff")
+        starts = [message for message in self.session.queue
+                  if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x028
+                  and struct.unpack_from("<I", message, 5)[0] == trust.id]
+        self.assertTrue(starts)
+
+        self.world._tick_trust(trust, self.world.sessions_in_zone(100), now + 10)
+        self.assertIn(effects.PROTECT, self.session.effect_state)
+        status = self.session.char_status()
+        icons = []
+        for slot in range(32):
+            if status[4 + slot] == 0xFF:
+                continue
+            high = (status[4 + 0x48 + slot // 4] >> (2 * (slot % 4))) & 3
+            icons.append(status[4 + slot] | (high << 8))
+        self.assertIn(effects.PROTECT, icons)
+
+    def test_cornelia_aura_is_a_separate_haste_icon(self):
+        """Cornelia's GEO Haste stacks with Haste, and a passive Trust never swings."""
+        self.zone(100)
+        self.session.char["main_level"] = 99
+        self.session.refresh_vitals()
+        self.session.add_effect(effects.HASTE, duration=120,
+                                mods={mod.HASTE_GEAR: 1500})
+        trust = self.world.spawn_trust(self.session, self.service.trust(1002))
+        self.assertIsNotNone(trust)
+        state = self.session.effect(effects.TRUST_AURA_HASTE)
+        self.assertIsNotNone(state)
+        self.assertEqual(state["icon"], 580)
+        icons = []
+        status = self.session.char_status()
+        for slot in range(32):
+            if status[4 + slot] == 0xFF:
+                continue
+            high = (status[4 + 0x48 + slot // 4] >> (2 * (slot % 4))) & 3
+            icons.append(status[4 + slot] | (high << 8))
+        self.assertIn(effects.HASTE, icons)
+        self.assertIn(580, icons)                    # GEO Haste, beside normal Haste
+        self.assertGreaterEqual(self.session.combat_mods().get(mod.HASTE_GEAR, 0), 3500)
+
+        mob = next(entity for entity in self.session.entities
+                   if entity.kind == "mob" and entity.alive)
+        mob.hp_max = 50000
+        mob.hp = 50000
+        self.session.pos = [mob.x + 2.0, mob.y, mob.z, 0]
+        trust.x, trust.y, trust.z = self.session.pos[0], mob.y, self.session.pos[2]
+        self.session.engaged_id = int(mob.id)
+        self.session.queue.clear()
+        self.world._tick_trust(trust, self.world.sessions_in_zone(100), time.time() + 5)
+        self.assertEqual(int(mob.hp), 50000)
+        self.assertFalse(any((struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x028
+                             for message in self.session.queue))
+
+        self.world.despawn_trust(trust, time.time() + 6, "test")
+        self.assertFalse(self.session.has_effect(effects.TRUST_AURA_HASTE))
+        self.assertTrue(self.session.has_effect(effects.HASTE))
+
+    def test_trust_nukes_the_owners_target(self):
+        """After the opening swing a caster Trust starts and resolves a real spell."""
+        self.zone(100)
+        self.session.char["main_level"] = 99
+        self.session.refresh_vitals()
+        self.session.char["hp_current"] = int(self.session.char["hp"])
+        trust = self.world.spawn_trust(self.session, self.service.trust(896))
+        self.assertIsNotNone(trust)
+        mob = next(entity for entity in self.session.entities
+                   if entity.kind == "mob" and entity.alive)
+        mob.hp_max = 50000
+        mob.hp = 50000
+        self.session.pos = [mob.x + 2.0, mob.y, mob.z, 0]
+        trust.x, trust.y, trust.z = self.session.pos[0], mob.y, self.session.pos[2]
+        self.session.engaged_id = int(mob.id)
+        now = time.time() + 5
+        self.world._tick_trust(trust, self.world.sessions_in_zone(100), now)
+        after_swing = int(mob.hp)
+        self.assertLess(after_swing, 50000)
+
+        self.world._tick_trust(trust, self.world.sessions_in_zone(100), now + 1)
+        self.assertIsNotNone(trust.casting)
+        self.assertEqual(trust.casting["kind"], "nuke")
+        self.session.queue.clear()
+        self.world._tick_trust(trust, self.world.sessions_in_zone(100), now + 30)
+        self.assertLess(int(mob.hp), after_swing)
+        self.assertTrue(any(
+            (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x028
+            and struct.unpack_from("<I", message, 5)[0] == trust.id
+            for message in self.session.queue))
 
     def test_dawn_mulsum_heals_pet_percentage_and_refills(self):
         self.give(0, 50, 5411, 3)
@@ -1635,7 +1845,7 @@ class WorldTest(unittest.TestCase):
         self.assertTrue(any("Shikanofuda 10/99" in line for line in self.chats()))
 
     def test_locker_stores_ammo_back_and_names(self):
-        """!locker store moves ammo/capes out of every bag and into the 9999-item locker."""
+        """//locker store moves ammo/capes out of every bag and into the 9999-item locker."""
         self.give(0, 50, 22279)  # Staunch Tathlum +1: ammo
         self.give(0, 51, 26258)  # Andartia's Mantle: back
         self.give(0, 52, 26254)  # Artio's Mantle: back
@@ -1683,7 +1893,7 @@ class WorldTest(unittest.TestCase):
         self.assertIn("Took 1 item out of the locker (0 left).", self.chats())
 
     def test_locker_grab_quantity_limit(self):
-        """A 99-jug entry can be taken one stack at a time with !locker grab <name> 12."""
+        """A 99-jug entry can be taken one stack at a time with //locker grab <name> 12."""
         self.db.execute(
             "INSERT INTO char_locker (character_id, item_id, quantity) VALUES (?, 17860, 99)",
             (int(self.character["id"]),))
@@ -1733,9 +1943,9 @@ class WorldTest(unittest.TestCase):
         self.assertTrue(any("Staunch Tathlum +1" in line for line in lines))
         self.assertTrue(any("Andartia's Mantle" in line for line in lines))
 
-    def test_locker_accepts_the_slash_bang_chat_form(self):
+    def test_locker_accepts_the_double_slash_chat_form(self):
         self.give(0, 50, 22279)
-        text = "/!locker store ammo"
+        text = "//locker store ammo"
         payload = bytearray(2 + len(text) + 1)
         payload[2:2 + len(text)] = text.encode("ascii")
         header = bytearray(28)
@@ -1874,6 +2084,11 @@ class EquipBatchTest(unittest.TestCase):
         self.equip(10, 0)
         self.assertNotIn(1, self.session.equipped)
         self.assertEqual(self.session.char["sub"], 0)
+
+    def test_khonsu_is_a_grip(self):
+        self.assertTrue(self.session._is_grip({"name": "Khonsu"}))
+        self.assertTrue(self.session._is_grip({"name": "Pole Grip"}))
+        self.assertFalse(self.session._is_grip({"name": "Genbu's Shield"}))
 
     def test_auto_equip_pairs_the_hands(self):
         self.session.char["main_job"] = 22  # RUN

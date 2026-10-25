@@ -1,7 +1,7 @@
 //! Tauri commands: the only bridge between the React UI and the Rust core.
 
 use std::collections::BTreeMap;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use chrono::Local;
 use serde::Serialize;
@@ -10,8 +10,10 @@ use tauri::{AppHandle, Manager, State};
 use tokio::sync::Mutex;
 
 use crate::api::ApiClient;
+use crate::boxes;
 use crate::config::{self, AccountEntry, ConfigView, LauncherConfig};
-use crate::control::{InstanceManager, InstanceView};
+use crate::control::{ControlClient, InstanceManager, InstanceView, OnlineRoster};
+use crate::display::{self, GameDisplay, WindowMode};
 use crate::error::{AppError, AppResult};
 use crate::game;
 use crate::gear::{self, GearItem, JobInfo};
@@ -20,6 +22,8 @@ use crate::icons;
 pub struct AppState {
     pub config: Mutex<LauncherConfig>,
     pub instances: Mutex<InstanceManager>,
+    /// One remote helper run at a time: it restarts every target box and takes tens of seconds.
+    pub remote: Mutex<()>,
 }
 
 impl AppState {
@@ -27,6 +31,7 @@ impl AppState {
         Self {
             config: Mutex::new(LauncherConfig::load()),
             instances: Mutex::new(InstanceManager::new()),
+            remote: Mutex::new(()),
         }
     }
 }
@@ -651,11 +656,25 @@ pub async fn save_settings(
     state: State<'_, AppState>,
     api_url: String,
     game_dir: String,
+    headless_game_dir: String,
+    remote_ssh: String,
     repo_root: String,
     api_insecure: bool,
     auto_login: bool,
+    limit_main_fps: bool,
+    game_window_mode: WindowMode,
+    game_width: u32,
+    game_height: u32,
+    game_ui_scale: f64,
 ) -> AppResult<ConfigView> {
     let mut config = state.config.lock().await;
+    let display = GameDisplay {
+        mode: game_window_mode,
+        width: game_width,
+        height: game_height,
+        ui_scale: game_ui_scale,
+    };
+    display.validate()?;
     let normalized = ApiClient::new(&api_url, api_insecure)?.base().to_string();
     if normalized != config.api_url {
         config.accounts.clear();
@@ -672,6 +691,14 @@ pub async fn save_settings(
             .to_string_lossy()
             .into_owned()
     };
+    config.headless_game_dir = if headless_game_dir.trim().is_empty() {
+        String::new()
+    } else {
+        config::expand_home(headless_game_dir.trim())
+            .to_string_lossy()
+            .into_owned()
+    };
+    config.remote_ssh = remote_ssh.trim().to_string();
     config.repo_root = if repo_root.trim().is_empty() {
         String::new()
     } else {
@@ -681,8 +708,17 @@ pub async fn save_settings(
     };
     config.api_insecure = api_insecure;
     config.auto_login = auto_login;
+    config.limit_main_fps = limit_main_fps;
+    config.game_display = display.sanitized();
     config.save()?;
     Ok(ConfigView::from(&*config))
+}
+
+/// The displays attached to this machine. Settings uses their work area for "Fit this display"
+/// and to cap the resolution presets at what the monitor can show.
+#[tauri::command]
+pub fn display_info(app: AppHandle) -> display::DisplayInfo {
+    display::info(&app)
 }
 
 #[tauri::command]
@@ -749,7 +785,11 @@ pub async fn launch(
     character_id: Option<i64>,
 ) -> AppResult<InstanceView> {
     let config = state.config.lock().await.clone();
-    launch_with_config(&state, &config, &account, character_id).await
+    let view = launch_with_config(&state, &config, &account, character_id).await?;
+    // The launch token skips the lobby but the game can still stop at the agreement or character
+    // select. Drive those with Enter so Play lands in the zone, like the headless path.
+    await_signin(&view).await?;
+    Ok(view)
 }
 
 async fn spawn_launch(
@@ -758,6 +798,7 @@ async fn spawn_launch(
     account: &str,
     fallback_character: Value,
     data: &Value,
+    headless: bool,
 ) -> AppResult<InstanceView> {
     let client = data.get("client").cloned().ok_or_else(|| AppError::Api {
         status: 500,
@@ -773,14 +814,25 @@ async fn spawn_launch(
             message: "the server did not return a launch token".to_string(),
         })?
         .to_string();
-    let game_dir = if !config.game_dir.trim().is_empty() {
-        config::expand_home(&config.game_dir)
+    let configured = if headless && !config.headless_game_dir.trim().is_empty() {
+        config.headless_game_dir.as_str()
+    } else {
+        config.game_dir.as_str()
+    };
+    let game_dir = if !configured.trim().is_empty() {
+        config::expand_home(configured)
     } else {
         game::find_game_dir("").ok_or_else(|| {
             AppError::Game("choose your FINAL FANTASY XI folder in Settings first".to_string())
         })?
     };
-    if game::find_host64(config).is_none() {
+    if headless {
+        if game::find_host64_headless(config).is_none() {
+            return Err(AppError::Game(
+                "host64-headless is not built yet; build it with tools/build_posix.py host64-headless".to_string(),
+            ));
+        }
+    } else if game::find_host64(config).is_none() {
         return Err(AppError::Game(
             "host64 is not built yet; open Settings and build the game".to_string(),
         ));
@@ -788,7 +840,7 @@ async fn spawn_launch(
     let character = data.get("character").cloned().unwrap_or(fallback_character);
     let mut instances = state.instances.lock().await;
     instances
-        .launch(config, account, character, &client, &login_token, &game_dir)
+        .launch(config, account, character, &client, &login_token, &game_dir, headless)
         .await
 }
 
@@ -812,7 +864,7 @@ async fn launch_with_config(
     let data = api
         .launch(&entry.token, character.get("id").and_then(value_i64))
         .await?;
-    let view = spawn_launch(state, config, &entry.username, character, &data).await?;
+    let view = spawn_launch(state, config, &entry.username, character, &data, false).await?;
     let mut locked = state.config.lock().await;
     locked.set_character_id(
         &entry.username,
@@ -827,6 +879,7 @@ async fn launch_sub_with_config(
     config: &LauncherConfig,
     sub_id: i64,
     character_id: Option<i64>,
+    headless: bool,
 ) -> AppResult<InstanceView> {
     if config.token.is_empty() {
         return Err(AppError::Validation(
@@ -845,7 +898,466 @@ async fn launch_sub_with_config(
         })?
         .to_string();
     let character = data.get("character").cloned().unwrap_or(Value::Null);
-    spawn_launch(state, config, &username, character, &data).await
+    spawn_launch(state, config, &username, character, &data, headless).await
+}
+
+async fn sub_username(config: &LauncherConfig, sub_id: i64) -> AppResult<String> {
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    let value = api.sub_accounts(&config.token).await?;
+    value
+        .get("subs")
+        .and_then(Value::as_array)
+        .and_then(|subs| {
+            subs.iter()
+                .find(|sub| sub.get("id").and_then(value_i64) == Some(sub_id))
+        })
+        .and_then(|sub| sub.get("username"))
+        .and_then(Value::as_str)
+        .map(str::to_string)
+        .ok_or_else(|| {
+            AppError::Validation(format!("sub-account {sub_id} is no longer in the team"))
+        })
+}
+
+/// Stop the instance the launcher itself tracks for this account.
+async fn stop_tracked_account(state: &State<'_, AppState>, account: &str) -> Vec<String> {
+    let mut notes = Vec::new();
+    loop {
+        let port = {
+            let instances = state.instances.lock().await;
+            instances.running_for(account).map(|instance| instance.port)
+        };
+        let Some(port) = port else { break };
+        let mut instances = state.instances.lock().await;
+        match instances.stop(port).await {
+            Ok(()) => notes.push(format!("stopped the client on control port {port}")),
+            Err(_) => break,
+        }
+    }
+    notes
+}
+
+/// True when the launcher already has a tracked client for the account that is in game.
+async fn tracked_in_game(state: &State<'_, AppState>, account: &str) -> bool {
+    poll_views(state)
+        .await
+        .into_iter()
+        .any(|view| view.account.eq_ignore_ascii_case(account) && view_in_game(&view))
+}
+
+/// Stop anything that can still hold this account before a local headless relaunch: the instance
+/// the launcher tracks, a remote box in the helper's registry whose tunnel died, and local
+/// leftovers from an earlier launcher session.
+async fn clean_account(state: &State<'_, AppState>, account: &str) -> Vec<String> {
+    if tracked_in_game(state, account).await {
+        return vec![format!("kept @{account}: already in game")];
+    }
+    let mut notes = stop_tracked_account(state, account).await;
+    notes.extend(boxes::stop_account(account).await);
+    boxes::wait_local_gone(account, std::time::Duration::from_secs(5)).await;
+    notes
+}
+
+/// The remote path keeps the registry entry and any attached remote instance (the helper restarts
+/// it), but a local duplicate for the account still has to go before the remote client logs in.
+async fn stop_local_for_account(state: &State<'_, AppState>, account: &str) -> Vec<String> {
+    if tracked_in_game(state, account).await {
+        return vec![format!("kept @{account}: already in game")];
+    }
+    let mut notes = Vec::new();
+    loop {
+        let port = {
+            let instances = state.instances.lock().await;
+            instances
+                .local_running_for(account)
+                .map(|instance| instance.port)
+        };
+        let Some(port) = port else { break };
+        let mut instances = state.instances.lock().await;
+        match instances.stop(port).await {
+            Ok(()) => notes.push(format!("stopped the local client on control port {port}")),
+            Err(_) => break,
+        }
+    }
+    notes.extend(boxes::stop_local_orphans(account).await);
+    boxes::wait_local_gone(account, std::time::Duration::from_secs(5)).await;
+    notes
+}
+
+/// Run `scripts/linux_boxes.py` against the configured Linux host. The helper mints the launch
+/// tokens, starts/restarts the remote `host64-headless` processes, rebuilds their ssh tunnels and
+/// waits until the characters are in a zone.
+async fn run_remote_boxes(
+    config: &LauncherConfig,
+    action: &str,
+    only: Option<&str>,
+) -> AppResult<String> {
+    if config.remote_ssh.trim().is_empty() {
+        return Err(AppError::Config(
+            "set the remote Linux host in Settings first".to_string(),
+        ));
+    }
+    let root = game::resolve_repo_root_for(config).ok_or_else(|| {
+        AppError::Config("the Fanxi checkout was not found; set it in Settings".to_string())
+    })?;
+    let script = root.join("scripts").join("linux_boxes.py");
+    if !script.is_file() {
+        return Err(AppError::Config(format!(
+            "{} was not found",
+            script.display()
+        )));
+    }
+    let venv_python = root.join(".venv").join("bin").join("python");
+    let python = if venv_python.is_file() {
+        venv_python
+    } else {
+        PathBuf::from("python3")
+    };
+    let mut command = tokio::process::Command::new(&python);
+    command
+        .arg(&script)
+        .arg(action)
+        .arg("--ssh")
+        .arg(config.remote_ssh.trim())
+        .arg("--api")
+        .arg(&config.api_url)
+        .arg("--token")
+        .arg(&config.token)
+        .current_dir(&root)
+        .kill_on_drop(true);
+    if let Some(only) = only {
+        if !only.trim().is_empty() {
+            command.arg("--only").arg(only);
+        }
+    }
+    let output = tokio::time::timeout(
+        std::time::Duration::from_secs(180),
+        command.output(),
+    )
+    .await
+    .map_err(|_| AppError::Control("the remote box helper timed out".to_string()))?
+    .map_err(|error| {
+        AppError::Control(format!("could not run scripts/linux_boxes.py: {error}"))
+    })?;
+    let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
+    let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+    let text = if stderr.is_empty() {
+        stdout
+    } else if stdout.is_empty() {
+        stderr
+    } else {
+        format!("{stdout}\n{stderr}")
+    };
+    if !output.status.success() {
+        let tail: Vec<&str> = text.lines().rev().take(6).collect();
+        let tail: Vec<&str> = tail.into_iter().rev().collect();
+        return Err(AppError::Control(format!(
+            "remote box helper failed: {}",
+            tail.join(" | ")
+        )));
+    }
+    Ok(text)
+}
+
+/// The server's live zone roster, or `None` when it cannot be trusted as authoritative
+/// (no sign-in, the route is missing on an older server, or the game gateway is off).
+async fn online_roster(config: &LauncherConfig) -> Option<OnlineRoster> {
+    if config.token.trim().is_empty() {
+        return None;
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure).ok()?;
+    // The UI polls every three seconds; a slow or unreachable server must not hold the whole
+    // control-room refresh. Unknown is a valid answer and falls back to the client's own state.
+    let value = tokio::time::timeout(
+        std::time::Duration::from_secs(2),
+        api.world_online(&config.token),
+    )
+    .await
+    .ok()?
+    .ok()?;
+    OnlineRoster::from_value(&value)
+}
+
+/// Poll every client once, with the server's roster in hand, so a row can say whether the
+/// client's "in world" is backed by a live session.
+async fn poll_views(state: &State<'_, AppState>) -> Vec<InstanceView> {
+    let config = state.config.lock().await.clone();
+    let roster = online_roster(&config).await;
+    let mut instances = state.instances.lock().await;
+    instances.poll_with_online(roster.as_ref()).await
+}
+
+/// Refresh the attached boxes and return every live view.
+async fn attached_views(state: &State<'_, AppState>) -> Vec<InstanceView> {
+    poll_views(state).await
+}
+
+/// A box whose control port says it is in a zone but the server has no session for it. This
+/// is what a server restart leaves behind: the process keeps running and answering, but
+/// `//warp`, invites and `/sea` all see an offline character.
+fn view_orphaned(view: &InstanceView) -> bool {
+    view.alive
+        && view.error.is_empty()
+        && view.uptime_seconds > 15
+        && view.server_online == Some(false)
+        && view
+            .state
+            .as_ref()
+            .and_then(|state| state.get("login_status"))
+            .and_then(Value::as_u64)
+            == Some(2)
+}
+
+/// A view is "good active" only when the client is alive, the control port is answering, and
+/// the game itself says it is in a zone. `alive` alone is not enough: a disconnected client
+/// can still answer the control socket while it sits on the disconnect screen.
+fn view_in_game(view: &InstanceView) -> bool {
+    view.alive
+        && view.error.is_empty()
+        && !view_orphaned(view)
+        && view
+            .state
+            .as_ref()
+            .and_then(|state| state.get("login_status"))
+            .and_then(Value::as_u64)
+            == Some(2)
+}
+
+/// Conservative pre-launch cleanup. Only untracked/unanswered local clients and dead registry
+/// tunnels are touched; anything in game is kept.
+async fn reap_before_headless(state: &State<'_, AppState>) -> Vec<String> {
+    let tracked: Vec<u32> = {
+        let instances = state.instances.lock().await;
+        instances.views().into_iter().filter(|view| view.alive).map(|view| view.pid).collect()
+    };
+    let notes = boxes::reap_orphans_for_launch(&tracked).await;
+    if !notes.is_empty() {
+        eprintln!("[headless cleanup] {}", notes.join("; "));
+    }
+    notes
+}
+
+/// Refresh the attached boxes and return the view for one account.
+async fn refresh_view(state: &State<'_, AppState>, account: &str) -> Option<InstanceView> {
+    poll_views(state)
+        .await
+        .into_iter()
+        .find(|view| view.account.eq_ignore_ascii_case(account))
+}
+
+/// The helper finished, but give the tunnel a moment to appear in the launcher's attach list.
+async fn attach_remote_view(
+    state: &State<'_, AppState>,
+    account: &str,
+) -> AppResult<InstanceView> {
+    for _ in 0..20 {
+        if let Some(view) = refresh_view(state, account).await {
+            return Ok(view);
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
+    Err(AppError::Control(format!(
+        "the remote helper finished, but @{account} did not attach; check the Linux box"
+    )))
+}
+
+/// A client reports success as soon as the process exists, but it only becomes useful when the
+/// character reaches a zone. Wait for that, nudging the title/agreement/character screens with
+/// Enter the way `scripts/linux_boxes.py` does.
+async fn await_signin(view: &InstanceView) -> AppResult<Value> {
+    let client = ControlClient::new(view.port);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(75);
+    loop {
+        if !boxes::pid_alive(view.pid) {
+            return Err(AppError::Control(format!("{} exited", view.name)));
+        }
+        if let Ok(state) = client
+            .call("state", json!({}), std::time::Duration::from_secs(2))
+            .await
+        {
+            if state.get("login_status").and_then(Value::as_u64) == Some(2) {
+                return Ok(state);
+            }
+        }
+        let _ = client
+            .call(
+                "keys",
+                json!({"keys": ["enter"], "hold_ms": 100}),
+                std::time::Duration::from_secs(2),
+            )
+            .await;
+        if tokio::time::Instant::now() >= deadline {
+            return Err(AppError::Control(format!(
+                "{} did not reach a zone within 75 s",
+                view.name
+            )));
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+fn tail_lines(path: &str, count: usize) -> String {
+    let Ok(text) = std::fs::read_to_string(path) else {
+        return String::new();
+    };
+    let lines: Vec<&str> = text
+        .lines()
+        .filter(|line| !line.trim().is_empty())
+        .collect();
+    lines[lines.len().saturating_sub(count)..].join(" | ")
+}
+
+async fn launch_remote_party(
+    state: &State<'_, AppState>,
+    config: &LauncherConfig,
+) -> AppResult<LaunchAllResult> {
+    let _guard = state.remote.try_lock().map_err(|_| {
+        AppError::Control("a remote box operation is already running".to_string())
+    })?;
+    let _reaped = reap_before_headless(&state).await;
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    let value = api.sub_accounts(&config.token).await?;
+    let subs = value
+        .get("subs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut ids = Vec::new();
+    let mut accounts = Vec::new();
+    for sub in subs {
+        if sub.get("status").and_then(Value::as_str) != Some("active")
+            || sub.get("character").map(Value::is_null).unwrap_or(true)
+        {
+            continue;
+        }
+        let Some(sub_id) = sub.get("id").and_then(value_i64) else {
+            continue;
+        };
+        let account = sub
+            .get("username")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if account.is_empty() {
+            continue;
+        }
+        ids.push(sub_id.to_string());
+        accounts.push(account);
+    }
+    if ids.is_empty() {
+        return Err(AppError::Validation(
+            "no active sub-accounts with characters".to_string(),
+        ));
+    }
+    // Restart only the boxes that are not already in game; a healthy team makes this instant.
+    let current = attached_views(state).await;
+    let missing_ids: Vec<String> = ids
+        .iter()
+        .zip(&accounts)
+        .filter(|(_, account)| {
+            !current
+                .iter()
+                .any(|view| view_in_game(view) && view.account.eq_ignore_ascii_case(account))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    for (id, account) in ids.iter().zip(&accounts) {
+        if missing_ids.contains(id) {
+            let _ = stop_local_for_account(state, account).await;
+        }
+    }
+    let output = if missing_ids.is_empty() {
+        String::new()
+    } else {
+        run_remote_boxes(config, "restart", Some(&missing_ids.join(","))).await?
+    };
+    let views = attached_views(state).await;
+    let launched: Vec<InstanceView> = views
+        .into_iter()
+        .filter(|view| {
+            accounts
+                .iter()
+                .any(|account| account.eq_ignore_ascii_case(&view.account))
+        })
+        .collect();
+    let failed: Vec<FailedLaunch> = accounts
+        .iter()
+        .filter(|account| {
+            !launched
+                .iter()
+                .any(|view| view.account.eq_ignore_ascii_case(account))
+        })
+        .map(|account| FailedLaunch {
+            account: account.clone(),
+            error: format!("did not attach after the remote helper finished; {output}"),
+        })
+        .collect();
+    Ok(LaunchAllResult { launched, failed })
+}
+
+#[tauri::command]
+pub async fn launch_headless_party(state: State<'_, AppState>) -> AppResult<LaunchAllResult> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
+    }
+    if !config.remote_ssh.trim().is_empty() {
+        return launch_remote_party(&state, &config).await;
+    }
+    let _reaped = reap_before_headless(&state).await;
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    let value = api.sub_accounts(&config.token).await?;
+    let subs = value
+        .get("subs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut launched = Vec::new();
+    let mut failed = Vec::new();
+    for sub in subs {
+        if sub.get("status").and_then(Value::as_str) != Some("active")
+            || sub.get("character").map(Value::is_null).unwrap_or(true)
+        {
+            continue;
+        }
+        let Some(sub_id) = sub.get("id").and_then(value_i64) else {
+            continue;
+        };
+        let account = sub
+            .get("username")
+            .and_then(Value::as_str)
+            .unwrap_or("?")
+            .to_string();
+        let character_id = sub
+            .pointer("/character/id")
+            .and_then(value_i64);
+        if refresh_view(&state, &account)
+            .await
+            .map(|view| view_in_game(&view))
+            .unwrap_or(false)
+        {
+            continue;
+        }
+        let stopped = clean_account(&state, &account).await;
+        match launch_sub_with_config(&state, &config, sub_id, character_id, true).await {
+            Ok(view) => launched.push(view),
+            Err(error) => {
+                let cleanup = if stopped.is_empty() {
+                    String::new()
+                } else {
+                    format!(" (cleaned first: {})", stopped.join("; "))
+                };
+                failed.push(FailedLaunch {
+                    account,
+                    error: format!("{error}{cleanup}"),
+                });
+            }
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(700)).await;
+    }
+    Ok(LaunchAllResult { launched, failed })
 }
 
 #[tauri::command]
@@ -960,7 +1472,243 @@ pub async fn launch_sub(
     character_id: Option<i64>,
 ) -> AppResult<InstanceView> {
     let config = state.config.lock().await.clone();
-    launch_sub_with_config(&state, &config, sub_id, character_id).await
+    launch_sub_with_config(&state, &config, sub_id, character_id, false).await
+}
+
+/// Launch a single box without a visible game window, from its Team card.
+#[tauri::command]
+pub async fn launch_sub_headless(
+    state: State<'_, AppState>,
+    sub_id: i64,
+    character_id: Option<i64>,
+) -> AppResult<InstanceView> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
+    }
+    let username = sub_username(&config, sub_id).await?;
+    let _reaped = reap_before_headless(&state).await;
+    // Never restart a box that is alive and in game. The button can be pressed twice, and the
+    // client may already be online from the previous launch or a manual start.
+    if let Some(view) = refresh_view(&state, &username).await {
+        if view.alive && view.error.is_empty() {
+            let status = view
+                .state
+                .as_ref()
+                .and_then(|state| state.get("login_status"))
+                .and_then(Value::as_u64);
+            if status == Some(2) {
+                // A live box is never restarted. Wake it if it was sleeping; an awake box
+                // answers "Already awake" and is returned unchanged.
+                let client = ControlClient::new(view.port);
+                let _ = client.command("//wake").await;
+                {
+                    let mut instances = state.instances.lock().await;
+                    instances.set_sleeping(view.port, false);
+                }
+                boxes::set_sleeping(&username, false);
+                return Ok(refresh_view(&state, &username).await.unwrap_or(view));
+            }
+        }
+    }
+    if !config.remote_ssh.trim().is_empty() {
+        let _guard = state.remote.try_lock().map_err(|_| {
+            AppError::Control("a remote box operation is already running".to_string())
+        })?;
+        let _stopped = stop_local_for_account(&state, &username).await;
+        let only = sub_id.to_string();
+        let _output = run_remote_boxes(&config, "restart", Some(&only)).await?;
+        return attach_remote_view(&state, &username).await;
+    }
+    let stopped = clean_account(&state, &username).await;
+    let view = launch_sub_with_config(&state, &config, sub_id, character_id, true).await?;
+    if let Err(error) = await_signin(&view).await {
+        {
+            let mut instances = state.instances.lock().await;
+            let _ = instances.stop(view.port).await;
+        }
+        let cleanup = if stopped.is_empty() {
+            String::new()
+        } else {
+            format!(" Cleaned first: {}.", stopped.join("; "))
+        };
+        let tail = tail_lines(&view.log_path, 8);
+        let detail = if tail.is_empty() {
+            String::new()
+        } else {
+            format!(" Last log: {tail}")
+        };
+        return Err(AppError::Control(format!(
+            "{error}.{cleanup}{detail} Log: {}",
+            view.log_path
+        )));
+    }
+    Ok(view)
+}
+
+#[tauri::command]
+pub async fn force_relaunch_headless(
+    state: State<'_, AppState>,
+    sub_id: i64,
+    character_id: Option<i64>,
+) -> AppResult<InstanceView> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
+    }
+    let username = sub_username(&config, sub_id).await?;
+    // The normal path can be stuck behind a remote operation that never returned. Force is
+    // deliberately allowed to ignore that in-memory guard: it kills the helper, clears the
+    // account's local/remote session and registry row, then starts a fresh client.
+    let mut notes = boxes::kill_helper_processes();
+    notes.extend(stop_tracked_account(&state, &username).await);
+    notes.extend(boxes::force_stop_account(&username).await);
+    if !config.remote_ssh.trim().is_empty() {
+        notes.extend(boxes::force_stop_remote(config.remote_ssh.trim(), &username).await);
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        // A previously stuck task may try to spawn a new helper after the first sweep.
+        notes.extend(boxes::kill_helper_processes());
+        let only = sub_id.to_string();
+        let _ = run_remote_boxes(&config, "restart", Some(&only)).await?;
+        eprintln!("[force relaunch] {username}: {}", notes.join("; "));
+        return attach_remote_view(&state, &username).await;
+    }
+    let view = launch_sub_with_config(&state, &config, sub_id, character_id, true).await?;
+    if let Err(error) = await_signin(&view).await {
+        {
+            let mut instances = state.instances.lock().await;
+            let _ = instances.stop(view.port).await;
+        }
+        return Err(AppError::Control(format!(
+            "force cleanup ran ({}), but {username} did not sign in: {error}",
+            notes.join("; ")
+        )));
+    }
+    eprintln!("[force relaunch] {username}: {}", notes.join("; "));
+    Ok(view)
+}
+
+#[tauri::command]
+pub async fn launch_remote_team(state: State<'_, AppState>) -> AppResult<String> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation(
+            "sign in to the main account first".to_string(),
+        ));
+    }
+    if config.remote_ssh.trim().is_empty() {
+        return Err(AppError::Config(
+            "set the remote Linux host in Settings first".to_string(),
+        ));
+    }
+    let _guard = state.remote.try_lock().map_err(|_| {
+        AppError::Control("a remote box operation is already running".to_string())
+    })?;
+    let reaped = reap_before_headless(&state).await;
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    let value = api.sub_accounts(&config.token).await?;
+    let subs = value
+        .get("subs")
+        .and_then(Value::as_array)
+        .cloned()
+        .unwrap_or_default();
+    let mut ids = Vec::new();
+    let mut accounts = Vec::new();
+    for sub in subs {
+        if sub.get("status").and_then(Value::as_str) != Some("active")
+            || sub.get("character").map(Value::is_null).unwrap_or(true)
+        {
+            continue;
+        }
+        let Some(sub_id) = sub.get("id").and_then(value_i64) else {
+            continue;
+        };
+        let account = sub
+            .get("username")
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_string();
+        if account.is_empty() {
+            continue;
+        }
+        ids.push(sub_id.to_string());
+        accounts.push(account);
+    }
+    if ids.is_empty() {
+        return Err(AppError::Validation(
+            "no active sub-accounts with characters".to_string(),
+        ));
+    }
+    // A local copy of a box that is not in game yet would fight the remote login. Healthy
+    // remote boxes are left alone; healthy local clients are left alone too.
+    let current = attached_views(&state).await;
+    let missing_ids: Vec<String> = ids
+        .iter()
+        .zip(&accounts)
+        .filter(|(_, account)| {
+            !current
+                .iter()
+                .any(|view| view_in_game(view) && view.account.eq_ignore_ascii_case(account))
+        })
+        .map(|(id, _)| id.clone())
+        .collect();
+    for (id, account) in ids.iter().zip(&accounts) {
+        if missing_ids.contains(id) {
+            let _ = stop_local_for_account(&state, account).await;
+        }
+    }
+    // The main account stays the one visible client, on this Mac.
+    if !config.username.is_empty() {
+        let in_game = refresh_view(&state, &config.username)
+            .await
+            .map(|view| view_in_game(&view))
+            .unwrap_or(false);
+        if !in_game {
+            let _ = stop_local_for_account(&state, &config.username).await;
+            let view =
+                launch_with_config(&state, &config, &config.username, config.character_id).await?;
+            await_signin(&view).await?;
+        }
+    }
+    let output = if missing_ids.is_empty() {
+        String::new()
+    } else {
+        run_remote_boxes(&config, "restart", Some(&missing_ids.join(","))).await?
+    };
+    let views = attached_views(&state).await;
+    let missing: Vec<&str> = accounts
+        .iter()
+        .map(String::as_str)
+        .filter(|account| {
+            !views
+                .iter()
+                .any(|view| view.account.eq_ignore_ascii_case(account))
+        })
+        .collect();
+    if !missing.is_empty() {
+        return Err(AppError::Control(format!(
+            "the remote helper finished, but these boxes did not attach: {}. {output}",
+            missing.join(", ")
+        )));
+    }
+    let cleaned = reaped
+        .iter()
+        .filter(|note| note.starts_with("stopped") || note.starts_with("reaped"))
+        .count();
+    Ok(format!(
+        "team online on {}: {} boxes + main{}",
+        config.remote_ssh.trim(),
+        accounts.len(),
+        if cleaned > 0 {
+            format!("; cleaned {cleaned} orphan(s)")
+        } else {
+            String::new()
+        }
+    ))
 }
 
 #[tauri::command]
@@ -1019,7 +1767,7 @@ pub async fn launch_team(state: State<'_, AppState>) -> AppResult<LaunchAllResul
         if running {
             continue;
         }
-        match launch_sub_with_config(&state, &config, sub_id, character_id).await {
+        match launch_sub_with_config(&state, &config, sub_id, character_id, false).await {
             Ok(view) => launched.push(view),
             Err(error) => failed.push(FailedLaunch {
                 account: username,
@@ -1045,20 +1793,170 @@ pub async fn delete_sub(state: State<'_, AppState>, sub_id: i64, purge: bool) ->
 
 #[tauri::command]
 pub async fn list_instances(state: State<'_, AppState>) -> AppResult<Vec<InstanceView>> {
-    let mut instances = state.instances.lock().await;
-    Ok(instances.poll().await)
+    Ok(poll_views(&state).await)
+}
+
+/// The sub-account id behind a box username, or `None` for the main account.
+async fn find_sub_id(config: &LauncherConfig, account: &str) -> AppResult<Option<i64>> {
+    if config.token.is_empty() {
+        return Ok(None);
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    let value = api.sub_accounts(&config.token).await?;
+    let found = value
+        .get("subs")
+        .and_then(Value::as_array)
+        .and_then(|subs| {
+            subs.iter()
+                .find(|sub| {
+                    sub.get("username")
+                        .and_then(Value::as_str)
+                        .map(|name| name.eq_ignore_ascii_case(account))
+                        .unwrap_or(false)
+                })
+                .and_then(|sub| sub.get("id"))
+                .and_then(value_i64)
+        });
+    Ok(found)
+}
+
+/// Stop one box and start the same character again.
+///
+/// A box that lost its zone session keeps its process and its control port, so the server has no
+/// session to warp and the launcher still lists it. An attached Linux box is restarted through the
+/// same helper that started it (same tunnel port, so the launcher adopts it again); a local client
+/// is stopped and launched again through the normal token path.
+#[tauri::command]
+pub async fn relaunch_instance(state: State<'_, AppState>, port: u16) -> AppResult<InstanceView> {
+    let config = state.config.lock().await.clone();
+    let (account, remote, headless, character_id) = {
+        let instances = state.instances.lock().await;
+        let view = instances
+            .views()
+            .into_iter()
+            .find(|view| view.port == port)
+            .ok_or_else(|| AppError::Control(format!("no client on control port {port}")))?;
+        (
+            view.account,
+            view.remote,
+            view.headless,
+            view.character.get("id").and_then(value_i64),
+        )
+    };
+    let sub_id = find_sub_id(&config, &account).await?;
+    if remote {
+        let _guard = state.remote.try_lock().map_err(|_| {
+            AppError::Control("a remote box operation is already running".to_string())
+        })?;
+        let id = sub_id.ok_or_else(|| {
+            AppError::Validation(format!("@{account} is not a sub-account of this launcher"))
+        })?;
+        run_remote_boxes(&config, "restart", Some(&id.to_string())).await?;
+        return attach_remote_view(&state, &account).await;
+    }
+    {
+        let mut instances = state.instances.lock().await;
+        instances.stop(port).await?;
+    }
+    match sub_id {
+        Some(id) => launch_sub_with_config(&state, &config, id, character_id, headless).await,
+        None => launch_with_config(&state, &config, &account, character_id).await,
+    }
 }
 
 #[tauri::command]
 pub async fn stop_instance(state: State<'_, AppState>, port: u16) -> AppResult<()> {
+    let sleep = {
+        let instances = state.instances.lock().await;
+        instances
+            .by_port(port)
+            .map(|instance| instance.remote.is_some() || instance.headless)
+            .unwrap_or(false)
+    };
+    if sleep {
+        let (client, account) = {
+            let instances = state.instances.lock().await;
+            let account = instances
+                .by_port(port)
+                .map(|instance| instance.account.clone())
+                .ok_or_else(|| AppError::Control(format!("no client on control port {port}")))?;
+            (ControlClient::new(port), account)
+        };
+        client.command("//sleep").await?;
+        {
+            let mut instances = state.instances.lock().await;
+            instances.set_sleeping(port, true);
+        }
+        boxes::set_sleeping(&account, true);
+        return Ok(());
+    }
     let mut instances = state.instances.lock().await;
     instances.stop(port).await
 }
 
+/// Park or wake one live client. Sleep keeps the process, UDP session and tunnel alive; the
+/// server hides the character and parks its tick. Wake resumes in place with no new login.
+#[tauri::command]
+pub async fn set_headless_sleep(
+    state: State<'_, AppState>,
+    port: u16,
+    sleeping: bool,
+) -> AppResult<Value> {
+    let (client, account) = {
+        let instances = state.instances.lock().await;
+        let account = instances
+            .by_port(port)
+            .map(|instance| instance.account.clone())
+            .ok_or_else(|| AppError::Control(format!("no client on control port {port}")))?;
+        (ControlClient::new(port), account)
+    };
+    let result = client
+        .command(if sleeping { "//sleep" } else { "//wake" })
+        .await?;
+    {
+        let mut instances = state.instances.lock().await;
+        instances.set_sleeping(port, sleeping);
+    }
+    boxes::set_sleeping(&account, sleeping);
+    Ok(result)
+}
+
 #[tauri::command]
 pub async fn stop_all(state: State<'_, AppState>) -> AppResult<usize> {
-    let mut instances = state.instances.lock().await;
-    instances.stop_all().await
+    let targets: Vec<(u16, String, bool)> = {
+        let instances = state.instances.lock().await;
+        instances
+            .views()
+            .into_iter()
+            .filter(|view| view.alive)
+            .map(|view| {
+                let sleep = {
+                    instances
+                        .by_port(view.port)
+                        .map(|instance| instance.remote.is_some() || instance.headless)
+                        .unwrap_or(false)
+                };
+                (view.port, view.account, sleep)
+            })
+            .collect()
+    };
+    let mut stopped = 0;
+    for (port, account, sleep) in targets {
+        if sleep {
+            let client = ControlClient::new(port);
+            let _ = client.command("//sleep").await;
+            {
+                let mut instances = state.instances.lock().await;
+                instances.set_sleeping(port, true);
+            }
+            boxes::set_sleeping(&account, true);
+        } else {
+            let mut instances = state.instances.lock().await;
+            let _ = instances.stop(port).await;
+        }
+        stopped += 1;
+    }
+    Ok(stopped)
 }
 
 #[tauri::command]
@@ -1695,4 +2593,54 @@ fn value_i64(value: &Value) -> Option<i64> {
         .as_i64()
         .or_else(|| value.as_u64().and_then(|number| i64::try_from(number).ok()))
         .or_else(|| value.as_str().and_then(|text| text.parse().ok()))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn view(login_status: u64, server_online: Option<bool>, uptime_seconds: u64) -> InstanceView {
+        InstanceView {
+            account: "aria".to_string(),
+            character: json!({"name": "Aria", "id": 1}),
+            name: "Aria".to_string(),
+            port: 54_300,
+            pid: 42,
+            started_at: 0,
+            uptime_seconds,
+            alive: true,
+            exit_code: None,
+            state: Some(json!({"login_status": login_status})),
+            metrics: None,
+            error: String::new(),
+            log_path: String::new(),
+            remote: false,
+            host: None,
+            headless: true,
+            sleeping: false,
+            server_online,
+        }
+    }
+
+    #[test]
+    fn an_orphaned_session_is_not_in_game() {
+        let orphaned = view(2, Some(false), 120);
+        assert!(view_orphaned(&orphaned));
+        assert!(!view_in_game(&orphaned));
+    }
+
+    #[test]
+    fn a_verified_or_unknown_session_is_in_game() {
+        assert!(view_in_game(&view(2, Some(true), 120)));
+        assert!(view_in_game(&view(2, None, 120)));
+        assert!(!view_orphaned(&view(2, None, 120)));
+        assert!(!view_in_game(&view(0, Some(false), 120)));
+    }
+
+    #[test]
+    fn a_young_client_is_not_orphaned_yet() {
+        let starting = view(2, Some(false), 10);
+        assert!(view_in_game(&starting));
+        assert!(!view_orphaned(&starting));
+    }
 }

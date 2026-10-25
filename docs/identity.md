@@ -8,11 +8,11 @@ IDs and boundaries so future changes stay consistent.
 | Context | Value |
 |---|---|
 | Product, window, docs | **Fanxi** |
-| Executable / package | `fanxi`, `fanxi_launcher`, `fanxi_server` |
+| Executable / package | `fanxi-launcher`, `fanxi_server` |
 | Repository | `fanxi` |
 | Server name (default) | `Fanxi` |
 | Launcher window | `Fanxi Launcher` |
-| Launcher version | `Fanxi Launcher 0.2.0` |
+| Launcher version | `Fanxi Launcher 0.1.0` |
 | API server header | `Fanxi/0.2.0` |
 | Server tagline | FINAL FANTASY XI, on your own terms. |
 

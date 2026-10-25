@@ -65,12 +65,22 @@ A session ends in one of three ways:
 
 - **Logout** (`C2S 0x0E7`): the character is despawned, its targid freed, its position saved and
   `0x00B` sent.
-- **Zone change**: the session is parked in `World.by_char` with its advanced cipher, despawned
-  from the old zone, and picked up again by the next `0x00A` within thirty seconds.
+- **Zone change**: the session is parked in `World.by_char` with the zone key it was using,
+  despawned from the old zone, and picked up again by the next `0x00A` within thirty seconds of
+  the change being queued. The 2026-10-05 client keeps the same key across `0x00B`; the server
+  follows whichever key the client actually uses. A same-zone `//warp` is still a `0x00B`
+  hand-off: the client ignores a server `0x00D` position update for its own character, so it
+  zones in again at the destination instead of being left where it stood.
 - **Silence**: a zone session has no TCP connection, so a force-quit, crash or dead network is
   only visible as missing packets. After sixty seconds the session is treated as logged out and
   despawned from everyone. This is what stops a force-quit character from staying in another
   client's world as a frozen ghost.
+
+A fourth state is **sleeping**: `//sleep` despawns the character from every other client, clears
+its combat/cast state, skips its world tick and saves its position, but keeps the process, UDP
+session, targid and zone. While sleeping the server reads only chat so `//wake` can arrive, and
+sends a status heartbeat every ten seconds to keep the client connection alive. `//wake` rebuilds
+the client's zone state in place; there is no new login, launch token or zone change.
 
 A login only continues a session handed to it by the lobby or a recent zone change. It never
 takes over the session at the same UDP address: the OS recycles local ports, and doing so gave
@@ -96,18 +106,36 @@ Each call creates a `ZoneEntity(kind="trust")`:
 
 `database/migrations/0115_trusts.sql` carries the factual appearance and combat data
 for all 122 Trust spells (model, main/sub job, attack delay, damage multiplier and the
-passive-Geomancy flag).  The level tracks the owner's main job.  A Trust follows its
-owner, attacks the monster the owner is fighting, and passes half its damage on as the
-owner's enmity.  A duplicate spell is refused, five active Trusts is the cap, and a
-zone change, logout, K.O., or the client's Release menu despawns them.  Every other
-player in the zone sees the same `0x00E` spawn.  The HUD reads the client's TrustFlag and
-the `0x067` master targid, highlights a called Trust's button, and turns a second click into
-`!trust release <spell id>`; `!trust` lists what is out and `!trust release all` clears
+passive-Geomancy flag).  `0117_trust_spells.sql` carries each Trust's own
+`mob_spell_lists` rows, so Kupipi's kit is the White Mage list rather than a generic
+caster table.  The level tracks the owner's main job.
+
+A Trust follows its owner and fights the monster the owner is fighting.  Its opening
+action at melee reach is a weapon swing (the client's stance tell); after that the AI
+casts from its kit: a Cure when the owner is below 85% HP, a missing or expiring buff,
+a missing debuff on the monster, then a nuke.  Buffs land on the owner with the normal
+`0x037`/`0x063` status icons and a `0x028` gain-effect result; a cast shows the client's
+magic-start bar.  All damage is credited to the owner, and half of a melee hit becomes
+the owner's enmity.
+
+The seven passive Trusts do not swing.  They radiate the retail COLURE aura, and the
+aura is a separate effect from the player's own buff: Cornelia applies
+`TRUST_AURA_HASTE` (808) with the GEO Haste icon (580), so her Haste sits beside a White
+Mage's Haste (33) instead of replacing it.  Sakura, Moogle, Star Sibyl, Kuyin Hathdenna,
+Brygid and Kupofried carry their Regen, Refresh, Magic Attack, Accuracy, CHR and
+Dedication auras; the effect is removed when the Trust leaves.
+
+A duplicate spell is refused, five active Trusts is the cap, and a zone change, logout,
+K.O., or the client's Release menu despawns them.  Every other player in the zone sees
+the same `0x00E` spawn.  The HUD reads the client's TrustFlag and the `0x067` master
+targid, highlights a called Trust's button, and turns a second click into
+`//trust release <spell id>`; `//trust` lists what is out and `//trust release all` clears
 the group.
 
-Limits: Trusts do not cast their own spells or use job abilities, do not appear in the
-party window, and monsters cannot select one as their hate target -- a Trust's damage
-is credited to its owner.  They are also not persisted; a server restart clears them.
+Limits: Trusts do not use job abilities or ranged attacks, do not appear in the party
+window, and monsters cannot select one as their hate target.  Their spells heal and buff
+the owner only, not other party members.  They are also not persisted; a server restart
+clears them.
 
 ## NPCs and the quest
 
@@ -123,7 +151,7 @@ NPC and that the player is within 6 yalms, then calls the script.
 **Pest Control** is stored in `quests` and `char_quests`:
 
 1. Talk to Cumetouflaix, the NPC nearest the Port Jeuno arrival point. The quest becomes `active`.
-2. Go to West Ronfaure with `!zone 100`; `!pos -376 -50 311` puts you at an Orcish Fodder camp.
+2. Go to West Ronfaure with `//zone 100`; `//pos -376 -50 311` puts you at an Orcish Fodder camp.
 3. Defeat three Orcish Fodder. Each kill increments `char_quests.progress`.
 4. Return to Cumetouflaix. The server marks the quest `complete`, adds 300 gil and two Potions,
    and refuses to pay a second time.
@@ -192,18 +220,42 @@ that camp around the zone:
 | Orcish Grappler | imported | 3–8 | imported | aggro, roam |
 | Wild Rabbit | imported | 1 | imported | roam |
 
-The gateway tick runs on the UDP receive timeout (about every 250 ms). Monster logic is simple and
-deliberate:
+The gateway tick runs on the UDP receive timeout (about every 250 ms) and the zone loop also
+flushes queued replies every 200 ms, so a box that is not sending anything still receives its
+mob movement while another box keeps the socket busy. Monsters walk the zone instead of floating
+through it: the server reads the zone's collision mesh from the player's own game folder, turns
+its upward faces into a floor grid and its walls into barriers, and plans every roam leg and
+chase on that grid. The details are under [Zone navigation](#zone-navigation).
 
-- idle monsters roam within 5 yalms of their spawn point every few seconds and send `0x00E`
-  position updates;
+Entity movement is **ambient** traffic: only the newest `0x00E`/`0x00D` position per entity is
+kept in the session queue, action/status/chat/equipment messages are packed ahead of it, and the
+stream is capped by a 900 B/s token bucket (`AMBIENT_BYTES_PER_SECOND` in `game/zone.py`). The
+client's receive pipe was built for roughly 3 kB/s; without the cap a crowded zone could fill it
+and delay the answer to a job ability or a macro click by minutes.
+
+The client walks an NPC forward between `0x00E` packets using the `moving` flag and the speed
+byte, so a position packet is a correction rather than the animation. A walking roamer carries
+speed byte 12 and is corrected four times a second (`MOB_SYNC_INTERVAL`); a chasing runner
+carries 36 and is corrected every 100 ms (`MOB_SYNC_INTERVAL_RUN`). A real corner or a stop is
+sent immediately within 30 yalms (`MOB_URGENT_RANGE`), and steady movement beyond 45 yalms
+(`MOB_SYNC_RANGE`) is not streamed at all — spawning still reaches 60. That is what keeps a
+dense roam zone smooth without printing every mob's position every tick.
+
+- idle monsters roam within 5 yalms of their spawn point every few seconds, stay on a walkable
+  surface, route around walls and send `0x00E` position updates;
 - a monster within 8 yalms of a living player engages, announces itself, and attacks every few
-  seconds;
+  seconds. It needs a walkable line to the player: a cliff, a wall or a bridge deck between them
+  hides the player from aggro exactly the way it should;
+- a chasing monster follows a path around the obstacle and keeps its feet on the floor height
+  under it. If no route exists -- the player is on top of a wall, across a chasm or on a surface
+  the mesh does not connect -- the monster stops at the last reachable point instead of clipping
+  through the geometry. Melee swings also require that walkable line, so nothing hits through a
+  wall;
 - a player attacks with `C2S 0x01A` action `0x02` while the target is within draw range
   (`ENGAGE_RANGE`, 30 yalms); `0x04` disengages. The client sends its own `0x04` as soon as the
   target leaves auto-attack reach (about four yalms); the server ignores that first
   distance-driven packet and re-asserts the stance, so the engagement survives out to 30 yalms.
-  A second `0x04` within 1.5 seconds, `!disengage`, or the target going beyond 30 yalms ends it;
+  A second `0x04` within 1.5 seconds, `//disengage`, or the target going beyond 30 yalms ends it;
 - engaging sends the `0x058` target acknowledgement and then re-sends the self `0x00D` with
   animation `0x1B = 1` (battle stance, weapon drawn); disengaging, target death or player death
   sets it back to 0 (sheathe). Without that byte the client stays in its idle pose and never
@@ -236,12 +288,54 @@ When a monster reaches 0 HP:
 Player death is temporary: Fanxi records the death, disengages, and restores the player at half HP
 and MP after six seconds. There is no home-point teleport or EXP loss yet.
 
+### Zone navigation
+
+A zone model (the client's `MZB` block) contains the same collision triangles the player walks
+on. `server/fanxi_server/game/zonemesh.py` reads that block through the client's own
+`VTABLE`/`FTABLE` pair; `server/fanxi_server/game/nav.py` rasterises floors into a 1.5-yalm grid
+and keeps non-floor triangles as barriers. Each cell holds up to four floor heights, so a bridge
+deck, the ground under it and their ramps are separate layers.
+
+The grid is built from the **player's** FINAL FANTASY XI folder, the same `FANXI_GAME_DIR` the
+gateway uses for `compress.dat`; no zone geometry is shipped with Fanxi or committed to the
+repository. The first zone-in starts a background build (a few seconds for most outdoor zones, up to
+about fifteen for the largest caverns), and the result is cached under
+
+```
+data/nav/<zone>.nav
+```
+
+with the source file's size and mtime in the header. A changed zone model rebuilds its cache. To
+prebuild every zone that has monster spawns, or just the ones being played:
+
+```bash
+cd server
+FANXI_GAME_DIR=/path/to/FINAL\ FANTASY\ XI \
+  python3 -m fanxi_server nav --zone 100 --zone 101
+python3 -m fanxi_server nav --all          # or: make nav, from the repository root
+```
+
+Set `FANXI_NAV=0` to switch the whole layer off, or `FANXI_NAV_DIR` to move the cache.
+
+The step rule allows 0.35 yalms of kerb plus 0.9 yalms of rise per yalm walked (a 42-degree
+grade), which is at most 1.7 yalms over one 1.5-yalm cell; crossing a barrier triangle also has
+to clear the monster's 1.5-yalm body. This is what stops a monster walking up a cliff face,
+through a wall standing on flat ground, or off the edge of the mesh. A* is limited to a small node budget on the chase path, so an unreachable player
+costs a short failed search, not a zone-wide one. `NAV_VERSION` (in `nav.py`) is the cache format
+version; bump it when the rasteriser changes.
+
+A server without the game folder can still use grids already in `data/nav`, but it cannot build
+new ones. A zone with no readable model keeps the older straight-line movement with one safety
+rule: a monster will not chase a target more than four yalms above or below it. City interiors
+and some zones keep their geometry in separate sub-region files, which this reader does not
+follow yet; those zones take the fallback.
+
 ## Inventory
 
 Inventory is one row per slot in `char_inventory`:
 
 - container 0 is the normal inventory;
-- container 2 is the client's Storage bag. The `!storage` command no longer uses it; migration
+- container 2 is the client's Storage bag. The `//storage` command no longer uses it; migration
   `0067` moved its contents onto the server-side slips;
 - container 4 is the Mog Locker. No command uses it, and migration `0067` emptied it too;
 - containers 8 and 10–16 are Mog Wardrobes 1–8;
@@ -286,16 +380,16 @@ a model-less grip after a dagger left the dagger drawn on the hip.
 Retail stores these items by trading a Storage Slip and the matching gear to a
 [Porter Moogle](https://www.bg-wiki.com/ffxi/Porter_Moogle); withdrawn items come back from the
 server when the slip is traded again. Fanxi keeps the same server-side record in `char_storage`,
-keyed by the item's slip, but it does **not** put the item in any bag. `!storage` deletes the
+keyed by the item's slip, but it does **not** put the item in any bag. `//storage` deletes the
 `char_inventory` row and the item disappears from the client until it is grabbed. The Porter
-Moogles are placed in the world, but their trade menu is not implemented yet; `!storage` is the
+Moogles are placed in the world, but their trade menu is not implemented yet; `//storage` is the
 current interface to the same slip record:
 
 ```
-!storage store nin        put storable NIN gear on its slips and out of every bag
-!storage grab nin         take the NIN gear back off the slips
-!storage grab all         take everything off the slips
-!storage                  list how many items are on each slip
+//storage store nin        put storable NIN gear on its slips and out of every bag
+//storage grab nin         take the NIN gear back off the slips
+//storage grab all         take everything off the slips
+//storage                  list how many items are on each slip
 ```
 
 A job name, abbreviation or number is accepted (`nin`, `NIN`, `Ninja`, `13`). "Job-exclusive"
@@ -321,29 +415,32 @@ into `char_storage`, so the transition leaves no gear stranded in a bag the clie
 ## The 9999-item locker, from anywhere
 
 The client's visible bag capacity is one byte, so a 9999-slot bag cannot be drawn. Fanxi's
-`!locker` is a hidden server-side locker with room for 9999 items: storing deletes the item from
+`//locker` is a hidden server-side locker with room for 9999 items: storing deletes the item from
 every permanent bag and keeps it in `char_locker`, so it disappears from the client until grabbed:
 
 ```
-!locker store ammo       store every ammo-slot item
-!locker store back       store capes and mantles
-!locker store materials  store non-wearables: potions, crafting materials, etc.
-!locker store Artio      store items whose name contains "Artio"
-!locker store all        store every unequipped item
-!locker grab ammo        return ammo (same selectors as store)
-!locker grab all         return everything
-!locker grab broth 12    return at most 12 of the matching item (one stack)
-!locker list             list the locker's contents in chat
-!locker                  show used/capacity and the selector list
+//locker store ammo       store every ammo-slot item
+//locker store back       store capes and mantles
+//locker store jsecapes   store only the 22 Ambuscade job capes
+//locker store materials  store non-wearables: potions, crafting materials, etc.
+//locker store Artio      store items whose name contains "Artio"
+//locker store all        store every unequipped item
+//locker grab ammo        return ammo (same selectors as store)
+//locker grab all         return everything
+//locker grab broth 12    return at most 12 of the matching item (one stack)
+//locker grab jsecapes    return every Ambuscade job-cape build
+//locker list             list the locker's contents in chat
+//locker                  show used/capacity and the selector list
 ```
 
 Selectors are `all`, a slot (`main`, `sub`, `ranged`, `ammo`, `head`, `body`, `hands`, `legs`,
-`feet`, `neck`, `waist`, `ear`, `ring`, `back`), `materials`, or any other word as a name
-substring. `cape`, `capes` and `mantle` are aliases for `back`; `ear` covers both ear slots and
-`ring` both ring slots. Grab accepts an optional trailing count, which is how a 99-item entry can
-be taken one stack at a time. Worn pieces stay equipped, temporary items and the recycle bin are
-never swept, and the 9999 limit counts stored quantities. This is independent of the Storage
-Slips: `!storage` remains the slip-only store, and `!locker` is the catch-all.
+`feet`, `neck`, `waist`, `ear`, `ring`, `back`), `materials`, `jsecapes` for the 22 Ambuscade
+job capes, or any other word as a name substring. `cape`, `capes` and `mantle` are aliases for
+`back`; `ear` covers both ear slots and `ring` both ring slots. Grab accepts an optional
+trailing count, which is how a 99-item entry can be taken one stack at a time. Worn pieces
+stay equipped, temporary items and the recycle bin are never swept, and the 9999 limit counts
+stored quantities. This is independent of the Storage Slips: `//storage` remains the
+slip-only store, and `//locker` is the catch-all.
 
 ## Working stock (auto-refill)
 
@@ -361,11 +458,11 @@ locker:
   yet, so it reports "no pet to heal" until Call Beast/pet logic exists.
 
 ```
-!stock                    refill the visible working stacks and show current/target
+//stock                    refill the visible working stacks and show current/target
 ```
 
 Zone-in also runs the refill automatically. Call Beast jugs are the exception: they are bulk
-stored in the locker and `!locker grab <jug> 12` is the current way to bring one out. Call Beast
+stored in the locker and `//locker grab <jug> 12` is the current way to bring one out. Call Beast
 and Reward themselves are not implemented in the zone server yet, so the items are ready but the
 abilities still need their pet logic.
 
@@ -374,56 +471,74 @@ abilities still need their pet logic.
 Chat commands remain the fastest way to exercise the world:
 
 ```
-!zone 100                 West Ronfaure (the monster camps)
-!zone 246                 Port Jeuno (NPCs and the shop)
-!pos <x> <y> <z> [rot]    reposition
-!where                    zone and position
-!warp mark [alias]        save the spot you are standing on as 1-1000
-!warp me <n|alias>        return to one of your saved places
-!warp all <n|alias>       return with every online character on your account and subs
-!warp list [page]         print the saved places (8 per page)
-!warp delete <n|alias>    forget a saved place
-!warp rename <n> <alias>  name or clear a saved place from chat
-!entities                 list live NPCs/monsters and their targids
-!trust [list]             list the alter egos currently out
-!trust release <id|name|all>  release one or every alter ego
-!heal                     restore HP/MP
-!time <hour>              set Vana'diel hour
-!storage store <job>      move that job's storable gear onto its slips
-!storage grab <job|all>   take it back off the slips
-!locker store|grab <sel>  use the hidden 9999-item locker (all, ammo, back, materials, name)
-!locker list              list the locker's contents
-!stock                    refill the visible working consumables from the locker
-!ws <name>                use a weapon skill (needs 1000 TP; self skills need no target)
-!ja <name>                use a job ability; quotes around multi-word names are optional
-!job <job> [sub]          change job: slip the old set, pull the new one, tidy the bags
-!character model <race> <1-48|random>
+//zone 100                 West Ronfaure (the monster camps)
+//zone 246                 Port Jeuno (NPCs and the shop)
+//pos <x> <y> <z> [rot]    reposition
+//where                    zone and position
+//warp mark [alias]        save the spot you are standing on as 1-1000
+//warp me <n|alias>        return to one of your saved places
+//warp all <n|alias>       return with every online character on your account and subs
+//warp all me              call every other online character on your account and subs to you
+//warp call <name>         call one of them to you (the launcher's post-relog pull)
+//warp list [page]         print the saved places (8 per page)
+//warp delete <n|alias>    forget a saved place
+//warp rename <n> <alias>  name or clear a saved place from chat
+//entities                 list live NPCs/monsters and their targids
+//trust [list]             list the alter egos currently out
+//trust release <id|name|all>  release one or every alter ego
+//makeparty                drop every online sub from its party, then invite it
+//invite [subs|all|<name>] party every online sub-account, or invite one player by name
+//heal                     restore HP/MP
+//time <hour>              set Vana'diel hour
+//storage store <job>      move that job's storable gear onto its slips
+//storage grab <job|all>   take it back off the slips
+//locker store|grab <sel>  use the hidden 9999-item locker (all, ammo, back, materials, name)
+//locker list              list the locker's contents
+//stock                    refill the visible working consumables from the locker
+//ws <name>                use a weapon skill (needs 1000 TP; self skills need no target)
+//ja <name>                use a job ability; quotes around multi-word names are optional
+//job <job> [sub]          change job: slip the old set, pull the new one, tidy the bags
+//character model <race> <1-48|random>
                           change race/face/hair colour/size; `face 2 hair a size m` and
                           `random` are accepted, and the live model repaints
-!abilities                re-send the command data that fills the Abilities menu
-!traits                   list the current job pair's job traits and their modifiers
-!help                     list commands
+//abilities                re-send the command data that fills the Abilities menu
+//traits                   list the current job pair's job traits and their modifiers
+//help                     list commands
 ```
 
-`!warp` stores a row in `char_warps` (migration 110) with the zone and position, so the list
+`//warp` stores a row in `char_warps` (migration 110) with the zone and position, so the list
 survives a relog. The next number is one past the highest existing one; an alias is optional and
 must be unique per character. `me` and `all` accept either the number or a case-insensitive alias
 (prefixes are accepted when exactly one warp matches). `all` selects the online sessions whose
 account is the sender's main account or one of its sub-accounts; it is the multibox group, not the
-whole zone. The launcher's **Warps** page reads and edits the same rows, so a mark made in game can
-be renamed there and vice versa. Home Points keep their own `!hp` command; `!warp` is the custom
-list.
+whole zone. `all me` (also `all here` and `all self`) is the reverse call: the sender stays put and
+every other online family session zones in at the sender's current zone, position and heading. A
+saved alias named "me" does not shadow it (the same holds for "all", "here" and "call"). `call
+<name>` is the same move for one character: the
+name is resolved on the server, so a box in another zone still answers, and the launcher sends it
+by itself when a box comes back from a relog. Parked (`//sleep`) boxes are left out of all three —
+their client only reads chat, so a zone-in sent to one would never be acknowledged and the session
+would stay `zoning` for good; wake it first. The launcher's **Warps** page reads and edits the same
+rows and has a **Warp team to me** button for the same call, so a mark made in game can be renamed
+there and vice versa. Home Points keep their own `//hp` command; `//warp` is the custom list.
 
-In chat, a `/!` command can be completed with **Tab** (see
-[docs/control-panel.md](control-panel.md#command-completion)). `/!wa` + Tab becomes `/!warp `;
-`/!warp ma` + Tab becomes `/!warp mark `. An ambiguous prefix is left as typed — `/!w` and
-`/!warp ` do nothing, and `/!wh` + Tab becomes `/!where ` — so add a letter and press Tab again.
+In chat, a `//` command can be completed with **Tab** (see
+[docs/control-panel.md](control-panel.md#command-completion)). `//wa` + Tab becomes `//warp `;
+`//warp ma` + Tab becomes `//warp mark `. An ambiguous prefix is left as typed — `//w` and
+`//warp ` do nothing, and `//wh` + Tab becomes `//where ` — so add a letter and press Tab again.
 
-`!job` is a self-contained swap. It takes the old outfit off, runs the same job store as
-`!storage store <old job>`, pulls every item on the new job's slips into a cleared inventory,
-wears the best gear it can find (including pieces in the Mog Wardrobes), and moves the
-leftovers into the wardrobes. Working stock (ninjutsu tools, pet food, Dawn Mulsum) stays
-visible so the client can still use it; equipped pieces stay on.
+`//job` is a self-contained swap. It takes the old outfit off, runs the same job store as
+`//storage store <old job>`, pulls every item on the new job's slips into a cleared inventory,
+then grabs that job's Ambuscade JSE cape builds out of the hidden locker. It wears the best
+gear it can find (including pieces in the Mog Wardrobes), and moves the leftovers — capes
+included — into the wardrobes, so the new job's cape is available there even when the cape
+wasn't on a slip. Working stock (ninjutsu tools, pet food, Dawn Mulsum) stays visible so the
+client can still use it; equipped pieces stay on. The other 21 jobs' capes stay in the locker;
+`//locker grab jsecapes` takes all of them out, and `//locker store jsecapes` puts them back.
+
+The 22 capes all share one item id per job, so each copy's augment build lives in its 24-byte
+extdata block. The locker keeps that block alongside the item (`char_locker.extra`), and a
+grab writes it back, which is why 198 named copies can exist without losing their augments.
 
 ### Slash commands
 
@@ -444,10 +559,54 @@ and is stored per character (the `style_*` columns from migration 0085), so it s
 relog and a zone change. Locking a new appearance has the client's usual ~10-second cooldown;
 a command typed sooner is ignored by the client, not by the server. A job change turns style
 lock off. `/heal`, `/attack`, `/ma`, `/ja`, `/ws`, `/item` and `/equip` were already answered
-through their own packets; `/shout`, `/tell`, party and linkshell commands still have no
-channel in this world.
+through their own packets. The party commands (`/pcmd add|leave|kick|leader|breakup`), the
+alliance ones (`/acmd add|leave|kick|leader|breakup`) and the party menu's invite/accept actions
+are answered by `C2S 0x06E`/`0x074` and the group packets below. `/shout`, `/tell`, party chat
+(`/p`) and linkshell commands still have no channel in this world.
 
-`!abilities` is the manual form of the automatic refresh: the client builds the Weapon Skills
+### Parties and alliances
+
+The client's group menu is a view of server state, not a local list. A `/pcmd add` or a menu
+invite sends `C2S 0x06E` with the target's character id (or its targid), and the server answers
+with `S2C 0x0DC`; the invitee's Accept sends `C2S 0x074`. On acceptance the server sends `0x0C8`
+with up to twenty `char id, targid, party/leader flags, zone` rows and one `0x0DD` per member
+(HP/MP/TP, job/sub-job, level, member number, name). A member outside the receiver's zone is sent
+their zone number instead of vitals, so the client prints the zone. HP/MP/TP changes ride the same
+`0x0DF` packet the player gets for themselves.
+
+An invitation to a **server-owned sub-account in the inviter's own account family** skips that
+prompt: the server accepts it on the sub's behalf and sends the roster straight away. This is what
+lets a headless box join from `/pcmd add` when there is no window to click. A main account, or
+another player's character, still receives `0x0DC` and answers with `C2S 0x074`. Set
+`FANXI_AUTO_ACCEPT_SUB_INVITES=0` to require the prompt for every invitee.
+
+`//invite subs` (also `//invite all` or `//invite team`) resolves the account family's online
+sub-accounts on the server and invites them all in one command; `//invite <name>` invites one
+player. Because the server resolves the name, these work even when a box is outside the client's
+45-yalm player range or in another zone, where the client's own `/pcmd add <name>` may have
+nothing to resolve. The Control room's **Live party** header has an **Invite** button for the same
+choices.
+
+**A returning main gets the team back.** A main that logs out, freezes past the session timeout or
+is force-relaunched is removed from the party, and one of the subs becomes leader. The subs remain
+grouped, so a fresh `/pcmd add` to them is refused. On the main's next fresh login the server finds
+the party whose members all belong to that account family, joins the main to it and moves the lead
+back. Only a fresh login does this; a zone line after a deliberate `/pcmd leave` is left alone.
+The same recovery runs first in `//invite subs`, which then invites any online sub that is still
+missing. A party containing a character outside the family is never taken over.
+
+`//makeparty` is the destructive form: every online sub that is in another party leaves it first,
+then accepts the invite into the caller's party. The Party Info window's **Make party** button runs
+the same command, so a team scattered across old parties becomes one group in a click. The caller
+must be the party leader (or solo).
+
+A party holds six players; an alliance holds three parties and is led by the main party's leader.
+`C2S 0x06F`, `0x070`, `0x071`, `0x076`, `0x077` and `0x078` cover leave, disband, kick, roster
+reload, leader change and the group id. Invitations expire after thirty seconds. The roster is
+in-memory: a server restart or a character's logout ends the group, and party/alliance chat is
+still not implemented.
+
+`//abilities` is the manual form of the automatic refresh: the client builds the Weapon Skills
 menu before the zone-in `0x0AC` copy is read, so the server also sends the command data after
 the `0x061` stats request and on two short timers, with `0x0AC` before the `0x062` skill packet.
 
@@ -456,7 +615,7 @@ main-hand weapon's skill type (hand-to-hand when unarmed) plus archery/marksmans
 ranged slot, and only skills at or below the character's value for that weapon. Merit and gear
 skill bonuses count. Quested/relic/empyrean/aeonic skills have no `skill_level`; they are offered
 once that weapon skill is mastered (350+, the level-99 band). The server rejects a weapon skill
-outside that list, so `!ws` and the advertised bitmap agree. Campaign Battle skills (Uriel Blade,
+outside that list, so `//ws` and the advertised bitmap agree. Campaign Battle skills (Uriel Blade,
 Glory Slash, Tartarus Torpor) need a Campaign weapon and a Campaign zone, so they are left out of
 the list and refused by name.
 
@@ -500,8 +659,8 @@ The client does not read the bitmap directly. It keeps a command-id list at
 all-weapon-skill list, and a fresh profile had an empty one. `host/addons/hooks.c` rebuilds that
 list from every `0x0AC` packet on the game thread, so the Weapon Skills menu (in the field and
 while engaged) shows exactly the advertised skills. The list is rebuilt at zone-in, after
-`!abilities`, and after a weapon change. A client started before this patch keeps its old list
-until it is restarted once. `!ws` still enforces the filtered list.
+`//abilities`, and after a weapon change. A client started before this patch keeps its old list
+until it is restarted once. `//ws` still enforces the filtered list.
 
 The list's command array and count are struct offsets, not per-build addresses: they are
 `+0x160` and `+0x1760` in both the 2025-07-03 and 2026-10-05 clients (checked against the menu
@@ -519,7 +678,7 @@ to relocate them as addresses.
 game's trait ids, job/level gates and modifier values in
 `server/fanxi_server/game/traits_data.py`, takes the highest rank reached by the main job and the
 support job (an equal rank does not stack), and advertises every active id in that block.
-`!traits` prints the same list, with the modifier values, and re-sends `0x0AC`.
+`//traits` prints the same list, with the modifier values, and re-sends `0x0AC`.
 
 The Abilities menu itself is built from the client's saved command-id list, not from the bitmap.
 `host/addons/hooks.c` rebuilds that list from `0x0AC`; it now appends traits as `0x600 + trait
@@ -533,7 +692,7 @@ Trait modifiers use the gear modifier ids, so they are merged into the equipment
 the damage limit therefore read traits and gear through the same path. `Max HP Boost` and
 `Max MP Boost` are added to the sheet maximum, and a job change recomputes the stored maxima.
 
-`!traits` lists every active trait, including the killer/resist, Fast Cast, Dual Wield and Store
+`//traits` lists every active trait, including the killer/resist, Fast Cast, Dual Wield and Store
 TP families whose modifiers the current engine does not read yet. Those rows are kept for the
 client's trait list and future combat work; only the modifiers named above and the two passive
 ticks change behaviour today. The closing "Passive tick" line adds the worn gear's Regen and
@@ -576,6 +735,11 @@ its duration and the numbers the engine reads:
   Scholar level; the first tock lands 1-10 s after the cast.
 - Sneak and Invisible keep a monster from aggroing.  Regen/Refresh and Poison tick on the
   player through the same three-second timer as the passive Auto Regen/Auto Refresh.
+- **Accession** widens the next white enhancing spell to every party member within ten
+  yalms of the caster (the caster included).  Each recipient gets the caster's rolled
+  duration, tick and power, its own gain-effect result and its own `0x037` icon list, so
+  a boxed client draws the buff immediately.  Haste and Reraise are retail's exceptions
+  and keep the stratagem up; the icon is spent when the spell lands.
 - `game/spell_effects.py` is generated by `tools/import_lsb_spell_effects.py` from
   LandSandBoat's enhancing, enfeebling, ninjutsu and song tables, and gives every spell an
   icon even where the engine has no numbers for it (the Bar- and Boost- lines, Protectra
@@ -641,6 +805,7 @@ the client menu index (`home_points.hp_index`); opening the crystal menu require
 | `monster_templates` | reusable monster template: name, model, level range, HP, combat stats |
 | `monster_spawns` | placed monster: template, zone, position, respawn seconds |
 | `trusts` | factual alter-ego appearance and combat data, one row per Trust spell |
+| `trust_spells` | the spells one alter ego can cast, with each spell's unlock level |
 | `items` | item id, name, stack size, usable flag, equip slot, level, Rare/Ex flags |
 | `char_inventory` | per-character slots; slot 0 is gil (`65535`) |
 | `quests` | quest key, reward, required template and kill count |
@@ -663,7 +828,10 @@ This slice deliberately omits:
   the ninjutsu, enfeebling, enhancing and weapon-skill families);
 - skillchains, magic bursts and weapon-skill aftermath (Empyrean/Relic/Mythic Aftermath is a
   separate buff model; the per-skill damage and status rows above still apply);
-- navmesh pathing (monsters roam in a short radius);
+- collision data for zones whose model is a shell plus separate interior sub-regions (the
+  outdoor mesh is read, the interiors are not);
+- dynamic obstacles: only the static zone mesh blocks a monster, not a door that opens or
+  another player;
 - loot tables beyond the quest reward and shop stock;
 - anti-cheat or client-position validation.
 

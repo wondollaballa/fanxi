@@ -114,6 +114,20 @@ local limbus = {
     },
 }
 
+local capes = {
+    fc = { name = "Campestres's Cape", augments = {"MP+60", "Mag. Acc+20 /Mag. Dmg.+20", "MP+20", '"Fast Cast"+10', "Phys. dmg. taken-10%"} },
+    pdt = { name = "Campestres's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Campestres's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Campestres's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Campestres's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Campestres's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    macc = { name = "Campestres's Cape", augments = {"MND+20", "Mag. Acc+20 /Mag. Dmg.+20", "Mag. Acc.+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mabws = { name = "Campestres's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", "Weapon skill damage +10%", "Phys. dmg. taken-10%"} },
+    pet_mab = { name = "Campestres's Cape", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Mag. Acc+20 /Mag. Dmg.+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
+    pet_tp = { name = "Campestres's Cape", augments = {"Pet: Acc.+20 Pet: R.Acc.+20 Pet: Atk.+20 Pet: R.Atk.+20", "Pet: Attack+10 Pet: Rng.Atk.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
+    pet_dt = { name = "Campestres's Cape", augments = {"Pet: M.Acc.+20 Pet: M.Dmg.+20", "Pet: Accuracy+20 Pet: Rng. Acc.+20", "Pet: Mag. Acc.+10", "Pet: Haste+10", "Pet: Damage taken -5%"} },
+}
+
 function get_sets()
     sets = {}
     sets.avatar = {}
@@ -136,7 +150,7 @@ function get_sets()
         legs = "Convoker's Spats +4",
         feet = "Convoker's Pigaches +4",
         neck = "Summoner's Collar +2",
-        back = "Campestres's Cape",
+        back = capes.mabws,
     }
     sets.JA["Astral Flow"] = {
         main = "Nirvana",
@@ -147,7 +161,7 @@ function get_sets()
         legs = "Convoker's Spats +4",
         feet = "Convoker's Pigaches +4",
         neck = "Summoner's Collar +2",
-        back = "Campestres's Cape",
+        back = capes.mabws,
     }
     sets.JA["Avatar's Favor"] = {
         main = "Nirvana",
@@ -158,7 +172,7 @@ function get_sets()
         legs = "Convoker's Spats +4",
         feet = "Convoker's Pigaches +4",
         neck = "Summoner's Collar +2",
-        back = "Campestres's Cape",
+        back = capes.mabws,
     }
     sets.JA["Elemental Siphon"] = {
         main = "Nirvana",
@@ -169,7 +183,7 @@ function get_sets()
         legs = "Convoker's Spats +4",
         feet = "Convoker's Pigaches +4",
         neck = "Summoner's Collar +2",
-        back = "Campestres's Cape",
+        back = capes.mabws,
     }
     sets.JA["Mana Cede"] = {
         main = "Nirvana",
@@ -180,7 +194,7 @@ function get_sets()
         legs = "Convoker's Spats +4",
         feet = "Convoker's Pigaches +4",
         neck = "Summoner's Collar +2",
-        back = "Campestres's Cape",
+        back = capes.mabws,
     }
 
     -- ===== Odyssey =====
@@ -229,7 +243,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Campestres's Cape",
+        back = capes.mabws,
     }
     sets.WS.Omniscience = {
         main = "Nirvana",
@@ -246,7 +260,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Campestres's Cape",
+        back = capes.mabws,
     }
     sets.WS.Shattersoul = {
         main = "Nirvana",
@@ -263,7 +277,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Campestres's Cape",
+        back = capes.mabws,
     }
 
     -- ===== avatar =====
@@ -277,7 +291,7 @@ function get_sets()
         feet = "Convoker's Pigaches +4",
         neck = "Summoner's Collar +2",
         waist = "Incarnation Sash",
-        back = "Campestres's Cape",
+        back = capes.pet_tp,
     }
     sets.avatar.dt = {
         main = "Nirvana",
@@ -289,7 +303,7 @@ function get_sets()
         feet = "Glyphic Pigaches +4",
         neck = "Summoner's Collar +2",
         waist = "Incarnation Sash",
-        back = "Campestres's Cape",
+        back = capes.pet_dt,
     }
     sets.avatar.mab = {
         main = "Nirvana",
@@ -301,7 +315,7 @@ function get_sets()
         feet = "Beckoner's Pigaches +3",
         neck = "Summoner's Collar +2",
         waist = "Incarnation Sash",
-        back = "Campestres's Cape",
+        back = capes.pet_mab,
     }
     sets.avatar.perpetuation = {
         main = "Nirvana",
@@ -314,7 +328,7 @@ function get_sets()
         neck = "Summoner's Collar +2",
         waist = "Incarnation Sash",
         ring1 = "Petrov Ring",
-        back = "Campestres's Cape",
+        back = capes.pet_mab,
     }
 
     -- ===== engaged =====
@@ -333,7 +347,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Campestres's Cape",
+        back = capes.tp,
     }
     sets.engaged.hybrid = {
         main = "Nirvana",
@@ -350,7 +364,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Campestres's Cape",
+        back = capes.tp,
     }
     sets.engaged.tp = {
         main = "Nirvana",
@@ -367,7 +381,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Campestres's Cape",
+        back = capes.tp,
     }
 
     -- ===== Limbus Rank 30 sets =================================
@@ -390,7 +404,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Campestres's Cape",
+        back = capes.dt,
     }
     sets.idle.maxhp = {
         main = "Nirvana",
@@ -407,7 +421,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Campestres's Cape",
+        back = capes.maxhp,
     }
     sets.idle.mdt = {
         main = "Nirvana",
@@ -424,7 +438,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Campestres's Cape",
+        back = capes.mdt,
     }
     sets.idle.movement = {
         main = "Nirvana",
@@ -458,7 +472,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Campestres's Cape",
+        back = capes.pdt,
     }
     sets.idle.refresh = {
         main = "Nirvana",
@@ -475,7 +489,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Chirich Ring +1",
         ring2 = "Stikini Ring +1",
-        back = "Campestres's Cape",
+        back = capes.fc,
     }
     sets.idle.town = {
         main = "Nirvana",
@@ -510,7 +524,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Campestres's Cape",
+        back = capes.macc,
     }
 
     -- ===== precast =====
@@ -527,7 +541,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = "Campestres's Cape",
+        back = capes.fc,
     }
 
     -- ===== weaponset =====

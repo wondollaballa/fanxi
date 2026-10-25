@@ -114,6 +114,15 @@ local limbus = {
     },
 }
 
+local capes = {
+    tank = { name = "Ogma's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity+10", "Parrying rate+5%"} },
+    dd = { name = "Ogma's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    sird = { name = "Ogma's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity+10", "Spell interruption rate down-10%"} },
+    ws_str = { name = "Ogma's Cape", augments = {"STR+20", "Accuracy+20 Attack+20", "STR+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    ws_dex = { name = "Ogma's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    ws_mnd = { name = "Ogma's Cape", augments = {"MND+20", "Accuracy+20 Attack+20", "MND+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+}
+
 function get_sets()
     sets = {}
     sets.engaged = {}
@@ -142,7 +151,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
     sets.JA["Elemental Sforzo"] = {
         main = "Epeolatry",
@@ -159,7 +168,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
     sets.JA.Embolden = {
         main = "Epeolatry",
@@ -176,7 +185,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
     sets.JA.Gambit = {
         main = "Epeolatry",
@@ -193,7 +202,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
     sets.JA.Pflug = {
         main = "Epeolatry",
@@ -210,7 +219,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
     sets.JA.Rayke = {
         main = "Epeolatry",
@@ -227,7 +236,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
     sets.JA.Swordplay = {
         main = "Epeolatry",
@@ -244,7 +253,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
     sets.JA.Valiance = {
         main = "Epeolatry",
@@ -261,7 +270,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
     sets.JA.Vallation = {
         main = "Epeolatry",
@@ -278,7 +287,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
 
     -- ===== Odyssey =====
@@ -337,7 +346,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ogma's Cape",
+        back = capes.ws_str,
     }
     sets.WS.Requiescat = {
         main = "Epeolatry",
@@ -354,7 +363,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ogma's Cape",
+        back = capes.ws_mnd,
     }
     sets.WS.Resolution = {
         main = "Epeolatry",
@@ -371,7 +380,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ogma's Cape",
+        back = capes.ws_str,
     }
     sets.WS["Savage Blade"] = {
         main = "Epeolatry",
@@ -388,7 +397,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Ogma's Cape",
+        back = capes.ws_str,
     }
 
     -- ===== engaged =====
@@ -407,7 +416,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Ogma's Cape",
+        back = capes.dd,
     }
     sets.engaged.hybrid = {
         main = "Epeolatry",
@@ -441,7 +450,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Ogma's Cape",
+        back = capes.dd,
     }
 
     -- ===== enmity =====
@@ -460,7 +469,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Supershear Ring",
         ring2 = "Eihwaz Ring",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
 
     -- ===== Limbus Rank 30 sets =================================
@@ -570,7 +579,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Chirich Ring +1",
         ring2 = "Stikini Ring +1",
-        back = "Ogma's Cape",
+        back = capes.tank,
     }
     sets.idle.town = {
         main = "Epeolatry",
@@ -605,7 +614,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Ogma's Cape",
+        back = capes.sird,
     }
     sets.midcast["Enhancing Magic"] = {
         main = "Epeolatry",
@@ -622,7 +631,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Ogma's Cape",
+        back = capes.sird,
     }
     sets.midcast["Healing Magic"] = {
         main = "Epeolatry",
@@ -639,7 +648,7 @@ function get_sets()
         ear2 = "Tuisto Earring",
         ring1 = "Gelatinous Ring +1",
         ring2 = "Stikini Ring +1",
-        back = "Ogma's Cape",
+        back = capes.sird,
     }
 
     -- ===== precast =====
@@ -656,7 +665,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = "Ogma's Cape",
+        back = capes.sird,
     }
 
     -- ===== weaponset =====

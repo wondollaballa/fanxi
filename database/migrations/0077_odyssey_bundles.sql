@@ -8,7 +8,7 @@
 -- DEX/AGI+15, Evasion+25, Triple Attack+4% - exactly its known R25 row.
 --
 -- Nyame has one bundle per path, so each piece gets Path A in place plus three
--- extra copies for Paths B/C/D. `!augment <index> <item>` rewrites a copy.
+-- extra copies for Paths B/C/D. `//augment <index> <item>` rewrites a copy.
 
 UPDATE char_inventory SET extra = X'038300000000F801B6010000000000000000000000000000' WHERE character_id = 1 AND item_id = 23761;  -- Nyame Helm Path A, bundle 438
 UPDATE char_inventory SET extra = X'038300000000F801B7010000000000000000000000000000' WHERE character_id = 1 AND item_id = 23768;  -- Nyame Mail Path A, bundle 439

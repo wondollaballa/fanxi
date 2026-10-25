@@ -179,6 +179,27 @@ class EffectTest(unittest.TestCase):
         self.session.queue.clear()
         self.session.zone_loaded = True
 
+    def party_with(self, name: str = "Ally", *, offset: float = 0.0):
+        """A second real character in the caster's party, ``offset`` yalms to the east."""
+        account = self.service.register(name.casefold(), "password123").account
+        row = self.service.create_character(account["id"], {"name": name, "race": 1})
+        other = ZoneSession(
+            self.world, None,
+            self.service.character_record(self.service.character(row["id"]), name))
+        other.set_key(bytes(20))
+        other.logged_in = True
+        other.zone = self.session.zone
+        other.targid = 0x401
+        other.pos = list(self.session.pos)
+        other.pos[0] = float(other.pos[0]) + float(offset)
+        other.zone_loaded = True
+        self.world.sessions[("127.0.0.1", 4321)] = other
+        party = self.world.party_of(int(self.session.char["char_id"]))
+        if party is None:
+            party = self.world.create_party(self.session)
+        self.assertTrue(self.world.join_party(party, other))
+        return other
+
     def mob(self):
         return next(entity for entity in self.session.entities
                     if entity.kind == "mob" and entity.alive)
@@ -477,6 +498,9 @@ class EffectTest(unittest.TestCase):
         self.world._tick_mob(mob, [self.session], time.time())
         self.assertIsNone(mob.engaged_char_id)
         self.session.remove_effect(effects.SNEAK, quiet=True)
+        # The mob roamed for one beat while Sneak hid the player; put it back in range
+        # for the second check (the original test assumed it stayed still).
+        mob.x, mob.y, mob.z = self.session.pos[0], self.session.pos[1], self.session.pos[2]
         self.world._tick_mob(mob, [self.session], time.time() + 1)
         self.assertEqual(mob.engaged_char_id, int(self.session.char["char_id"]))
 
@@ -642,13 +666,13 @@ class EffectTest(unittest.TestCase):
         self.assertEqual(int(self.session.char["hp_current"]), 840)
 
     def test_light_arts_extends_regen_v_and_its_tick(self):
-        """Regen V is 60 s + 48 s Light Arts at 99, with 40 + 24 HP per tick."""
+        """Regen V is 60 s + 48 s Light Arts + 60 s maxed JP, at 40 + 24 HP per tick."""
         self.session.char.update(main_job=20, main_level=99, mp_current=600)
         self.ability(211)
         row = self.db.one("SELECT * FROM spells WHERE name = 'Regen V'")
         self.cast(int(row["id"]))
         state = self.session.effect(effects.REGEN)
-        self.assertAlmostEqual(effect_seconds(state), 108.0, delta=1.0)
+        self.assertAlmostEqual(effect_seconds(state), 168.0, delta=1.0)
         self.assertEqual(int(state["tick"]), 64)
 
     def test_perpetuance_extends_regen_v_and_is_consumed(self):
@@ -660,8 +684,72 @@ class EffectTest(unittest.TestCase):
         row = self.db.one("SELECT * FROM spells WHERE name = 'Regen V'")
         self.cast(int(row["id"]))
         state = self.session.effect(effects.REGEN)
-        self.assertAlmostEqual(effect_seconds(state), 216.0, delta=1.0)
+        self.assertAlmostEqual(effect_seconds(state), 336.0, delta=1.0)
         self.assertNotIn(effects.PERPETUANCE, self.session.status_effects)
+
+    def test_accession_spreads_regen_v_across_the_party(self):
+        """Accession turns the next white enhancing spell into a party-wide buff."""
+        self.session.char.update(main_job=20, main_level=99, mp_current=600)
+        other = self.party_with(offset=4.0)
+        self.ability(211)
+        self.ability(218)
+        self.assertIn(effects.ACCESSION, self.session.status_effects)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Regen V'")
+        self.cast(int(row["id"]))
+        for session in (self.session, other):
+            self.assertIn(effects.REGEN, session.effect_state)
+            state = session.effect(effects.REGEN)
+            self.assertAlmostEqual(effect_seconds(state), 168.0, delta=1.0)
+            self.assertEqual(int(state["tick"]), 64)
+        self.assertIn(effects.REGEN, self.session.status_effects)
+        self.assertEqual(status_icon(other), effects.REGEN)
+        self.assertNotIn(effects.ACCESSION, self.session.status_effects)
+        # Each recipient's client gets a gain-effect result addressed to it.
+        targets = [message["target"] for message in messages(self.session)
+                   if message["message"] == packets.MESSAGE_MAGIC_GAIN_EFFECT]
+        self.assertIn(int(other.char["char_id"]), targets)
+
+    def test_regen_v_without_accession_stays_on_the_caster(self):
+        """The party-wide result is Accession's doing, not every Regen's."""
+        self.session.char.update(main_job=20, main_level=99, mp_current=600)
+        other = self.party_with(offset=4.0)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Regen V'")
+        self.cast(int(row["id"]))
+        self.assertIn(effects.REGEN, self.session.effect_state)
+        self.assertNotIn(effects.REGEN, other.effect_state)
+
+    def test_accession_skips_a_party_member_out_of_range(self):
+        """Only the party inside the spell's area gets the buff."""
+        self.session.char.update(main_job=20, main_level=99, mp_current=600)
+        other = self.party_with(offset=20.0)
+        self.ability(211)
+        self.ability(218)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Regen V'")
+        self.cast(int(row["id"]))
+        self.assertIn(effects.REGEN, self.session.effect_state)
+        self.assertNotIn(effects.REGEN, other.effect_state)
+        self.assertNotIn(effects.ACCESSION, self.session.status_effects)
+
+    def test_a_black_enhancing_spell_does_not_spend_accession(self):
+        """Only a white enhancing spell consumes the stratagem."""
+        self.session.char.update(main_job=20, main_level=99, mp_current=600)
+        self.ability(211)
+        self.ability(218)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Blaze Spikes'")
+        self.cast(int(row["id"]))
+        self.assertIn(effects.ACCESSION, self.session.status_effects)
+
+    def test_accession_leaves_haste_alone(self):
+        """Retail's exception: Haste keeps the stratagem and does not spread."""
+        self.session.char.update(main_job=20, main_level=99, mp_current=600)
+        other = self.party_with(offset=4.0)
+        self.ability(211)
+        self.ability(218)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Haste'")
+        self.cast(int(row["id"]))
+        self.assertIn(effects.HASTE, self.session.effect_state)
+        self.assertNotIn(effects.HASTE, other.effect_state)
+        self.assertIn(effects.ACCESSION, self.session.status_effects)
 
     def test_tabula_rasa_replaces_the_light_arts_regen_bonus(self):
         """Tabula Rasa's +36 HP/tick and +72 s overwrite Light Arts, they do not stack."""
@@ -670,7 +758,7 @@ class EffectTest(unittest.TestCase):
         row = self.db.one("SELECT * FROM spells WHERE name = 'Regen V'")
         self.cast(int(row["id"]))
         state = self.session.effect(effects.REGEN)
-        self.assertAlmostEqual(effect_seconds(state), 132.0, delta=1.0)
+        self.assertAlmostEqual(effect_seconds(state), 192.0, delta=1.0)
         self.assertEqual(int(state["tick"]), 76)
 
     def test_regen_duration_gear_feeds_the_timer(self):
@@ -682,7 +770,7 @@ class EffectTest(unittest.TestCase):
         with mock.patch.object(self.session, "combat_mods", return_value=gear):
             self.cast(int(row["id"]))
         state = self.session.effect(effects.REGEN)
-        self.assertAlmostEqual(effect_seconds(state), (60 + 15 + 48) * 1.2, delta=1.0)
+        self.assertAlmostEqual(effect_seconds(state), (60 + 15 + 48 + 60) * 1.2, delta=1.0)
 
     def test_food_mods_reach_the_stat_sheet_and_expire(self):
         """Food is a modifier source, not just an icon: INT/MP move the same sheet."""
@@ -941,6 +1029,15 @@ class EnhancingDurationTest(unittest.TestCase):
             effects.regen_tick(spec, main_job=20, main_level=99, mods={},
                                light_arts=True),
             64)
+
+    def test_flat_regen_potency_adds_after_the_multiplier(self):
+        """Bookworm's and the Telchine augments are flat HP, not a second percent."""
+        spec = self.spec()
+        mods = {mod.REGEN_MULTIPLIER: 25, mod.REGEN_POTENCY: 75}
+        self.assertEqual(
+            effects.regen_tick(spec, main_job=20, main_level=99, mods=mods,
+                               light_arts=True),
+            149)  # ceil(40 * 1.25) + 75 + 24
 
     def test_the_retail_max_duration_set(self):
         """The Community Scholar Guide's max set: Musa, four Telchine slots, Lugh."""

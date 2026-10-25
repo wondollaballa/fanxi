@@ -246,7 +246,7 @@ export function DataPage({
   async function reloadClient(): Promise<boolean> {
     if (runningPort === null) return false;
     try {
-      await backend.sendCommand(runningPort, "!reload");
+      await backend.sendCommand(runningPort, "//reload");
       return true;
     } catch {
       return false;
@@ -405,7 +405,7 @@ export function DataPage({
       <SectionHeader
         eyebrow="Data"
         title="Character data"
-        subtitle="Assign merits, job points, profile values, ranks, levels, skills, travel, currencies, key items, Trusts, RP paths and Armory gear to the selected tenant."
+        subtitle="Assign merits, job points, profile values, ranks, levels, skills, travel, currencies, key items, Trusts, RP paths, Oboro weapon augments and Armory gear to the selected tenant."
         actions={
           <>
             <Button
@@ -439,7 +439,7 @@ export function DataPage({
         </div>
         <p className="data-character-note">
           {runningPort !== null
-            ? "The client is running: every apply also sends !reload so the change is visible immediately."
+            ? "The client is running: every apply also sends //reload so the change is visible immediately."
             : "The client is not running: values are written now and the next zone-in picks them up."}
         </p>
       </Card>

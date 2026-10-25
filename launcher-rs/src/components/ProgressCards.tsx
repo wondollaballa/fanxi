@@ -3,13 +3,14 @@ import type { ReactNode } from "react";
 import {
   Flag,
   ListChecks,
+  ShoppingCart,
   Swords,
   Users,
   Wand2,
 } from "lucide-react";
-import type { CharacterData } from "../types";
-import { formatNumber, JOB_ABBRS, jobName, NATIONS } from "../lib/format";
-import { Badge, Button, Card, Select, TextInput } from "./ui";
+import type { CharacterData, OboroCopy } from "../types";
+import { formatNumber, JOB_ABBRS, jobName, NATIONS, pct } from "../lib/format";
+import { Badge, Button, Card, ProgressBar, Select, TextInput } from "./ui";
 
 type RunAction = (
   action: string,
@@ -82,23 +83,26 @@ export function ProgressCards({
   const [crafts, setCrafts] = useState<Record<number, number>>(() =>
     Object.fromEntries(data.crafts.map((craft) => [craft.skill_id, craft.value])),
   );
-  const [augmentKey, setAugmentKey] = useState<string | null>(() =>
-    data.augments[0] ? `${data.augments[0].container}:${data.augments[0].slot}` : null,
-  );
+  const [augmentKey, setAugmentKey] = useState<string | null>(() => {
+    const first = data.augments.find((item) => item.kind !== "oboro");
+    return first ? `${first.container}:${first.slot}` : null;
+  });
 
   useEffect(() => {
     setCrafts(Object.fromEntries(data.crafts.map((craft) => [craft.skill_id, craft.value])));
     setAugmentKey((current) => {
-      if (current && data.augments.some((item) => `${item.container}:${item.slot}` === current)) {
+      const gear = data.augments.filter((item) => item.kind !== "oboro");
+      if (current && gear.some((item) => `${item.container}:${item.slot}` === current)) {
         return current;
       }
-      return data.augments[0] ? `${data.augments[0].container}:${data.augments[0].slot}` : null;
+      return gear[0] ? `${gear[0].container}:${gear[0].slot}` : null;
     });
   }, [data]);
 
+  const gear = data.augments.filter((item) => item.kind !== "oboro");
   const selectedAugment =
-    data.augments.find((item) => `${item.container}:${item.slot}` === augmentKey) ??
-    data.augments[0] ??
+    gear.find((item) => `${item.container}:${item.slot}` === augmentKey) ??
+    gear[0] ??
     null;
 
   function saveRank() {
@@ -437,13 +441,13 @@ export function ProgressCards({
         <Head
           icon={<Swords size={17} />}
           title="RP"
-          hint="Cap a path on augmentable gear in the inventory"
-          badge={<Badge tone="accent">{data.augments.length} pieces</Badge>}
+          hint="Cap a path on Odyssey, Limbus or Unity gear in the inventory"
+          badge={<Badge tone="accent">{gear.length} pieces</Badge>}
         />
-        {data.augments.length === 0 ? (
+        {gear.length === 0 ? (
           <p className="data-note">
-            No augmentable gear in the inventory. Odyssey, Limbus and Unity pieces show here
-            once they are in a bag.
+            No Odyssey, Limbus or Unity gear in the inventory. Those pieces show here once
+            they are in a bag; Oboro weapons have their own card below.
           </p>
         ) : (
           <>
@@ -452,7 +456,7 @@ export function ProgressCards({
               onChange={(event) => setAugmentKey(event.target.value)}
               aria-label="Augmentable item"
             >
-              {data.augments.map((item) => (
+              {gear.map((item) => (
                 <option key={`${item.container}:${item.slot}`} value={`${item.container}:${item.slot}`}>
                   {item.name} · {whereLabel(item.container)}#{item.slot}
                   {item.current ? ` · Rank ${item.current.rank}` : ""}
@@ -517,6 +521,194 @@ export function ProgressCards({
           </>
         )}
       </Card>
+
+      <OboroCard data={data} run={run} busy={busy} />
     </>
+  );
+}
+
+function oboroCopyKey(copy: OboroCopy): string {
+  return `${copy.container}:${copy.slot}`;
+}
+
+function OboroCard({
+  data,
+  run,
+  busy,
+}: {
+  data: CharacterData;
+  run: RunAction;
+  busy: string | null;
+}) {
+  const items = data.oboro?.items ?? [];
+  const owned = items.filter((item) => item.owned);
+  const [itemId, setItemId] = useState<number>(() => (owned[0] ?? items[0])?.item_id ?? 0);
+  const [copyKey, setCopyKey] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!items.some((item) => item.item_id === itemId)) {
+      setItemId((items.find((item) => item.owned) ?? items[0])?.item_id ?? 0);
+      setCopyKey(null);
+    }
+  }, [items, itemId]);
+
+  const selected = items.find((item) => item.item_id === itemId) ?? items[0] ?? null;
+  const copies = selected?.copies ?? [];
+  const copy =
+    copies.find((candidate) => oboroCopyKey(candidate) === copyKey) ?? copies[0] ?? null;
+
+  useEffect(() => {
+    if (copyKey && !copies.some((candidate) => oboroCopyKey(candidate) === copyKey)) {
+      setCopyKey(null);
+    }
+  }, [copies, copyKey]);
+
+  if (!data.oboro || !selected) return null;
+
+  const current = copy?.current ?? null;
+  const isCapped = Boolean(current && current.rank >= selected.rank);
+  const buyKey = `oboro-buy-${selected.item_id}`;
+
+  return (
+    <Card className="span-2">
+      <Head
+        icon={<Swords size={17} />}
+        title="Oboro"
+        hint="Dynamis-Divergence JSE weapons · NQ R15 / HQ1 R20 / HQ2 R25 · Path A, B or C"
+        badge={
+          <Badge tone={owned.length ? "success" : "neutral"}>
+            {owned.length} in bags
+          </Badge>
+        }
+      />
+      <p className="data-note">
+        {data.oboro.note} Pick the weapon, then cap a path. Capping writes the client&apos;s
+        24-byte augment block and sends <code>//reload</code> to a live client; changing a
+        path overwrites the old block.
+      </p>
+
+      <div className="data-form-row" style={{ marginTop: 10 }}>
+        <Select
+          value={selected.item_id}
+          onChange={(event) => {
+            setItemId(Number(event.target.value));
+            setCopyKey(null);
+          }}
+          aria-label="Oboro weapon"
+        >
+          {items.map((item) => (
+            <option key={item.item_id} value={item.item_id}>
+              {item.name} · {item.quality} · {item.job}
+              {item.owned ? " · in bags" : ""}
+            </option>
+          ))}
+        </Select>
+        {copies.length > 1 && (
+          <Select
+            value={copy ? oboroCopyKey(copy) : ""}
+            onChange={(event) => setCopyKey(event.target.value)}
+            aria-label="Oboro copy"
+          >
+            {copies.map((candidate) => (
+              <option key={oboroCopyKey(candidate)} value={oboroCopyKey(candidate)}>
+                {whereLabel(candidate.container)} #{candidate.slot}
+                {candidate.current
+                  ? ` · Path ${candidate.current.path} · R${candidate.current.rank}`
+                  : " · not augmented"}
+              </option>
+            ))}
+          </Select>
+        )}
+        {!selected.owned && (
+          <Button
+            icon={<ShoppingCart size={15} />}
+            loading={busy === buyKey}
+            disabled={busy !== null && busy !== buyKey}
+            onClick={() =>
+              run(
+                "armory",
+                { item_id: selected.item_id, quantity: 1 },
+                `${selected.name} bought for ${formatNumber(selected.price)} gil`,
+                buyKey,
+              )
+            }
+          >
+            Buy for {formatNumber(selected.price)} gil
+          </Button>
+        )}
+      </div>
+
+      <div className="data-row" style={{ marginTop: 10 }}>
+        <span>
+          {selected.job} · {selected.weapon} · {selected.quality} ·{" "}
+          {selected.slot === "range" ? "Ranged" : "Main hand"}
+        </span>
+        <strong>
+          {current
+            ? `Path ${current.path} · Rank ${current.rank}/${selected.rank}`
+            : selected.owned
+              ? "Not augmented"
+              : "Not in bags"}
+        </strong>
+      </div>
+      <div className="data-row">
+        <span>Cap</span>
+        <strong>
+          R{selected.rank} (Max) · {formatNumber(selected.total_rp)} RP
+        </strong>
+      </div>
+      <ProgressBar value={isCapped ? 100 : copy ? pct(current?.rank ?? 0, selected.rank) : 0} />
+
+      <div className="data-paths data-paths-3">
+        {selected.paths.map((path) => {
+          const key = `oboro-${selected.item_id}-${copy?.container ?? "x"}-${
+            copy?.slot ?? "x"
+          }-${path.key}`;
+          const active = Boolean(
+            current && current.path === path.key && current.rank >= path.rank,
+          );
+          return (
+            <div className={active ? "data-path is-current" : "data-path"} key={path.key}>
+              <div className="data-path-head">
+                <strong>
+                  {path.label}
+                  {active ? " · capped" : ""}
+                </strong>
+                <span>
+                  R{path.rank} (Max) · {formatNumber(path.total_rp ?? path.rp)} RP
+                </span>
+              </div>
+              <ul className="data-path-lines">
+                {path.augments.map((line, index) => (
+                  <li key={index}>{line}</li>
+                ))}
+              </ul>
+              <Button
+                size="sm"
+                variant={active ? "secondary" : "primary"}
+                loading={busy === key}
+                disabled={!copy || (busy !== null && busy !== key) || active}
+                onClick={() => {
+                  if (!copy) return;
+                  run(
+                    "progress",
+                    {
+                      op: "augment",
+                      container: copy.container,
+                      slot: copy.slot,
+                      path: path.key,
+                    },
+                    `${selected.name} → ${path.label} (R${path.rank})`,
+                    key,
+                  );
+                }}
+              >
+                {active ? "Capped" : copy ? "Cap path" : "Add to bags first"}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+    </Card>
   );
 }

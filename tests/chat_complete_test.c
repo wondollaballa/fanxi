@@ -1,4 +1,4 @@
-/* Unit test for host/addons/complete.c (the /! Tab completion table).
+/* Unit test for host/addons/complete.c (the // Tab completion table).
  *
  * Built and run by tests/chat_complete_test.py; no game or SDL required. */
 #include <stdio.h>
@@ -34,7 +34,18 @@ static void expect_unchanged(const char* name, const char* line)
         fail(name, line, ok ? out : "(none)", line);
 }
 
-/* Not a /! command, or nothing matches: the game keeps Tab. */
+/* Whether cmd.c will forward a // line as a server command. */
+static void expect_command(const char* name, const char* word, int want)
+{
+    int got = xi_complete_is_command(word);
+    if (got != want)
+    {
+        printf("FAIL %-28s word=%s got=%d want=%d\n", name, word, got, want);
+        ++failures;
+    }
+}
+
+/* Not a command, or nothing matches: the game keeps Tab. */
 static void expect_none(const char* name, const char* line)
 {
     char out[400] = "";
@@ -45,43 +56,60 @@ static void expect_none(const char* name, const char* line)
 
 int main(void)
 {
-    expect("command prefix", "/!wa", "/!warp ");
-    expect("command prefix without slash", "!war", "!warp ");
-    expect("where prefix", "/!wh", "/!where ");
-    expect("merits prefix", "/!mer", "/!merits ");
-    expect("unique subcommand", "/!warp li", "/!warp list ");
-    expect("unique subcommand, upper", "/!WARP LI", "/!WARP list ");
-    expect("mark prefix", "/!warp ma", "/!warp mark ");
-    expect("job abbreviation", "/!job n", "/!job NIN ");
-    expect("job word", "/!job war", "/!job WAR ");
-    expect("storage action", "/!storage gr", "/!storage grab ");
-    expect("locker action", "/!locker li", "/!locker list ");
-    expect("augment action", "/!augment b", "/!augment B ");
-    expect("trust action", "/!trust rel", "/!trust release ");
-    expect("character action", "/!character m", "/!character model ");
-    expect("follow action", "/!follow stopa", "/!follow stopall ");
-    expect("focus word", "/!gs focus p", "/!gs focus pdt ");
+    expect("command prefix", "//wa", "//warp ");
+    expect("where prefix", "//wh", "//where ");
+    expect("merits prefix", "//mer", "//merits ");
+    expect("unique subcommand", "//warp li", "//warp list ");
+    expect("unique subcommand, upper", "//WARP LI", "//WARP list ");
+    expect("mark prefix", "//warp ma", "//warp mark ");
+    expect("job abbreviation", "//job n", "//job NIN ");
+    expect("job word", "//job war", "//job WAR ");
+    expect("storage action", "//storage gr", "//storage grab ");
+    expect("locker action", "//locker li", "//locker list ");
+    expect("augment action", "//augment b", "//augment B ");
+    expect("trust action", "//trust rel", "//trust release ");
+    expect("make party command", "//makep", "//makeparty ");
+    expect("invite command", "//inv", "//invite ");
+    expect("invite action", "//invite su", "//invite subs ");
+    expect("character action", "//character m", "//character model ");
+    expect("follow action", "//follow stopa", "//follow stopall ");
+    expect("focus word", "//gs focus p", "//gs focus pdt ");
+
+    /* The legacy /! and ! spellings still complete while old macros catch up. */
+    expect("legacy slash-bang", "/!wa", "/!warp ");
+    expect("legacy bang", "!war", "!warp ");
 
     /* A word that is already a command completes itself, even when a longer command shares it. */
-    expect("exact beats longer", "/!home", "/!home ");
-    expect("exact command", "/!warp", "/!warp ");
-    expect("exact job", "/!job", "/!job ");
+    expect("exact beats longer", "//home", "//home ");
+    expect("exact command", "//warp", "//warp ");
+    expect("exact job", "//job", "//job ");
 
     /* More than one match: keep the line and keep Tab; type more and press Tab again. */
-    expect_unchanged("ambiguous top level w", "/!w");
-    expect_unchanged("ambiguous top level m", "/!m");
-    expect_unchanged("ambiguous top level c", "/!c");
-    expect_unchanged("ambiguous home/homepoint", "/!hom");
-    expect_unchanged("ambiguous warp actions", "/!warp ");
-    expect_unchanged("ambiguous warp m", "/!warp m");
-    expect_unchanged("ambiguous gs focus", "/!gs focus ");
-    expect_unchanged("ambiguous jobs w", "/!job w");
-    expect_unchanged("ambiguous storage", "/!storage ");
+    expect_unchanged("ambiguous top level w", "//w");
+    expect_unchanged("ambiguous top level m", "//m");
+    expect_unchanged("ambiguous top level c", "//c");
+    expect_unchanged("ambiguous home/homepoint", "//hom");
+    expect_unchanged("ambiguous warp actions", "//warp ");
+    expect_unchanged("ambiguous warp m", "//warp m");
+    expect_unchanged("ambiguous gs focus", "//gs focus ");
+    expect_unchanged("ambiguous jobs w", "//job w");
+    expect_unchanged("ambiguous storage", "//storage ");
+
+    /* wake is forwarded but not completed: it would make //wa ambiguous with //warp. */
+    expect_none("wake stays out of the table", "//wake");
 
     expect_none("plain text", "hello there");
-    expect_none("unknown command", "/!nothing");
-    expect_none("full command with space", "/!warp mark ");
-    expect_none("alias text", "/!warp me ca");
+    expect_none("unknown command", "//nothing");
+    expect_none("full command with space", "//warp mark ");
+    expect_none("alias text", "//warp me ca");
+
+    /* cmd.c forwards only exact command words, case-insensitively. */
+    expect_command("known server command", "warp", 1);
+    expect_command("known forward-only command", "wake", 1);
+    expect_command("known command upper", "WARP", 1);
+    expect_command("a prefix is not a command", "war", 0);
+    expect_command("an unknown word", "nothing", 0);
+    expect_command("an empty word", "", 0);
 
     if (failures)
     {

@@ -29,6 +29,7 @@ extern "C" {
 #include "host.h"
 #include "d3d_ffi.h"
 #include "plat.h"
+#include "user32.h"
 }
 
 #include <SDL3/SDL.h>
@@ -1311,6 +1312,16 @@ extern "C" void xi_gui_focus(int on)
     ImGui::GetIO().AddFocusEvent(on != 0);
     if (!on)
         g_drag_text = NULL, g_drag_prim = NULL;
+}
+
+/* 1 while the game's own window has keyboard focus. The HUD uses it so a window opened while the
+ * launcher is in front appears at once, instead of staying hidden for a menu or chat line the
+ * player is not looking at. */
+extern "C" int xi_gui_focused(void)
+{
+    uint32_t hwnd = d3d8_window();
+    SDL_Window* w = hwnd ? (SDL_Window*)user32_sdl_window(hwnd) : NULL;
+    return w && (SDL_GetWindowFlags(w) & SDL_WINDOW_INPUT_FOCUS);
 }
 
 /* The mouse leaving the game's window: no window of ours is under it, so the press that brings

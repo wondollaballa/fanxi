@@ -43,6 +43,15 @@ class ZoneEntity:
     sub_job: int = 0
     damage_mult: int = 100
     passive: bool = False
+    # Live spell state: the spells this Trust unlocked, the grouped kit the AI reads,
+    # the cast in progress, and the aura a passive Trust keeps on its owner.
+    spells: list[dict] = field(default_factory=list)
+    kit: dict = field(default_factory=dict)
+    casting: dict | None = None
+    next_cast_at: float = 0.0
+    next_mp_tick: float = 0.0
+    trust_has_acted: bool = False
+    aura_effect: int = 0
     # mob fields
     template_id: int = 0
     level: int = 1
@@ -85,6 +94,16 @@ class ZoneEntity:
     moving: bool = False
     roam_heading: float = 0.0
     last_sync_at: float = 0.0
+    # A turn is the one correction the client cannot interpolate; the next position
+    # packet must bypass the ambient budget instead of waiting behind other mobs.
+    pending_turn: bool = False
+    # Navigation state.  ``nav_goal`` is the point the current path was planned to;
+    # a moving target (the player a monster is chasing) invalidates it.  The cooldown
+    # stops an unreachable player from costing an A* search every tick.
+    nav_path: list[tuple[float, float, float]] = field(default_factory=list)
+    nav_goal: tuple[float, float, float] | None = None
+    nav_planned_at: float = 0.0
+    nav_blocked_until: float = 0.0
     aggro_announced: bool = False
     dialogue_index: int = 0
     # Debuffs a player has landed.  The client draws them from the action result; the
@@ -106,6 +125,9 @@ class ZoneEntity:
     def is_trust(self) -> bool:
         return self.kind == "trust"
 
+    def is_pet(self) -> bool:
+        return self.kind == "pet"
+
     def reset_mob(self, now: float) -> None:
         self.alive = True
         self.hp = self.hp_max
@@ -117,11 +139,16 @@ class ZoneEntity:
         self.enmity_ve.clear()
         self.enmity_decay_at = 0.0
         self.animation = 0
+        self.speed = 12
         self.next_attack_at = 0.0
         self.last_move_at = now
         self.roam_target = None
         self.moving = False
         self.roam_pause_until = now + 2.0
+        self.nav_path.clear()
+        self.nav_goal = None
+        self.nav_planned_at = 0.0
+        self.nav_blocked_until = 0.0
         self.aggro_announced = False
         self.respawn_at = 0.0
         self.status_effects.clear()

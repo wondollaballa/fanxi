@@ -205,6 +205,8 @@ export function GearPage({
   /** Latest master-switch value for an enable request that was already in flight. */
   const phaseOnRef = useRef(phaseOn);
   phaseOnRef.current = phaseOn;
+  /** The armed modes the host reported last, so a stale poll cannot undo a local switch. */
+  const hostModesRef = useRef<Record<string, string> | null>(null);
   const lockedSlots = useMemo(
     () => slotsFromMask(phaseLive?.lockedSlots),
     [phaseLive?.lockedSlots],
@@ -449,6 +451,30 @@ export function GearPage({
       );
     }
   }, [phaseLive?.enabled, phaseLive?.focus, config.focusMode]);
+
+  // The //modes command can change a mode in-game. The host mirrors the armed modes in phase_status;
+  // fold a *changed* host mode back into the saved config. Ignoring an unchanged status
+  // means a stale poll cannot undo a switch the user just made in the dropdown.
+  useEffect(() => {
+    const modes = phaseLive?.modes;
+    if (!modes) return;
+    const previous = hostModesRef.current;
+    const hostChanged =
+      !previous || Object.entries(modes).some(([group, mode]) => previous[group] !== mode);
+    if (!hostChanged) return;
+    hostModesRef.current = { ...modes };
+    setConfig((current) => {
+      let changed = false;
+      const next = { ...current.spellModes };
+      for (const [group, mode] of Object.entries(modes)) {
+        if (mode && next[group] !== mode) {
+          next[group] = mode;
+          changed = true;
+        }
+      }
+      return changed ? { ...current, spellModes: next } : current;
+    });
+  }, [phaseLive?.modes]);
 
   useEffect(() => {
     backend
@@ -1558,7 +1584,7 @@ export function GearPage({
                     </p>
                     <p className="gear-hint">
                       Reads the client's 18 bags (inventory, Mog Safe, Storage, wardrobes,
-                      satchel/sack/case). The hidden !locker needs !locker grab first.
+                      satchel/sack/case). The hidden //locker needs //locker grab first.
                     </p>
                     {weapons.length === 0 ? (
                       <p className="gear-hint">

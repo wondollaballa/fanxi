@@ -29,8 +29,8 @@ piece) and is augmented here too.
 ## In game
 
 `database/migrations/0083_unity_augments.sql` writes each block into
-`char_inventory.extra` for the first character.  `!augment A <item>` rewrites
-a copy, `!augment off <item>` clears it, and `!augment list` shows the builds.
+`char_inventory.extra` for the first character.  `//augment A <item>` rewrites
+a copy, `//augment off <item>` clears it, and `//augment list` shows the builds.
 The block is not only a tooltip any more: `FanxiService.equipped_mods()` joins
 each equipped item back to its inventory copy and `augment_stats` turns the
 Rank 15 rows into modifiers, so Unmoving Collar +1's `DEF+30 HP+200` reaches

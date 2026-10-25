@@ -1,8 +1,8 @@
 """What an item's augments add to the stat sheet.
 
 The client stores augments in the item's 24-byte ``extdata`` block and draws the
-tooltip from them.  The server has always written those blocks (``!r30``, ``!rp30``,
-``!cape``, the launcher's augment card) but never read them back, so a Rank 30
+tooltip from them.  The server has always written those blocks (``//r30``, ``//rp30``,
+``//cape``, the launcher's augment card) but never read them back, so a Rank 30
 Revelation set granted its base stats and none of its ``"Double Attack"+7%`` rows.
 This module is the missing direction: block -> augment text -> the modifier ids the
 combat path already reads.
@@ -15,8 +15,8 @@ Two block families exist:
   applied only when the block's rank reaches the row's rank, so an unranked copy
   adds nothing.
 * **standard augments** (``kind 0x02, subkind 0x03``), used by the Ambuscade job
-  capes: five ``(augment id, value)`` words.  :mod:`capes` already renders those
-  words back to text, so both families share one parser.
+  capes and Alluvion Skirmish armor: five ``(augment id, value)`` words.  :mod:`capes`
+  already renders those words back to text, so both families share one parser.
 
 Only modifiers the engine actually reads are mapped.  A handful of tooltip lines
 name stats the engine has no model for yet (pet stats, Snapshot, "Chance of
@@ -71,6 +71,7 @@ _FLAT = {
     "magicdamage": mod.MAGIC_DAMAGE,
     "magdmg": mod.MAGIC_DAMAGE,
     "enmity": mod.ENMITY,
+    "regenpotency": mod.REGEN_POTENCY,
 }
 
 # Percent-integer modifiers: "Store TP"+7 stores 7; the engine divides by 100 itself.
@@ -89,6 +90,7 @@ _PERCENT = {
     "drainandaspirpotency": mod.DRAIN_ASPIR,
     "refresh": mod.REFRESH,
     "regen": mod.REGEN,
+    "enhmageffdur": mod.ENH_MAGIC_DURATION_AUGMENT,
     "physdmglimit": mod.DAMAGE_LIMITP,
     "physicaldamagelimit": mod.DAMAGE_LIMITP,
     "weaponskilldamage": mod.WSD_ALL_HITS,
@@ -120,14 +122,58 @@ UNMODELLED = {
     "magicburstdamage",         # magic burst damage
     "magicburstdamageii",
     "occincresisttostatailments",
+    "parryingrate",             # the engine has no parry-rate pool yet
     "phalanxreceived",
     "snapshot",
     "spellinterruptionratedown",
+    "waltzpotency",             # Dancer waltz potency is not modelled
+    # Oboro Dynamis-Divergence weapon paths.  The chance-based rows are client
+    # text only; the job-specific path C rows below need systems the engine does
+    # not model (pets, songs, Utsusemi, Sekkanoki, Mana Wall, ...).
+    "additionalammoaccuracy",
+    "additionalammodamage",
+    "afflatusmiserystored",
+    "automatonspecialattackdamage",
+    "bloodpactdmg",
+    "burstaffinityrecasttime",
+    "chainaffinityrecasttime",
+    "chakra",
+    "chanceofdoubledamage",
+    "chanceofdoublerangeddamage",
+    "chanceofdoublingbloodpactstatus",
+    "chanceoffollow-upattack",
+    "chanceofrangedfollow-upattack",
+    "drainpotency",
+    "elementalweaponskilldamage",
+    "flourishrecasttime",
+    "healingmagicrecastdelay",
+    "magicburstaccuracy",
+    "manawall",
+    "ninjutsurecasttime",
+    "phantomroll",
+    "phantomrolleffectduration",
+    "phantomrollxirecoverhpandmp",
+    "potencyofregeneffectsreceived",
+    "sekkanokirecasttime",
+    "sekkanokiweaponskilldamage",
+    "songeffectsdoubleattack",
+    "songspellcastingtime",
+    "stepduration",
+    "swordenhancementspelldamage",
+    "tpduringevasion",
+    "tpgainedwhenlandingcriticalhits",
+    "vivaciouspulsepotency",
+    "wyverndamagetaken",
+    "wyvernhp",
 }
 
 # Lines with no signed value at all cannot be tokenised; they are listed verbatim.
 UNMODELLED_LINES = {
     "Spell interruption rate down 10%",
+    # Oboro NIN path C: Enmity per Utsusemi shadow, not flat Enmity.
+    "Enmity+6 for each Utsusemi",
+    "Enmity+8 for each Utsusemi",
+    "Enmity+10 for each Utsusemi",
 }
 
 MAPPED = set(_FLAT) | set(_PERCENT) | set(_HUNDREDTHS) | {"allattr"}

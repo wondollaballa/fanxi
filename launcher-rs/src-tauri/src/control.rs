@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use tokio::io::{AsyncBufReadExt, AsyncWriteExt, BufReader};
 use tokio::net::TcpStream;
@@ -282,6 +282,13 @@ impl ControlClient {
     }
 }
 
+#[derive(Clone, Debug, Deserialize)]
+pub struct RemoteInfo {
+    pub ssh: String,
+    pub remote_pid: u32,
+    pub tunnel_pid: u32,
+}
+
 pub struct Instance {
     pub account: String,
     pub character: Value,
@@ -289,13 +296,20 @@ pub struct Instance {
     pub pid: u32,
     pub log_path: PathBuf,
     pub started_at: u64,
-    pub child: Child,
+    pub child: Option<Child>,
+    pub remote: Option<RemoteInfo>,
+    pub headless: bool,
+    pub sleeping: bool,
     pub last_state: Option<Value>,
     pub last_metrics: Option<Value>,
     pub last_error: String,
     pub last_seen: u64,
     pub exited: bool,
     pub exit_code: Option<i32>,
+    /// The server's live zone roster, when the launcher could read it. `None` is unknown
+    /// (no token, endpoint failure, gateway off); `Some(false)` means the client's own state
+    /// says it is in world but the server has no session for it.
+    pub server_online: Option<bool>,
 }
 
 impl Instance {
@@ -305,6 +319,21 @@ impl Instance {
             .and_then(Value::as_str)
             .unwrap_or("?")
             .to_string()
+    }
+
+    /// The name and database id the server's online roster uses. The addon's player id is a
+    /// wire id on some client builds, so only the character id from the API/registry is safe.
+    fn online_identity(&self) -> (String, Option<i64>) {
+        let name = self
+            .last_state
+            .as_ref()
+            .and_then(|state| state.pointer("/player/name"))
+            .and_then(Value::as_str)
+            .filter(|name| !name.trim().is_empty())
+            .map(str::to_string)
+            .unwrap_or_else(|| self.name());
+        let id = self.character.get("id").and_then(Value::as_i64);
+        (name, id)
     }
 }
 
@@ -324,11 +353,59 @@ pub struct InstanceView {
     pub metrics: Option<Value>,
     pub error: String,
     pub log_path: String,
+    pub remote: bool,
+    pub host: Option<String>,
+    pub headless: bool,
+    pub sleeping: bool,
+    pub server_online: Option<bool>,
+}
+
+/// The server's live zone roster, normalised for matching against a client's own state.
+#[derive(Clone, Debug, Default)]
+pub struct OnlineRoster {
+    names: std::collections::HashSet<String>,
+    ids: std::collections::HashSet<i64>,
+}
+
+impl OnlineRoster {
+    /// `None` when the response is not authoritative: no game gateway, or an older server
+    /// without the roster route. The launcher must not call every box orphaned in that case.
+    pub fn from_value(value: &Value) -> Option<Self> {
+        if value.get("gateway").and_then(Value::as_bool) != Some(true) {
+            return None;
+        }
+        let mut roster = Self::default();
+        if let Some(characters) = value.get("characters").and_then(Value::as_array) {
+            for character in characters {
+                if let Some(name) = character.get("name").and_then(Value::as_str) {
+                    let name = name.trim();
+                    if !name.is_empty() {
+                        roster.names.insert(name.to_lowercase());
+                    }
+                }
+                if let Some(id) = character.get("id").and_then(Value::as_i64) {
+                    roster.ids.insert(id);
+                }
+            }
+        }
+        Some(roster)
+    }
+
+    pub fn contains(&self, name: &str, id: Option<i64>) -> bool {
+        if id.is_some_and(|id| self.ids.contains(&id)) {
+            return true;
+        }
+        let name = name.trim();
+        !name.is_empty() && self.names.contains(&name.to_lowercase())
+    }
 }
 
 #[derive(Default)]
 pub struct InstanceManager {
     instances: Vec<Instance>,
+    /// `ps`/`lsof` are not free; a local client that appears between polls is adopted within
+    /// this window instead of on every three-second tick.
+    local_scan_at: Option<std::time::Instant>,
 }
 
 impl InstanceManager {
@@ -343,17 +420,38 @@ impl InstanceManager {
                 self.instances.remove(index);
                 continue;
             }
-            match self.instances[index].child.try_wait() {
-                Ok(Some(_status)) => {
-                    // The game closed on its own. Drop the row rather than leaving a dead control
-                    // port in the UI; the log file remains on disk.
-                    self.instances.remove(index);
-                    continue;
+            if let Some(child) = self.instances[index].child.as_mut() {
+                match child.try_wait() {
+                    Ok(Some(_status)) => {
+                        // The game closed on its own. Drop the row rather than leaving a dead control
+                        // port in the UI; the log file remains on disk.
+                        self.instances.remove(index);
+                        continue;
+                    }
+                    Ok(None) => {}
+                    Err(_error) => {
+                        self.instances.remove(index);
+                        continue;
+                    }
                 }
-                Ok(None) => {}
-                Err(_error) => {
-                    self.instances.remove(index);
-                    continue;
+            } else {
+                // An attached box has no child here: its control port is the liveness signal.
+                // One busy/failed tunnel probe is not enough to drop a whole team; keep the row
+                // until the box has been unreachable for a while.
+                let port = self.instances[index].port;
+                let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+                if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_err() {
+                    let now = game::now_epoch();
+                    let instance = &self.instances[index];
+                    let reference = if instance.last_seen > 0 {
+                        instance.last_seen
+                    } else {
+                        instance.started_at
+                    };
+                    if now.saturating_sub(reference) > 20 {
+                        self.instances.remove(index);
+                        continue;
+                    }
                 }
             }
             index += 1;
@@ -363,6 +461,16 @@ impl InstanceManager {
     pub fn running_for(&self, account: &str) -> Option<&Instance> {
         self.instances.iter().find(|instance| {
             !instance.exited && instance.account.eq_ignore_ascii_case(account.trim())
+        })
+    }
+
+    /// The tracked process the launcher itself spawned for this account. Attached remote boxes
+    /// have no local process and are deliberately excluded.
+    pub fn local_running_for(&self, account: &str) -> Option<&Instance> {
+        self.instances.iter().find(|instance| {
+            !instance.exited
+                && instance.remote.is_none()
+                && instance.account.eq_ignore_ascii_case(account.trim())
         })
     }
 
@@ -388,11 +496,26 @@ impl InstanceManager {
                 metrics: instance.last_metrics.clone(),
                 error: instance.last_error.clone(),
                 log_path: instance.log_path.to_string_lossy().into_owned(),
+                remote: instance.remote.is_some(),
+                host: instance.remote.as_ref().map(|remote| remote.ssh.clone()),
+                headless: instance.headless,
+                sleeping: instance.sleeping,
+                server_online: instance.server_online,
             })
             .collect()
     }
 
     pub async fn poll(&mut self) -> Vec<InstanceView> {
+        self.poll_with_online(None).await
+    }
+
+    /// Poll every client and mark it against the server's live zone roster.
+    ///
+    /// The client's own `login_status` cannot see a server restart: the process keeps its last
+    /// zone and still answers `2`. The roster is what tells the panel the difference.
+    pub async fn poll_with_online(&mut self, roster: Option<&OnlineRoster>) -> Vec<InstanceView> {
+        self.attach_linux();
+        self.attach_local().await;
         self.prune().await;
         let ports: Vec<u16> = self
             .instances
@@ -416,6 +539,12 @@ impl InstanceManager {
                 }
             }
         }
+        for instance in &mut self.instances {
+            instance.server_online = roster.map(|roster| {
+                let (name, id) = instance.online_identity();
+                roster.contains(&name, id)
+            });
+        }
         self.views()
     }
 
@@ -427,6 +556,7 @@ impl InstanceManager {
         client: &Value,
         login_token: &str,
         game_dir: &std::path::Path,
+        headless: bool,
     ) -> AppResult<InstanceView> {
         self.prune().await;
         if let Some(running) = self.running_for(account) {
@@ -440,7 +570,7 @@ impl InstanceManager {
         let log_path =
             crate::config::log_dir()?.join(format!("game-{}.log", game::safe_name(account)));
         let child =
-            game::spawn_host64(config, game_dir, client, login_token, port, account).await?;
+            game::spawn_host64(config, game_dir, client, login_token, port, account, headless).await?;
         let pid = child.id().unwrap_or(0);
         let instance = Instance {
             account: account.to_string(),
@@ -449,13 +579,17 @@ impl InstanceManager {
             pid,
             log_path,
             started_at: game::now_epoch(),
-            child,
+            child: Some(child),
+            remote: None,
+            headless,
+            sleeping: false,
             last_state: None,
             last_metrics: None,
             last_error: String::new(),
             last_seen: 0,
             exited: false,
             exit_code: None,
+            server_online: None,
         };
         let view = InstanceView {
             account: instance.account.clone(),
@@ -471,6 +605,11 @@ impl InstanceManager {
             metrics: None,
             error: String::new(),
             log_path: instance.log_path.to_string_lossy().into_owned(),
+            remote: false,
+            host: None,
+            headless,
+            sleeping: false,
+            server_online: None,
         };
         self.instances.push(instance);
         Ok(view)
@@ -491,15 +630,45 @@ impl InstanceManager {
             return Ok(());
         }
 
+        if let Some(remote) = self.instances[index].remote.clone() {
+            let _ = ControlClient::new(port).command("/shutdown").await;
+            if !remote.ssh.is_empty() {
+                let _ = tokio::process::Command::new("ssh")
+                    .arg("-n")
+                    .arg(&remote.ssh)
+                    .arg(format!("kill {}", remote.remote_pid))
+                    .status()
+                    .await;
+            } else if remote.remote_pid > 0 {
+                // A locally attached box: the panel did not spawn this process, so there is no
+                // Child handle to kill; its recorded pid is the handle.
+                #[cfg(unix)]
+                unsafe {
+                    libc::kill(remote.remote_pid as i32, libc::SIGTERM);
+                }
+            }
+            if remote.tunnel_pid > 0 {
+                let _ = std::process::Command::new("kill")
+                    .arg(remote.tunnel_pid.to_string())
+                    .status();
+            }
+            self.instances.remove(index);
+            return Ok(());
+        }
+
         let _ = ControlClient::new(port).command("/shutdown").await;
         for _ in 0..40 {
-            match self.instances[index].child.try_wait() {
-                Ok(Some(_status)) => {
+            let status = self.instances[index]
+                .child
+                .as_mut()
+                .map(|child| child.try_wait());
+            match status {
+                Some(Ok(Some(_status))) => {
                     self.instances.remove(index);
                     return Ok(());
                 }
-                Ok(None) => tokio::time::sleep(Duration::from_millis(150)).await,
-                Err(_) => break,
+                Some(Ok(None)) => tokio::time::sleep(Duration::from_millis(150)).await,
+                _ => break,
             }
         }
 
@@ -512,10 +681,11 @@ impl InstanceManager {
                 }
             }
         }
-        let _ =
-            tokio::time::timeout(Duration::from_secs(3), self.instances[index].child.kill()).await;
-        if let Ok(Some(status)) = self.instances[index].child.try_wait() {
-            self.instances[index].exit_code = status.code();
+        if let Some(child) = self.instances[index].child.as_mut() {
+            let _ = tokio::time::timeout(Duration::from_secs(3), child.kill()).await;
+            if let Ok(Some(status)) = child.try_wait() {
+                self.instances[index].exit_code = status.code();
+            }
         }
         self.instances.remove(index);
         Ok(())
@@ -532,6 +702,203 @@ impl InstanceManager {
             let _ = self.stop(*port).await;
         }
         Ok(ports.len())
+    }
+
+    /// Adopt the boxes the Linux helper started (`scripts/linux_boxes.py up`): it leaves their
+    /// control ports in a local ssh tunnel, so the same ControlClient and the same panel work.
+    pub fn attach_linux(&mut self) -> usize {
+        let path = crate::config::home_dir().join(".fanxi-linux-boxes.json");
+        let Ok(text) = std::fs::read_to_string(&path) else {
+            return 0;
+        };
+        let Ok(boxes) = serde_json::from_str::<Vec<Value>>(&text) else {
+            return 0;
+        };
+        let mut added = 0;
+        for item in boxes {
+            let Some(port) = item.get("port").and_then(Value::as_u64).map(|p| p as u16) else {
+                continue;
+            };
+            let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
+            if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(300)).is_err() {
+                continue; // the tunnel is not up (or the box was stopped)
+            }
+            let account = item
+                .get("user")
+                .and_then(Value::as_str)
+                .unwrap_or("?")
+                .to_string();
+            let name = item
+                .get("character")
+                .and_then(Value::as_str)
+                .unwrap_or("?");
+            let ssh = item
+                .get("ssh")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            if ssh.trim().is_empty() {
+                // The helper also records the local main client here. It is not a tunneled box;
+                // the launcher owns that process as a child and must not adopt a stale pid.
+                continue;
+            }
+            let remote_pid = item
+                .get("remote_pid")
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as u32;
+            let tunnel_pid = item
+                .get("tunnel_pid")
+                .and_then(Value::as_u64)
+                .unwrap_or(0) as u32;
+            let log = item
+                .get("log")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_string();
+            let started = item
+                .get("started")
+                .and_then(Value::as_u64)
+                .unwrap_or_else(game::now_epoch);
+            let headless = item.get("headless").and_then(Value::as_bool).unwrap_or(true);
+            let sleeping = item.get("sleeping").and_then(Value::as_bool).unwrap_or(false);
+            let character = json!({
+                "name": name,
+                "id": item.get("character_id").cloned().unwrap_or(Value::Null),
+            });
+            // The helper restarts a box on the same tunnel port. Refresh the metadata of the
+            // attached instance so Stop targets the new remote pid instead of the old one.
+            if let Some(index) = self.instances.iter().position(|instance| instance.port == port) {
+                if self.instances[index].remote.is_some() {
+                    let instance = &mut self.instances[index];
+                    instance.account = account;
+                    instance.character = character;
+                    instance.pid = remote_pid;
+                    instance.log_path = PathBuf::from(log);
+                    instance.started_at = started;
+                    instance.remote = Some(RemoteInfo {
+                        ssh,
+                        remote_pid,
+                        tunnel_pid,
+                    });
+                    instance.headless = headless;
+                    instance.sleeping = sleeping;
+                    instance.exited = false;
+                    if instance.last_seen == 0 {
+                        instance.last_seen = game::now_epoch();
+                    }
+                }
+                continue;
+            }
+            self.instances.push(Instance {
+                account,
+                character,
+                port,
+                pid: remote_pid,
+                log_path: PathBuf::from(log),
+                started_at: started,
+                child: None,
+                remote: Some(RemoteInfo {
+                    ssh,
+                    remote_pid,
+                    tunnel_pid,
+                }),
+                headless,
+                sleeping,
+                last_state: None,
+                last_metrics: None,
+                last_error: String::new(),
+                last_seen: game::now_epoch(),
+                exited: false,
+                exit_code: None,
+                server_online: None,
+            });
+            added += 1;
+        }
+        added
+    }
+
+    /// Adopt local `host64` clients the launcher did not spawn in this run.
+    ///
+    /// The launcher deliberately leaves the game running when its window closes, so after a
+    /// restart the client is still in world but the new process has no `Child` handle or row
+    /// for it. Its control port is enough to list, command and stop it again.
+    pub async fn attach_local(&mut self) -> usize {
+        if let Some(at) = self.local_scan_at {
+            if at.elapsed() < Duration::from_secs(15) {
+                return 0;
+            }
+        }
+        self.local_scan_at = Some(std::time::Instant::now());
+        let mut added = 0;
+        for game in crate::boxes::local_games() {
+            let Some(port) = game.port else {
+                continue; // started without FFXI_CONTROL: nothing here can drive it
+            };
+            if self.instances.iter().any(|instance| {
+                instance.port == port || instance.account.eq_ignore_ascii_case(game.account.trim())
+            }) {
+                continue;
+            }
+            let Ok(Ok(state)) = tokio::time::timeout(
+                Duration::from_millis(1_500),
+                ControlClient::new(port).state(),
+            )
+            .await
+            else {
+                continue;
+            };
+            let Some(name) = state
+                .pointer("/player/name")
+                .and_then(Value::as_str)
+                .filter(|name| !name.trim().is_empty())
+                .map(str::to_string)
+            else {
+                continue;
+            };
+            let character = json!({
+                "name": name,
+                "id": state.pointer("/player/id").cloned().unwrap_or(Value::Null),
+            });
+            let log_path = crate::config::log_dir()
+                .map(|dir| dir.join(format!("game-{}.log", game::safe_name(&game.account))))
+                .unwrap_or_default();
+            let sleeping = state
+                .get("sleeping")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
+            self.instances.push(Instance {
+                account: game.account,
+                character,
+                port,
+                pid: game.pid,
+                log_path,
+                started_at: game::now_epoch().saturating_sub(game.age_secs),
+                child: None,
+                remote: None,
+                headless: game.headless,
+                sleeping,
+                last_state: Some(state),
+                last_metrics: None,
+                last_error: String::new(),
+                last_seen: game::now_epoch(),
+                exited: false,
+                exit_code: None,
+                server_online: None,
+            });
+            added += 1;
+        }
+        added
+    }
+
+    pub fn set_sleeping(&mut self, port: u16, sleeping: bool) {
+        if let Some(instance) = self.instances.iter_mut().find(|item| item.port == port) {
+            instance.sleeping = sleeping;
+            if let Some(state) = instance.last_state.as_mut() {
+                if let Some(map) = state.as_object_mut() {
+                    map.insert("sleeping".to_string(), Value::Bool(sleeping));
+                }
+            }
+        }
     }
 
     pub fn control_for(&self, port: u16) -> AppResult<ControlClient> {
@@ -612,6 +979,29 @@ mod tests {
 
         let error = ControlClient::new(port).metrics().await.unwrap_err();
         assert!(error.to_string().contains("not in the world yet"));
+    }
+
+    #[test]
+    fn online_roster_matches_names_case_insensitively_and_ids() {
+        let value = json!({
+            "gateway": true,
+            "characters": [
+                {"id": 3, "name": "Threedough", "zone": 190},
+                {"name": "Twodough", "zone": 190},
+            ]
+        });
+        let roster = OnlineRoster::from_value(&value).expect("authoritative roster");
+        assert!(roster.contains("Threedough", None));
+        assert!(roster.contains("threedough", Some(3)));
+        assert!(roster.contains("", Some(3)));
+        assert!(!roster.contains("Fourdough", None));
+        assert!(!roster.contains("", None));
+    }
+
+    #[test]
+    fn online_roster_is_not_authoritative_without_a_gateway() {
+        assert!(OnlineRoster::from_value(&json!({"gateway": false, "characters": []})).is_none());
+        assert!(OnlineRoster::from_value(&json!({"characters": []})).is_none());
     }
 
     #[test]

@@ -1,0 +1,1134 @@
+{
+  "source": "https://www.bg-wiki.com/ffxi/Dynamis_Divergence_Weapon_Augments",
+  "rp_curve": 0,
+  "note": "Oboro (Port Jeuno E-6) augments Dynamis-Divergence crafted JSE weapons. NQ caps at R15, HQ1 at R20 and HQ2 at R25; path choice is permanent in retail.",
+  "qualities": {
+    "nq": {
+      "label": "NQ",
+      "rank": 15,
+      "tier": 0,
+      "rp": 1110,
+      "total_rp": 5950,
+      "double_damage": 30,
+      "store_tp": 15,
+      "follow_up": 30,
+      "subtle_blow_ii": 15
+    },
+    "hq1": {
+      "label": "HQ1",
+      "rank": 20,
+      "tier": 1,
+      "rp": 1960,
+      "total_rp": 13060,
+      "double_damage": 40,
+      "store_tp": 20,
+      "follow_up": 40,
+      "subtle_blow_ii": 20
+    },
+    "hq2": {
+      "label": "HQ2",
+      "rank": 25,
+      "tier": 2,
+      "rp": 3180,
+      "total_rp": 25150,
+      "double_damage": 50,
+      "store_tp": 25,
+      "follow_up": 50,
+      "subtle_blow_ii": 25
+    }
+  },
+  "weapons": [
+    {
+      "job": "MNK",
+      "weapon": "Hand-to-Hand",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 12,
+      "tiers": {
+        "nq": {
+          "item_id": 21521,
+          "name": "Melee Fists",
+          "bundles": {
+            "A": 1,
+            "B": 2,
+            "C": 3
+          },
+          "c": [
+            "HP+200",
+            "\"Chakra\"+20"
+          ]
+        },
+        "hq1": {
+          "item_id": 21522,
+          "name": "Hes. Fists",
+          "bundles": {
+            "A": 4,
+            "B": 5,
+            "C": 6
+          },
+          "c": [
+            "HP+300",
+            "\"Chakra\"+35"
+          ]
+        },
+        "hq2": {
+          "item_id": 21523,
+          "name": "Sagitta",
+          "bundles": {
+            "A": 7,
+            "B": 8,
+            "C": 9
+          },
+          "c": [
+            "HP+400",
+            "\"Chakra\"+50",
+            "DMG:+12"
+          ]
+        }
+      }
+    },
+    {
+      "job": "PUP",
+      "weapon": "Hand-to-Hand",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 12,
+      "tiers": {
+        "nq": {
+          "item_id": 21524,
+          "name": "Pantin Fists",
+          "bundles": {
+            "A": 10,
+            "B": 11,
+            "C": 12
+          },
+          "c": [
+            "Weapon skill damage +10%",
+            "Automaton: Special attack damage +15%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21525,
+          "name": "Pitre Fists",
+          "bundles": {
+            "A": 13,
+            "B": 14,
+            "C": 15
+          },
+          "c": [
+            "Weapon skill damage +12%",
+            "Automaton: Special attack damage +20%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21526,
+          "name": "Xiucoatl",
+          "bundles": {
+            "A": 16,
+            "B": 17,
+            "C": 18
+          },
+          "c": [
+            "Weapon skill damage +15%",
+            "Automaton: Special attack damage +25%",
+            "DMG:+12"
+          ]
+        }
+      }
+    },
+    {
+      "job": "THF",
+      "weapon": "Dagger",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 5,
+      "tiers": {
+        "nq": {
+          "item_id": 21573,
+          "name": "Assassin's Knife",
+          "bundles": {
+            "A": 19,
+            "B": 20,
+            "C": 21
+          },
+          "c": [
+            "Evasion+50",
+            "TP during evasion +20"
+          ]
+        },
+        "hq1": {
+          "item_id": 21574,
+          "name": "Plun. Knife",
+          "bundles": {
+            "A": 22,
+            "B": 23,
+            "C": 24
+          },
+          "c": [
+            "Evasion+75",
+            "TP during evasion +35"
+          ]
+        },
+        "hq2": {
+          "item_id": 21575,
+          "name": "Gandring",
+          "bundles": {
+            "A": 25,
+            "B": 26,
+            "C": 27
+          },
+          "c": [
+            "Evasion+100",
+            "TP during evasion +50",
+            "DMG:+5"
+          ]
+        }
+      }
+    },
+    {
+      "job": "BRD",
+      "weapon": "Dagger",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 5,
+      "tiers": {
+        "nq": {
+          "item_id": 21576,
+          "name": "Bard's Knife",
+          "bundles": {
+            "A": 28,
+            "B": 29,
+            "C": 30
+          },
+          "c": [
+            "Song spellcasting time -15%",
+            "Song effects: \"Double Attack\"+2%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21577,
+          "name": "Bihu Knife",
+          "bundles": {
+            "A": 31,
+            "B": 32,
+            "C": 33
+          },
+          "c": [
+            "Song spellcasting time -20%",
+            "Song effects: \"Double Attack\"+3%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21578,
+          "name": "Barfawc",
+          "bundles": {
+            "A": 34,
+            "B": 35,
+            "C": 36
+          },
+          "c": [
+            "Song spellcasting time -25%",
+            "Song effects: \"Double Attack\"+4%",
+            "DMG:+5"
+          ]
+        }
+      }
+    },
+    {
+      "job": "COR",
+      "weapon": "Dagger",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 5,
+      "tiers": {
+        "nq": {
+          "item_id": 21579,
+          "name": "Comm. Knife",
+          "bundles": {
+            "A": 37,
+            "B": 38,
+            "C": 39
+          },
+          "c": [
+            "\"Phantom Roll\" effect duration +30",
+            "\"Phantom Roll XI\": Recover HP and MP +10%",
+            "\"Phantom Roll\"+6"
+          ]
+        },
+        "hq1": {
+          "item_id": 21580,
+          "name": "Lanun Knife",
+          "bundles": {
+            "A": 40,
+            "B": 41,
+            "C": 42
+          },
+          "c": [
+            "\"Phantom Roll\" effect duration +45",
+            "\"Phantom Roll XI\": Recover HP and MP +12%",
+            "\"Phantom Roll\"+7"
+          ]
+        },
+        "hq2": {
+          "item_id": 21581,
+          "name": "Rostam",
+          "bundles": {
+            "A": 43,
+            "B": 44,
+            "C": 45
+          },
+          "c": [
+            "\"Phantom Roll\" effect duration +60",
+            "\"Phantom Roll XI\": Recover HP and MP +15%",
+            "\"Phantom Roll\"+8"
+          ]
+        }
+      }
+    },
+    {
+      "job": "DNC",
+      "weapon": "Dagger",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 5,
+      "tiers": {
+        "nq": {
+          "item_id": 21582,
+          "name": "Etoile Knife",
+          "bundles": {
+            "A": 46,
+            "B": 47,
+            "C": 48
+          },
+          "c": [
+            "\"Flourish\" recast time -15%",
+            "\"Step\" duration +30"
+          ]
+        },
+        "hq1": {
+          "item_id": 21583,
+          "name": "Horos Knife",
+          "bundles": {
+            "A": 49,
+            "B": 50,
+            "C": 51
+          },
+          "c": [
+            "\"Flourish\" recast time -20%",
+            "\"Step\" duration +45"
+          ]
+        },
+        "hq2": {
+          "item_id": 21584,
+          "name": "Setan Kober",
+          "bundles": {
+            "A": 52,
+            "B": 53,
+            "C": 54
+          },
+          "c": [
+            "\"Flourish\" recast time -25%",
+            "\"Step\" duration +60",
+            "DMG:+5"
+          ]
+        }
+      }
+    },
+    {
+      "job": "RDM",
+      "weapon": "Sword",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 7,
+      "tiers": {
+        "nq": {
+          "item_id": 21625,
+          "name": "Duelist's Sword",
+          "bundles": {
+            "A": 55,
+            "B": 56,
+            "C": 57
+          },
+          "c": [
+            "Sword enhancement spell damage +300%",
+            "Elemental weapon skill damage +50%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21626,
+          "name": "Vitiation Sword",
+          "bundles": {
+            "A": 58,
+            "B": 59,
+            "C": 60
+          },
+          "c": [
+            "Sword enhancement spell damage +400%",
+            "Elemental weapon skill damage +75%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21627,
+          "name": "Crocea Mors",
+          "bundles": {
+            "A": 61,
+            "B": 62,
+            "C": 63
+          },
+          "c": [
+            "Sword enhancement spell damage +500%",
+            "Elemental weapon skill damage +100%",
+            "DMG:+7"
+          ]
+        }
+      }
+    },
+    {
+      "job": "PLD",
+      "weapon": "Sword",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 7,
+      "tiers": {
+        "nq": {
+          "item_id": 21628,
+          "name": "Valor Sword",
+          "bundles": {
+            "A": 64,
+            "B": 65,
+            "C": 66
+          },
+          "c": [
+            "HP+150",
+            "\"Cure\" potency+15%",
+            "\"Refresh\"+2"
+          ]
+        },
+        "hq1": {
+          "item_id": 21629,
+          "name": "Cabal. Sword",
+          "bundles": {
+            "A": 67,
+            "B": 68,
+            "C": 69
+          },
+          "c": [
+            "HP+200",
+            "\"Cure\" potency+20%",
+            "\"Refresh\"+3"
+          ]
+        },
+        "hq2": {
+          "item_id": 21630,
+          "name": "Moralltach",
+          "bundles": {
+            "A": 70,
+            "B": 71,
+            "C": 72
+          },
+          "c": [
+            "HP+250",
+            "\"Cure\" potency+25%",
+            "\"Refresh\"+4"
+          ]
+        }
+      }
+    },
+    {
+      "job": "BLU",
+      "weapon": "Sword",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 7,
+      "tiers": {
+        "nq": {
+          "item_id": 21631,
+          "name": "Mirage Sword",
+          "bundles": {
+            "A": 73,
+            "B": 74,
+            "C": 75
+          },
+          "c": [
+            "\"Chain Affinity\" recast time -15%",
+            "\"Burst Affinity\" recast time -15%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21632,
+          "name": "Luhlaza Sword",
+          "bundles": {
+            "A": 76,
+            "B": 77,
+            "C": 78
+          },
+          "c": [
+            "\"Chain Affinity\" recast time -20%",
+            "\"Burst Affinity\" recast time -20%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21633,
+          "name": "Zomorrodnegar",
+          "bundles": {
+            "A": 79,
+            "B": 80,
+            "C": 81
+          },
+          "c": [
+            "\"Chain Affinity\" recast time -25%",
+            "\"Burst Affinity\" recast time -25%",
+            "DMG:+7"
+          ]
+        }
+      }
+    },
+    {
+      "job": "RUN",
+      "weapon": "Great Sword",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 14,
+      "tiers": {
+        "nq": {
+          "item_id": 21667,
+          "name": "Futhark Claymore",
+          "bundles": {
+            "A": 82,
+            "B": 83,
+            "C": 84
+          },
+          "c": [
+            "Potency of \"Regen\" effects received +15",
+            "\"Vivacious Pulse\" potency +20%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21668,
+          "name": "Peord Claymore",
+          "bundles": {
+            "A": 85,
+            "B": 86,
+            "C": 87
+          },
+          "c": [
+            "Potency of \"Regen\" effects received +20",
+            "\"Vivacious Pulse\" potency +25%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21669,
+          "name": "Morgelai",
+          "bundles": {
+            "A": 88,
+            "B": 89,
+            "C": 90
+          },
+          "c": [
+            "Potency of \"Regen\" effects received +25",
+            "\"Vivacious Pulse\" potency +30%",
+            "DMG:+14"
+          ]
+        }
+      }
+    },
+    {
+      "job": "BST",
+      "weapon": "Axe",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 11,
+      "tiers": {
+        "nq": {
+          "item_id": 21715,
+          "name": "Monster Axe",
+          "bundles": {
+            "A": 91,
+            "B": 92,
+            "C": 93
+          },
+          "c": [
+            "Damage Taken -15%",
+            "Pet: Damage Taken -10%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21716,
+          "name": "Ankusa Axe",
+          "bundles": {
+            "A": 94,
+            "B": 95,
+            "C": 96
+          },
+          "c": [
+            "Damage Taken -20%",
+            "Pet: Damage Taken -12%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21717,
+          "name": "Pangu",
+          "bundles": {
+            "A": 97,
+            "B": 98,
+            "C": 99
+          },
+          "c": [
+            "Damage Taken -25%",
+            "Pet: Damage Taken -15%",
+            "DMG:+11"
+          ]
+        }
+      }
+    },
+    {
+      "job": "WAR",
+      "weapon": "Great Axe",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 14,
+      "tiers": {
+        "nq": {
+          "item_id": 21772,
+          "name": "War. Chopper",
+          "bundles": {
+            "A": 100,
+            "B": 101,
+            "C": 102
+          },
+          "c": [
+            "TP Gained when landing critical hits +30",
+            "Crit. Hit Rate +6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21773,
+          "name": "Agoge Chopper",
+          "bundles": {
+            "A": 103,
+            "B": 104,
+            "C": 105
+          },
+          "c": [
+            "TP Gained when landing critical hits +40",
+            "Crit. Hit Rate +8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21774,
+          "name": "Labraunda",
+          "bundles": {
+            "A": 106,
+            "B": 107,
+            "C": 108
+          },
+          "c": [
+            "TP Gained when landing critical hits +50",
+            "Crit. Hit Rate +10%",
+            "DMG:+14"
+          ]
+        }
+      }
+    },
+    {
+      "job": "DRK",
+      "weapon": "Scythe",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 15,
+      "tiers": {
+        "nq": {
+          "item_id": 21823,
+          "name": "Abyss Scythe",
+          "bundles": {
+            "A": 109,
+            "B": 110,
+            "C": 111
+          },
+          "c": [
+            "\"Drain\" potency +15%",
+            "Weapon Skill Damage +10%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21824,
+          "name": "Fallen's Scythe",
+          "bundles": {
+            "A": 112,
+            "B": 113,
+            "C": 114
+          },
+          "c": [
+            "\"Drain\" potency +20%",
+            "Weapon Skill Damage +12%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21825,
+          "name": "Father Time",
+          "bundles": {
+            "A": 115,
+            "B": 116,
+            "C": 117
+          },
+          "c": [
+            "\"Drain\" potency +25%",
+            "Weapon Skill Damage +15%",
+            "DMG:+15"
+          ]
+        }
+      }
+    },
+    {
+      "job": "DRG",
+      "weapon": "Polearm",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 14,
+      "tiers": {
+        "nq": {
+          "item_id": 21876,
+          "name": "Wyrm Lance",
+          "bundles": {
+            "A": 118,
+            "B": 119,
+            "C": 120
+          },
+          "c": [
+            "Wyvern: HP +150",
+            "Wyvern: Damage Taken -10%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21877,
+          "name": "Pteroslaver Lance",
+          "bundles": {
+            "A": 121,
+            "B": 122,
+            "C": 123
+          },
+          "c": [
+            "Wyvern: HP +200",
+            "Wyvern: Damage Taken -12%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21878,
+          "name": "Aram",
+          "bundles": {
+            "A": 124,
+            "B": 125,
+            "C": 126
+          },
+          "c": [
+            "Wyvern: HP +250",
+            "Wyvern: Damage Taken -15%",
+            "DMG:+14"
+          ]
+        }
+      }
+    },
+    {
+      "job": "NIN",
+      "weapon": "Katana",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 7,
+      "tiers": {
+        "nq": {
+          "item_id": 21915,
+          "name": "Koga Shin.",
+          "bundles": {
+            "A": 127,
+            "B": 128,
+            "C": 129
+          },
+          "c": [
+            "Ninjutsu recast time -15%",
+            "Enmity+6 for each Utsusemi"
+          ]
+        },
+        "hq1": {
+          "item_id": 21916,
+          "name": "Mochi. Shin.",
+          "bundles": {
+            "A": 130,
+            "B": 131,
+            "C": 132
+          },
+          "c": [
+            "Ninjutsu recast time -20%",
+            "Enmity+8 for each Utsusemi"
+          ]
+        },
+        "hq2": {
+          "item_id": 21917,
+          "name": "Fudo Masamune",
+          "bundles": {
+            "A": 133,
+            "B": 134,
+            "C": 135
+          },
+          "c": [
+            "Ninjutsu recast time -25%",
+            "Enmity+10 for each Utsusemi",
+            "DMG:+7"
+          ]
+        }
+      }
+    },
+    {
+      "job": "SAM",
+      "weapon": "Great Katana",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 13,
+      "tiers": {
+        "nq": {
+          "item_id": 21968,
+          "name": "Saotome-no-Tachi",
+          "bundles": {
+            "A": 136,
+            "B": 137,
+            "C": 138
+          },
+          "c": [
+            "\"Sekkanoki\" recast time -15%",
+            "\"Sekkanoki\": Weapon Skill Damage +50%"
+          ]
+        },
+        "hq1": {
+          "item_id": 21969,
+          "name": "Sakonji-no-Tachi",
+          "bundles": {
+            "A": 139,
+            "B": 140,
+            "C": 141
+          },
+          "c": [
+            "\"Sekkanoki\" recast time -20%",
+            "\"Sekkanoki\": Weapon Skill Damage +75%"
+          ]
+        },
+        "hq2": {
+          "item_id": 21970,
+          "name": "Fusenaikyo",
+          "bundles": {
+            "A": 142,
+            "B": 143,
+            "C": 144
+          },
+          "c": [
+            "\"Sekkanoki\" recast time -25%",
+            "\"Sekkanoki\": Weapon Skill Damage +100%",
+            "DMG:+13"
+          ]
+        }
+      }
+    },
+    {
+      "job": "WHM",
+      "weapon": "Club",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 8,
+      "tiers": {
+        "nq": {
+          "item_id": 22033,
+          "name": "Cleric's Wand",
+          "bundles": {
+            "A": 145,
+            "B": 146,
+            "C": 147
+          },
+          "c": [
+            "\"Afflatus Misery\" stored +150%",
+            "Healing magic recast delay -15%",
+            "Damage Taken -10%"
+          ]
+        },
+        "hq1": {
+          "item_id": 22034,
+          "name": "Piety Wand",
+          "bundles": {
+            "A": 148,
+            "B": 149,
+            "C": 150
+          },
+          "c": [
+            "\"Afflatus Misery\" stored +200%",
+            "Healing magic recast delay -20%",
+            "Damage Taken -12%"
+          ]
+        },
+        "hq2": {
+          "item_id": 22035,
+          "name": "Asclepius",
+          "bundles": {
+            "A": 151,
+            "B": 152,
+            "C": 153
+          },
+          "c": [
+            "\"Afflatus Misery\" stored +250%",
+            "Healing magic recast delay -25%",
+            "Damage Taken -15%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "GEO",
+      "weapon": "Club",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 8,
+      "tiers": {
+        "nq": {
+          "item_id": 22036,
+          "name": "Bagua Wand",
+          "bundles": {
+            "A": 154,
+            "B": 155,
+            "C": 156
+          },
+          "c": [
+            "Magic burst damage II +6",
+            "Magic burst accuracy +20",
+            "\"Drain\" and \"Aspir\" potency +10"
+          ]
+        },
+        "hq1": {
+          "item_id": 22037,
+          "name": "Sifang Wand",
+          "bundles": {
+            "A": 157,
+            "B": 158,
+            "C": 159
+          },
+          "c": [
+            "Magic burst damage II +8",
+            "Magic burst accuracy +25",
+            "\"Drain\" and \"Aspir\" potency +15"
+          ]
+        },
+        "hq2": {
+          "item_id": 22038,
+          "name": "Bhima",
+          "bundles": {
+            "A": 160,
+            "B": 161,
+            "C": 162
+          },
+          "c": [
+            "Magic burst damage II +10",
+            "Magic burst accuracy +30",
+            "\"Drain\" and \"Aspir\" potency +20"
+          ]
+        }
+      }
+    },
+    {
+      "job": "BLM",
+      "weapon": "Staff",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 11,
+      "tiers": {
+        "nq": {
+          "item_id": 22091,
+          "name": "Sorcerer's Staff",
+          "bundles": {
+            "A": 163,
+            "B": 164,
+            "C": 165
+          },
+          "c": [
+            "MP+50",
+            "\"Mana Wall\"+15%",
+            "Damage Taken -10%"
+          ]
+        },
+        "hq1": {
+          "item_id": 22092,
+          "name": "Archmage's Staff",
+          "bundles": {
+            "A": 166,
+            "B": 167,
+            "C": 168
+          },
+          "c": [
+            "MP+75",
+            "\"Mana Wall\"+20%",
+            "Damage Taken -12%"
+          ]
+        },
+        "hq2": {
+          "item_id": 22093,
+          "name": "Kaumodaki",
+          "bundles": {
+            "A": 169,
+            "B": 170,
+            "C": 171
+          },
+          "c": [
+            "MP+100",
+            "\"Mana Wall\"+25%",
+            "Damage Taken -15%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "SMN",
+      "weapon": "Staff",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 11,
+      "tiers": {
+        "nq": {
+          "item_id": 22094,
+          "name": "Summoner's Staff",
+          "bundles": {
+            "A": 172,
+            "B": 173,
+            "C": 174
+          },
+          "c": [
+            "Pet: Chance of double damage +20%",
+            "Chance of doubling \"Blood Pact\" status +15%",
+            "Blood Pact Dmg.+10"
+          ]
+        },
+        "hq1": {
+          "item_id": 22095,
+          "name": "Glyphic Staff",
+          "bundles": {
+            "A": 175,
+            "B": 176,
+            "C": 177
+          },
+          "c": [
+            "Pet: Chance of double damage +35%",
+            "Chance of doubling \"Blood Pact\" status +20%",
+            "Blood Pact Dmg.+12"
+          ]
+        },
+        "hq2": {
+          "item_id": 22096,
+          "name": "Draumstafir",
+          "bundles": {
+            "A": 178,
+            "B": 179,
+            "C": 180
+          },
+          "c": [
+            "Pet: Chance of double damage +50%",
+            "Chance of doubling \"Blood Pact\" status +25%",
+            "Blood Pact Dmg.+15"
+          ]
+        }
+      }
+    },
+    {
+      "job": "SCH",
+      "weapon": "Staff",
+      "slot": "main",
+      "ranged": false,
+      "dmg": 11,
+      "tiers": {
+        "nq": {
+          "item_id": 22097,
+          "name": "Argute Staff",
+          "bundles": {
+            "A": 181,
+            "B": 182,
+            "C": 183
+          },
+          "c": [
+            "\"Regen\" potency +15",
+            "\"Cure\" potency +15%",
+            "\"Fast Cast\"+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 22098,
+          "name": "Pedagogy Staff",
+          "bundles": {
+            "A": 184,
+            "B": 185,
+            "C": 186
+          },
+          "c": [
+            "\"Regen\" potency +20",
+            "\"Cure\" potency +20%",
+            "\"Fast Cast\"+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 22099,
+          "name": "Musa",
+          "bundles": {
+            "A": 187,
+            "B": 188,
+            "C": 189
+          },
+          "c": [
+            "\"Regen\" potency +25",
+            "\"Cure\" potency +25%",
+            "\"Fast Cast\"+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "RNG",
+      "weapon": "Marksmanship",
+      "slot": "range",
+      "ranged": true,
+      "dmg": 6,
+      "tiers": {
+        "nq": {
+          "item_id": 22147,
+          "name": "Scout's Crossbow",
+          "bundles": {
+            "A": 190,
+            "B": 191,
+            "C": 192
+          },
+          "c": [
+            "Additional ammo damage: +200%",
+            "Additional ammo accuracy +100"
+          ]
+        },
+        "hq1": {
+          "item_id": 22148,
+          "name": "Arke Crossbow",
+          "bundles": {
+            "A": 193,
+            "B": 194,
+            "C": 195
+          },
+          "c": [
+            "Additional ammo damage: +250%",
+            "Additional ammo accuracy +125"
+          ]
+        },
+        "hq2": {
+          "item_id": 22149,
+          "name": "Sharanga",
+          "bundles": {
+            "A": 196,
+            "B": 197,
+            "C": 198
+          },
+          "c": [
+            "Additional ammo damage: +300%",
+            "Additional ammo accuracy +150",
+            "DMG:+6"
+          ]
+        }
+      }
+    }
+  ]
+}

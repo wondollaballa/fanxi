@@ -14,9 +14,9 @@ VALUES
     ((SELECT id FROM world_npcs WHERE name = 'Fanxi Guide'),
      0, 'Welcome to Fanxi. Target me and press the action button to talk.'),
     ((SELECT id FROM world_npcs WHERE name = 'Wandering Moogle'),
-     0, 'Kupo! The fields west of Jeuno are full of things that bite. Say !zone 100 when you are ready.'),
+     0, 'Kupo! The fields west of Jeuno are full of things that bite. Say //zone 100 when you are ready.'),
     ((SELECT id FROM world_npcs WHERE name = 'Chocobo Stablehand'),
-     0, 'The stables are closed for now, but the road west is open. Try !zone 100.');
+     0, 'The stables are closed for now, but the road west is open. Try //zone 100.');
 
 INSERT INTO monster_templates (name, model, level_min, level_max, hp, attack, defense, accuracy, evasion,
                        attack_delay_ms, aggro, roam_radius, respawn_seconds, behavior, content_tag)

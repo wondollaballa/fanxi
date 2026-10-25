@@ -8,6 +8,20 @@
     to add a variant, copy an existing set and give it a new path.
 ]]
 
+local capes = {
+    pdt = { name = "Andartia's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Andartia's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Andartia's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Andartia's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Andartia's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    dw = { name = "Andartia's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", '"Dual Wield"+10', "Phys. dmg. taken-10%"} },
+    fc = { name = "Andartia's Mantle", augments = {"HP+60", "Mag. Acc+20 /Mag. Dmg.+20", "Evasion+10", '"Fast Cast"+10', "Phys. dmg. taken-10%"} },
+    ninjutsu = { name = "Andartia's Mantle", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", '"Mag.Atk.Bns."+10', "Phys. dmg. taken-10%"} },
+    ws_agi = { name = "Andartia's Mantle", augments = {"AGI+20", "Accuracy+20 Attack+20", "AGI+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    ws_dex = { name = "Andartia's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    ws_str = { name = "Andartia's Mantle", augments = {"STR+20", "Accuracy+20 Attack+20", "STR+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+}
+
 function get_sets()
     sets = {}
     sets.engaged = {}
@@ -30,7 +44,7 @@ function get_sets()
         legs = "Hachiya Hakama +4",
         feet = "Hachiya Kyahan +4",
         neck = "Ninja Nodowa +2",
-        back = "Andartia's Mantle",
+        back = capes.dt,
     }
     sets.JA.Migawari = {
         main = "Kikoku",
@@ -41,7 +55,7 @@ function get_sets()
         legs = "Hachiya Hakama +4",
         feet = "Hachiya Kyahan +4",
         neck = "Ninja Nodowa +2",
-        back = "Andartia's Mantle",
+        back = capes.dt,
     }
     sets.JA["Mijin Gakure"] = {
         main = "Kikoku",
@@ -52,7 +66,7 @@ function get_sets()
         legs = "Hachiya Hakama +4",
         feet = "Hachiya Kyahan +4",
         neck = "Ninja Nodowa +2",
-        back = "Andartia's Mantle",
+        back = capes.dt,
     }
     sets.JA["Tonko: Ni"] = {
         main = "Kikoku",
@@ -63,7 +77,7 @@ function get_sets()
         legs = "Hachiya Hakama +4",
         feet = "Hachiya Kyahan +4",
         neck = "Ninja Nodowa +2",
-        back = "Andartia's Mantle",
+        back = capes.dt,
     }
     sets.JA["Utsusemi: Ichi"] = {
         main = "Kikoku",
@@ -74,7 +88,7 @@ function get_sets()
         legs = "Hachiya Hakama +4",
         feet = "Hachiya Kyahan +4",
         neck = "Ninja Nodowa +2",
-        back = "Andartia's Mantle",
+        back = capes.dt,
     }
     sets.JA["Utsusemi: Ni"] = {
         main = "Kikoku",
@@ -85,7 +99,7 @@ function get_sets()
         legs = "Hachiya Hakama +4",
         feet = "Hachiya Kyahan +4",
         neck = "Ninja Nodowa +2",
-        back = "Andartia's Mantle",
+        back = capes.dt,
     }
     sets.JA.Yonin = {
         main = "Kikoku",
@@ -96,7 +110,7 @@ function get_sets()
         legs = "Hachiya Hakama +4",
         feet = "Hachiya Kyahan +4",
         neck = "Ninja Nodowa +2",
-        back = "Andartia's Mantle",
+        back = capes.dt,
     }
 
     -- ===== Limbus =====
@@ -164,7 +178,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Andartia's Mantle",
+        back = capes.tp,
     }
     sets.WS["Blade: Kamu"] = {
         main = "Kikoku",
@@ -181,7 +195,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Andartia's Mantle",
+        back = capes.tp,
     }
     sets.WS["Blade: Ku"] = {
         main = "Kikoku",
@@ -198,7 +212,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Andartia's Mantle",
+        back = capes.tp,
     }
     sets.WS["Blade: Shun"] = {
         main = "Kikoku",
@@ -215,7 +229,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Andartia's Mantle",
+        back = capes.tp,
     }
     sets.WS["Blade: Ten"] = {
         main = "Kikoku",
@@ -232,7 +246,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Andartia's Mantle",
+        back = capes.tp,
     }
 
     -- ===== engaged =====
@@ -251,7 +265,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Andartia's Mantle",
+        back = capes.tp,
     }
     sets.engaged.dw = {
         main = "Kikoku",
@@ -268,7 +282,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Andartia's Mantle",
+        back = capes.dw,
     }
     sets.engaged.hybrid = {
         main = "Kikoku",
@@ -285,7 +299,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Andartia's Mantle",
+        back = capes.tp,
     }
     sets.engaged.tp = {
         main = "Kikoku",
@@ -302,7 +316,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Andartia's Mantle",
+        back = capes.tp,
     }
 
     -- ===== idle =====
@@ -321,7 +335,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Andartia's Mantle",
+        back = capes.dt,
     }
     sets.idle.maxhp = {
         main = "Kikoku",
@@ -338,7 +352,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Andartia's Mantle",
+        back = capes.maxhp,
     }
     sets.idle.mdt = {
         main = "Kikoku",
@@ -355,7 +369,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Andartia's Mantle",
+        back = capes.mdt,
     }
     sets.idle.movement = {
         main = "Kikoku",
@@ -389,7 +403,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Andartia's Mantle",
+        back = capes.pdt,
     }
     sets.idle.town = {
         main = "Kikoku",
@@ -425,7 +439,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Andartia's Mantle",
+        back = capes.ninjutsu,
     }
     sets.midcast["Ninjutsu Damage"] = {
         main = "Kikoku",
@@ -442,7 +456,7 @@ function get_sets()
         ear2 = "Crematio Earring",
         ring1 = "Metamorph Ring +1",
         ring2 = "Mujin Band",
-        back = "Andartia's Mantle",
+        back = capes.ninjutsu,
     }
 
     -- ===== precast =====
@@ -459,7 +473,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = "Andartia's Mantle",
+        back = capes.fc,
     }
 
     -- ===== weaponset =====

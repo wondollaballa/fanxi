@@ -3,7 +3,7 @@ import { Lock, LockOpen, Pencil, Plus, Shield, Sparkles, Trash2, Wind, Zap } fro
 import type { JobAbility, JobSpell, PhaseStatus } from "../types";
 import {
   FOCUS_MODES,
-  SPELL_CATEGORIES,
+  SPELL_GROUPS,
   phaseStateLabel,
   slotLabelOf,
   type PhaseConfig,
@@ -172,16 +172,18 @@ export function PhasePanel({
   );
   const spellGroups = useMemo(
     () =>
-      SPELL_CATEGORIES.map((category) => ({
-        ...category,
-        spells: spells.filter((spell) => spell.categories?.includes(category.key)),
-      })),
+      SPELL_GROUPS.map((group) => ({
+        ...group,
+        spells: spells.filter((spell) => spell.categories?.includes(group.key)),
+      })).filter((group) => group.spells.length > 0),
     [spells],
   );
   const overrides = Object.entries(config.spellOverrides);
-  const categoryOverrideCount = SPELL_CATEGORIES.filter(
-    (category) => config.spellCategoryOverrides[category.key],
-  ).length;
+  const categoryOverrideCount = spellGroups.reduce(
+    (count, group) =>
+      count + group.modes.filter((mode) => config.spellCategoryOverrides[mode.category]).length,
+    0,
+  );
   const jaOverrideCount = Object.keys(config.jaOverrides).length;
   const now = status?.state ? `${phaseStateLabel(status.state)}` : "—";
   const activeSet = status?.set ?? null;
@@ -290,7 +292,7 @@ export function PhasePanel({
         title="Weaponset"
         wide
         badge={<Badge tone="neutral">session locks</Badge>}
-        hint="Wear a weaponset and pin its slots so no precast, midcast, idle or GearSwap swap can replace them. A main or support job change releases the lock and the pins, wherever the change happens; /!gs lock main, sub also works in game."
+        hint="Wear a weaponset and pin its slots so no precast, midcast, idle or GearSwap swap can replace them. A main or support job change releases the lock and the pins, wherever the change happens; //gs lock main, sub also works in game."
       >
         <div className="phase-row">
           <SetSelect
@@ -464,7 +466,7 @@ export function PhasePanel({
             {status?.resting ? "resting" : "off"}
           </Badge>
         }
-        hint="This server has no rest packet, so resting is a manual state: start it, or use /!gs rest on, and turn it off when you stand."
+        hint="This server has no rest packet, so resting is a manual state: start it, or use //gs rest on, and turn it off when you stand."
       >
         <div className="phase-row">
           <SetSelect
@@ -493,10 +495,10 @@ export function PhasePanel({
         badge={
           <Badge tone="neutral">
             {overrides.length} per-spell
-            {categoryOverrideCount ? ` · ${categoryOverrideCount} categories` : ""}
+            {categoryOverrideCount ? ` · ${categoryOverrideCount} modes` : ""}
           </Badge>
         }
-        hint="Precast is worn before the cast is timed; the midcast default is worn for every spell. A category card gives one set to every spell in its group, and a per-spell card wins over its category. Enfeebles macc/duration and buff potency/duration are alternatives, so choosing one releases the other. The host classifies the job pair's spells, so macc, mab and magic-skill sets can be picked per category or per spell."
+        hint="Precast is worn before the cast is timed; the midcast default is worn for every spell. A group card can hold a set for every mode; the Mode dropdown chooses which one is worn for that group's spells. A per-spell card wins over its group. Switching modes is also available in the in-game spell HUD and with //modes."
       >
         <div className="phase-row">
           <SetSelect
@@ -517,52 +519,69 @@ export function PhasePanel({
           />
         </div>
         <div className="phase-category-heading">
-          <span className="eyebrow">Category overrides</span>
-          <span className="muted">One set for every spell in the group.</span>
+          <span className="eyebrow">Spell mode groups</span>
+          <span className="muted">Configure every mode; the armed mode is worn.</span>
         </div>
         <div className="phase-category-cards">
-          {spellGroups.map((category) => {
-            const path = config.spellCategoryOverrides[category.key] ?? "";
+          {spellGroups.map((group) => {
+            const activeMode = config.spellModes[group.key] ?? group.defaultMode;
+            const configured = group.modes.some(
+              (mode) => config.spellCategoryOverrides[mode.category],
+            );
             return (
-              <div key={category.key} className={cn("phase-category", path && "configured")}>
+              <div key={group.key} className={cn("phase-category", configured && "configured")}>
                 <div className="phase-category-head">
-                  <span className="phase-category-title">{category.label}</span>
-                  <Badge tone={path ? "accent" : "neutral"}>{category.spells.length} spells</Badge>
+                  <span className="phase-category-title">{group.label}</span>
+                  <Badge tone={configured ? "accent" : "neutral"}>
+                    {group.spells.length} spells
+                  </Badge>
                 </div>
-                <InlineSetSelect
-                  value={path}
-                  sets={sets}
-                  prefixes={["midcast.", "precast."]}
-                  empty="— use the default —"
-                  onChange={(nextPath) => {
-                    const next = { ...config.spellCategoryOverrides };
-                    if (nextPath) {
-                      next[category.key] = nextPath;
-                      // Macc and duration answer the same question, as do potency and duration:
-                      // one set is worn per cast, so picking one releases its pair.
-                      if (category.alternate) delete next[category.alternate];
-                    } else {
-                      delete next[category.key];
+                <div className="phase-mode-row">
+                  <span className="phase-mode-label">Mode</span>
+                  <Select
+                    className="phase-inline-select"
+                    value={activeMode}
+                    onChange={(event) =>
+                      onConfig({
+                        spellModes: { ...config.spellModes, [group.key]: event.target.value },
+                      })
                     }
-                    onConfig({ spellCategoryOverrides: next });
-                  }}
-                />
+                  >
+                    {group.modes.map((mode) => (
+                      <option key={mode.key} value={mode.key}>
+                        {mode.label}
+                      </option>
+                    ))}
+                  </Select>
+                </div>
+                {group.modes.map((mode) => (
+                  <div key={mode.key} className="phase-mode-set">
+                    <span className="phase-mode-name">{mode.short}</span>
+                    <InlineSetSelect
+                      value={config.spellCategoryOverrides[mode.category] ?? ""}
+                      sets={sets}
+                      prefixes={["midcast.", "precast."]}
+                      empty="— use the default —"
+                      onChange={(nextPath) => {
+                        const next = { ...config.spellCategoryOverrides };
+                        if (nextPath) next[mode.category] = nextPath;
+                        else delete next[mode.category];
+                        onConfig({ spellCategoryOverrides: next });
+                      }}
+                    />
+                  </div>
+                ))}
                 <details className="phase-category-spells">
-                  <summary>{category.detail}</summary>
-                  {category.spells.length ? (
-                    <div className="phase-category-names">
-                      {category.spells.map((spell) => (
-                        <span
-                          key={spell.id}
-                          title={`${spell.skill || "spell"} · Lv ${spell.level}`}
-                        >
-                          {spell.name}
-                        </span>
-                      ))}
-                    </div>
-                  ) : (
-                    <p className="muted">No matching spells for this job pair.</p>
-                  )}
+                  <summary>
+                    {group.modes.map((mode) => `${mode.label}: ${mode.detail}`).join(" ")}
+                  </summary>
+                  <div className="phase-category-names">
+                    {group.spells.map((spell) => (
+                      <span key={spell.id} title={`${spell.skill || "spell"} · Lv ${spell.level}`}>
+                        {spell.name}
+                      </span>
+                    ))}
+                  </div>
                 </details>
               </div>
             );

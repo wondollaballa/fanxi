@@ -62,16 +62,26 @@ class CapeTest(unittest.TestCase):
             self.assertIn(augment_id, capes.TABLE, name)
             self.assertNotIn("id ", capes._text(augment_id, value), name)
 
+    def test_all_jobs_and_builds_are_present(self):
+        self.assertEqual(len(capes.JOBS), 22)
+        self.assertEqual(sum(len(entry["builds"]) for entry in capes.JOBS.values()), 198)
+        self.assertEqual(capes.JOBS["WAR"]["cape_name"], "Cichol's Mantle")
+        self.assertEqual(capes.JOBS["RUN"]["cape_name"], "Ogma's Cape")
+        self.assertEqual(len(capes.CAPE_IDS), 22)
+
     def test_job_lookup(self):
         self.assertEqual(capes.job_for_item(26254), "BST")
         self.assertEqual(capes.job_for_item(26258), "NIN")
         self.assertEqual(capes.job_for_item(26253), "DRK")
         self.assertEqual(capes.job_for_item(26249), "BLM")
+        self.assertEqual(capes.job_for_item(26246), "WAR")
+        self.assertEqual(capes.job_for_item(26267), "RUN")
         self.assertIsNone(capes.job_for_item(1))
         self.assertEqual(capes.job_for_name("Andartia's Mantle"), "NIN")
         self.assertEqual(capes.job_for_name("Artio's Mantle"), "BST")
         self.assertEqual(capes.job_for_name("Ankou's Mantle"), "DRK")
         self.assertEqual(capes.job_for_name("Taranus's Cape"), "BLM")
+        self.assertEqual(capes.job_for_name("Ogma's Cape"), "RUN")
 
     def test_black_mage_has_every_cape_build_the_library_uses(self):
         self.assertEqual(sorted(capes.JOBS["BLM"]["builds"]),
@@ -82,7 +92,7 @@ class CapeTest(unittest.TestCase):
         with self.assertRaises(ValueError):
             capes.encode("nope")
         with self.assertRaises(ValueError):
-            capes.encode("tp", "DRG")
+            capes.encode("tp", "XXX")
 
     def test_only_five_bits_of_value(self):
         # All values stay inside the 5-bit field, so the high byte keeps its id bits.
@@ -92,18 +102,19 @@ class CapeTest(unittest.TestCase):
                     self.assertLessEqual(slot["value"], 0x1F)
                     self.assertLessEqual(slot["id"], 0x7FF)
 
-    def test_migrations_and_docs_are_in_sync(self):
+    def test_migration_and_docs_are_in_sync(self):
         sys.path.insert(0, str(ROOT / "tools"))
         import importlib
 
         gen = importlib.import_module("gen_capes")
-        for job, path in gen.MIGRATIONS.items():
-            migration = path.read_text()
-            self.assertEqual(gen.sql(job), migration, job)
-            # Every build in the migration carries its own block.
-            hexes = re.findall(r"X'([0-9A-F]{48})'", migration)
-            self.assertEqual(len(hexes), len(capes.JOBS[job]["builds"]), job)
-        self.assertEqual(gen.doc(), (ROOT / "docs/capes.md").read_text())
+        migration = gen.MIGRATION.read_text()
+        self.assertEqual(gen.sql(), migration)
+        self.assertEqual(gen.doc(), gen.DOC.read_text())
+        # Every build is stored as its own copy with its own block.
+        blocks = set(re.findall(r"X'([0-9A-F]{48})'", migration))
+        for job, entry in capes.JOBS.items():
+            for build in entry["builds"]:
+                self.assertIn(capes.encode(build, job).hex().upper(), blocks, (job, build))
 
 
 def _norm(text: str) -> str:

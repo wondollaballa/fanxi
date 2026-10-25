@@ -138,7 +138,7 @@ export function EquipViewer({
   slots?: Record<string, GearSlot>;
   /** The client's 0x01B Encumbrance Flags word. */
   encumbrance?: number;
-  /** Slots pinned by /!gs lock; drawn with a red border. */
+  /** Slots pinned by //gs lock; drawn with a red border. */
   locked?: string[];
   onSlotClick?: (slot: ViewerSlot) => void;
   showSettings?: boolean;

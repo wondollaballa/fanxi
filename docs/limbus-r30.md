@@ -26,8 +26,8 @@ costs 1,600), so the client reads the block at rank 30, not rank 0.
 Each piece carries its own client augment **bundle** index. The indices
 come from the client's bundle table (LandSandBoat's
 `xi.data.augments.bundles`, parsed from the MNC2 data); every one was
-matched to the Rank 30 row above by content. `!rp30` re-stamps the
-pieces in a character's bags, and `!r30 <piece>` prints the rows.
+matched to the Rank 30 row above by content. `//rp30` re-stamps the
+pieces in a character's bags, and `//r30 <piece>` prints the rows.
 
 The rows are **not only tooltips**: `FanxiService.equipped_mods()` joins each
 equipped piece back to its inventory copy, `augment_stats` decodes the rank-30
@@ -195,7 +195,7 @@ be worn as a unit.
   engine has no pet sheet yet, so nothing would read them.
 - The 24-byte exdata block is rank 30 / tier 3 / 55,800 RP (curve B) with
   the piece's own augment bundle index, so the client prints the four rows
-  on the tooltip. `!r30 <piece>` still prints them in chat, and `!rp30`
+  on the tooltip. `//r30 <piece>` still prints them in chat, and `//rp30`
   re-stamps every Limbus piece a character is carrying.
 - The bundle indices sit in the client table as 472-496: 477-481 Duty,
   472-476 Revelation, 487-491 Sworn, 482-486 Indomitable and 492-496

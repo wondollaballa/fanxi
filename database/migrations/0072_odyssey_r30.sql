@@ -6,7 +6,7 @@
 -- migrations. The Rank 30 rows themselves live in data/odyssey_r30.json
 -- and in the gearswap libraries; the client tooltip cannot print them (see
 -- docs/odyssey-r30.md) until the server learns retail's extdata augment
--- encoding, so !r30 is the in-game view for now.
+-- encoding, so //r30 is the in-game view for now.
 --
 -- Item ids, slots, job masks and the Rank 30 values are factual game data
 -- cross-checked against BG Wiki. The SQL is Fanxi's own.

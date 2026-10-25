@@ -166,7 +166,8 @@ def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
     body[28] = 1 if getattr(entity, "kind", "") == "mob" and entity.alive else 0
     body[29] = 0
     is_trust = getattr(entity, "kind", "") == "trust"
-    body[33] = (0x08 if (getattr(entity, "kind", "") == "mob" or is_trust)
+    is_pet = getattr(entity, "kind", "") == "pet"
+    body[33] = (0x08 if (getattr(entity, "kind", "") == "mob" or is_trust or is_pet)
                 and entity.alive else 0)  # health flag
     body[35] = int(getattr(entity, "name_prefix", 0)) & 0xFF
     trigger = bool(getattr(entity, "triggerable", False)) and entity.alive
@@ -177,7 +178,7 @@ def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
     # keeps the claim shield from this field; left at 0 the mob stays "unclaimed" even
     # while it is swinging at the player who pulled it.  ``engaged_char_id`` is the
     # session the monster has hate on, so it is exactly the claim owner.
-    if is_trust:
+    if is_trust or is_pet:
         # TrustFlag (0x01) gives the client the "Release" sub-menu, PetFlag (0x40)
         # treats the alter ego as an ally and PetNewFlag (0x04) plays the spawn-in
         # animation.  Allegiance 1 is the player side.  The flags ride every update,
@@ -200,7 +201,7 @@ def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
         # A name-only update after the equipped look: mask has no look bits, so the
         # client keeps the appearance while setting the target name.
         body[6] = (SEND_NAME | 0x02) & 0xFF
-        if is_trust:
+        if is_trust or is_pet:
             # Spawnables (targid 0x700-0x8FF) have no literal-name marker: the client
             # reads the name at 0x38, not 0x35.
             body[52:68] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
@@ -250,10 +251,10 @@ def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
             look = bytes(getattr(entity, "look", b"") or b"")
             look_model = int.from_bytes(look[2:4], "little") if len(look) >= 4 else model
             struct.pack_into("<I", body, 44, look_model << 16)
-        if is_trust:
-            # A Trust is a spawnable (targid >= 0x700), so its name lives at 0x38
+        if is_trust or is_pet:
+            # A Trust/pet is a spawnable (targid >= 0x700), so its name lives at 0x38
             # and 0x34 stays part of the model block.  0x067 also carries the name
-            # and tells the client this entity is a Trust of the master.
+            # and tells the client this entity belongs to its master.
             body[48:52] = bytes(4)
             body[52:68] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
         else:
@@ -524,3 +525,114 @@ def item_max() -> bytes:
         body[index] = 81
         struct.pack_into("<H", body, 32 + 2 * index, 81)
     return bytes(body)
+
+
+# --- party and alliance group packets ------------------------------------------------------
+# The client's group pages read three packets: 0x0C8 (who is in which party), 0x0DD
+# (one member's row) and 0x0DF (a member's vitals, also used for the local player in
+# zone.party_member).  0x0DC is the invite prompt, 0x0E1 the server-side group id.
+GROUP_TBL_SLOTS = 20
+
+
+def _packed_name(name, size: int = 16) -> bytes:
+    """A fixed-width, NUL-padded ASCII name, the shape the client's name fields use."""
+    text = str(name or "").encode("ascii", "replace")[:size - 1]
+    return text + bytes(size - len(text))
+
+
+def group_invite(inviter_id: int, inviter_targid: int, name: str,
+                 kind: int = 0, race: int = 0) -> bytes:
+    """Body of S2C 0x0DC: ``<name>`` has invited the client to a party or alliance."""
+    body = bytearray(0x1C)
+    struct.pack_into("<IHBB", body, 0, int(inviter_id) & 0xFFFFFFFF,
+                     int(inviter_targid) & 0xFFFF, 0, int(kind) & 0xFF)
+    body[0x08:0x18] = _packed_name(name)
+    struct.pack_into("<H", body, 0x18, int(race) & 0xFFFF)
+    return bytes(body)
+
+
+def group_table(entries, kind: int = 0) -> bytes:
+    """Body of S2C 0x0C8: up to twenty ``(char_id, targid, flags, zone)`` rows.
+
+    Kind 0 is a party and 5 an alliance.  A member's flags carry the party number,
+    leader and alliance-leader bits; the client draws the whole roster from this plus
+    one 0x0DD per row.
+    """
+    body = bytearray(4 + GROUP_TBL_SLOTS * 12)
+    body[0] = int(kind) & 0xFF
+    for index, entry in enumerate(list(entries)[:GROUP_TBL_SLOTS]):
+        char_id, targid, flags, zone = entry
+        offset = 4 + index * 12
+        struct.pack_into("<IHBBHH", body, offset, int(char_id) & 0xFFFFFFFF,
+                         int(targid) & 0xFFFF, int(flags) & 0xFF, 0,
+                         int(zone) & 0xFFFF, 0)
+    return bytes(body)
+
+
+def group_list(member, number: int, flags: int, receiver_zone: int,
+               targid: int | None = None) -> bytes:
+    """Body of S2C 0x0DD: one party row, with vitals only while it is in our zone.
+
+    ``member`` is a ``party.PartyMember``.  A member in another zone is sent its zone
+    number alone; the client prints the zone instead of HP/MP/TP.
+    """
+    body = bytearray(0x38)
+    struct.pack_into("<I", body, 0x00, int(member.char_id) & 0xFFFFFFFF)
+    same_zone = int(member.zone) == int(receiver_zone)
+    if same_zone:
+        struct.pack_into("<III", body, 0x04, int(member.hp) & 0xFFFFFFFF,
+                         int(member.mp) & 0xFFFFFFFF, int(member.tp) & 0xFFFFFFFF)
+    # GP_GROUP_ATTR: party number (2 bits), leader/alliance-leader and recruiter bits,
+    # then level-sync at bit 8.
+    attributes = (int(flags) & 0x1FF)
+    struct.pack_into("<I", body, 0x10, attributes)
+    if same_zone:
+        struct.pack_into("<H", body, 0x14,
+                         int(member.targid if targid is None else targid) & 0xFFFF)
+        body[0x16] = int(number) & 0xFF
+        body[0x18] = 0                       # Kind
+        body[0x19] = int(member.hpp) & 0xFF
+        body[0x1A] = int(member.mpp) & 0xFF
+        body[0x1E] = int(member.main_job) & 0xFF
+        body[0x1F] = int(member.main_level) & 0xFF
+        body[0x20] = int(member.sub_job) & 0xFF
+        body[0x21] = int(member.sub_level) & 0xFF
+    else:
+        body[0x16] = int(number) & 0xFF
+        struct.pack_into("<H", body, 0x1C, int(member.zone) & 0xFFFF)
+    body[0x17] = 1 if int(flags) & 0x0200 else 0  # MoghouseFlg
+    body[0x24:0x34] = _packed_name(member.name)
+    return bytes(body)
+
+
+def group_attr(member, targid: int | None = None) -> bytes:
+    """Body of S2C 0x0DF: a party member's HP/MP/TP and job levels.
+
+    This is the same packet the local player already receives from
+    ``ZoneSession.party_member``; sending it for other members is what moves their bars.
+    """
+    body = bytearray(0x24)
+    struct.pack_into("<IIIIH", body, 0x00, int(member.char_id) & 0xFFFFFFFF,
+                     int(member.hp) & 0xFFFFFFFF, int(member.mp) & 0xFFFFFFFF,
+                     int(member.tp) & 0xFFFFFFFF,
+                     int(member.targid if targid is None else targid) & 0xFFFF)
+    body[0x12] = int(member.hpp) & 0xFF
+    body[0x13] = int(member.mpp) & 0xFF
+    body[0x14] = 0                              # Kind
+    body[0x15] = 0                              # MoghouseFlg
+    struct.pack_into("<H", body, 0x16, int(member.zone) & 0xFFFF)
+    body[0x1C] = int(member.main_job) & 0xFF
+    body[0x1D] = int(member.main_level) & 0xFF
+    body[0x1E] = int(member.sub_job) & 0xFF
+    body[0x1F] = int(member.sub_level) & 0xFF
+    return bytes(body)
+
+
+def group_checkid(group_id: int) -> bytes:
+    """Body of S2C 0x0E1: the party id the client asks for with C2S 0x078."""
+    return struct.pack("<I", int(group_id) & 0xFFFFFFFF)
+
+
+def group_solicit_no(reason: int = 0) -> bytes:
+    """Body of S2C 0x0DE: clears the client's pending-invite state."""
+    return struct.pack("<B3x", int(reason) & 0xFF)

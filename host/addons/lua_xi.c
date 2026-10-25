@@ -619,6 +619,11 @@ static int u_in_frame(lua_State* L)
     lua_pushboolean(L, xi_gui_in_frame());
     return 1;
 }
+static int u_focused(lua_State* L)
+{
+    lua_pushboolean(L, xi_gui_focused());
+    return 1;
+}
 static int u_imgui(lua_State* L)
 {
     xi_gui_lua_push_manager(L);
@@ -630,6 +635,7 @@ static const luaL_Reg UI[] = {
     { "prim_new", u_prim_new }, { "prim_delete", u_prim_delete }, { "prim_set", u_prim_set }, { "prim_get", u_prim_get },
     { "texture_file", u_texture_file }, { "texture_memory", u_texture_memory }, { "texture_free", u_texture_free },
     { "texture_size", u_texture_size }, { "screen", u_screen }, { "wants", u_wants }, { "in_frame", u_in_frame },
+    { "focused", u_focused },
     { "imgui", u_imgui }, { "capture", u_capture }, { "capture_result", u_capture_result }, { NULL, NULL },
 };
 

@@ -100,10 +100,6 @@ def main():
     ico = os.path.join(ROOT, 'assets', 'icon.ico')
     icon.save(ico, sizes=[(16, 16), (32, 32), (48, 48), (64, 64), (128, 128), (256, 256)])
 
-    # Tk 8.5 cannot read PNG; the launcher falls back to this GIF.
-    gif = os.path.join(ROOT, 'assets', 'icon.gif')
-    icon.resize((128, 128), Image.LANCZOS).convert('P', palette=Image.ADAPTIVE, colors=128).save(gif)
-
     icns = os.path.join(ROOT, 'assets', 'icon.icns')
     if shutil.which('iconutil'):
         with tempfile.TemporaryDirectory() as tmp:
@@ -113,7 +109,7 @@ def main():
                 icon.resize((px, px), Image.LANCZOS).save(os.path.join(iconset, 'icon_%dx%d.png' % (px, px)))
                 icon.resize((px * 2, px * 2), Image.LANCZOS).save(os.path.join(iconset, 'icon_%dx%d@2x.png' % (px, px)))
             subprocess.run(['iconutil', '-c', 'icns', iconset, '-o', icns], check=True)
-    print('wrote', png, ico, gif, icns if os.path.exists(icns) else '(no icns)')
+    print('wrote', png, ico, icns if os.path.exists(icns) else '(no icns)')
 
 
 if __name__ == '__main__':

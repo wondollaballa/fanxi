@@ -62,7 +62,7 @@ publishing a compatibility list.
   ([`ashita_core.lua`](../host/addons/lua/ashita_core.lua)); Windower's `load`/`unload` say
   plugins are not supported ([`windower.lua`](../host/addons/lua/windower.lua)).
 - The launcher has **no addon surface at all**. It starts a client with `FFXI_CONTROL` only
-  ([`control.py`](../launcher/fanxi_launcher/control.py), [`game.rs`](../launcher-rs/src-tauri/src/game.rs));
+  ([`game.rs`](../launcher-rs/src-tauri/src/game.rs));
   the only addon control today is the in-game **Config → Addons** page, backed by
   [`manage.c`](../host/addons/manage.c) and `addons.cfg`.
 - Upstream research: Ashita v4 has a public C++ plugin SDK and a small official plugin set;
@@ -241,8 +241,7 @@ draw distance/LoD/fog controls and timer overlays are all close to things the ho
 
 ### Launcher UX
 
-Add **Add-ons** to the launcher sidebar (Rust launcher first; mirror in the Python launcher only
-if it remains supported):
+Add **Add-ons** to the launcher sidebar:
 
 - Filter: All / Ashita / Windower / Fanxi / Legacy plugins.
 - Row: enable checkbox, name, kind badge, version, source, status

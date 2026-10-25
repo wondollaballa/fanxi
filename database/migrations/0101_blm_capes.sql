@@ -7,7 +7,7 @@
 -- The existing wardrobe copy becomes the tp build; the other eight
 -- are new copies in wardrobe 6 slots 66-73 (the inventory and the
 -- earlier wardrobes are full).  The client reads the job from the
--- item name, so !cape <build> <item> can rewrite any of them.
+-- item name, so //cape <build> <item> can rewrite any of them.
 
 UPDATE char_inventory SET extra = X'0203019A449817488E483648000000000000000000000000'
  WHERE character_id = 1 AND item_id = 26249 AND (extra IS NULL OR length(extra) = 0);

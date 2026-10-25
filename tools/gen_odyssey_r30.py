@@ -185,7 +185,7 @@ def docs(data: dict) -> str:
         "and each item's page.",
         "",
         "The same data drives `gearswap/*.lua` (`local odyssey` and the `sets.Odyssey`",
-        "container), `data/odyssey_r30.json`, and the server's `!r30` chat command.",
+        "container), `data/odyssey_r30.json`, and the server's `//r30` chat command.",
         "",
     ]
     titles = {"nyame": "Nyame", "sakpata": "Sakpata's", "gleti": "Gleti's", "agwu": "Agwu's"}
@@ -227,8 +227,8 @@ def docs(data: dict) -> str:
     out += ["",
             "## In game", "",
             "The armour pieces are granted to the character's wardrobes by",
-            "`database/migrations/0072_odyssey_r30.sql`. Use `!r30 <item>` in the chat",
-            "log to print an item's Rank 30 rows, and `!r30` alone to list every",
+            "`database/migrations/0072_odyssey_r30.sql`. Use `//r30 <item>` in the chat",
+            "log to print an item's Rank 30 rows, and `//r30` alone to list every",
             "Odyssey item the server knows.",
             "",
             "Each item's `extdata` now carries its real **augment bundle index**",
@@ -240,8 +240,8 @@ def docs(data: dict) -> str:
             "",
             "Nyame gets one copy per path: the original piece carries Path A and",
             "migration `0077_odyssey_bundles.sql` adds Path B/C/D copies, each with",
-            "its own bundle, so all four tooltips are distinct. `!augment <index>",
-            "<item>` rewrites a copy; `!augment <A-D> <item>` looks the index up.",
+            "its own bundle, so all four tooltips are distinct. `//augment <index>",
+            "<item>` rewrites a copy; `//augment <A-D> <item>` looks the index up.",
             ""]
     return "\n".join(out)
 
@@ -287,7 +287,7 @@ def sql(data: dict) -> str:
         "-- migrations. The Rank 30 rows themselves live in data/odyssey_r30.json",
         "-- and in the gearswap libraries; the client tooltip cannot print them (see",
         "-- docs/odyssey-r30.md) until the server learns retail's extdata augment",
-        "-- encoding, so !r30 is the in-game view for now.",
+        "-- encoding, so //r30 is the in-game view for now.",
         "--",
         "-- Item ids, slots, job masks and the Rank 30 values are factual game data",
         "-- cross-checked against BG Wiki. The SQL is Fanxi's own.",

@@ -248,7 +248,7 @@ class WeaponSkillSessionTest(unittest.TestCase):
         self.assertEqual(int(self.session.char["tp"]), 500)
 
     def test_bang_ws_uses_the_same_self_skill_path(self):
-        """`!ws Myrkr` must work with no monster selected, like the menu packet does."""
+        """`//ws Myrkr` must work with no monster selected, like the menu packet does."""
         self.session.char["tp"] = 1000
         self.session.char["mp_current"] = 0
         self.session.queue.clear()

@@ -114,6 +114,22 @@ local limbus = {
     },
 }
 
+local capes = {
+    fc = { name = "Sucellos's Cape", augments = {"MP+60", "Mag. Acc+20 /Mag. Dmg.+20", "MP+20", '"Fast Cast"+10', "Phys. dmg. taken-10%"} },
+    pdt = { name = "Sucellos's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Sucellos's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Sucellos's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Sucellos's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Sucellos's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    cure = { name = "Sucellos's Cape", augments = {"MND+20", "Mag. Acc+20 /Mag. Dmg.+20", "MND+10", '"Cure Potency"+10%', "Phys. dmg. taken-10%"} },
+    macc = { name = "Sucellos's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "Mag. Acc.+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    nuke = { name = "Sucellos's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", '"Mag.Atk.Bns."+10', "Phys. dmg. taken-10%"} },
+    ws_str = { name = "Sucellos's Cape", augments = {"STR+20", "Accuracy+20 Attack+20", "STR+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    ws_dex = { name = "Sucellos's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    ws_mnd = { name = "Sucellos's Cape", augments = {"MND+20", "Accuracy+20 Attack+20", "MND+10", "Weapon skill damage +10%", "Damage taken-5%"} },
+    mabws = { name = "Sucellos's Cape", augments = {"MND+20", "Mag. Acc+20 /Mag. Dmg.+20", "MND+10", "Weapon skill damage +10%", "Phys. dmg. taken-10%"} },
+}
+
 function get_sets()
     sets = {}
     sets.engaged = {}
@@ -135,7 +151,7 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Atrophy Boots +4",
         neck = "Duelist's Torque +2",
-        back = "Sucellos's Cape",
+        back = capes.fc,
     }
     sets.JA.Composure = {
         main = "Murgleis",
@@ -146,7 +162,7 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Atrophy Boots +4",
         neck = "Duelist's Torque +2",
-        back = "Sucellos's Cape",
+        back = capes.fc,
     }
     sets.JA.Convert = {
         main = "Murgleis",
@@ -157,7 +173,7 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Atrophy Boots +4",
         neck = "Duelist's Torque +2",
-        back = "Sucellos's Cape",
+        back = capes.fc,
     }
     sets.JA.Saboteur = {
         main = "Murgleis",
@@ -168,7 +184,7 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Atrophy Boots +4",
         neck = "Duelist's Torque +2",
-        back = "Sucellos's Cape",
+        back = capes.fc,
     }
     sets.JA.Spontaneity = {
         main = "Murgleis",
@@ -179,7 +195,7 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Vitiation Boots +4",
         neck = "Duelist's Torque +2",
-        back = "Sucellos's Cape",
+        back = capes.fc,
     }
 
     -- ===== Odyssey =====
@@ -231,7 +247,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Sucellos's Cape",
+        back = capes.tp,
     }
     sets.WS.Requiescat = {
         main = "Naegling",
@@ -248,7 +264,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Sucellos's Cape",
+        back = capes.mabws,
     }
     sets.WS["Sanguine Blade"] = {
         main = "Naegling",
@@ -265,7 +281,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Sucellos's Cape",
+        back = capes.mabws,
     }
     sets.WS["Savage Blade"] = {
         main = "Naegling",
@@ -282,7 +298,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = "Sucellos's Cape",
+        back = capes.mabws,
     }
 
     -- ===== engaged =====
@@ -301,7 +317,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Sucellos's Cape",
+        back = capes.tp,
     }
     sets.engaged.hybrid = {
         main = "Naegling",
@@ -318,7 +334,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Sucellos's Cape",
+        back = capes.tp,
     }
     sets.engaged.tp = {
         main = "Naegling",
@@ -335,7 +351,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Sucellos's Cape",
+        back = capes.tp,
     }
 
     -- ===== Limbus Rank 30 sets =================================
@@ -360,7 +376,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Sucellos's Cape",
+        back = capes.dt,
     }
     sets.idle.maxhp = {
         main = "Naegling",
@@ -377,7 +393,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Sucellos's Cape",
+        back = capes.maxhp,
     }
     sets.idle.mdt = {
         main = "Naegling",
@@ -394,7 +410,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Sucellos's Cape",
+        back = capes.mdt,
     }
     sets.idle.movement = {
         main = "Murgleis",
@@ -428,7 +444,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Sucellos's Cape",
+        back = capes.pdt,
     }
     sets.idle.refresh = {
         main = "Murgleis",
@@ -445,7 +461,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Chirich Ring +1",
         ring2 = "Stikini Ring +1",
-        back = "Sucellos's Cape",
+        back = capes.fc,
     }
     sets.idle.town = {
         main = "Murgleis",
@@ -481,7 +497,7 @@ function get_sets()
         ear2 = "Enchntr. Earring +1",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Sucellos's Cape",
+        back = capes.macc,
     }
     sets.midcast["Elemental Magic"] = {
         main = "Murgleis",
@@ -498,7 +514,7 @@ function get_sets()
         ear2 = "Crematio Earring",
         ring1 = "Metamorph Ring +1",
         ring2 = "Mujin Band",
-        back = "Sucellos's Cape",
+        back = capes.nuke,
     }
     sets.midcast["Elemental Magic Macc"] = {
         main = "Murgleis",
@@ -515,7 +531,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Sucellos's Cape",
+        back = capes.macc,
     }
     sets.midcast["Enfeebling Magic"] = {
         main = "Murgleis",
@@ -532,7 +548,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Sucellos's Cape",
+        back = capes.macc,
     }
     sets.midcast["Enhancing Magic"] = {
         main = "Murgleis",
@@ -549,7 +565,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Sucellos's Cape",
+        back = capes.macc,
     }
     sets.midcast["Healing Magic"] = {
         main = "Murgleis",
@@ -566,7 +582,7 @@ function get_sets()
         ear2 = "Tuisto Earring",
         ring1 = "Gelatinous Ring +1",
         ring2 = "Stikini Ring +1",
-        back = "Sucellos's Cape",
+        back = capes.cure,
     }
 
     -- ===== precast =====
@@ -583,7 +599,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = "Sucellos's Cape",
+        back = capes.fc,
     }
 
     -- ===== weaponset =====

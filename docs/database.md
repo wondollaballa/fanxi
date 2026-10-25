@@ -50,14 +50,15 @@ The current schema is migrations `0001_initial.sql`, `0002_world_content.sql` an
 | `monster_templates` | Monster templates | `name`, `model`, `level_min/max`, `hp`, combat stats, `aggro`, `roam_radius`, `respawn_seconds` |
 | `monster_spawns` | Monster placements | `template_id`, `zone`, `pos_*`, `rot`, `level`, `respawn_seconds` |
 | `trusts` | Factual alter-ego data behind the 122 Trust spells (migration 115) | `spell_id` (primary key), `name`, `job`/`sub_job`, `look_hex`, `model`, `delay`, `damage_mult`, `passive` |
+| `trust_spells` | Spells each alter ego can cast, joined from its `mob_spell_lists` row (migration 117) | `trust_spell_id`, `spell_id`, `min_level`, `max_level` |
 | `items` | Item catalogue | `item_id`, `name`, `stack`, `usable`, `equip_slot`, `level`, `item_level`, `rare`, `ex`, `price`, `base_sell` (retail flags; a Rare item is one per character) |
 | `char_purchases` | Armory purchase history | `character_id`, `item_id`, `quantity`, `price`, `created_at` |
 | `item_models` | Grap model per visible item (migration 95) | `item_id`, `model`; triggers on `items`/`char_inventory`/`char_equip` keep it applied |
 | `char_inventory` | Character slots | `character_id`, `container`, `slot`, `item_id`, `quantity`; slot 0 / item 65535 is gil |
-| `char_warps` | `/!warp` saved places (migration 110) | `character_id`, `slot` 1-1000, `alias` (unique per character when non-empty), `zone`, `pos_*`, `rot` |
+| `char_warps` | `//warp` saved places (migration 110) | `character_id`, `slot` 1-1000, `alias` (unique per character when non-empty), `zone`, `pos_*`, `rot` |
 | `item_storage` | Storage Slip eligibility | `item_id`, `slip` (1–33) |
 | `char_storage` | Items on a character's slips | `character_id`, `item_id`, `quantity`, `slip`, `stored_at` |
-| `char_locker` | Hidden 9999-item locker | `character_id`, `item_id`, `quantity`, `stored_at` |
+| `char_locker` | Hidden 9999-item locker | `character_id`, `item_id`, `extra`, `quantity`, `stored_at` |
 | `quests` | Quest definitions | `quest_key`, `name`, reward, `required_template_id`, `required_kills` |
 | `char_quests` | Quest progress | `character_id`, `quest_id`, `state` (`active`/`complete`), `progress` |
 
@@ -107,8 +108,10 @@ inserts here, so the item is not in any client-visible bag. Grabbing reverses th
 `0065_storage_slips.sql` seeds the item map; `0067_slip_storage.sql` moves anything left in the
 old visible Storage/Locker containers into `char_storage`.
 
-`char_locker` is the hidden general-purpose locker (`!locker`). It has no client container and no
-slip column; `0069_generic_locker.sql` creates it. The server enforces a 9999-quantity cap.
+`char_locker` is the hidden general-purpose locker (`//locker`). It has no client container and no
+slip column; `0069_generic_locker.sql` creates it, and `0116_all_capes_locker.sql` adds the
+24-byte `extra` augment block and makes `(character_id, item_id, extra)` the primary key so the
+198 same-id cape builds can coexist. The server enforces a 9999-quantity cap.
 
 All times are ISO-8601 UTC strings (`2026-10-20T02:34:18.331Z`), written by the server. Sorting
 the text sorts the times.

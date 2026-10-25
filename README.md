@@ -15,15 +15,14 @@ a server that belong to the same project:
 | Piece | What it is | Where |
 |---|---|---|
 | **Client** | The game, statically recompiled from *your* install and run natively (no Wine, no Rosetta) | `recomp/`, `runtime/`, `host/` |
-| **Launcher** | A dependency-free Python/Tk desktop app, plus a Rust + Tauri rebuild in progress | `launcher/`, `launcher-rs/` |
+| **Launcher** | A native Rust + Tauri 2 desktop app with a React front end | `launcher-rs/` |
 | **Server** | Fanxi's HTTP API plus the FINAL FANTASY XI auth, lobby and zone gateway | `server/` |
 | **Database** | SQLite: accounts, sessions, characters, zones, news, releases | `database/` |
 
-> **Rust launcher preview.** `launcher-rs/` is a side-by-side Tauri 2 + Rust rebuild: the same
-> accounts, characters, control room, GearSwap tools and build hand-off, wrapped in a native
-> desktop app. It shares `launcher.json` with the Python app, so it can be tried without migrating
-> anything. See [launcher-rs/README.md](launcher-rs/README.md). The Python launcher remains the
-> default until the Rust one reaches parity.
+> **Native launcher.** `launcher-rs/` is a Rust + Tauri 2 desktop app with a React front end: the
+> accounts, characters, sub-account team, control room, GearSwap tools and build hand-off in one
+> native window. The earlier Python/Tkinter launcher it grew from has been removed; an existing
+> `launcher.json` carries over unchanged. See [launcher-rs/README.md](launcher-rs/README.md).
 
 > **Project status.** The client is the mature part: the recompiler, renderer, audio, input and
 > addon host are ported from a working native build. The Fanxi launcher, server and database are
@@ -38,7 +37,8 @@ You need:
 
 - macOS on Apple silicon (M1 or later) for the client. The launcher and server run on macOS and
   Linux; the server is Python 3.9+ only.
-- Python 3.9+ with `tkinter` (the Command Line Tools on macOS include both).
+- Node 18+ and Rust 1.85+ if you build the launcher from source (`install.sh` drives both; on
+  Linux also install the WebKitGTK/Tauri packages).
 - Your own copy of FINAL FANTASY XI: a `FINAL FANTASY XI` folder containing `FFXiMain.dll`,
   `FFXi.dll` and `ROM`.
 
@@ -55,7 +55,7 @@ You need:
 #    game       auth 54231/tcp, data 54230/tcp, lobby 54001/tcp, zone 54230/udp
 
 # 4. In another terminal, start the launcher
-./launcher/fanxi-launcher
+./scripts/launcher.sh
 ```
 
 In the launcher:
@@ -71,9 +71,9 @@ In the launcher:
    EXP/hr/DPS and gear.
 
 You start in Port Jeuno. Cumetouflaix, the NPC beside the arrival point, starts **Pest
-Control**; the port's merchants (Gekko sells Potions) open shops. Say `!zone 100` to visit the
-West Ronfaure camp, fight three Orcish Fodder, then return to Cumetouflaix. `!entities`, `!heal`,
-`!where` and `!help` are available in chat.
+Control**; the port's merchants (Gekko sells Potions) open shops. Say `//zone 100` to visit the
+West Ronfaure camp, fight three Orcish Fodder, then return to Cumetouflaix. `//entities`, `//heal`,
+`//where` and `//help` are available in chat.
 
 The launcher's default server is `http://127.0.0.1:8080`. Everything can live on one machine, or
 the server can run elsewhere and the launcher can point at it in **Settings**.
@@ -82,18 +82,25 @@ the server can run elsewhere and the launcher can point at it in **Settings**.
 
 ### Our launcher
 
-`launcher/` is Fanxi's own desktop app. It is plain Python + Tkinter, so it has no Electron, no
-downloaded runtime and no third-party UI framework to audit. It:
+`launcher-rs/` is Fanxi's own desktop app: a Rust core behind a React front end, packaged as a
+native window with Tauri 2. The Rust side owns the machine-facing work — tokens, builds, game
+processes and control ports — and the UI never sees a stored token. It:
 
 - signs in to one or more Fanxi accounts over the HTTP API and keeps each session token in a
   `0600` file (never a password);
 - creates unlimited characters (mules) on an account and keeps them in a picker;
+- creates server-owned sub-account boxes and launches the whole team, windowed or headless;
 - opens a **Control room** that launches several clients, one per account, and shows each one's
   zone, HP/MP, EXP/hr and DPS;
-- sends in-game commands such as `!zone`, `!merits` and `!heal` to any running client;
-- saves `/!warp` places and can mark, rename, delete and warp to them from the **Warps** page,
-  alone or with every online character on the account and its sub-accounts;
-- completes `/!` commands in the game's chat line with Tab when the typed word is unique, and
+- sends in-game commands such as `//zone`, `//merits` and `//heal` to any running client;
+- saves `//warp` places and can mark, rename, delete and warp to them from the **Warps** page,
+  alone or with every online character on the account and its sub-accounts, and has a **Warp
+  team to me** button that calls the whole team to the selected character;
+- tells a live client from a live character: a box that lost its zone session shows **orphaned**
+  or **logged out** with **Reconcile** / **Relaunch** instead of a green row, **Reconcile N**
+  restarts every stale box after a server restart, and a box that comes back from a relog is
+  pulled to the leader by itself (`//warp call <name>`);
+- completes `//` commands in the game's chat line with Tab when the typed word is unique, and
   leaves an ambiguous prefix alone until another letter narrows it;
 - reads the active gear of each client, detects its live main job, loads that job's default
   GearSwap library, and can import/edit/save timestamped versions from the **Gear** page, with a
@@ -103,11 +110,11 @@ downloaded runtime and no third-party UI framework to audit. It:
   `pefile`, and streams the build log);
 - asks the server for a one-time launch token and starts `host64` with the right ports and a
   per-client control port;
-- shows server status and news, and can package itself as a macOS `.app` or a Linux desktop entry:
+- shows server status and news, and packages itself for this OS:
 
 ```bash
-python3 launcher/build_app.py             # build/Fanxi Launcher.app (macOS)
-python3 launcher/build_app.py --desktop   # build/Fanxi Launcher.desktop (Linux)
+cd launcher-rs
+npm run tauri build          # .app/.dmg (macOS), AppImage/deb (Linux), MSI/NSIS (Windows)
 ```
 
 No passwords are stored by the launcher. The token is the only credential on disk. The same app
@@ -134,24 +141,35 @@ it is used.
 The zone gateway implements the packets needed to sign in, stand in a zone, see the character,
 move, change zones and talk/attack. Its small world adds:
 
-- 126 imported NPCs in Port Jeuno (`!zone 246`), including the quest giver and five merchants;
-- the imported West Ronfaure spawn table (`!zone 100`);
+- 126 imported NPCs in Port Jeuno (`//zone 246`), including the quest giver and five merchants;
+- the imported West Ronfaure spawn table (`//zone 100`);
+- monsters that walk the zone's own collision mesh: they roam and chase on the floor, path
+  around walls and cliffs, and cannot aggro or swing through them
+  ([details](docs/world.md#zone-navigation));
 - click-to-talk dialogue and the persistent **Pest Control** hunt quest;
 - basic melee combat with `0x028` action packets, HP updates, EXP, gil and level-ups;
 - an 80-slot inventory with gil, Potions and starter swords;
-- a Storage Slip command (`!storage store|grab <job|all>`) reachable from any zone, which moves
+- a Storage Slip command (`//storage store|grab <job|all>`) reachable from any zone, which moves
   only gear a slip accepts off the character entirely and puts it back when you need it;
-- a hidden 9999-item locker (`!locker store|grab|list <all|ammo|back|materials|name>`) for JSE
-  capes, ammo, crafting materials and everything else a slip does not accept;
-- working-stock auto-refill: `!stock` keeps a visible stack of ninjutsu tools, pet food and Dawn
+- a hidden 9999-item locker (`//locker store|grab|list <all|ammo|back|jsecapes|materials|name>`) for the
+  198 Ambuscade JSE cape builds, ammo, crafting materials and everything else a slip does
+  not accept;
+- working-stock auto-refill: `//stock` keeps a visible stack of ninjutsu tools, pet food and Dawn
   Mulsum in the inventory, pulling from the hidden locker when they are used;
 - monster death, rewards and respawn.
 
-Server commands: `!zone`, `!warp`, `!pos`, `!where`, `!entities`, `!trust`, `!heal`, `!time`,
-`!storage`, `!locker`, `!stock`, `!help`. `!warp` marks your own camps (`!warp mark [alias]`) and returns to
-them by number or alias (`!warp me 1`, `!warp all 1` for your sub-account boxes); the launcher's
-**Warps** page edits the same list. Positions are persisted to the database (throttled to a few
-writes a second at most). See [docs/world.md](docs/world.md) for content, packet flow and limits.
+Server commands: `//zone`, `//warp`, `//invite`, `//makeparty`, `//pos`, `//where`, `//entities`,
+`//trust`, `//heal`, `//time`, `//storage`, `//locker`, `//stock`, `//help`. `//warp` marks your own
+camps (`//warp mark [alias]`) and returns to them by number or alias (`//warp me 1`, `//warp all 1`
+for your sub-account boxes); `//warp all me` calls the whole online team to your current spot, and
+`//warp call <name>` calls one box — the launcher sends that by itself when a relogged box is back
+in game.
+`//invite subs` parties every online sub-account in one command, or `//invite <name>` one player;
+`//makeparty` drops the subs out of any old parties first (the Party Info HUD has a **Make party**
+button for it). The Control room's **Invite** button offers the same choices. The launcher's
+**Warps** page edits the same list and has the same **Warp team to me** button. Positions are
+persisted to the database (throttled to a few writes a second at most). See
+[docs/world.md](docs/world.md) for content, packet flow and limits.
 
 ### Our database
 
@@ -195,9 +213,9 @@ as the license requires. No upstream name, URL or key is used at runtime.
 
 ```
 fanxi/
-├── launcher/            Fanxi Launcher (Python/Tkinter)
-│   ├── fanxi_launcher/  config, API client, game build/launch, UI
-│   └── build_app.py     .app / .desktop packager
+├── launcher-rs/         Fanxi Launcher (Rust + Tauri 2, React)
+│   ├── src/             React pages and components
+│   └── src-tauri/       Rust core: API, config, game, control, gear, commands
 ├── server/              Fanxi server (stdlib HTTP + game sockets)
 │   └── fanxi_server/
 │       ├── http_api.py  /api/v1 router
@@ -228,6 +246,8 @@ or pass the matching command-line flag.
 | `FANXI_ADMIN_KEY` | empty | Key for `X-Admin-Key` calls; empty means admin accounts only |
 | `FANXI_REGISTRATION` | `1` | Allow new accounts |
 | `FANXI_MAX_CHARACTERS` | `0` | Characters per account (`0` = unlimited) |
+| `FANXI_MAX_SUBS` | `5` | Server-owned sub-accounts per main (`0` disables them) |
+| `FANXI_AUTO_ACCEPT_SUB_INVITES` | `1` | A family sub joins a party/alliance without a prompt |
 | `FANXI_SESSION_DAYS` | `30` | Launcher session lifetime |
 | `FANXI_LOGIN_TOKEN_SECONDS` | `120` | Launch-token lifetime |
 | `FANXI_GAME_SESSION_HOURS` | `12` | In-game session lifetime |
@@ -250,7 +270,7 @@ python3 -m fanxi_server run
 ```
 
 Open `8080/tcp` (API), `54231/tcp` (auth), `54230/tcp` and `54230/udp` (data and zone),
-`54001/tcp` (lobby) and `54002/udp` (search) on the firewall. Put the HTTP API behind TLS
+`54001/tcp` (lobby) and `54002/tcp` (search) on the firewall. Put the HTTP API behind TLS
 (a reverse proxy such as Caddy or nginx) if it is on the public internet; the game auth port
 already uses a generated self-signed certificate, and the client does not verify it (private
 servers work that way). Set `FANXI_ADMIN_KEY` to a long random value, or leave it unset and use
@@ -263,10 +283,10 @@ protocol is the game protocol, and the world has no anti-cheat.
 ## Development
 
 ```bash
-./scripts/test.sh          # server + launcher unit/integration tests, then byte-compile
+./scripts/test.sh          # server, launcher and tool tests
 python3 -m fanxi_server doctor          # from server/: configuration in one screen
 python3 -m unittest discover -s server/tests -v
-python3 -m unittest discover -s launcher/tests -v
+cd launcher-rs && npm run check && cargo test --manifest-path src-tauri/Cargo.toml
 python3 tools/build_posix.py vfstest    # game-free client check
 ```
 

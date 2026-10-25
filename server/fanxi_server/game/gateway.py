@@ -1,4 +1,4 @@
-"""Sockets for the game client: auth (TLS), login data, lobby and zone.
+"""Sockets for the game client: auth (TLS), login data, lobby, search and zone.
 
 The wire formats are the ones host/lsb_login.c and the recompiled game already speak to a
 LandSandBoat-compatible server. Ports default to the client's own defaults, so a player only has to
@@ -20,7 +20,8 @@ from ..security import signed_bytes
 from ..service import ApiError, FanxiService
 from . import design as character_design
 from .cipher import VIEW_KEY, lobby_packet
-from .world import World
+from .search import SearchServer
+from .world import FLUSH_INTERVAL, World
 from .zone import cstr, ZoneSession
 
 log = logging.getLogger("fanxi.game")
@@ -283,6 +284,7 @@ class Gateway:
         self.huffman = huffman
         self.world = World(config, service, huffman)
         self.lobby = Lobby(self.world)
+        self.search = SearchServer(self.world)
         self.auth_ctx = tls_context(config)
         self._udp = None
 
@@ -297,6 +299,7 @@ class Gateway:
         sockets.append(_listen(bind, ports["auth_port"], self.auth, self.auth_ctx))
         sockets.append(_listen(bind, ports["data_port"], self.data))
         sockets.append(_listen(bind, ports["view_port"], self.lobby.serve))
+        sockets.append(_listen(bind, ports["search_port"], self.search.serve))
         udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
         udp.bind((bind, ports["zone_port"]))
         udp.settimeout(0.25)
@@ -304,12 +307,17 @@ class Gateway:
         self._udp = udp
         self.world.udp = udp
         self.world.sockets.extend(sockets)
+        # Only publish the live roster once every socket exists: a half-started gateway must
+        # not make the HTTP API claim it can see zone sessions.
+        self.service.attach_world(self.world)
         threading.Thread(target=self.zone_loop, args=(udp,), name="fanxi-zone", daemon=True).start()
-        log.info("game gateway: auth %d/tcp, data %d/tcp, lobby %d/tcp, zone %d/udp",
-                 ports["auth_port"], ports["data_port"], ports["view_port"], ports["zone_port"])
+        log.info("game gateway: auth %d/tcp, data %d/tcp, lobby %d/tcp, search %d/tcp, "
+                 "zone %d/udp", ports["auth_port"], ports["data_port"], ports["view_port"],
+                 ports["search_port"], ports["zone_port"])
 
     def stop(self) -> None:
         self.world.close()
+        self.service.detach_world(self.world)
 
     # --- auth ----------------------------------------------------------------------------------
     def auth(self, conn, addr):
@@ -422,6 +430,7 @@ class Gateway:
 
     # --- zone ----------------------------------------------------------------------------------
     def zone_loop(self, udp: socket.socket):
+        last_flush = 0.0
         while True:
             try:
                 data, addr = udp.recvfrom(4096)
@@ -430,6 +439,7 @@ class Gateway:
                     self.world.tick(time.time())
                 except Exception as exc:
                     log.warning("world tick: %s: %s", type(exc).__name__, exc)
+                last_flush = time.time()
                 continue
             except OSError:
                 return
@@ -440,3 +450,14 @@ class Gateway:
                     udp.sendto(out, addr)
             except Exception as exc:  # one bad packet must not stop the zone
                 log.warning("zone %s: %s: %s", addr, type(exc).__name__, exc)
+            # Do not let one busy client starve the others: the socket only times out when
+            # every box is quiet, and before this the queued packets for a box that was
+            # not sending anything simply stayed here.  flush() sends at most one packet
+            # per session per FLUSH_INTERVAL, so this is not a second copy of the reply.
+            now = time.time()
+            if now - last_flush >= FLUSH_INTERVAL:
+                last_flush = now
+                try:
+                    self.world.flush(now)
+                except Exception as exc:
+                    log.warning("world flush: %s: %s", type(exc).__name__, exc)

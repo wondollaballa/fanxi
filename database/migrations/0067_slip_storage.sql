@@ -1,8 +1,8 @@
--- Storage Slips keep their contents off the character entirely.  The old !locker
--- experiment used container 4, and the first !storage version used container 2; both
+-- Storage Slips keep their contents off the character entirely.  The old //locker
+-- experiment used container 4, and the first //storage version used container 2; both
 -- showed up as bags in the client.  Move whatever is left in those two containers into
 -- char_storage, keyed by the slip that accepts the item.  Slip 0 means the item has no
--- slip (a legacy row); it is kept so !storage grab all can still return it.
+-- slip (a legacy row); it is kept so //storage grab all can still return it.
 CREATE TABLE IF NOT EXISTS char_storage (
     character_id INTEGER NOT NULL REFERENCES characters(id) ON DELETE CASCADE,
     item_id      INTEGER NOT NULL,

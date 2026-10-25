@@ -2,11 +2,11 @@
 # Fanxi on this Mac: double-click this file in Finder, or run ./setup.command.
 #
 # It starts this checkout's Fanxi server if one is not already answering on the launcher's
-# address, then opens the launcher. The launcher builds host64 from your own FINAL FANTASY XI
-# folder the first time you press Play.
+# address, then opens the Tauri launcher. The launcher builds host64 from your own
+# FINAL FANTASY XI folder the first time you press Play.
 #
-# Nothing to install: macOS's Command Line Tools provide python3 and tkinter, and the build brings
-# its own SDL, mbedTLS and LuaJIT. If the tools are missing, this asks macOS to install them.
+# The launcher is Rust + Tauri: building or running it from source needs Node 18+ and Rust 1.85+
+# (install.sh installs the app for you). The server only needs Python 3.9+.
 cd "$(dirname "$0")" || exit 1
 
 if ! xcode-select -p >/dev/null 2>&1 || ! xcrun --find clang >/dev/null 2>&1; then
@@ -55,7 +55,7 @@ cleanup() {
 }
 trap cleanup EXIT INT TERM
 
-./launcher/fanxi-launcher
+./scripts/launcher.sh
 status=$?
 if [ -t 0 ] && [ -z "$FANXI_SETUP_NO_WAIT" ]; then
     echo

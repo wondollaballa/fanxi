@@ -17,7 +17,7 @@ INSERT OR IGNORE INTO zones (id, name, pos_x, pos_y, pos_z, rot) VALUES
 
 INSERT OR IGNORE INTO settings (key, value) VALUES
     ('server_name', 'Fanxi'),
-    ('motd', 'Welcome to Fanxi. Say !help in the zone for commands.'),
+    ('motd', 'Welcome to Fanxi. Say //help in the zone for commands.'),
     ('registration_open', '1'),
     ('world_id', '1'),
     ('schema_version', '2'),

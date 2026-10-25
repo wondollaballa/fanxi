@@ -72,6 +72,12 @@ Fanxi ships no FINAL FANTASY XI data, binaries or assets extracted from the game
 built on the player's machine from the player's own `FFXiMain.dll`, `FFXi.dll` and `ROM` folder.
 `assets/` contains only Fanxi's own icons and UI art created for this project.
 
+`server/fanxi_server/game/zonemesh.py` reads the player's own zone collision mesh when the server
+is pointed at the game folder, and caches a derived walkable grid under `data/nav/`; that cache
+is runtime data, is not committed, and holds no art, textures, models or dialogue. The DAT
+container and `MZB` mesh block layouts are functional format facts taken from the files
+themselves, and the implementation is Fanxi's own.
+
 The Storage Slip item ids in `database/migrations/0065_storage_slips.sql` are game data,
 cross-checked against the [BG-Wiki Storage Slip category](https://www.bg-wiki.com/ffxi/Category:Storage_Slip)
 and the public Windower resources slip table (BSD-3-Clause). Only item ids and slip numbers are

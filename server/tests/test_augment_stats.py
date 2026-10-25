@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "server"))
 from support import make_service  # noqa: E402
 
 from fanxi_server.game import (  # noqa: E402
-    augment_stats, augments, capes, limbus, modifiers as mod, odyssey, unity,
+    augment_stats, augments, capes, limbus, modifiers as mod, oboro, odyssey, unity,
 )
 
 REVELATION = (24122, 24125, 24128, 24131, 24134)  # head, body, hands, legs, feet
@@ -54,6 +54,18 @@ class AugmentParserTest(unittest.TestCase):
         self.assertEqual(augment_stats.parse_line("Accuracy+20 Attack+20"),
                          {mod.ACC: 20, mod.ATT: 20})
 
+    def test_sch_regen_augments(self):
+        # 0x173 is flat HP/tick; 0x4E0 is the separate augment-duration multiplier.
+        self.assertEqual(augment_stats.parse_line('"Regen" potency+10'),
+                         {mod.REGEN_POTENCY: 10})
+        self.assertEqual(augment_stats.parse_line("Enh. Mag. eff. dur.+10%"),
+                         {mod.ENH_MAGIC_DURATION_AUGMENT: 10})
+        block = bytes.fromhex("02037349E04C000000000000000000000000000000000000")
+        self.assertEqual(augment_stats.item_mods(28636, block), {
+            mod.REGEN_POTENCY: 10,
+            mod.ENH_MAGIC_DURATION_AUGMENT: 10,
+        })
+
     def test_all_attributes(self):
         self.assertEqual(augment_stats.parse_line("All Attr.+10"), {
             mod.STR: 10, mod.DEX: 10, mod.VIT: 10, mod.AGI: 10,
@@ -73,6 +85,7 @@ class AugmentParserTest(unittest.TestCase):
                 rows.update(path_rows or [])
         for entry in unity.ITEMS.values():
             rows.update(entry["augments"])
+        rows.update(oboro.rows())
         for entry in capes.JOBS.values():
             for build in entry["builds"].values():
                 rows.update(build)

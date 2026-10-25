@@ -123,9 +123,30 @@ void gfx_draw(const GfxDraw* d)
     (void)d;
     g_prof.draws++;
 }
+/* A headless game still has a frame loop. Without a real Present there is nothing to wait on, so
+ * the game can spin as fast as the CPU allows; FFXI_HEADLESS_FPS paces the loop (15 fps is plenty
+ * for a box that is driven through its control port). 0, the default, leaves the game's own pacing. */
+static int g_headless_fps = -1;
+static uint64_t g_headless_next;
+
 void gfx_present(GfxTex* backbuffer)
 {
     (void)backbuffer;
+    if (g_headless_fps < 0)
+    {
+        const char* s = getenv("FFXI_HEADLESS_FPS");
+        g_headless_fps = s && s[0] ? atoi(s) : 0;
+    }
+    if (g_headless_fps > 0)
+    {
+        uint64_t period = 1000000000ull / (uint64_t)g_headless_fps;
+        uint64_t now = rt_monotonic_ns();
+        if (!g_headless_next || g_headless_next < now || g_headless_next > now + period)
+            g_headless_next = now;
+        else if (g_headless_next > now)
+            plat_sleep_ms((uint32_t)((g_headless_next - now + 999999ull) / 1000000ull));
+        g_headless_next += period;
+    }
     if (!gfx_profiling)
         return;
     g_present_thread = plat_thread_id();

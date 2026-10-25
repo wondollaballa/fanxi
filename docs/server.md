@@ -27,7 +27,8 @@ Or use the helpers at the repository root:
 ./scripts/dev.sh       # server and launcher together
 ```
 
-`FANXI_GAME_DIR` (or `--game-dir`) tells the gateway where `res/compress.dat` is. The gateway
+`FANXI_GAME_DIR` (or `--game-dir`) tells the gateway where `res/compress.dat` is, and is also
+where the collision meshes for monster navigation are read from. The gateway
 needs it to compress zone packets; without it the server still runs the HTTP API, but the game
 cannot enter a zone. If you press Play and the server has no gateway, the launcher reports the
 auth failure; fix the game folder or `FANXI_HUFFMAN`.
@@ -50,7 +51,7 @@ It prints the repository, database, HTTP address, public host, game ports, game 
 | 54230 | TCP | Login data connection |
 | 54001 | TCP | Lobby |
 | 54230 | UDP | Zone |
-| 54002 | UDP | Search (advertised, reserved) |
+| 54002 | TCP | Search (`/sea all`, `/sea <name>`) |
 
 The data and zone ports share `54230` on TCP and UDP, as the client expects.
 
@@ -67,7 +68,7 @@ The zone gateway hosts the imported world. Its design, packet flow and limits ar
 - **Inventory:** 1,000 starter gil, two Potions and an Onion Sword, stored in SQLite.
 
 NPCs and monsters are sent only after the client's first position (`0x015`), not during zone-in.
-In game, use `!entities` to see targids, `!zone 100` for the camp and `!zone 246` for town.
+In game, use `//entities` to see targids, `//zone 100` for the camp and `//zone 246` for town.
 
 Content lives in `world_npcs`, `npc_lines`, `monster_templates`, `monster_spawns`, `items`, `quests` and
 `char_inventory`/`char_quests`; behaviour is in `server/fanxi_server/game/content.py`. The data is
@@ -102,6 +103,7 @@ once.
 | Method | Path | Body | Result |
 |---|---|---|---|
 | POST | `/auth/logout` | — | `204` |
+| GET | `/world/online` | — | `{gateway, characters: [{id, char_id, name, zone, zone_name}], count}` |
 | GET | `/me` | — | `{account, characters}` |
 | GET | `/characters` | — | `{characters: [...]}` |
 | POST | `/characters` | `{name, race, face, hair, size, nation, main_job, sub_job?}` | `201 {character}` |
@@ -114,12 +116,21 @@ once.
 | POST | `/accounts/sub/{id}/characters` | `{name?, race?, ...}` | `201 {character}` |
 | DELETE | `/accounts/sub/{id}` | `purge=1` query | suspend, or purge |
 
+`GET /world/online` is the authoritative online roster (the same one `/sea all` reads). It lists
+live zone sessions, not `game_sessions` login rows: after a server restart the rows still exist
+for clients the world has forgotten, so they are not proof that a character is online. `gateway` is false when the game gateway is not attached (API-only server),
+in which case `characters` is empty and the launcher must not treat that as "everyone is offline".
+The public `/status` `online` count uses the same roster while the gateway is attached.
+
 Sub-accounts are server-owned. A main account creates up to `FANXI_MAX_SUBS` (default 5) of
 them; each is created with exactly one character. They have no password and no API session, and
 the main's Bearer token is the only key: `POST /accounts/sub/{id}/launch` checks `parent_id` and
 mints a normal single-use game launch token for the sub. Another account cannot list, launch or
 delete them (the answer is `404`), and a sub cannot sign in on its own. Without `purge=1`,
 `DELETE` suspends the sub and keeps its character; `purge=1` deletes both and frees the slot.
+A party or alliance invitation to a sub from its own account family is accepted by the server
+without the `0x0DC` prompt, so a headless box joins as soon as it is invited;
+`FANXI_AUTO_ACCEPT_SUB_INVITES=0` restores the prompt.
 
 `client` is ready for `host64`:
 
@@ -194,9 +205,13 @@ Everything is environment-driven. The command line for `run` can override the ma
 | `FANXI_DB` | `data/fanxi.db` | SQLite file |
 | `FANXI_GAME_DIR` | auto-detect | Folder containing `FFXiMain.dll` and `res/compress.dat` |
 | `FANXI_HUFFMAN` | — | Folder containing `compress.dat` (wins over game dir) |
+| `FANXI_NAV_DIR` | `data/nav` | Walkable zone grids built from the game's collision meshes |
+| `FANXI_NAV` | `1` | `0` disables collision-aware monster movement (legacy straight-line chase) |
 | `FANXI_ADMIN_KEY` | empty | If empty, only `role = admin` accounts can use admin endpoints |
 | `FANXI_REGISTRATION` | `1` | `0` closes registration (also `settings.registration_open`) |
 | `FANXI_MAX_CHARACTERS` | `0` | Per account; `0` means unlimited |
+| `FANXI_MAX_SUBS` | `5` | Server-owned sub-accounts per main; `0` disables them |
+| `FANXI_AUTO_ACCEPT_SUB_INVITES` | `1` | Accept a party/alliance invite to a family sub without the `0x0DC` prompt |
 | `FANXI_SESSION_DAYS` | `30` | Launcher token lifetime |
 | `FANXI_LOGIN_TOKEN_SECONDS` | `120` | Launch token lifetime |
 | `FANXI_GAME_SESSION_HOURS` | `12` | Game session lifetime |
@@ -256,7 +271,7 @@ TLS (self-signed by default); the client does not verify it, as is normal for pr
 ### Firewall
 
 Open only what players need: `8080/tcp` (or 443 if proxied), `54231/tcp`, `54230/tcp`,
-`54230/udp`, `54001/tcp`, `54002/udp`. Keep SSH and the database file private.
+`54230/udp`, `54001/tcp`, `54002/tcp`. Keep SSH and the database file private.
 
 ### Backups
 

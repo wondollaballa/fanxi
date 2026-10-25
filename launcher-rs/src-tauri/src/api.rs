@@ -1,5 +1,5 @@
-//! HTTP client for the Fanxi server. This mirrors `launcher/fanxi_launcher/api.py`, including the
-//! stable error envelope: `{"error": {"code": "...", "message": "..."}}`.
+//! HTTP client for the Fanxi server, including the stable error envelope:
+//! `{"error": {"code": "...", "message": "..."}}`.
 
 use std::time::Duration;
 
@@ -260,6 +260,13 @@ impl ApiClient {
 
     pub async fn sub_accounts(&self, token: &str) -> AppResult<Value> {
         self.request(Method::GET, "/accounts/sub", None, Some(token), None)
+            .await
+    }
+
+    /// The characters with a live zone session in the token's account family. This is the
+    /// server's truth, as opposed to a client process's memory of its last zone.
+    pub async fn world_online(&self, token: &str) -> AppResult<Value> {
+        self.request(Method::GET, "/world/online", None, Some(token), None)
             .await
     }
 

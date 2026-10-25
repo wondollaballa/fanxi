@@ -21,6 +21,11 @@ def make_config(tmp_path: Path, **overrides) -> Config:
         db_path=tmp_path / "fanxi.db",
         tls_cert=tmp_path / "tls" / "auth-cert.pem",
         tls_key=tmp_path / "tls" / "auth-key.pem",
+        # Keep a developer's data/nav cache and game folder out of the tests: the
+        # suite's monsters must behave the same on a machine that has played a zone and
+        # on a clean CI checkout.  Navigation tests replace World.nav explicitly.
+        nav_dir=tmp_path / "nav",
+        nav_enabled=False,
         registration_open=True,
         admin_key="test-admin-key",
     )
@@ -71,5 +76,5 @@ def game_ports() -> dict:
         "data_port": free_tcp_port(),
         "view_port": free_tcp_port(),
         "zone_port": free_udp_port(),
-        "search_port": free_udp_port(),
+        "search_port": free_tcp_port(),
     }

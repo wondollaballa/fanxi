@@ -69,7 +69,7 @@ def bundle(path: str = "A", rank: int = RANK_MAX, tier: int = 3,
 
 
 def decode(extra: bytes | None) -> dict | None:
-    """Read back a bundle block (used by ``!augment`` and the tests)."""
+    """Read back a bundle block (used by ``//augment`` and the tests)."""
     if not extra or len(extra) < 12:
         return None
     raw = bytes(extra)

@@ -1,36 +1,27 @@
 # Launcher
 
-The Fanxi Launcher is the desktop app in `launcher/`. It is ordinary Python 3.9+ and Tkinter: no
-Electron, no Node runtime, no compiled UI dependencies.
+The Fanxi Launcher is the native desktop app in `launcher-rs/`: Rust and Tauri 2 behind a React
+front end. It keeps its settings in the same `launcher.json` the earlier Python/Tkinter app used —
+that app has been removed — so an existing install keeps its accounts, characters, game folder and
+tenants.
 
-> **Rust/Tauri preview.** `launcher-rs/` contains a native rebuild of this app in Rust + Tauri 2.
-> It uses the same `launcher.json` and control protocol, and is being brought to parity alongside
-> the Python launcher. This document covers the Python app until the Rust one becomes the default;
-> see [launcher-rs/README.md](../launcher-rs/README.md) for its own run and build instructions.
+The Rust core owns everything that touches the machine: saved tokens, the game build, `host64`
+processes and their control ports. The React app is the view; it calls typed Tauri commands and
+never sees a stored token. See [launcher-rs/README.md](../launcher-rs/README.md) for the module
+layout.
 
 ## Run it
 
 From a checkout:
 
 ```bash
-./launcher/fanxi-launcher
-# or
-python3 -m fanxi_launcher          # from launcher/
-# or
-./install.sh                       # builds and installs the .app / desktop entry
+cd launcher-rs
+npm ci
+npm run tauri dev
 ```
 
-The launcher's own checks:
-
-```bash
-./launcher/fanxi-launcher --check
-./launcher/fanxi-launcher --api http://192.0.2.10:8080
-./launcher/fanxi-launcher --game ~/Games/FINAL\ FANTASY\ XI
-./launcher/fanxi-launcher --sign-out
-```
-
-`--check` prints the settings file, data folder, detected game folder, `host64`, the server URL
-and the server's health response.
+`./scripts/launcher.sh` does that (or starts the last release build), `make launcher` is the short
+form, and `./install.sh` builds and installs the `.app` / desktop entry for this OS.
 
 ## What it stores
 
@@ -49,6 +40,12 @@ One JSON file, mode `0600`, at:
   "character_id": 1,
   "tenant_character_id": 1,
   "game_dir": "/Users/aria/Games/FINAL FANTASY XI",
+  "game_display": {
+    "mode": "windowed",
+    "width": 1280,
+    "height": 720,
+    "ui_scale": 2.0
+  },
   "host64": "/…/fanxi/build/host64",
   "auto_login": true,
   "last_page": "control",
@@ -87,12 +84,28 @@ or is revoked, use **Accounts → Sign in again**.
 | **Characters** | Every character on the active account. **New mule** creates another; Select chooses the one Play uses. **Design** opens that character in the tenant context. |
 | **Design** | Race, face, hair colour and size for the selected tenant. Applying writes to that character only; a running client repaints immediately. |
 | **Accounts** | Every saved account. **Add account** signs in a second account for multiboxing; Use switches the active one; Remove forgets only the local token. |
-| **Control** | The party roster, Launch / Launch all, the live KPI table, Stop, and the command console. |
-| **Warps** | Saved `/!warp` places for the selected tenant: mark the live position, rename aliases, delete rows, and warp just that character or every online box in the account family. Works for main and sub-account characters. |
-| **Data** | The Rust launcher's assignment page: merits, job points, Mastery Rank, gil, Home Points, currencies, key items, the Armory, mission/fame/Mog Garden ranks, jobs and Master Levels, Exemplar Points, crafts, Trusts and augment RP paths, applied to the selected tenant. |
+| **Control** | The party roster, Launch / Launch all, the live KPI table, Stop, the command console, and **Invite** to party the whole sub team or one running character. A client whose zone session died shows **orphaned** (the server has no session although the client still answers) or **logged out**, with **Reconcile** / **Relaunch**; **Reconcile N** restarts every stale box, and a relogged or relaunched box is pulled to the leader automatically. |
+| **Warps** | Saved `//warp` places for the selected tenant: mark the live position, rename aliases, delete rows, warp just that character or every online box in the account family, and **Warp team to me** to call the team to the live character. Works for main and sub-account characters. Even when the team is already in that zone the server hands each box a short `0x00B` re-zone: the client ignores its own position update, so this is what actually moves it to the leader. |
+| **Data** | The assignment page: merits, job points, Mastery Rank, gil, Home Points, currencies, key items, the Armory, mission/fame/Mog Garden ranks, jobs and Master Levels, Exemplar Points, crafts, Trusts, augment RP paths and Oboro weapon paths, applied to the selected tenant. |
 | **Gear / GearSwap** | The selected tenant's live gear and GearSwap library, plus job defaults, imports and versioned set libraries. |
 | **News** | Posts from `news` in the database. |
-| **Settings** | Server URL, game folder, Save, Detect game, Build game, Open data folder, live build log. |
+| **Settings** | Server URL, game folder, headless game folder, remote Linux host, 30 fps main cap, **game window** (mode, resolution, interface scale), Save, Detect game, Build game, Open data folder, live build log. |
+
+The **Game window** card in Settings controls how every visible client opens:
+
+- **Window mode**: Windowed, Borderless window, Full screen, or Borderless full screen. The two
+  full-screen modes follow the primary display's own resolution; the windowed modes use the
+  resolution below.
+- **Resolution**: width × height, or **Fit this display** to use 92% of the primary display's
+  usable area. The quick presets are filtered to sizes that fit that area.
+- **Interface scale**: the game's menus are rendered at the window resolution divided by this, so
+  they stay legible on a large display. 2× matches the sign-in screen's default.
+
+The launcher writes the chosen values to `display.reg` in its data folder and passes that file to
+`host64` with `--reg-final`. The overlay is loaded after the game's saved registry, so it wins for
+that launch without the launcher editing the game folder. Changes apply the next time a client
+starts; a running client keeps its current window.
+
 
 The **Armory** is a typeahead over migration 111's full equipment catalogue: it starts
 suggesting as soon as a name is typed, draws each item's BG Wiki icon, and shows the slot,
@@ -110,7 +123,26 @@ GearSwap** and **Warps** together without changing the signed-in account. The ch
 `tenant_character_id` in `launcher.json` (separate from `character_id`, which is the main account's
 Play character), so it survives page changes and restarts. A tenant that is not running still has
 Design, Data and Warps; Gear shows its live client only while it is up. Create and launch boxes from
-the **Team** page. Characters on a different saved account are not tenants here: use **Accounts → Use**
+the **Team** page: each box card has **Launch client** for a visible window and **Launch headless**
+for a windowless client, and **Launch all clients** starts the main account plus every active box.
+Headless boxes are persistent: **Sleep** parks the character (hidden, no actions) without stopping
+the process or tunnel, and **Wake** / **Launch headless** resumes it in place. The sleeping flag is
+saved in the box registry.
+
+When **Remote Linux host (SSH)** is set, **Launch headless team** starts the main on this Mac and
+restarts only the boxes on that host that are not already in game, through
+`scripts/linux_boxes.py`; healthy boxes are left alone. If a remote operation is stuck and a box
+reports **a remote box operation is already running**, use that box's **Force relaunch**: it
+stops the stuck helper and that account's session (even if it still answers in game), clears its
+registry row/tunnel, and starts a fresh client with a new token. Before any headless launch the launcher
+runs a conservative reaper: tracked clients, visible clients, anything in game
+(`login_status == 2`) and processes younger than two minutes are kept, while old untracked
+headless clients and dead tunnels are removed. A box
+that is already in game is attached instead of restarted. **Launch headless** uses the same remote
+path for one box; with the setting empty it stops any stale local/remote process, starts locally,
+and waits until the character reaches a zone before reporting success. A timeout stops it and names
+the log. Boxes that need an older install can use the separate **Headless game folder** in Settings.
+Characters on a different saved account are not tenants here: use **Accounts → Use**
 to make that account the main one first.
 
 The default server is `http://127.0.0.1:8080`. For a server elsewhere, change it in Settings or
@@ -121,11 +153,23 @@ that launcher process only).
 **Warps** reads and edits the same `char_warps` rows as the in-game command. The tenant bar's
 selection is the character it manages (switching the tenant changes Home, Data, Gear and Warps
 together); it can be a mule on a sub-account because the main account's token is allowed to manage
-its whole family. The row's **Warp** button sends `!warp me <slot>` (or `!warp all <slot>` when
-**Everyone** is selected) to the selected character's running client. **Mark** reads the client's
-current `state` first, so a spot saved from the page is the position the client is actually standing
-on, not a polling snapshot. The **Control room** button makes the round trip easy when a client is
-offline.
+its whole family. The row's **Warp** button sends `//warp me <slot>` (or `//warp all <slot>` when
+**Everyone** is selected) to the selected character's running client. **Warp team to me** sends
+`//warp all me` from that client, which calls every other online box in the account family to the
+character's current zone and position. The Control room's **Live party** header has the same
+button, using the highlighted row. **Mark** reads the client's current `state` first, so a spot
+saved from the page is the position the client is actually standing on, not a polling snapshot. The
+**Control room** button makes the round trip easy when a client is offline.
+
+A box that comes back from a relog is pulled to its leader without a button: the launcher arms the
+warp when the client stops reporting a character block (or when **Relaunch** is pressed) and, once
+that account has been `login_status == 2` for two polls, sends `//warp call <name>` from the
+leader's client. Only that box moves, so a team that is already in place is not snapped around.
+
+**Invite** in the Control room's **Live party** header opens a picker for the highlighted client:
+**Invite all online subs** runs `//invite subs` on the server (the boxes need not be near the
+inviter), while the list of running characters offers one **Invite** per member. The server
+auto-accepts the family subs and still sends the normal prompt to anyone else.
 
 ## Building the game
 
@@ -156,8 +200,12 @@ If `host64` already exists, Play uses it. To rebuild after a game update, run Bu
 
 ```bash
 build/host64 --game <folder> --server <host> --user <name> --login-token <token> \
-             --authport 54231 --dataport 54230 --viewport 54001
+             --authport 54231 --dataport 54230 --viewport 54001 \
+             --reg-final <launcher data dir>/display.reg
 ```
+
+The last argument is the **Game window** overlay from Settings; without it `host64` would read
+whatever display settings the game saved last.
 
 4. the game signs in to Fanxi's auth gateway; the launcher stays open and reports the process id.
 
@@ -181,13 +229,14 @@ same time, the mule needs its own account:
    separate control port and log.
 
 The launcher refuses to start a second client for the same account because the server replaces that
-account's game session. Stopping a client sends `/shutdown`, then terminates its process group if
-the game does not exit.
+account's game session. **Stop** on a headless or remote box parks it with `//sleep` and keeps the
+process, tunnel and session; **Force relaunch** is the path that actually kills and replaces it.
+A visible local client still stops with `/shutdown`, then its process group is terminated.
 
 A new mule can start from another character's progress instead of levelling and gearing it again:
 
 ```bash
-tools/clone_character.py --source Onedough --target Twodough --force --dry-run
+tools/clone_character.py --source Onedough --target Twodough --force
 tools/clone_character.py --source Onedough --target Twodough --force --apply
 ```
 
@@ -213,9 +262,9 @@ polled. Per client it shows:
 - whether the client is online, signing in, or has no control port yet.
 
 Double-click a row to open its **Gear** window. The command console sends a line to the selected
-client: `!zone 100`, `!warp list`, `!merits 5`, `!heal`, `!where`, `!help`, or any other server
+client: `//zone 100`, `//warp list`, `//merits 5`, `//heal`, `//where`, `//help`, or any other server
 command. The control addon executes it as if typed, without the launcher's `/say` fallback. In the
-game's chat line, **Tab** completes `/!` commands when the prefix is unique and leaves an ambiguous
+game's chat line, **Tab** completes `//` commands when the prefix is unique and leaves an ambiguous
 one alone until another letter is typed; the **Warps** page is the point-and-click equivalent for
 saved places.
 
@@ -269,11 +318,11 @@ On the Sets tab, the phase engine is split into the groups the player thinks in:
   One copy of a weapon can fill Main *or* Sub; a second copy unlocks the other (dual wield).
   Grips are offered only when Main is a two-handed weapon; off-hand weapons and shields only
   when Main is one-handed or empty, and an incompatible saved Sub is cleared. Ranged and ammo
-  are in the same form, with stack counts for ammo. The hidden `!locker` is not a client bag, so
-  `!locker grab <name>` first. **Edit** reopens the selected set, **Wear** equips it and
+  are in the same form, with stack counts for ammo. The hidden `//locker` is not a client bag, so
+  `//locker grab <name>` first. **Edit** reopens the selected set, **Wear** equips it and
   **Wear & lock** pins its slots. The weapon slot chips pin individual slots; the EquipViewer
   draws a red border on a pinned cell. Pins are session-only, and a main or support job change
-  releases them with the gear lock; `/!gs lock main, sub, …` / `/!gs unlock …` work in game.
+  releases them with the gear lock; `//gs lock main, sub, …` / `//gs unlock …` work in game.
   Ranged/throw actions are guarded: a Tathlum, orb or other
   stack-1 ammo is never thrown; the addon swaps in a stackable shuriken/stone (or arrows/bolts/
   bullets with a ranged weapon), waits for the equipment echo, then restores the original ammo.
@@ -315,8 +364,10 @@ Migration `0066_gearswap_grant.sql` resolves the names in the default libraries 
 and grants the missing ones to the first character's wardrobes; `0089_gearswap_reforged_grant.sql`
 grants the 255 library items that were appended after migration 66 had already run, and
 `0090_gearswap_full_sets.sql` completes every job's 15-piece reforged AF/relic/empyrean sets.
+`0118_sch_regen_gear.sql` adds the Scholar Regen pieces and their augment lines to Onedough's
+inventory.
 **Wear set** can find every library item that is in a bag after the client next zones or logs back
-in. Items put on a storage slip with `!storage store` need `!storage grab <job|all>` first.
+in. Items put on a storage slip with `//storage store` need `//storage grab <job|all>` first.
 
 If no job can be read yet (the client has not reached its first frame), the window says so;
 **Refresh** retries, or pick a job in Manage's **Job defaults** dropdown.
@@ -352,37 +403,26 @@ like any other addon; the Control room's Gear panel is the native, scriptable vi
 
 ## Packaging
 
-### macOS
-
 ```bash
-python3 launcher/build_app.py
-open "build/Fanxi Launcher.app"
+npm run tauri build          # .app/.dmg (macOS), AppImage/deb (Linux), MSI/NSIS (Windows)
 ```
 
-The bundle is a shell stub plus the Python package, the bundled `gearswap/` default libraries and
-an icon; it runs `python3 -m fanxi_launcher` from inside `Contents/Resources/app`. It records the checkout it was built from in
-`FANXI_REPO_ROOT`, so **keep the checkout** (or rebuild the app after moving it) — the bundle
-builds `host64` and finds the game through that checkout. It is ad-hoc code-signed; macOS may ask
-for confirmation the first time.
+The macOS app lands in `launcher-rs/src-tauri/target/release/bundle/macos/Fanxi Launcher.app`
+(with a `.dmg` beside it); the Linux bundles and the raw binary land under
+`launcher-rs/src-tauri/target/release/`. The bundle carries the `gearswap/` default libraries in
+its Resources folder. `install.sh` builds with `--bundles app` on macOS and `--no-bundle` on Linux,
+then copies the app to `~/Applications` (or `/Applications` when writable) or writes a desktop
+entry that runs the release binary from the checkout.
 
-`install.sh` copies it to `~/Applications/Fanxi Launcher.app` (or `/Applications` when writable).
-
-### Linux
-
-```bash
-python3 launcher/build_app.py --desktop
-```
-
-This writes `build/Fanxi Launcher.desktop`. `install.sh` copies the entry to
-`~/.local/share/applications/`, the icon to `~/.local/share/icons/`, and a `fanxi-server` helper
-to `~/.local/bin/`. The entry runs `launcher/fanxi-launcher` from the checkout, which must remain
-in place.
+The installer records the checkout in `launcher.json` (`repo_root`), because the app builds
+`host64` through `tools/build_posix.py` and reads the game folder through that checkout. If the
+checkout moves, set **Fanxi checkout** in Settings to the new path.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
-| Window does not open | `python3 -c "import tkinter"` must succeed. macOS: install Command Line Tools. Linux: install `python3-tk`. |
+| Window does not open | The app needs a WebView: current macOS and Windows include one; Linux needs WebKitGTK 4.1. Run `npm run tauri dev` in `launcher-rs/` to see the startup error. |
 | `cannot reach http://…: is the Fanxi server running?` | Start the server (`scripts/server.sh`) or fix the URL in Settings. |
 | Sign-in says the session expired | Sign out and in again; the token may have been revoked by a server restart or admin action. |
 | Build fails on `capstone`/`pefile` | The venv needs network access once. Delete `.venv/` and build again, or run `python3 -m pip install 'capstone>=5,<6' 'pefile>=2023'` in it. |
@@ -392,14 +432,16 @@ in place.
 | Control page says "starting" forever | Rebuild `host64` after updating the repository; the control addon is embedded in the client. Check the game log for `control: listening`. |
 | `command: the line must start with / or !` | The console only runs commands; to say something use `chat_send` (or start with `/say`). |
 | GearSwap import says a set is missing | The file builds that set in an `include()`d library; this pass does not evaluate includes. |
-| The `.app` cannot find the game/tools | The checkout used to build it moved. Rebuild with `python3 launcher/build_app.py`, or run `launcher/fanxi-launcher` from the checkout. |
+| The `.app` cannot find the game/tools | Set **Fanxi checkout** in Settings to this checkout, or re-run `install.sh` (it records the path in `launcher.json`). |
 
 ## Tests
 
 ```bash
-python3 -m unittest discover -s launcher/tests -v
+cd launcher-rs
+npm run check
+cargo test --manifest-path src-tauri/Cargo.toml
 ```
 
-The tests cover the settings file and permissions, the HTTP client against a local stand-in
-server, game-folder detection, `host64` discovery and the exact launch command. The UI is
-constructed in a smoke test during development but is not part of CI.
+`npm run check` type-checks the React front end. The Rust tests cover the HTTP client and URL
+normalisation, the settings file and permissions, the control-port protocol, checkout and
+game-folder detection, the launch command, item icons and GearSwap set handling.

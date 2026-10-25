@@ -1,4 +1,4 @@
-"""Saved /!warp places: storage, the HTTP snapshot and the in-game command."""
+"""Saved //warp places: storage, the HTTP snapshot and the in-game command."""
 from __future__ import annotations
 
 import json
@@ -252,6 +252,140 @@ class WarpCommandTest(unittest.TestCase):
         self.session.command(["warp", "delete", "Fishing", "Camp"])
         self.assertIn("Warp 1 (Fishing Camp) deleted.", chats(self.session))
         self.assertEqual(self.service.warps_for_character(int(self.character["id"])), [])
+
+    def test_warp_all_me_calls_the_team_to_the_sender(self):
+        # An alias named "me" must not shadow the built-in target.
+        self.session.command(["warp", "mark", "me"])
+        self.assertEqual(
+            self.service.warps_for_character(int(self.character["id"]))[0]["alias"], "me")
+
+        # The leader moves; the team follows to that exact zone, position and heading.
+        self.session.zone = 100
+        self.session.pos = [10.0, 20.0, 30.0, 128]
+        other = self.service.register("other", "password123").account
+        other_character = self.service.create_character(
+            other["id"], {"name": "Notmine", "race": 1})
+        other_session = self.make_session(
+            other_character, ("127.0.0.1", 1203), 100)
+        other_pos = list(other_session.pos)
+        self.session.queue.clear()
+        self.sub_session.queue.clear()
+        other_session.queue.clear()
+
+        self.session.command(["warp", "all", "me"])
+
+        self.assertEqual(self.sub_session.zone, 100)
+        self.assertEqual(self.sub_session.pos, [10.0, 20.0, 30.0, 128])
+        self.assertTrue(self.sub_session.zoning)
+        self.assertIn("warps you to their side in West Ronfaure.",
+                      "\n".join(chats(self.sub_session)))
+        self.assertIn("Warped 1 character to you in West Ronfaure.", chats(self.session))
+        # The leader is already there and must not be reloaded by its own call.
+        self.assertEqual(self.session.pos, [10.0, 20.0, 30.0, 128])
+        self.assertFalse(self.session.zoning)
+        # A different account's character is not part of the family.
+        self.assertEqual(other_session.pos, other_pos)
+        self.assertFalse(other_session.zoning)
+
+    def test_warp_all_me_in_the_same_zone_hands_the_box_in_again(self):
+        # Same zone still needs 0x00B: the client ignores its own 0x00D position update,
+        # so the old "no reload" shortcut left every box standing where it was.
+        self.session.zone = 100
+        self.session.pos = [10.0, 20.0, 30.0, 128]
+        self.sub_session.zone = 100
+        self.sub_session.pos = [1.0, 2.0, 3.0, 4]
+        self.sub_session.zoning = False
+        self.sub_session.queue.clear()
+
+        self.session.command(["warp", "all", "me"])
+
+        self.assertEqual(self.sub_session.pos, [10.0, 20.0, 30.0, 128])
+        self.assertTrue(self.sub_session.zoning)
+        types = [struct.unpack_from("<H", message, 0)[0] & 0x1FF
+                 for message in self.sub_session.queue]
+        self.assertIn(0x00B, types)
+        self.assertNotIn(0x00D, types)
+
+    def test_warp_call_brings_one_family_character(self):
+        # The single-target form the launcher fires when a box comes back from a relog.
+        self.session.zone = 100
+        self.session.pos = [10.0, 20.0, 30.0, 128]
+        self.sub_session.zone = 246
+        self.sub_session.zoning = False
+        self.session.queue.clear()
+        self.sub_session.queue.clear()
+
+        self.session.command(["warp", "call", "tinybox"])
+
+        self.assertEqual(self.sub_session.zone, 100)
+        self.assertEqual(self.sub_session.pos, [10.0, 20.0, 30.0, 128])
+        self.assertTrue(self.sub_session.zoning)
+        self.assertIn("calls you to their side in West Ronfaure.",
+                      "\n".join(chats(self.sub_session)))
+        self.assertIn("Called Tinybox to you in West Ronfaure.", chats(self.session))
+
+        # Same zone: the hand-off is still required; a self position update is ignored.
+        self.sub_session.zoning = False
+        self.sub_session.zone = 100
+        self.sub_session.pos = [1.0, 2.0, 3.0, 4]
+        self.sub_session.queue.clear()
+        self.session.command(["warp", "call", "Tinybox"])
+        self.assertEqual(self.sub_session.pos, [10.0, 20.0, 30.0, 128])
+        self.assertTrue(self.sub_session.zoning)
+        types = [struct.unpack_from("<H", message, 0)[0] & 0x1FF
+                 for message in self.sub_session.queue]
+        self.assertIn(0x00B, types)
+        self.assertNotIn(0x00D, types)
+        # Let the simulated client finish the zone-in before the whole-team call.
+        self.sub_session.zoning = False
+
+        # "all" is the whole-team call, and an unknown name is reported, not silently dropped.
+        self.session.queue.clear()
+        self.session.command(["warp", "call", "all"])
+        self.assertIn("Warped 1 character to you in West Ronfaure.", chats(self.session))
+        self.session.queue.clear()
+        self.session.command(["warp", "call", "Nobody"])
+        self.assertIn("No character called Nobody is online.", chats(self.session))
+        self.session.queue.clear()
+        self.session.command(["warp", "call", "Fanxi"])
+        self.assertIn("That is you.", chats(self.session))
+
+    def test_warp_call_refuses_another_account(self):
+        other = self.service.register("other", "password123").account
+        other_character = self.service.create_character(
+            other["id"], {"name": "Notmine", "race": 1})
+        other_session = self.make_session(other_character, ("127.0.0.1", 1203), 246)
+        other_pos = list(other_session.pos)
+        self.session.zone = 100
+        self.session.queue.clear()
+
+        self.session.command(["warp", "call", "Notmine"])
+
+        self.assertIn("Notmine is not on your account or a sub-account.", chats(self.session))
+        self.assertEqual(other_session.pos, other_pos)
+        self.assertFalse(other_session.zoning)
+
+    def test_warp_skips_parked_boxes(self):
+        # //sleep leaves the client only reading chat, so a zone-in sent to it is dropped
+        # and the box would stay "zoning" forever.  Parked boxes are out of the warp group.
+        self.sub_session.sleeping = True
+        self.sub_session.zone = 246
+        self.session.zone = 100
+        self.session.queue.clear()
+
+        self.session.command(["warp", "call", "Tinybox"])
+        self.assertIn("Tinybox is asleep; //wake it first.", chats(self.session))
+        self.assertEqual(self.sub_session.zone, 246)
+
+        self.session.queue.clear()
+        self.session.command(["warp", "all", "me"])
+        self.assertIn("No other characters in your team are online.", chats(self.session))
+        self.assertEqual(self.sub_session.zone, 246)
+
+        self.sub_session.sleeping = False
+        self.session.queue.clear()
+        self.session.command(["warp", "call", "Tinybox"])
+        self.assertEqual(self.sub_session.zone, 100)
 
     def test_rename_and_ambiguous_alias(self):
         self.session.command(["warp", "mark", "Camp"])

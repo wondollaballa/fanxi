@@ -8,6 +8,21 @@
     to add a variant, copy an existing set and give it a new path.
 ]]
 
+local capes = {
+    fc = { name = "Lugh's Cape", augments = {"MP+60", "Mag. Acc+20 /Mag. Dmg.+20", "MP+20", '"Fast Cast"+10', "Phys. dmg. taken-10%"} },
+    pdt = { name = "Lugh's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    mdt = { name = "Lugh's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
+    maxhp = { name = "Lugh's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
+    dt = { name = "Lugh's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
+    tp = { name = "Lugh's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
+    cure = { name = "Lugh's Cape", augments = {"MND+20", "Mag. Acc+20 /Mag. Dmg.+20", "MND+10", '"Cure Potency"+10%', "Phys. dmg. taken-10%"} },
+    regen_duration = { name = "Lugh's Cape", augments = {"MND+20", "Mag. Acc+20 /Mag. Dmg.+20", "MND+10", '"Fast Cast"+10'} },
+    regen_potency = { name = "Bookworm's Cape", augments = {'"Regen" potency +10', "Enh. Mag. eff. dur. +10"} },
+    macc = { name = "Lugh's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "Mag. Acc.+10", "Enmity-10", "Phys. dmg. taken-10%"} },
+    nuke = { name = "Lugh's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", '"Mag.Atk.Bns."+10', "Phys. dmg. taken-10%"} },
+    mabws = { name = "Lugh's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", "Weapon skill damage +10%", "Phys. dmg. taken-10%"} },
+}
+
 function get_sets()
     sets = {}
     sets.engaged = {}
@@ -30,7 +45,7 @@ function get_sets()
         legs = "Academic's Pants +4",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA.Alacrity = {
         main = "Tupsimati",
@@ -41,7 +56,7 @@ function get_sets()
         legs = "Academic's Pants +4",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA.Celerity = {
         main = "Tupsimati",
@@ -52,7 +67,7 @@ function get_sets()
         legs = "Academic's Pants +4",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA.Ebullience = {
         main = "Tupsimati",
@@ -63,7 +78,7 @@ function get_sets()
         legs = "Academic's Pants +4",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA.Focalization = {
         main = "Tupsimati",
@@ -74,7 +89,7 @@ function get_sets()
         legs = "Academic's Pants +4",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA.Immanence = {
         main = "Tupsimati",
@@ -85,7 +100,7 @@ function get_sets()
         legs = "Pedagogy Pants +4",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA.Manifestation = {
         main = "Tupsimati",
@@ -96,7 +111,7 @@ function get_sets()
         legs = "Academic's Pants +4",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA.Parsimony = {
         main = "Tupsimati",
@@ -107,7 +122,7 @@ function get_sets()
         legs = "Academic's Pants +4",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA.Perpetuance = {
         main = "Tupsimati",
@@ -118,7 +133,7 @@ function get_sets()
         legs = "Arbatel Pants +3",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA.Rapture = {
         main = "Tupsimati",
@@ -129,7 +144,7 @@ function get_sets()
         legs = "Academic's Pants +4",
         feet = "Academic's Loafers +4",
         neck = "Argute Stole +2",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.JA["Tabula Rasa"] = {
         head = "Pedagogy Mortarboard +4",
@@ -139,7 +154,7 @@ function get_sets()
         feet = "Pedagogy Loafers +4",
         neck = "Argute Stole +2",
         waist = "Witful Belt",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
 
     -- ===== Limbus =====
@@ -204,7 +219,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Lugh's Cape",
+        back = capes.mabws,
     }
     sets.WS.Omniscience = {
         main = "Tupsimati",
@@ -221,7 +236,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Lugh's Cape",
+        back = capes.mabws,
     }
     sets.WS.Shattersoul = {
         main = "Tupsimati",
@@ -238,7 +253,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Lugh's Cape",
+        back = capes.mabws,
     }
     sets.WS.Vidohunir = {
         main = "Tupsimati",
@@ -255,7 +270,7 @@ function get_sets()
         ear2 = "Moonshade Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = "Lugh's Cape",
+        back = capes.mabws,
     }
 
     -- ===== engaged =====
@@ -274,7 +289,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Lugh's Cape",
+        back = capes.tp,
     }
     sets.engaged.hybrid = {
         main = "Tupsimati",
@@ -291,7 +306,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Lugh's Cape",
+        back = capes.tp,
     }
     sets.engaged.tp = {
         main = "Tupsimati",
@@ -308,7 +323,7 @@ function get_sets()
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = "Lugh's Cape",
+        back = capes.tp,
     }
 
     -- ===== idle =====
@@ -327,7 +342,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Lugh's Cape",
+        back = capes.dt,
     }
     sets.idle.dt_indom = {
         main = "Tupsimati",
@@ -344,7 +359,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Lugh's Cape",
+        back = capes.dt,
     }
     sets.idle.maxhp = {
         main = "Tupsimati",
@@ -361,7 +376,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Lugh's Cape",
+        back = capes.maxhp,
     }
     sets.idle.mdt = {
         main = "Tupsimati",
@@ -378,7 +393,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Lugh's Cape",
+        back = capes.mdt,
     }
     sets.idle.movement = {
         main = "Tupsimati",
@@ -412,7 +427,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = "Lugh's Cape",
+        back = capes.pdt,
     }
     sets.idle.refresh = {
         main = "Tupsimati",
@@ -429,7 +444,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Chirich Ring +1",
         ring2 = "Stikini Ring +1",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
     sets.idle.town = {
         main = "Tupsimati",
@@ -465,7 +480,7 @@ function get_sets()
         ear2 = "Enchntr. Earring +1",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Lugh's Cape",
+        back = capes.macc,
     }
     sets.midcast["Divine Magic"] = {
         main = "Tupsimati",
@@ -482,7 +497,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Lugh's Cape",
+        back = capes.macc,
     }
     sets.midcast["Elemental Magic"] = {
         main = "Tupsimati",
@@ -499,7 +514,7 @@ function get_sets()
         ear2 = "Crematio Earring",
         ring1 = "Metamorph Ring +1",
         ring2 = "Mujin Band",
-        back = "Lugh's Cape",
+        back = capes.nuke,
     }
     sets.midcast["Elemental Magic MB"] = {
         main = "Tupsimati",
@@ -516,7 +531,7 @@ function get_sets()
         ear2 = "Crematio Earring",
         ring1 = "Metamorph Ring +1",
         ring2 = "Mujin Band",
-        back = "Lugh's Cape",
+        back = capes.nuke,
     }
     sets.midcast["Elemental Magic Macc"] = {
         main = "Tupsimati",
@@ -533,7 +548,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Lugh's Cape",
+        back = capes.macc,
     }
     sets.midcast["Enfeebling Magic"] = {
         main = "Tupsimati",
@@ -550,7 +565,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Lugh's Cape",
+        back = capes.macc,
     }
     sets.midcast["Enhancing Magic"] = {
         main = "Tupsimati",
@@ -567,7 +582,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Lugh's Cape",
+        back = capes.macc,
     }
     sets.midcast["Healing Magic"] = {
         main = "Tupsimati",
@@ -584,7 +599,7 @@ function get_sets()
         ear2 = "Tuisto Earring",
         ring1 = "Gelatinous Ring +1",
         ring2 = "Stikini Ring +1",
-        back = "Lugh's Cape",
+        back = capes.cure,
     }
     sets.midcast.Helix = {
         main = "Tupsimati",
@@ -601,7 +616,49 @@ function get_sets()
         ear2 = "Enchntr. Earring +1",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = "Lugh's Cape",
+        back = capes.nuke,
+    }
+
+    -- ===== Regen =====
+    -- The Alluvion stones roll both lines on one Telchine piece: "Regen" potency
+    -- +10 (flat HP/tick) and Enh. Mag. eff. dur. +10 (percent).  Bookworm's Cape
+    -- carries the same two max lines.
+    -- Potency: Arbatel Bonnet +3 (+25%), four Telchine pieces, Bookworm's +10.
+    sets.midcast.Regen_Potency = {
+        main = { name = "Musa", augments = {"Path: C"} },
+        sub = "Khonsu",
+        ammo = "Pemphredo Tathlum",
+        head = "Arbatel Bonnet +3",
+        body = { name = "Telchine Chas.", augments = {'"Regen" potency +10', "Enh. Mag. eff. dur. +10"} },
+        hands = { name = "Telchine Gloves", augments = {'"Regen" potency +10', "Enh. Mag. eff. dur. +10"} },
+        legs = { name = "Telchine Braconi", augments = {'"Regen" potency +10', "Enh. Mag. eff. dur. +10"} },
+        feet = { name = "Telchine Pigaches", augments = {'"Regen" potency +10', "Enh. Mag. eff. dur. +10"} },
+        neck = "Incanter's Torque",
+        waist = "Embla Sash",
+        ear1 = "Malignance Earring",
+        ear2 = "Mimir Earring",
+        ring1 = "Defending Ring",
+        ring2 = "Stikini Ring +1",
+        back = capes.regen_potency,
+    }
+    -- Duration: Musa path C, four Telchine pieces, Arbatel Bracers +3
+    -- (Perpetuance) and Lugh's Cape.
+    sets.midcast.Regen_Duration = {
+        main = { name = "Musa", augments = {"Path: C"} },
+        sub = "Khonsu",
+        ammo = "Pemphredo Tathlum",
+        head = { name = "Telchine Cap", augments = {'"Regen" potency +10', "Enh. Mag. eff. dur. +10"} },
+        body = { name = "Telchine Chas.", augments = {'"Regen" potency +10', "Enh. Mag. eff. dur. +10"} },
+        hands = "Arbatel Bracers +3",
+        legs = { name = "Telchine Braconi", augments = {'"Regen" potency +10', "Enh. Mag. eff. dur. +10"} },
+        feet = { name = "Telchine Pigaches", augments = {'"Regen" potency +10', "Enh. Mag. eff. dur. +10"} },
+        neck = "Incanter's Torque",
+        waist = "Embla Sash",
+        ear1 = "Malignance Earring",
+        ear2 = "Mimir Earring",
+        ring1 = "Defending Ring",
+        ring2 = "Gelatinous Ring +1",
+        back = capes.regen_duration,
     }
 
     -- ===== precast =====
@@ -618,7 +675,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = "Lugh's Cape",
+        back = capes.fc,
     }
 
     -- ===== weaponset =====

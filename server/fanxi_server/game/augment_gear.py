@@ -1,21 +1,23 @@
 """Augmentable gear paths for the launcher's RP card.
 
-Three datasets expose a 24-byte ``AugmentBundle`` block:
+Four datasets expose a 24-byte ``AugmentBundle`` block:
 
 * Odyssey ("Nyame" has four paths A-D, every other set/weapon one Rank 30 row),
 * Limbus (one Rank 30 row per piece, RP curve B),
-* Unity +1 accessories (one Rank 15 row, RP curve A).
+* Unity +1 accessories (one Rank 15 row, RP curve A),
+* Oboro Dynamis-Divergence JSE weapons (three paths A-C, NQ R15 / HQ1 R20 /
+  HQ2 R25, RP curve A).
 
 The client draws the augment lines from the bundle index.  The RP field is the
 accumulated total for the client's curve; the caps are the curve maxima in
 ``scripts/data/augments.lua``: curve A tops out at 4,750, curve B at 55,800,
-and Unity's rank-15 point on curve A is 1,110.  Capping a path writes rank,
-tier, bundle and RP in one block; the item's 0x020 attribute packet carries it
-back to the client on ``!reload``.
+Unity's rank-15 point on curve A is 1,110, and Oboro uses curve A at
+R15/R20/R25.  Capping a path writes rank, tier, bundle and RP in one block; the
+item's 0x020 attribute packet carries it back to the client on ``//reload``.
 """
 from __future__ import annotations
 
-from . import augments, limbus, odyssey, unity
+from . import augments, limbus, oboro, odyssey, unity
 
 RP_ODYSSEY = 4750
 RP_LIMBUS = 55800
@@ -37,7 +39,7 @@ def _path(key: str, label: str, bundle: int, rank: int, tier: int,
 
 
 def entries() -> dict[int, dict]:
-    """Item id -> its augment paths, merged from the three datasets."""
+    """Item id -> its augment paths, merged from every dataset."""
     out: dict[int, dict] = {}
     for entry in odyssey.entries():
         item_id = int(entry["id"])
@@ -94,6 +96,11 @@ def entries() -> dict[int, dict]:
             "paths": [_path("A", "Rank 15 (Unity)", int(item["bundle"]), 15, 0,
                             RP_UNITY, 0, item.get("augments"))],
         }
+    for entry in oboro.entries():
+        item_id = int(entry["item_id"])
+        if item_id in out:
+            continue
+        out[item_id] = entry
     return out
 
 

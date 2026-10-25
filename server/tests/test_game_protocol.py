@@ -78,6 +78,11 @@ class GatewayTest(unittest.TestCase):
         self.assertTrue(data, "auth server sent nothing")
         return json.loads(data.decode())
 
+    def test_gateway_publishes_the_live_world_to_the_service(self):
+        self.assertIs(self.service.zone_world, self.gateway.world)
+        self.gateway.stop()
+        self.assertIsNone(self.service.zone_world)
+
     def test_auth_with_launch_token(self):
         reply = self.auth({"command": 16, "username": "tester", "password": "",
                            "login_token": self.launch["login_token"], "version": [2, 2, 0]})
@@ -125,6 +130,14 @@ class GatewayTest(unittest.TestCase):
         self.assertEqual(data[8], 0x0B)
         cid = struct.unpack_from("<I", data, 28)[0]
         self.assertEqual(cid, self.character["char_id"])
+        # The 0x0B body: cid, world id, name, server id, zone ip/port, search ip/port.
+        self.assertEqual(struct.unpack_from("<I", data, 68)[0],
+                         self.config.ports["search_port"])
+
+    def test_search_port_is_listening(self):
+        with socket.create_connection(
+                ("127.0.0.1", self.config.ports["search_port"]), timeout=5):
+            pass
 
     def test_lobby_shows_only_the_launched_mule(self):
         mule = self.service.create_character(self.account["id"], {

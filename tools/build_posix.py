@@ -84,10 +84,11 @@ else:
     if os.environ.get('XI_DEPS'):
         CFLAGS += ['-I', os.path.join(os.environ['XI_DEPS'], 'include')]
         GFX_LIBS = ['-L' + os.path.join(os.environ['XI_DEPS'], 'lib')] + GFX_LIBS
-HOST_SOURCES = ['runtime/portable/user32.c', 'runtime/portable/d3d8.c', 'runtime/portable/dsound.c',
+HOST_SOURCES_BASE = ['runtime/portable/user32.c', 'runtime/portable/d3d8.c', 'runtime/portable/dsound.c',
                 'runtime/portable/input.c', 'runtime/portable/dinput.c', 'runtime/portable/ws2.c', 'host/host64.c',
                 'host/lsb_login.c', 'host/datui.c', 'host/uidraw.c', 'host/modern.c', 'host/cexi.c', 'host/frame.c', 'host/signin.c', 'host/sewave.c', 'host/ui_art.c', 'host/keychain.c', 'host/appdefaults.c',
-                'runtime/portable/geometry_hooks.c'] + GFX_SOURCES
+                'runtime/portable/geometry_hooks.c']
+HOST_SOURCES = HOST_SOURCES_BASE + GFX_SOURCES
 # the addon host (host/addons/, docs/addon-compat-design.md): C, C++ (ImGui) and its embedded Lua
 ADDON_SOURCES = sorted('host/addons/' + f for f in os.listdir(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'host', 'addons'))
                        if f.endswith('.c') or f.endswith('.cpp')) + ['generated/addons_lua.c']
@@ -362,6 +363,31 @@ def host64(game):
     print('built build/host64; run: build/host64 --game %s --server <name>' % shlex.quote(game))
 
 
+def host64_headless(game):
+    """host64 with the null graphics back end: game logic and the control port, no window or GPU.
+
+    The same translation and addon host as host64; the present path is gfx_null.c, so a box can run
+    on a Linux server with no display (SDL_VIDEO_DRIVER=dummy) and still be driven by its control
+    port. Captures are unavailable, since there is no back buffer to read."""
+    translate()
+    run([sys.executable, 'recomp/recomp.py', '--meta', build.FFXI_META, '--image', GEN_FFXI_IMAGE, '--retail',
+         build.FFXI_RETAIL, '--module', 'ffxi', '--out', 'generated/ffxi', '--all'])
+    sdl_cflags, sdl_libs = sdl()
+    tls_cflags, tls_libs = tls()
+    phase('compile')
+    objs = compile_stale(generated('all'), 'build/all64', ['-I', 'generated/all'])
+    objs += compile_stale(generated('ffxi'), 'build/ffxi64', ['-I', 'generated/ffxi'])
+    addon_cflags, addon_libs = addons()
+    objs += compile_stale(PORTABLE + HOST_SOURCES_BASE + ['runtime/portable/gfx_null.c'] + ADDON_SOURCES, 'build/obj/host64-headless',
+                          sdl_cflags + tls_cflags + addon_cflags)
+    # no GFX_LIBS: gfx_null.c needs no graphics API. The macOS keychain still needs Security.
+    export = ['-Wl,-export_dynamic'] if sys.platform == 'darwin' else ['-rdynamic']
+    extra = ['-framework', 'Security'] if sys.platform == 'darwin' else []
+    run(CC + PIE_LINK + ['-o', 'build/host64-headless'] + objs + sdl_libs + tls_libs + addon_libs + extra + ['-lm', '-lpthread'] + export)
+    buildinfo.stamp(os.path.join(ROOT, 'build', 'runtime.json'))
+    print('built build/host64-headless')
+
+
 def gfxtest():
     """The back end alone (gfx_test), then the D3D8 front end on it through its COM thunks (d3d8_test)."""
     sdl_cflags, sdl_libs = sdl()
@@ -571,7 +597,7 @@ APP_INFO_PLIST = '''<?xml version="1.0" encoding="UTF-8"?>
 
 def main():
     ap = argparse.ArgumentParser()
-    ap.add_argument('target', choices=['prepare', 'boot64', 'host64', 'gfxtest', 'vfstest', 'datuitest', 'app', 'kit', 'desktop'])
+    ap.add_argument('target', choices=['prepare', 'boot64', 'host64', 'host64-headless', 'gfxtest', 'vfstest', 'datuitest', 'app', 'kit', 'desktop'])
     ap.add_argument('--out', default='build/kit')  # kit: where it goes
     ap.add_argument('--kit')  # host64: build from this kit
     ap.add_argument('--game', default=os.path.expanduser('~/SquareEnix/FINAL FANTASY XI'))
@@ -610,6 +636,8 @@ def main():
         prepare(game)
     elif args.target == 'boot64':
         boot64(game)
+    elif args.target == 'host64-headless':
+        host64_headless(game)
     elif args.kit:
         host64_kit(game, args.kit)
     else:

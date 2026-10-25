@@ -1,4 +1,4 @@
-"""The Odyssey Rank 30 dataset and the !r30 lookup."""
+"""The Odyssey Rank 30 dataset and the //r30 lookup."""
 
 import unittest
 
