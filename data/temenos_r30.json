@@ -1,0 +1,75 @@
+{
+  "rank": 30,
+  "rp": 55800,
+  "curve": 1,
+  "source": [
+    "https://www.bg-wiki.com/ffxi/Alabaster_Mantle",
+    "https://www.bg-wiki.com/ffxi/Alabaster_Earring",
+    "https://www.bg-wiki.com/ffxi/Murky_Ring",
+    "https://www.bg-wiki.com/ffxi/Murky_Mantle"
+  ],
+  "note": "Temenos Furnace (Alabaster Matter / Murky Matter) Rank 30 rows. The Alabaster Mantle, Murky Mantle and Murky Ring carry fixed standard-augment picks: each pick is the client's standard augment id and its five-bit value, so the block renders through capes.describe and augment_stats. Rows are listed the way the wiki groups them; the client prints two two-stat rows (Accuracy+Attack and Ranged Accuracy+Attack) because it has no combined Accuracy+Ranged Accuracy id. The Alabaster Earring's All Attr.+10 row has no standard augment id, but client bundle 468 carries exactly its three Rank 30 rows, so the earring uses a bundle block instead.",
+  "items": [
+    {
+      "item_id": 26275,
+      "name": "Alabaster Mantle",
+      "slot": "back",
+      "rows": [
+        "Accuracy+25 Rng. Acc.+25",
+        "Attack+25 Rng. Atk.+25",
+        "STR/DEX+15",
+        "Enmity-10"
+      ],
+      "picks": [
+        [68, 24],
+        [69, 24],
+        [550, 14],
+        [40, 9]
+      ]
+    },
+    {
+      "item_id": 26276,
+      "name": "Murky Mantle",
+      "slot": "back",
+      "rows": [
+        "Mag. Acc.+25",
+        "Magic Damage+25",
+        "INT+15",
+        "Enmity-10"
+      ],
+      "picks": [
+        [80, 24],
+        [516, 14],
+        [40, 9]
+      ]
+    },
+    {
+      "item_id": 26234,
+      "name": "Murky Ring",
+      "slot": "ring1",
+      "rows": [
+        "Accuracy+15 Rng. Acc.+15 Mag. Acc.+15",
+        "Evasion+10 Mag. Evasion+10",
+        "Critical hit rate+5%"
+      ],
+      "picks": [
+        [23, 14],
+        [27, 14],
+        [35, 14],
+        [81, 9],
+        [41, 4]
+      ]
+    },
+    {
+      "item_id": 26119,
+      "name": "Alabaster Earring",
+      "slot": "ear1",
+      "bundle": 468,
+      "rows": [
+        "Accuracy+15 Rng. Acc.+15 Mag. Acc.+15",
+        "All Attr.+10",
+        "\"Store TP\"+5"
+      ]
+    }
+  ]
+}

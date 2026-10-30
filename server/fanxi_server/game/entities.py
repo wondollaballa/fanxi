@@ -9,6 +9,8 @@ import math
 import random
 from dataclasses import dataclass, field
 
+from . import trust_stats
+
 
 @dataclass
 class ZoneEntity:
@@ -24,6 +26,9 @@ class ZoneEntity:
     model: int = 50
     size: int = 0
     door_id: int = 0
+    # A door's role from world_npcs.door_kind: "" for a normal door, "drawbridge" for a
+    # moving bridge that the world times instead of a player opening it.
+    door_kind: str = ""
     look: bytes = b""
     name_prefix: int = 0
     namevis: int = 0
@@ -41,6 +46,7 @@ class ZoneEntity:
     trust_spell: int = 0
     job: int = 1
     sub_job: int = 0
+    race: int = 1
     damage_mult: int = 100
     passive: bool = False
     # Live spell state: the spells this Trust unlocked, the grouped kit the AI reads,
@@ -110,6 +116,16 @@ class ZoneEntity:
     # server keeps the timer and the numbers the AI reads.
     status_effects: list[int] = field(default_factory=list)
     effect_state: dict[int, dict] = field(default_factory=dict)
+    # A monster's live skillchain state (opening properties or the formed chain).
+    skillchain: object = None
+    # TP moves.  ``skill_list_id`` is the LandSandBoat family list (migration 0148),
+    # ``tp`` is 0..3000 and ``tp_threshold`` is the random bar the controller waits for
+    # after each move.  ``pending_skill`` holds the readied move while its prepare time
+    # runs, so the start and finish packets are one action rather than two swings.
+    skill_list_id: int = 0
+    tp: int = 0
+    tp_threshold: int = 0
+    pending_skill: dict | None = None
 
     def hpp(self) -> int:
         if self.hp_max <= 0:
@@ -153,10 +169,20 @@ class ZoneEntity:
         self.respawn_at = 0.0
         self.status_effects.clear()
         self.effect_state.clear()
+        self.tp = 0
+        self.pending_skill = None
+        # A respawn is a new monster: a chain state from its previous life would let
+        # the first weapon skill of the next fight close a skillchain nobody opened.
+        self.skillchain = None
 
 
 def npc_from_row(row: dict, targid: int, dialogue: list[str]) -> ZoneEntity:
     zone = int(row["zone"])
+    door_kind = str(row.get("door_kind") or "")
+    # A drawbridge is spawned lowered and stays that way until a real airship arrival
+    # drives it.  The stored animation is not trusted here because an old import left it
+    # at 0, which the door spawn turns into 9 (closed/raised).
+    animation = 8 if door_kind == "drawbridge" else int(row["animation"])
     return ZoneEntity(
         kind="npc",
         id=0x01000000 | (zone << 12) | (targid & 0xFFF),
@@ -166,10 +192,11 @@ def npc_from_row(row: dict, targid: int, dialogue: list[str]) -> ZoneEntity:
         x=float(row["pos_x"]), y=float(row["pos_y"]), z=float(row["pos_z"]),
         rot=int(row["rot"]), model=int(row["model"]), size=int(row["size"]),
         door_id=int(row.get("door_id", 0) or 0),
+        door_kind=door_kind,
         look=bytes.fromhex(row.get("look_hex") or ""),
         name_prefix=int(row["name_prefix"]), namevis=int(row["namevis"]),
         status=int(row["status"]), flags=int(row["flags"]), speed=int(row["speed"]),
-        animation=int(row["animation"]), triggerable=bool(row["triggerable"]),
+        animation=animation, triggerable=bool(row["triggerable"]),
         widescan=bool(row["widescan"]), script=str(row["script"] or ""),
         dialogue=list(dialogue or []),
         hp_index=(int(row["hp_index"]) if row.get("hp_index") is not None else -1),
@@ -203,6 +230,11 @@ def mob_from_row(row: dict, targid: int, rng: random.Random | None = None) -> Zo
         respawn_seconds=int(row["respawn_seconds"] or row["template_respawn"] or 30),
         behavior=str(row["behavior"] or "roam"),
         spawn_x=float(row["pos_x"]), spawn_y=float(row["pos_y"]), spawn_z=float(row["pos_z"]),
+        skill_list_id=int(row.get("skill_list_id") or 0),
+        # The first move waits for 1000 TP; after it the world picks a fresh
+        # 1000-3000 threshold.  Avoid consuming the spawn RNG here: the zone's
+        # roaming and level rolls use the same generator and must stay stable.
+        tp_threshold=1000,
         last_move_at=0.0,
     )
 
@@ -214,7 +246,8 @@ def trust_from_row(row: dict, targid: int, zone: int, owner_char_id: int,
     The look block is the client's 20-byte NPC model (size, model id, then eight
     equipment models).  Every Trust in the imported data is a fixed-model NPC, so the
     second uint16 is the model id the spawn packet carries.  Level tracks the owner's
-    main job, as retail does; HP is a compact stand-in until a Trust has its own sheet.
+    main job, as retail does; HP/MP come from the race/job/subjob table in
+    ``trust_stats``, with the species the client-data import put on the row.
     """
     level = max(1, int(level))
     look = bytes.fromhex(row.get("look_hex") or "")
@@ -222,16 +255,19 @@ def trust_from_row(row: dict, targid: int, zone: int, owner_char_id: int,
         look = bytes(20)
     model = int(row.get("model") or int.from_bytes(look[2:4], "little"))
     delay = max(1, int(row.get("delay") or 240))
+    job = int(row.get("job") or 1)
+    sub_job = int(row.get("sub_job") or 0)
+    race = trust_stats.race_for_species(row.get("species"))
+    hp_max, mp_max = trust_stats.vitals(race, job, sub_job, level)
     return ZoneEntity(
         kind="trust", id=0x01000000 | (int(zone) << 12) | (int(targid) & 0xFFF),
         targid=int(targid) & 0xFFF, zone=int(zone), name=str(row["name"]),
         model=model, size=0, look=look, speed=62, animation=0,
         triggerable=False, widescan=True, name_prefix=int(row.get("name_prefix") or 0),
-        namevis=0, level=level, hp_max=max(1, level * 30 + 200),
-        hp=max(1, level * 30 + 200), mp_max=max(0, level * 4),
-        mp=max(0, level * 4), attack_delay_ms=max(1500, delay * 1000 // 60),
+        namevis=0, level=level, hp_max=hp_max, hp=hp_max, mp_max=mp_max, mp=mp_max,
+        attack_delay_ms=max(1500, delay * 1000 // 60),
         owner_char_id=int(owner_char_id), trust_spell=int(row["spell_id"]),
-        job=int(row.get("job") or 1), sub_job=int(row.get("sub_job") or 0),
+        job=job, sub_job=sub_job, race=race,
         damage_mult=int(row.get("damage_mult") or 100),
         passive=bool(int(row.get("passive") or 0)),
         last_move_at=0.0,

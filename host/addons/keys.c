@@ -88,6 +88,11 @@ void xi_key_inject(uint32_t dik, int down)
         input_inject_key((uint8_t)dik, down);
 }
 
+void xi_wheel_inject(int32_t dz)
+{
+    input_inject_wheel(dz);
+}
+
 /* --- binds ------------------------------------------------------------------------------------ */
 
 enum
@@ -279,15 +284,18 @@ static int mouse(int msg, float px, float py, int delta)
 /* A press the overlay took is the overlay's until it is released. */
 static uint8_t g_mouse_taken;
 
-/* Tab in the chat line completes // commands.  The game's own command assist does not know
- * them (they are server chat commands, not client slash commands), so the host rewrites the
- * input line and keeps Tab away from the game.  An ambiguous prefix comes back unchanged:
- * keep the key, leave the input and its caret alone, and let the typist add letters. */
+/* Tab in the chat line takes the typeahead suggestion, or completes // commands.  The game's own
+ * command assist does not know them (they are server chat commands, not client slash commands),
+ * so the host rewrites the input line and keeps Tab away from the game.  An ambiguous prefix
+ * comes back unchanged: keep the key, leave the input and its caret alone, and let the typist
+ * add letters. */
 static int chat_complete_tab(void)
 {
     char input[400], output[400];
     if (!xi_chat_input_open())
         return 0;
+    if (xi_chat_ghost_accept())
+        return 1;
     if (xi_chat_input(input, sizeof input) <= 0)
         return 0;
     if (!xi_complete_line(input, output, sizeof output))
@@ -339,6 +347,15 @@ static int hook(const void* ev, int ww, int wh)
                 g_down[dik] = (uint8_t)down;
             if (!taken && !e->key.repeat && run_binds(dik, down))
                 taken = 1;
+            /* Backspace and Delete edit at the caret: with the suggestion right there, take it
+             * out first so the key deletes what the player typed. */
+            if (!taken && down && !e->key.repeat && (dik == 0x0E || dik == 0xD3))
+                xi_chat_ghost_drop();
+            /* Enter takes the typeahead suggestion (the "assumed" completion) before the game
+             * submits the line; the key itself still reaches the game. */
+            if (!taken && down && !e->key.repeat && (dik == 0x1C || dik == 0x9C)
+                && !(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI)))
+                xi_chat_ghost_enter();
             if (!taken && down && !e->key.repeat && dik == 0x0F
                 && !(SDL_GetModState() & (SDL_KMOD_CTRL | SDL_KMOD_ALT | SDL_KMOD_GUI))
                 && chat_complete_tab())

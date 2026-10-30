@@ -179,6 +179,86 @@ export function jobAbbr(value?: number): string {
   return JOB_ABBRS[value - 1];
 }
 
+/** A main job and its support job, with the levels when they are known. */
+export interface JobPair {
+  main?: number;
+  mainLevel?: number;
+  sub?: number;
+  subLevel?: number;
+}
+
+function knownJob(value?: number): number {
+  const job = Number(value ?? 0);
+  return Number.isInteger(job) && job >= 1 && job <= JOB_ABBRS.length ? job : 0;
+}
+
+function knownLevel(value?: number): number {
+  const level = Math.trunc(Number(value ?? 0));
+  return Number.isFinite(level) && level > 0 ? level : 0;
+}
+
+/** "WAR 99", or just "WAR" when the level is not known yet. */
+export function jobLevel(value?: number, level?: number): string {
+  const job = knownJob(value);
+  if (!job) return "—";
+  const amount = knownLevel(level);
+  return amount > 0 ? `${jobAbbr(job)} ${amount}` : jobAbbr(job);
+}
+
+/** "WAR 99 / NIN 49", or the main job alone when there is no support job. */
+export function jobPairAbbr(pair: JobPair): string {
+  const main = knownJob(pair.main);
+  if (!main) return "Adventurer";
+  const text = jobLevel(main, pair.mainLevel);
+  const sub = knownJob(pair.sub);
+  return sub ? `${text} / ${jobLevel(sub, pair.subLevel)}` : text;
+}
+
+/** "Warrior 99 / Ninja 49", or the main job alone when there is no support job. */
+export function jobPairName(pair: JobPair): string {
+  const main = knownJob(pair.main);
+  if (!main) return "Adventurer";
+  const mainLevel = knownLevel(pair.mainLevel);
+  const text = mainLevel > 0 ? `${jobName(main)} ${mainLevel}` : jobName(main);
+  const sub = knownJob(pair.sub);
+  if (!sub) return text;
+  const subLevel = knownLevel(pair.subLevel);
+  return `${text} / ${subLevel > 0 ? `${jobName(sub)} ${subLevel}` : jobName(sub)}`;
+}
+
+export function characterJobPair(character?: Character | null): JobPair {
+  return {
+    main: character?.main_job,
+    mainLevel: character?.main_level,
+    sub: character?.sub_job,
+    subLevel: character?.sub_level,
+  };
+}
+
+export function characterJob(character?: Character | null): string {
+  return jobPairAbbr(characterJobPair(character));
+}
+
+/** The full-name form, for cards with room for "Warrior 99 / Ninja 49". */
+export function characterJobLabel(character?: Character | null): string {
+  return jobPairName(characterJobPair(character));
+}
+
+/**
+ * The job pair for a running client, preferring the addon's live main/support job over the
+ * saved character row. An older addon reports no `sub_job`, so the saved support job fills in.
+ */
+export function instanceJobPair(instance?: InstanceView | null): JobPair {
+  const player = instance?.state?.player;
+  const character = instance?.character;
+  return {
+    main: player?.job ?? character?.main_job,
+    mainLevel: player?.level ?? character?.main_level,
+    sub: player?.sub_job ?? character?.sub_job,
+    subLevel: player?.sub_level ?? character?.sub_level,
+  };
+}
+
 export function zoneName(value?: number): string {
   if (!value) return "Unknown zone";
   return ZONES[value] ?? `Zone ${value}`;
@@ -186,10 +266,6 @@ export function zoneName(value?: number): string {
 
 export function characterName(character?: Character | null): string {
   return character?.name ?? "Adventurer";
-}
-
-export function characterJob(character?: Character | null): string {
-  return `${jobAbbr(character?.main_job)} · ${jobName(character?.main_job)}`;
 }
 
 export function prettyDate(value?: string): string {
@@ -279,6 +355,22 @@ export function inWorld(instance?: InstanceView | null): boolean {
   if (typeof status === "number") return status === 2;
   // Before the addon reported the status, the character block was the only signal.
   return Boolean(instance.state?.player && instance.state.zone?.id);
+}
+
+/**
+ * The control addon reports the client's own axes: `x`/`y` are the ground plane and `z` is
+ * height. The server's `//pos`/`//zone` commands and its warp rows take `x`, `y` (height),
+ * `z` (ground). Convert at that boundary: forwarding the block unchanged puts a box hundreds
+ * of yalms above the world, where no entity is in range and follow stays `waiting`.
+ */
+export function serverPosition(
+  position?: { x?: number; y?: number; z?: number } | null,
+): { x: number; y: number; z: number } | null {
+  const x = Number(position?.x);
+  const y = Number(position?.y);
+  const z = Number(position?.z);
+  if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) return null;
+  return { x, y: z, z: y };
 }
 
 export function slotLabel(slot: string): string {

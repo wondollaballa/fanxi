@@ -216,6 +216,59 @@ static void sdl_up(void)
     g_sdl_up = 1;
 }
 
+/* The display the launcher chose for this run, `FANXI_DISPLAY=x,y,w,h` in the units the window
+ * API uses (screen points on macOS, pixels elsewhere). It is the SDL display with those bounds,
+ * or 0: the main display, where the window code has always put windows. */
+static SDL_DisplayID target_display(void)
+{
+    static int parsed = -1;
+    static int sx, sy, sw, sh;
+    if (parsed < 0)
+    {
+        parsed = 0;
+        const char* spec = getenv("FANXI_DISPLAY");
+        if (spec && sscanf(spec, "%d,%d,%d,%d", &sx, &sy, &sw, &sh) == 4 && sw > 0 && sh > 0)
+            parsed = 1;
+    }
+    if (!parsed || !SDL_WasInit(SDL_INIT_VIDEO))
+        return 0;
+    int n = 0;
+    SDL_DisplayID* ids = SDL_GetDisplays(&n);
+    SDL_DisplayID found = 0;
+    for (int i = 0; i < n && !found; ++i)
+    {
+        SDL_Rect bounds;
+        if (SDL_GetDisplayBounds(ids[i], &bounds) && bounds.x == sx && bounds.y == sy && bounds.w == sw && bounds.h == sh)
+            found = ids[i];
+    }
+    SDL_free(ids);
+    if (!found)
+        rt_log("[recomp] FANXI_DISPLAY=%d,%d,%dx%d is not an attached display: using the main one\n", sx, sy, sw, sh);
+    return found;
+}
+
+/* Puts a window on the display the launcher chose: in the middle of its usable area, or at its
+ * top left when it covers the display (full screen and borderless full screen). Nothing when the
+ * launcher did not choose a display: the window opens where the platform puts it. */
+void user32_place_window(void* sdl_window, int cover)
+{
+    SDL_Window* sdl = sdl_window;
+    SDL_DisplayID display = target_display();
+    SDL_Rect area;
+    if (!sdl || !display)
+        return;
+    if (!(cover ? SDL_GetDisplayBounds(display, &area) : SDL_GetDisplayUsableBounds(display, &area)))
+        return;
+    if (cover)
+        SDL_SetWindowPosition(sdl, area.x, area.y);
+    else
+    {
+        int w = 0, h = 0;
+        SDL_GetWindowSize(sdl, &w, &h);
+        SDL_SetWindowPosition(sdl, area.x + (area.w - w) / 2, area.y + (area.h - h) / 2);
+    }
+}
+
 static int show_window(Wnd* w, int show);
 
 /* the window procedure, called as the guest would: stdcall (hwnd, msg, wParam, lParam) */
@@ -819,7 +872,11 @@ void user32_set_fullscreen(uint32_t hwnd, int on)
         return;
     w->fullscreen = on != 0;
     if (on && w->sdl) /* the screen's size, not the limits' */
+    {
         let_go(w);
+        /* full screen on the display the launcher chose, not the one the window happened to be on */
+        user32_place_window(w->sdl, 1);
+    }
     apply_frame(w);
 }
 
@@ -842,9 +899,10 @@ void user32_set_window(uint32_t hwnd, int mode, int width, int height)
         SDL_SetWindowFullscreen(w->sdl, false);
         SDL_SyncWindow(w->sdl);
         size_window(w);
+        /* a window in the middle of the chosen display, a full-screen one at its top left; before
+         * going full screen, so that SDL picks that display */
+        user32_place_window(w->sdl, mode == 0 || mode == 3);
         apply_frame(w);
-        if (mode == 1 || mode == 2)
-            SDL_SetWindowPosition(w->sdl, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
         SDL_SyncWindow(w->sdl);
         check_size(w);
     }
@@ -885,7 +943,9 @@ static void sh_CreateWindowExA(Guest* g)
     /* A WS_POPUP window with no caption (the game's full-screen and borderless windowed modes) has no
      * frame here either, and goes where the game puts it: at its size, borderless full screen. */
     int popup = (w->style & 0x80000000u) && !(w->style & 0x00C00000u);
-    (void)popup;
+    uint32_t desktop_w = 0, desktop_h = 0, desktop_hz = 0;
+    user32_desktop_mode(&desktop_w, &desktop_h, &desktop_hz);
+    int cover = popup && (uint32_t)w->w >= desktop_w && (uint32_t)w->h >= desktop_h;
     if (g_adopt && !ARG(8)) /* no parent: the game's main window */
     {
         w->sdl = g_adopt;
@@ -903,13 +963,17 @@ static void sh_CreateWindowExA(Guest* g)
 #endif
         w->sdl = SDL_CreateWindow(ARG(2) ? ARGS(2) : "", w->w, w->h, flags);
     }
+    /* the launcher's display, for a window that is not already full screen there (the sign-in
+     * window it may have adopted), then its frame: full screen picks the display it is on */
+    if (w->sdl && !(SDL_GetWindowFlags(w->sdl) & SDL_WINDOW_FULLSCREEN))
+        user32_place_window(w->sdl, cover);
     apply_frame(w);
     if (w->sdl && (SDL_GetWindowFlags(w->sdl) & SDL_WINDOW_HIDDEN) == 0) /* adopted: its size given? */
         sync_check_size(w);
     if (!w->sdl)
         rt_log("[recomp] SDL_CreateWindow: %s\n", SDL_GetError());
 #if defined(_WIN32)
-    else if (popup)
+    else if (popup && !target_display())
         SDL_SetWindowPosition(w->sdl, w->x, w->y);
 #endif
 
@@ -2039,7 +2103,10 @@ void user32_desktop_mode(uint32_t* w, uint32_t* h, uint32_t* hz)
 {
     *w = 1920, *h = 1080, *hz = 60;
     sdl_up();
-    const SDL_DisplayMode* dm = SDL_GetDesktopDisplayMode(SDL_GetPrimaryDisplay());
+    /* The display the launcher chose: a borderless full-screen window covers that one, and the
+     * game's own full-screen mode changes its mode. */
+    SDL_DisplayID display = target_display();
+    const SDL_DisplayMode* dm = SDL_GetDesktopDisplayMode(display ? display : SDL_GetPrimaryDisplay());
     if (dm)
     {
         *w = (uint32_t)dm->w, *h = (uint32_t)dm->h;

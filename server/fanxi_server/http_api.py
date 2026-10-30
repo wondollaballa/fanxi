@@ -18,7 +18,7 @@ from urllib.parse import parse_qs, urlsplit
 from . import __version__
 from .config import Config
 from .security import ValidationError, safe_equal
-from .game import augment_gear
+from .game import augment_gear, capes, glyptics, magian, mezzotint, moonshade, sinister, skirmish
 from .service import ApiError, FanxiService, GIL_MAX
 
 log = logging.getLogger("fanxi.http")
@@ -104,16 +104,32 @@ class Api:
         route("DELETE", r"/api/v1/characters/(?P<character_id>\d+)/warps/(?P<slot>\d+)")(
             self.character_warp_delete)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/merits")(self.character_merits)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/ascension")(
+            self.character_ascension)
+        # mounts: the catalogue, and one character's mount (or its whole sub team's)
+        route("GET", r"/api/v1/mounts")(self.mounts)
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/mount")(self.character_mount)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/mount")(self.character_mount_set)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/progress")(self.character_progress)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/job-points")(self.character_job_points)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/mastery-rank")(self.character_mastery_rank)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/gil")(self.character_gil)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/home-points")(self.character_home_points)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/key-items")(self.character_key_items)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/mounts")(self.character_mounts)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/currencies")(self.character_currencies)
         route("GET", r"/api/v1/characters/(?P<character_id>\d+)/items/search")(self.character_item_search)
+        route("POST", r"/api/v1/characters/(?P<character_id>\d+)/items")(self.character_items)
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/bags")(self.character_bags)
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/stats")(self.character_stats)
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/target")(self.character_target)
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/magicbag")(self.character_magicbag)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/armory")(self.character_armory)
         route("POST", r"/api/v1/launch")(self.launch)
+        route("GET", r"/api/v1/gearswap")(self.gearswap_settings)
+        route("POST", r"/api/v1/gearswap")(self.save_gearswap_settings)
+        route("GET", r"/api/v1/battle/team")(self.battle_team)
+        route("PUT", r"/api/v1/battle/team/(?P<character_id>\d+)")(self.save_battle_profile)
         # server-owned sub-accounts; the main account's token is the only key
         route("GET", r"/api/v1/accounts/sub")(self.sub_accounts)
         route("POST", r"/api/v1/accounts/sub")(self.create_sub_account)
@@ -188,7 +204,7 @@ class Api:
     def _with_cors(self, response: Response) -> Response:
         response.headers.setdefault("Access-Control-Allow-Origin", self.config.cors_origin)
         response.headers.setdefault("Access-Control-Allow-Headers", "Authorization, Content-Type, X-Admin-Key")
-        response.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+        response.headers.setdefault("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
         response.headers.setdefault("X-Content-Type-Options", "nosniff")
         response.headers.setdefault("Cache-Control", "no-store")
         return response
@@ -258,6 +274,37 @@ class Api:
             "characters": self.service.list_characters(request.account["id"]),
         })
 
+    def gearswap_settings(self, request: Request) -> Response:
+        assert request.account
+        return json_response(200, {
+            "config": self.service.gearswap_settings(int(request.account["id"])),
+        })
+
+    def save_gearswap_settings(self, request: Request) -> Response:
+        assert request.account
+        body = request.json()
+        saved = self.service.save_gearswap_settings(
+            int(request.account["id"]), body.get("config"))
+        return json_response(200, {"config": saved})
+
+    def battle_team(self, request: Request) -> Response:
+        assert request.account
+        characters = self.service.battle_team_profiles(int(request.account["id"]))
+        return json_response(200, {
+            "characters": characters,
+            # True when the live zone roster is attached.  The hub keeps the old
+            # "show every team character" behaviour when the roster is unavailable.
+            "online_known": self.service.zone_world is not None,
+        })
+
+    def save_battle_profile(self, request: Request) -> Response:
+        assert request.account
+        body = request.json()
+        saved = self.service.save_battle_profile(
+            int(request.account["id"]), int(request.params["character_id"]),
+            body.get("profile"), bool(body.get("shared")))
+        return json_response(200, {"character_id": int(request.params["character_id"]), "profile": saved})
+
     def characters(self, request: Request) -> Response:
         assert request.account
         return json_response(200, {"characters": self.service.list_characters(request.account["id"])})
@@ -289,9 +336,22 @@ class Api:
         The Data and Design pages follow the launcher's tenant bar, so they are one page for the
         whole team: a main account's token manages its own characters and the boxes it owns.
         Other accounts still get a plain 404, so character ids are not enumerable.
+
+        Either id form is accepted.  The launcher sends the database row id; the in-game HUD
+        only has the client's ServerId (``0x01000000 | char_id``) for the player entity.  A
+        Target Debuffs poll with the long id used to 404, and the window drew the error body
+        (a JSON object) as ``Server state: table: 0x...``.
         """
         assert request.account
-        row = self.service.character(int(request.params["character_id"]))
+        wanted = int(request.params["character_id"])
+        try:
+            row = self.service.character(wanted)
+        except ApiError:
+            # ``character_by_char_id`` returns None instead of raising: the gateway uses it to
+            # answer "no character" quietly.  Here that is an ordinary 404.
+            row = self.service.character_by_char_id(wanted)
+            if row is None:
+                raise ApiError(404, "not_found", "character not found")
         if (request.account.get("role") != "admin"
                 and not self.service.account_can_manage_character(
                     int(request.account["id"]), int(row["id"]))):
@@ -359,16 +419,55 @@ class Api:
         body = request.json()
         if body.get("top_off"):
             self.service.top_off_merits(int(row["id"]))
+        elif "upgrades" in body:
+            self.service.save_merit_layout(
+                int(row["id"]), body.get("upgrades"), spend=bool(body.get("spend")))
         else:
             try:
                 points = int(body.get("points"))
             except (TypeError, ValueError):
-                raise ApiError(422, "validation_error", "send points or top_off")
+                raise ApiError(422, "validation_error",
+                               "send points, top_off or upgrades")
             self.service.set_merit_points(int(row["id"]), points)
         return json_response(200, self.service.character_data(int(row["id"])))
 
+    def character_ascension(self, request: Request) -> Response:
+        """Apply or clear the two augment rows on one Shantotto's Ascension copy."""
+        row = self._data_character(request)
+        body = request.json()
+        self.service.apply_ascension(
+            int(row["id"]), body.get("container"), body.get("slot"),
+            body.get("choices") or [])
+        return json_response(200, self.service.character_data(int(row["id"])))
+
+    # --- mounts --------------------------------------------------------------------------------
+    def mounts(self, request: Request) -> Response:
+        """Every mount the client knows: id, name, description and Japanese name.
+
+        The catalogue is the game's own table and nothing here is per-account; the
+        launcher's mount picker is the reader.  It still needs a session like the rest of
+        the player API, so the route is behind the same gate.
+        """
+        return json_response(200, {"mounts": self.service.mount_catalog()})
+
+    def character_mount(self, request: Request) -> Response:
+        """The character's live mount, if it is online, and the last one it called."""
+        row = self._data_character(request)
+        return json_response(200, self.service.character_mount(int(row["id"])))
+
+    def character_mount_set(self, request: Request) -> Response:
+        """Mount one character — ``{"mount": "raptor"}`` — or its sub team with ``"all": true``."""
+        row = self._data_character(request)
+        body = request.json()
+        query = body.get("mount", body.get("name", body.get("mount_id")))
+        if query is None:
+            raise ApiError(422, "validation_error", "send mount (a name or id) or mount_id")
+        family = bool(body.get("all") or body.get("team"))
+        return json_response(200, self.service.mount_character(
+            int(row["id"]), query, family=family))
+
     def character_progress(self, request: Request) -> Response:
-        """Ranks, fame, jobs, Exemplar Points, crafts, Trust re-issue and augment paths (Odyssey/Limbus/Unity/Oboro)."""
+        """Ranks, fame, jobs, crafts, Trusts, augment paths, cape, Nolan and Oseem augments."""
         row = self._data_character(request)
         cid = int(row["id"])
         body = request.json()
@@ -412,6 +511,101 @@ class Api:
                 augment_gear.cap(
                     self.service, cid, int(body.get("container")), int(body.get("slot")),
                     str(body.get("path") or ""))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "cape-add":
+            try:
+                capes.add(self.service, cid, body.get("item_id"))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "cape-augment":
+            try:
+                capes.apply(self.service, cid, body.get("container"), body.get("slot"),
+                            body.get("choices") or {})
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "cape-clear":
+            try:
+                capes.clear(self.service, cid, body.get("container"), body.get("slot"))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "nolan":
+            try:
+                mezzotint.apply(self.service, cid, body.get("container"), body.get("slot"),
+                                body.get("path"))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "glyptics":
+            try:
+                glyptics.apply(self.service, cid, body.get("container"), body.get("slot"),
+                               body.get("path"), body.get("choices") or ())
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "glyptics-clear":
+            try:
+                glyptics.clear(self.service, cid, body.get("container"), body.get("slot"))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "skirmish":
+            try:
+                skirmish.apply(self.service, cid, body.get("container"), body.get("slot"),
+                               body.get("picks") or ())
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "skirmish-clear":
+            try:
+                skirmish.clear(self.service, cid, body.get("container"), body.get("slot"))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "sinister":
+            try:
+                sinister.apply_max(self.service, cid, body.get("container"), body.get("slot"))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "sinister-clear":
+            try:
+                sinister.clear(self.service, cid, body.get("container"), body.get("slot"))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "moonshade":
+            try:
+                moonshade.apply(self.service, cid, body.get("container"), body.get("slot"),
+                                body.get("first"), body.get("second"))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "moonshade-clear":
+            try:
+                moonshade.clear(self.service, cid, body.get("container"), body.get("slot"))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "magian":
+            try:
+                magian.apply(self.service, cid, body.get("container"), body.get("slot"),
+                             body.get("trial"))
             except LookupError as exc:
                 raise ApiError(404, "not_found", str(exc))
             except (TypeError, ValueError) as exc:
@@ -461,6 +655,12 @@ class Api:
         # The zone-in burst already carries all seven permanent key-item tables.
         return json_response(200, self.service.character_data(int(row["id"])))
 
+    def character_mounts(self, request: Request) -> Response:
+        """The Data page's Get all mounts: re-issue the unlock table to a live client."""
+        row = self._data_character(request)
+        self.service.resend_mounts(int(row["id"]))
+        return json_response(200, self.service.character_data(int(row["id"])))
+
     def character_currencies(self, request: Request) -> Response:
         row = self._data_character(request)
         body = request.json()
@@ -475,8 +675,37 @@ class Api:
         except ValueError:
             limit = 40
         items = self.service.search_items(
-            int(row["id"]), request.arg("q", "") or "", request.arg("kind"), limit)
+            int(row["id"]), request.arg("q", "") or "", request.arg("kind"), limit,
+            scope=request.arg("scope", "armory") or "armory",
+            category=request.arg("category"))
         return json_response(200, {"items": items})
+
+    def character_bags(self, request: Request) -> Response:
+        row = self._data_character(request)
+        return json_response(200, {
+            "items": self.service.character_bags(int(row["id"])),
+        })
+
+    def character_magicbag(self, request: Request) -> Response:
+        row = self._data_character(request)
+        return json_response(200, {
+            "items": self.service.character_all_items(int(row["id"])),
+        })
+
+    def character_stats(self, request: Request) -> Response:
+        row = self._data_character(request)
+        return json_response(200, self.service.character_stat_report(int(row["id"])))
+
+    def character_target(self, request: Request) -> Response:
+        """The selected mob's live debuffs (Target Debuffs HUD)."""
+        row = self._data_character(request)
+        raw = request.arg("entity_id", "") or ""
+        try:
+            entity_id = int(raw) if str(raw).strip() else 0
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "entity_id must be a number")
+        return json_response(200, self.service.character_target_report(
+            int(row["id"]), entity_id))
 
     def character_armory(self, request: Request) -> Response:
         row = self._data_character(request)
@@ -490,6 +719,21 @@ class Api:
         except (TypeError, ValueError):
             quantity = 1
         added = self.service.armory_add(int(row["id"]), item_id, quantity)
+        return json_response(201, {"item": added, "data": self.service.character_data(int(row["id"]))})
+
+    def character_items(self, request: Request) -> Response:
+        """Buy a general item (ninja tool, jug, consumable, ingredient) into the bag."""
+        row = self._data_character(request)
+        body = request.json()
+        try:
+            item_id = int(body.get("item_id"))
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error", "item_id must be a number")
+        try:
+            quantity = int(body.get("quantity") or 1)
+        except (TypeError, ValueError):
+            quantity = 1
+        added = self.service.item_add(int(row["id"]), item_id, quantity)
         return json_response(201, {"item": added, "data": self.service.character_data(int(row["id"]))})
 
     def launch(self, request: Request) -> Response:
@@ -594,6 +838,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_PATCH(self):
         self._dispatch("PATCH")
+
+    def do_PUT(self):
+        self._dispatch("PUT")
 
     def do_DELETE(self):
         self._dispatch("DELETE")

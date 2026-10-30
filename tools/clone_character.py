@@ -47,7 +47,7 @@ DEFAULT_DB = ROOT / "data" / "fanxi.db"
 CHARACTER_TABLES = {
     "character_jobs": ("job", "level", "master_level"),
     "char_equip": ("kind", "container", "slot", "item_id"),
-    "char_inventory": ("container", "slot", "item_id", "quantity", "extra"),
+    "char_inventory": ("container", "slot", "item_id", "quantity", "extra", "dropped_at"),
     "char_storage": ("item_id", "quantity", "slip", "stored_at"),
     "char_locker": ("item_id", "extra", "quantity", "stored_at"),
     "char_merits": ("merit_id", "upgrades"),

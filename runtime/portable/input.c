@@ -229,6 +229,19 @@ void input_inject_key(uint8_t dik, int down)
         notify(INPUT_KEYBOARD);
 }
 
+void input_inject_wheel(int32_t dz)
+{
+    if (!dz)
+        return;
+    lock();
+    g_dz += dz;
+    push(INPUT_MOUSE, 8, (uint32_t)dz);
+    void (*notify)(int) = g_ring[INPUT_MOUSE].notify;
+    unlock();
+    if (notify)
+        notify(INPUT_MOUSE);
+}
+
 void input_release_all(void)
 {
     lock();

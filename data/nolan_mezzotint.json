@@ -1,0 +1,12084 @@
+{
+ "note": "Nolan, Norg (I-7): mezzotints Escha - Zi'Tah and Escha - Ru'Aun weapons, the Zi'Tah armor sets and the NQ/HQ abjuration sets. Paths A/B/C are shared by every piece of a set; path D is per piece. Values are the Rank 15 maximums from the BG Wiki Nolan page.",
+ "source": "https://www.bg-wiki.com/ffxi/Nolan",
+ "items": [
+  {
+   "item_id": 25686,
+   "name": "Adhemar Jacket",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Adhemar Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "fast_cast",
+      "value": 7
+     },
+     {
+      "key": "mdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27473,
+   "name": "Adhemar Gamashes",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Adhemar Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "stp",
+      "value": 6
+     },
+     {
+      "key": "snapshot",
+      "value": 8
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27117,
+   "name": "Adhemar Wristbands",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Adhemar Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25613,
+   "name": "Adhemar Bonnet",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Adhemar Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27302,
+   "name": "Adhemar Kecks",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Adhemar Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "rapid_shot",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25687,
+   "name": "Adhemar Jacket +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Adhemar Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "racc",
+      "value": 20
+     },
+     {
+      "key": "ratt",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 105
+     },
+     {
+      "key": "fast_cast",
+      "value": 10
+     },
+     {
+      "key": "mdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27474,
+   "name": "Adhemar Gamashes +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Adhemar Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "racc",
+      "value": 20
+     },
+     {
+      "key": "ratt",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "stp",
+      "value": 7
+     },
+     {
+      "key": "snapshot",
+      "value": 10
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27118,
+   "name": "Adhemar Wristbands +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Adhemar Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "racc",
+      "value": 20
+     },
+     {
+      "key": "ratt",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "subtle_blow",
+      "value": 8
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25614,
+   "name": "Adhemar Bonnet +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Adhemar Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "racc",
+      "value": 20
+     },
+     {
+      "key": "ratt",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 105
+     },
+     {
+      "key": "attack",
+      "value": 13
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27303,
+   "name": "Adhemar Kecks +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Adhemar Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "racc",
+      "value": 20
+     },
+     {
+      "key": "ratt",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "agi",
+      "value": 12
+     },
+     {
+      "key": "rapid_shot",
+      "value": 13
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25688,
+   "name": "Amalric Doublet",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Amalric Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "elemental_skill",
+      "value": 15
+     },
+     {
+      "key": "dark_skill",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "mab",
+      "value": 20
+     },
+     {
+      "key": "fast_cast",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27475,
+   "name": "Amalric Nails",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Amalric Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "elemental_skill",
+      "value": 15
+     },
+     {
+      "key": "dark_skill",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27119,
+   "name": "Amalric Gages",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Amalric Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "elemental_skill",
+      "value": 15
+     },
+     {
+      "key": "dark_skill",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25615,
+   "name": "Amalric Coif",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Amalric Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "elemental_skill",
+      "value": 15
+     },
+     {
+      "key": "dark_skill",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27304,
+   "name": "Amalric Slops",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Amalric Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "elemental_skill",
+      "value": 15
+     },
+     {
+      "key": "dark_skill",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "mab",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25689,
+   "name": "Amalric Doublet +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Amalric Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "elemental_skill",
+      "value": 20
+     },
+     {
+      "key": "dark_skill",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "mab",
+      "value": 25
+     },
+     {
+      "key": "fast_cast",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27476,
+   "name": "Amalric Nails +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Amalric Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "elemental_skill",
+      "value": 20
+     },
+     {
+      "key": "dark_skill",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     },
+     {
+      "key": "conserve_mp",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27120,
+   "name": "Amalric Gages +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Amalric Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "elemental_skill",
+      "value": 20
+     },
+     {
+      "key": "dark_skill",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25616,
+   "name": "Amalric Coif +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Amalric Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "elemental_skill",
+      "value": 20
+     },
+     {
+      "key": "dark_skill",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "macc",
+      "value": 25
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27305,
+   "name": "Amalric Slops +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Amalric Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "elemental_skill",
+      "value": 20
+     },
+     {
+      "key": "dark_skill",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "mab",
+      "value": 25
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26852,
+   "name": "Apogee Dalmatica",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Apogee Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_mab",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_attack",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_mab",
+      "value": 20
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "summoning_skill",
+      "value": 15
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27380,
+   "name": "Apogee Pumps",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Apogee Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_mab",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_attack",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_mab",
+      "value": 20
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 70
+     },
+     {
+      "key": "summoning_skill",
+      "value": 15
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27028,
+   "name": "Apogee Mitts",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Apogee Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_mab",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_attack",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_mab",
+      "value": 20
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_macc",
+      "value": 20
+     },
+     {
+      "key": "bp_delay",
+      "value": -5
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26676,
+   "name": "Apogee Crown",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Apogee Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_mab",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_attack",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_mab",
+      "value": 20
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "avatar_perp",
+      "value": -5
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27204,
+   "name": "Apogee Slacks",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Apogee Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_mab",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pet_attack",
+      "value": 30
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_mab",
+      "value": 20
+     },
+     {
+      "key": "bp_damage",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_str",
+      "value": 15
+     },
+     {
+      "key": "bp_damage",
+      "value": 13
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26853,
+   "name": "Apogee Dalmatica +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Apogee Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_mab",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_attack",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 25
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "summoning_skill",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27381,
+   "name": "Apogee Pumps +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Apogee Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_mab",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_attack",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 25
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "summoning_skill",
+      "value": 20
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27029,
+   "name": "Apogee Mitts +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Apogee Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_mab",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_attack",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 25
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_macc",
+      "value": 25
+     },
+     {
+      "key": "bp_delay",
+      "value": -7
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26677,
+   "name": "Apogee Crown +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Apogee Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_mab",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_attack",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 25
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_acc",
+      "value": 25
+     },
+     {
+      "key": "avatar_perp",
+      "value": -7
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27205,
+   "name": "Apogee Slacks +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Apogee Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_mab",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pet_attack",
+      "value": 35
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 25
+     },
+     {
+      "key": "bp_damage",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_str",
+      "value": 20
+     },
+     {
+      "key": "bp_damage",
+      "value": 14
+     },
+     {
+      "key": "pet_da",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26848,
+   "name": "Argosy Hauberk",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Argosy Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27376,
+   "name": "Argosy Sollerets",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Argosy Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 60
+     },
+     {
+      "key": "da",
+      "value": 2
+     },
+     {
+      "key": "stp",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27024,
+   "name": "Argosy Mufflers",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Argosy Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "da",
+      "value": 2
+     },
+     {
+      "key": "haste",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26672,
+   "name": "Argosy Celata",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Argosy Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27200,
+   "name": "Argosy Breeches",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Argosy Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26849,
+   "name": "Argosy Hauberk +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Argosy Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27377,
+   "name": "Argosy Sollerets +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Argosy Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "da",
+      "value": 3
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27025,
+   "name": "Argosy Mufflers +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Argosy Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "da",
+      "value": 3
+     },
+     {
+      "key": "haste",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26673,
+   "name": "Argosy Celata +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Argosy Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27201,
+   "name": "Argosy Breeches +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Argosy Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "stp",
+      "value": 6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26854,
+   "name": "Carmine Scale Mail",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Carmine Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 60
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "int",
+      "value": 10
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 10
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27382,
+   "name": "Carmine Greaves",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Carmine Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 60
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "int",
+      "value": 10
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 60
+     },
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27030,
+   "name": "Carmine Finger Gauntlets",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Carmine Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 60
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "int",
+      "value": 10
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "ratt",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 10
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26678,
+   "name": "Carmine Mask",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Carmine Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 60
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "int",
+      "value": 10
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 10
+     },
+     {
+      "key": "fast_cast",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27206,
+   "name": "Carmine Cuisses",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Carmine Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 60
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "int",
+      "value": 10
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "dw",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26855,
+   "name": "Carmine Scale Mail +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Carmine Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "int",
+      "value": 12
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     }
+    ],
+    "D": [
+     {
+      "key": "mab",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "da",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27383,
+   "name": "Carmine Greaves +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Carmine Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "int",
+      "value": 12
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27031,
+   "name": "Carmine Finger Gauntlets +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Carmine Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "int",
+      "value": 12
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     }
+    ],
+    "D": [
+     {
+      "key": "ratt",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 12
+     },
+     {
+      "key": "stp",
+      "value": 6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26679,
+   "name": "Carmine Mask +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Carmine Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "int",
+      "value": 12
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "macc",
+      "value": 12
+     },
+     {
+      "key": "fast_cast",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27207,
+   "name": "Carmine Cuisses +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Carmine Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "int",
+      "value": 12
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "dw",
+      "value": 6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26948,
+   "name": "Despair Mail",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Escha - Zi'Tah",
+   "group": "Despair Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "cure_received",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "vit",
+      "value": 7
+     },
+     {
+      "key": "haste",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "pet_vit",
+      "value": 7
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "meva",
+      "value": 20
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27458,
+   "name": "Despair Greaves",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Escha - Zi'Tah",
+   "group": "Despair Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "cure_received",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "vit",
+      "value": 7
+     },
+     {
+      "key": "haste",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "pet_vit",
+      "value": 7
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "str",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27098,
+   "name": "Despair Finger Gauntlets",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Escha - Zi'Tah",
+   "group": "Despair Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "cure_received",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "vit",
+      "value": 7
+     },
+     {
+      "key": "haste",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "pet_vit",
+      "value": 7
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "racc",
+      "value": 25
+     },
+     {
+      "key": "ratt",
+      "value": 20
+     },
+     {
+      "key": "recycle",
+      "value": 10
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26792,
+   "name": "Despair Helm",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Escha - Zi'Tah",
+   "group": "Despair Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "cure_received",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "vit",
+      "value": 7
+     },
+     {
+      "key": "haste",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "pet_vit",
+      "value": 7
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "stp",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27283,
+   "name": "Despair Cuisses",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Escha - Zi'Tah",
+   "group": "Despair Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "cure_received",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "vit",
+      "value": 7
+     },
+     {
+      "key": "haste",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "pet_vit",
+      "value": 7
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 20
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25682,
+   "name": "Emicho Haubert",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Emicho Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_attack",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_hp",
+      "value": 100
+     },
+     {
+      "key": "pet_int",
+      "value": 15
+     },
+     {
+      "key": "pet_regen",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27469,
+   "name": "Emicho Gambieras",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Emicho Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_attack",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "subtle_blow",
+      "value": 4
+     },
+     {
+      "key": "pet_attack",
+      "value": 25
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27113,
+   "name": "Emicho Gauntlets",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Emicho Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_attack",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "dw",
+      "value": 5
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25609,
+   "name": "Emicho Coronet",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Emicho Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_attack",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 6
+     },
+     {
+      "key": "pet_str",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27298,
+   "name": "Emicho Hose",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Emicho Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_attack",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25683,
+   "name": "Emicho Haubert +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Emicho Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_da",
+      "value": 4
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_hp",
+      "value": 125
+     },
+     {
+      "key": "pet_int",
+      "value": 20
+     },
+     {
+      "key": "pet_regen",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27470,
+   "name": "Emicho Gambieras +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Emicho Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_da",
+      "value": 4
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "subtle_blow",
+      "value": 5
+     },
+     {
+      "key": "pet_attack",
+      "value": 30
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27114,
+   "name": "Emicho Gauntlets +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Emicho Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_da",
+      "value": 4
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 25
+     },
+     {
+      "key": "dw",
+      "value": 6
+     },
+     {
+      "key": "pet_acc",
+      "value": 25
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25610,
+   "name": "Emicho Coronet +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Emicho Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_da",
+      "value": 4
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "stp",
+      "value": 7
+     },
+     {
+      "key": "pet_str",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27299,
+   "name": "Emicho Hose +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Emicho Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_da",
+      "value": 4
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 25
+     },
+     {
+      "key": "attack",
+      "value": 25
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26947,
+   "name": "Eschite Breastplate",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Escha - Zi'Tah",
+   "group": "Eschite Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "meva",
+      "value": 15
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "vit",
+      "value": 7
+     },
+     {
+      "key": "dt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27457,
+   "name": "Eschite Greaves",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Escha - Zi'Tah",
+   "group": "Eschite Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "meva",
+      "value": 15
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27097,
+   "name": "Eschite Gauntlets",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Escha - Zi'Tah",
+   "group": "Eschite Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "meva",
+      "value": 15
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "da",
+      "value": 4
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26791,
+   "name": "Eschite Helm",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Escha - Zi'Tah",
+   "group": "Eschite Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "meva",
+      "value": 15
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 9
+     },
+     {
+      "key": "vit",
+      "value": 7
+     },
+     {
+      "key": "cure_potency",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27282,
+   "name": "Eschite Cuisses",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Escha - Zi'Tah",
+   "group": "Eschite Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "meva",
+      "value": 15
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "mab",
+      "value": 25
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     },
+     {
+      "key": "fast_cast",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25690,
+   "name": "Kaykaus Bliaut",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Kaykaus Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -10
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "cure_potency",
+      "value": 5
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27477,
+   "name": "Kaykaus Boots",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Kaykaus Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -10
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "cure_potency",
+      "value": 5
+     },
+     {
+      "key": "fast_cast",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27121,
+   "name": "Kaykaus Cuffs",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Kaykaus Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -10
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     },
+     {
+      "key": "fast_cast",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25617,
+   "name": "Kaykaus Mitra",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Kaykaus Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -10
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     }
+    ],
+    "D": [
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27306,
+   "name": "Kaykaus Tights",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Kaykaus Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -10
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -5
+     }
+    ],
+    "D": [
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "mab",
+      "value": 15
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25691,
+   "name": "Kaykaus Bliaut +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Kaykaus Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     },
+     {
+      "key": "macc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -12
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "cure_potency",
+      "value": 6
+     },
+     {
+      "key": "conserve_mp",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27478,
+   "name": "Kaykaus Boots +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Kaykaus Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     },
+     {
+      "key": "macc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -12
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "cure_potency",
+      "value": 6
+     },
+     {
+      "key": "fast_cast",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27122,
+   "name": "Kaykaus Cuffs +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Kaykaus Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     },
+     {
+      "key": "macc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -12
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "conserve_mp",
+      "value": 7
+     },
+     {
+      "key": "fast_cast",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25618,
+   "name": "Kaykaus Mitra +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Kaykaus Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     },
+     {
+      "key": "macc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -12
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     }
+    ],
+    "D": [
+     {
+      "key": "mnd",
+      "value": 12
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27307,
+   "name": "Kaykaus Tights +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Kaykaus Attire Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "mnd",
+      "value": 12
+     },
+     {
+      "key": "macc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -12
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     }
+    ],
+    "D": [
+     {
+      "key": "int",
+      "value": 12
+     },
+     {
+      "key": "mab",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26844,
+   "name": "Lustratio Harness",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Lustratio Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 5
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "dex",
+      "value": 5
+     },
+     {
+      "key": "crit_rate",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 8
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "attack",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 8
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27372,
+   "name": "Lustratio Leggings",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Lustratio Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 5
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "dex",
+      "value": 5
+     },
+     {
+      "key": "crit_rate",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 8
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "attack",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27020,
+   "name": "Lustratio Mittens",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Lustratio Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 5
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "dex",
+      "value": 5
+     },
+     {
+      "key": "crit_rate",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 8
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "attack",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 25
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26668,
+   "name": "Lustratio Cap",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Lustratio Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 5
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "dex",
+      "value": 5
+     },
+     {
+      "key": "crit_rate",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 8
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "attack",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "int",
+      "value": 30
+     },
+     {
+      "key": "str",
+      "value": 5
+     },
+     {
+      "key": "dex",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27196,
+   "name": "Lustratio Subligar",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Lustratio Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 5
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "dex",
+      "value": 5
+     },
+     {
+      "key": "crit_rate",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 8
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "attack",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26845,
+   "name": "Lustratio Harness +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Lustratio Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "str",
+      "value": 8
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "dex",
+      "value": 8
+     },
+     {
+      "key": "crit_rate",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "attack",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 13
+     },
+     {
+      "key": "da",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27373,
+   "name": "Lustratio Leggings +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Lustratio Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "str",
+      "value": 8
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "dex",
+      "value": 8
+     },
+     {
+      "key": "crit_rate",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "attack",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "dex",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27021,
+   "name": "Lustratio Mittens +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Lustratio Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "str",
+      "value": 8
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "dex",
+      "value": 8
+     },
+     {
+      "key": "crit_rate",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "attack",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 30
+     },
+     {
+      "key": "vit",
+      "value": 13
+     },
+     {
+      "key": "dex",
+      "value": 10
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26669,
+   "name": "Lustratio Cap +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Lustratio Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "str",
+      "value": 8
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "dex",
+      "value": 8
+     },
+     {
+      "key": "crit_rate",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "attack",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 8
+     },
+     {
+      "key": "dex",
+      "value": 8
+     },
+     {
+      "key": "int",
+      "value": 35
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27197,
+   "name": "Lustratio Subligar +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Lustratio Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "str",
+      "value": 8
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "dex",
+      "value": 8
+     },
+     {
+      "key": "crit_rate",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "attack",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "attack",
+      "value": 30
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26949,
+   "name": "Naga Samue",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Escha - Zi'Tah",
+   "group": "Naga Garb Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_mp",
+      "value": 80
+     },
+     {
+      "key": "automaton_cure_potency",
+      "value": 4
+     },
+     {
+      "key": "automaton_fast_cast",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27459,
+   "name": "Naga Kyahan",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Escha - Zi'Tah",
+   "group": "Naga Garb Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_mp",
+      "value": 80
+     },
+     {
+      "key": "automaton_cure_potency",
+      "value": 4
+     },
+     {
+      "key": "automaton_fast_cast",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_hp",
+      "value": 100
+     },
+     {
+      "key": "pet_acc",
+      "value": 25
+     },
+     {
+      "key": "pet_attack",
+      "value": 25
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27099,
+   "name": "Naga Tekko",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Escha - Zi'Tah",
+   "group": "Naga Garb Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_mp",
+      "value": 80
+     },
+     {
+      "key": "automaton_cure_potency",
+      "value": 4
+     },
+     {
+      "key": "automaton_fast_cast",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_mp",
+      "value": 80
+     },
+     {
+      "key": "pet_mab",
+      "value": 20
+     },
+     {
+      "key": "pet_macc",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26793,
+   "name": "Naga Somen",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Escha - Zi'Tah",
+   "group": "Naga Garb Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_mp",
+      "value": 80
+     },
+     {
+      "key": "automaton_cure_potency",
+      "value": 4
+     },
+     {
+      "key": "automaton_fast_cast",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "racc",
+      "value": 25
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27284,
+   "name": "Naga Hakama",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Escha - Zi'Tah",
+   "group": "Naga Garb Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_mp",
+      "value": 80
+     },
+     {
+      "key": "automaton_cure_potency",
+      "value": 4
+     },
+     {
+      "key": "automaton_fast_cast",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "ratt",
+      "value": 25
+     },
+     {
+      "key": "crit_rate",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26952,
+   "name": "Psycloth Vest",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Escha - Zi'Tah",
+   "group": "Psycloth Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "int",
+      "value": 7
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "B": [
+     {
+      "key": "macc",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "mnd",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 15
+     },
+     {
+      "key": "pet_enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "elemental_skill",
+      "value": 20
+     },
+     {
+      "key": "int",
+      "value": 7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27462,
+   "name": "Psycloth Boots",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Escha - Zi'Tah",
+   "group": "Psycloth Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "int",
+      "value": 7
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "B": [
+     {
+      "key": "macc",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "mnd",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 15
+     },
+     {
+      "key": "pet_enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_macc",
+      "value": 20
+     },
+     {
+      "key": "pet_mab",
+      "value": 20
+     },
+     {
+      "key": "pet_enmity",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27102,
+   "name": "Psycloth Manillas",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Escha - Zi'Tah",
+   "group": "Psycloth Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "int",
+      "value": 7
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "B": [
+     {
+      "key": "macc",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "mnd",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 15
+     },
+     {
+      "key": "pet_enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "blood_boon",
+      "value": 4
+     },
+     {
+      "key": "pet_mab",
+      "value": 25
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26796,
+   "name": "Psycloth Tiara",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Escha - Zi'Tah",
+   "group": "Psycloth Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "int",
+      "value": 7
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "B": [
+     {
+      "key": "macc",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "mnd",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 15
+     },
+     {
+      "key": "pet_enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "fast_cast",
+      "value": 10
+     },
+     {
+      "key": "int",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27287,
+   "name": "Psycloth Lappas",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Escha - Zi'Tah",
+   "group": "Psycloth Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "int",
+      "value": 7
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "B": [
+     {
+      "key": "macc",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "mnd",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 15
+     },
+     {
+      "key": "pet_enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "fast_cast",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26951,
+   "name": "Pursuer's Doublet",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Escha - Zi'Tah",
+   "group": "Pursuer's Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "rapid_shot",
+      "value": 10
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "dex",
+      "value": 7
+     },
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "recycle",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "crit_rate",
+      "value": 4
+     },
+     {
+      "key": "snapshot",
+      "value": 6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27461,
+   "name": "Pursuer's Gaiters",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Escha - Zi'Tah",
+   "group": "Pursuer's Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "rapid_shot",
+      "value": 10
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "dex",
+      "value": 7
+     },
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "recycle",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "racc",
+      "value": 10
+     },
+     {
+      "key": "rapid_shot",
+      "value": 10
+     },
+     {
+      "key": "recycle",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27101,
+   "name": "Pursuer's Cuffs",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Escha - Zi'Tah",
+   "group": "Pursuer's Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "rapid_shot",
+      "value": 10
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "dex",
+      "value": 7
+     },
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "recycle",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "ratt",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26795,
+   "name": "Pursuer's Beret",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Escha - Zi'Tah",
+   "group": "Pursuer's Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "rapid_shot",
+      "value": 10
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "dex",
+      "value": 7
+     },
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "recycle",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "ratt",
+      "value": 15
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27286,
+   "name": "Pursuer's Pants",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Escha - Zi'Tah",
+   "group": "Pursuer's Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "rapid_shot",
+      "value": 10
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "dex",
+      "value": 7
+     },
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "recycle",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "dex",
+      "value": 7
+     },
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "str",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26850,
+   "name": "Rao Togi",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Rao Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 100
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27378,
+   "name": "Rao Sune-Ate",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Rao Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 100
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "crit_rate",
+      "value": 3
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27026,
+   "name": "Rao Kote",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Rao Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 100
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "meva",
+      "value": 15
+     },
+     {
+      "key": "mdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26674,
+   "name": "Rao Kabuto",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Rao Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 100
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "counter",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27202,
+   "name": "Rao Haidate",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Rao Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 100
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "da",
+      "value": 3
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26851,
+   "name": "Rao Togi +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Rao Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 125
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "subtle_blow",
+      "value": 8
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27379,
+   "name": "Rao Sune-Ate +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Rao Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 125
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "crit_rate",
+      "value": 4
+     },
+     {
+      "key": "da",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27027,
+   "name": "Rao Kote +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Rao Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 125
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "mnd",
+      "value": 12
+     },
+     {
+      "key": "meva",
+      "value": 20
+     },
+     {
+      "key": "mdt",
+      "value": -5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26675,
+   "name": "Rao Kabuto +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Rao Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 125
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "vit",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "counter",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27203,
+   "name": "Rao Haidate +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Rao Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 125
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 25
+     },
+     {
+      "key": "da",
+      "value": 4
+     },
+     {
+      "key": "pet_acc",
+      "value": 25
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26950,
+   "name": "Rawhide Vest",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Escha - Zi'Tah",
+   "group": "Rawhide Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "str",
+      "value": 7
+     },
+     {
+      "key": "int",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     },
+     {
+      "key": "ta",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27460,
+   "name": "Rawhide Boots",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Escha - Zi'Tah",
+   "group": "Rawhide Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "str",
+      "value": 7
+     },
+     {
+      "key": "int",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27100,
+   "name": "Rawhide Gloves",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Escha - Zi'Tah",
+   "group": "Rawhide Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "str",
+      "value": 7
+     },
+     {
+      "key": "int",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "int",
+      "value": 7
+     },
+     {
+      "key": "mnd",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26794,
+   "name": "Rawhide Mask",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Escha - Zi'Tah",
+   "group": "Rawhide Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "str",
+      "value": 7
+     },
+     {
+      "key": "int",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "pet_macc",
+      "value": 20
+     },
+     {
+      "key": "pet_mab",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27285,
+   "name": "Rawhide Trousers",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Escha - Zi'Tah",
+   "group": "Rawhide Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "str",
+      "value": 7
+     },
+     {
+      "key": "int",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "pet_acc",
+      "value": 15
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "fast_cast",
+      "value": 5
+     },
+     {
+      "key": "refresh",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25684,
+   "name": "Ryuo Domaru",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Ryuo Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "da",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27471,
+   "name": "Ryuo Sune-Ate",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Ryuo Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "crit_rate",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27115,
+   "name": "Ryuo Tekko",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Ryuo Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25611,
+   "name": "Ryuo Somen",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Ryuo Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "ninjutsu_skill",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27300,
+   "name": "Ryuo Hakama",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Ryuo Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 4
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25685,
+   "name": "Ryuo Domaru +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Ryuo Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "subtle_blow",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "stp",
+      "value": 8
+     },
+     {
+      "key": "da",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27472,
+   "name": "Ryuo Sune-Ate +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Ryuo Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "subtle_blow",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "crit_rate",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27116,
+   "name": "Ryuo Tekko +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Ryuo Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "subtle_blow",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 25
+     },
+     {
+      "key": "da",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 25612,
+   "name": "Ryuo Somen +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Ryuo Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "subtle_blow",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "ninjutsu_skill",
+      "value": 20
+     },
+     {
+      "key": "macc",
+      "value": 25
+     },
+     {
+      "key": "mab",
+      "value": 25
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27301,
+   "name": "Ryuo Hakama +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Ryuo Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "dex",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "subtle_blow",
+      "value": 8
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 25
+     },
+     {
+      "key": "stp",
+      "value": 5
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26846,
+   "name": "Souveran Cuirass",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Souveran Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 4
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "cure_received",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "refresh",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27374,
+   "name": "Souveran Schuhs",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Souveran Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 4
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "cure_received",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "mdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27022,
+   "name": "Souveran Handschuhs",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Souveran Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 4
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "cure_received",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "shield_skill",
+      "value": 10
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26670,
+   "name": "Souveran Schaller",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Souveran Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 4
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "cure_received",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27198,
+   "name": "Souveran Diechlings",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Normal Quality Abjuratory",
+   "group": "Souveran Armor Set",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 10
+     },
+     {
+      "key": "enmity",
+      "value": 4
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "cure_received",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26847,
+   "name": "Souveran Cuirass +1",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "High Quality Abjuratory",
+   "group": "Souveran Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 13
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 105
+     },
+     {
+      "key": "enmity",
+      "value": 9
+     },
+     {
+      "key": "cure_received",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "vit",
+      "value": 12
+     },
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "refresh",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27375,
+   "name": "Souveran Schuhs +1",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "High Quality Abjuratory",
+   "group": "Souveran Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 13
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 105
+     },
+     {
+      "key": "enmity",
+      "value": 9
+     },
+     {
+      "key": "cure_received",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "mdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27023,
+   "name": "Souveran Handschuhs +1",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "High Quality Abjuratory",
+   "group": "Souveran Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 13
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 105
+     },
+     {
+      "key": "enmity",
+      "value": 9
+     },
+     {
+      "key": "cure_received",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "shield_skill",
+      "value": 15
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26671,
+   "name": "Souveran Schaller +1",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "High Quality Abjuratory",
+   "group": "Souveran Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 13
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 105
+     },
+     {
+      "key": "enmity",
+      "value": 9
+     },
+     {
+      "key": "cure_received",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 105
+     },
+     {
+      "key": "vit",
+      "value": 12
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27199,
+   "name": "Souveran Diechlings +1",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "High Quality Abjuratory",
+   "group": "Souveran Armor Set +1",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 13
+     },
+     {
+      "key": "attack",
+      "value": 12
+     },
+     {
+      "key": "enmity",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 65
+     },
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 13
+     }
+    ],
+    "C": [
+     {
+      "key": "hp",
+      "value": 105
+     },
+     {
+      "key": "enmity",
+      "value": 9
+     },
+     {
+      "key": "cure_received",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 12
+     },
+     {
+      "key": "vit",
+      "value": 12
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26953,
+   "name": "Vanya Robe",
+   "kind": "armor",
+   "slot": "body",
+   "zone": "Escha - Zi'Tah",
+   "group": "Vanya Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "cure_potency",
+      "value": 7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "B": [
+     {
+      "key": "healing_skill",
+      "value": 20
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "mdt",
+      "value": -3
+     }
+    ],
+    "C": [
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "refresh",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27463,
+   "name": "Vanya Clogs",
+   "kind": "armor",
+   "slot": "feet",
+   "zone": "Escha - Zi'Tah",
+   "group": "Vanya Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "cure_potency",
+      "value": 7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "B": [
+     {
+      "key": "healing_skill",
+      "value": 20
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "mdt",
+      "value": -3
+     }
+    ],
+    "C": [
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "D": [
+     {
+      "key": "cure_potency",
+      "value": 5
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -15
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27103,
+   "name": "Vanya Cuffs",
+   "kind": "armor",
+   "slot": "hands",
+   "zone": "Escha - Zi'Tah",
+   "group": "Vanya Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "cure_potency",
+      "value": 7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "B": [
+     {
+      "key": "healing_skill",
+      "value": 20
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "mdt",
+      "value": -3
+     }
+    ],
+    "C": [
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "D": [
+     {
+      "key": "chr",
+      "value": 10
+     },
+     {
+      "key": "string_skill",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 26797,
+   "name": "Vanya Hood",
+   "kind": "armor",
+   "slot": "head",
+   "zone": "Escha - Zi'Tah",
+   "group": "Vanya Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "cure_potency",
+      "value": 7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "B": [
+     {
+      "key": "healing_skill",
+      "value": 20
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "mdt",
+      "value": -3
+     }
+    ],
+    "C": [
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "fast_cast",
+      "value": 10
+     },
+     {
+      "key": "haste",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27288,
+   "name": "Vanya Slops",
+   "kind": "armor",
+   "slot": "legs",
+   "zone": "Escha - Zi'Tah",
+   "group": "Vanya Attire Set",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "cure_potency",
+      "value": 7
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "B": [
+     {
+      "key": "healing_skill",
+      "value": 20
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     },
+     {
+      "key": "mdt",
+      "value": -3
+     }
+    ],
+    "C": [
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "spell_interrupt",
+      "value": -15
+     },
+     {
+      "key": "conserve_mp",
+      "value": 6
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "meva",
+      "value": 15
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20519,
+   "name": "Hammerfists",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 17
+     },
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "vit",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20520,
+   "name": "Midnights",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_haste",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_acc",
+      "value": 25
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20597,
+   "name": "Enchufla",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "dex",
+      "value": 15
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 17
+     },
+     {
+      "key": "eva",
+      "value": 15
+     },
+     {
+      "key": "meva",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20598,
+   "name": "Shijo",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "ta",
+      "value": 2
+     },
+     {
+      "key": "dw",
+      "value": 5
+     },
+     {
+      "key": "dex",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20599,
+   "name": "Kali",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "chr",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "chr",
+      "value": 15
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "refresh",
+      "value": 1
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "string_skill",
+      "value": 10
+     },
+     {
+      "key": "wind_skill",
+      "value": 10
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20700,
+   "name": "Nixxer",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 17
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "vit",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20701,
+   "name": "Iris",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "blue_skill",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20702,
+   "name": "Emissary",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 20
+     },
+     {
+      "key": "refresh",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20797,
+   "name": "Skullrender",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_attack",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "pet_mab",
+      "value": 15
+     },
+     {
+      "key": "pet_regen",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20845,
+   "name": "Instigator",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 32
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "vit",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20892,
+   "name": "Deathbane",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "dark_skill",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 32
+     },
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "str",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20937,
+   "name": "Rhomphaia",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "vit",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 32
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20979,
+   "name": "Aizushintogo",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 17
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "racc",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21027,
+   "name": "Ichigohitofuri",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "acc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "acc",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "agi",
+      "value": 20
+     },
+     {
+      "key": "racc",
+      "value": 25
+     },
+     {
+      "key": "recycle",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21084,
+   "name": "Queller Rod",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "cure_potency",
+      "value": 15
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "B": [
+     {
+      "key": "mnd",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "cure_potency",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "mab",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "cure_potency",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "healing_skill",
+      "value": 15
+     },
+     {
+      "key": "cure_potency",
+      "value": 10
+     },
+     {
+      "key": "cure_cast_time",
+      "value": -7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21085,
+   "name": "Solstice",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 60
+     },
+     {
+      "key": "int",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 10
+     },
+     {
+      "key": "refresh",
+      "value": 1
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     },
+     {
+      "key": "fast_cast",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21149,
+   "name": "Espiritus",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "enmity",
+      "value": -6
+     },
+     {
+      "key": "pet_mab",
+      "value": 30
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     }
+    ],
+    "B": [
+     {
+      "key": "summoning_skill",
+      "value": 15
+     },
+     {
+      "key": "pet_macc",
+      "value": 30
+     },
+     {
+      "key": "pet_dt",
+      "value": -4
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "pet_mab",
+      "value": 20
+     },
+     {
+      "key": "pet_macc",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_str",
+      "value": 15
+     },
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_da",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21150,
+   "name": "Akademos",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mnd",
+      "value": 20
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "cure_potency",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "enhancing_skill",
+      "value": 15
+     },
+     {
+      "key": "enfeebling_skill",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21151,
+   "name": "Lathi",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "int",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "fast_cast",
+      "value": 5
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "enfeebling_skill",
+      "value": 15
+     },
+     {
+      "key": "dark_skill",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21698,
+   "name": "Bidenhander",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "str",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 30
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 32
+     },
+     {
+      "key": "stp",
+      "value": 7
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21215,
+   "name": "Vijaya Bow",
+   "kind": "weapon",
+   "slot": "range",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "agi",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "agi",
+      "value": 15
+     },
+     {
+      "key": "racc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     },
+     {
+      "key": "crit_rate",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21482,
+   "name": "Compensator",
+   "kind": "weapon",
+   "slot": "range",
+   "zone": "Escha - Ru'Aun",
+   "group": "Escha - Ru'Aun",
+   "paths": {
+    "A": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "agi",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "agi",
+      "value": 15
+     },
+     {
+      "key": "racc",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "dmg",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20524,
+   "name": "Nibiru Sainti",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 25
+     },
+     {
+      "key": "str",
+      "value": 7
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "eva",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ],
+    "D": [
+     {
+      "key": "automaton_melee_skill",
+      "value": 20
+     },
+     {
+      "key": "automaton_ranged_skill",
+      "value": 20
+     },
+     {
+      "key": "automaton_magic_skill",
+      "value": 20
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20600,
+   "name": "Nibiru Knife",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "eva",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "dex",
+      "value": 7
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "chr",
+      "value": 10
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "meva",
+      "value": 20
+     },
+     {
+      "key": "fast_cast",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20710,
+   "name": "Nibiru Blade",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     },
+     {
+      "key": "meva",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "da",
+      "value": 3
+     },
+     {
+      "key": "fast_cast",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20801,
+   "name": "Nibiru Tabar",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "pet_attack",
+      "value": 20
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_attack",
+      "value": 25
+     },
+     {
+      "key": "pet_mab",
+      "value": 15
+     },
+     {
+      "key": "pet_enmity",
+      "value": 7
+     }
+    ],
+    "D": [
+     {
+      "key": "chr",
+      "value": 15
+     },
+     {
+      "key": "pet_haste",
+      "value": 3
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20848,
+   "name": "Nibiru Chopper",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 25
+     }
+    ],
+    "B": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": 4
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "eva",
+      "value": 20
+     },
+     {
+      "key": "counter",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20895,
+   "name": "Nibiru Sickle",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "int",
+      "value": 7
+     }
+    ],
+    "B": [
+     {
+      "key": "attack",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 25
+     },
+     {
+      "key": "fast_cast",
+      "value": 5
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "stp",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "macc",
+      "value": 20
+     },
+     {
+      "key": "mab",
+      "value": 15
+     },
+     {
+      "key": "refresh",
+      "value": 1
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20939,
+   "name": "Nibiru Lance",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_hp",
+      "value": 100
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_attack",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 20983,
+   "name": "Mijin",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "racc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ],
+    "C": [
+     {
+      "key": "int",
+      "value": 7
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "eva",
+      "value": 20
+     },
+     {
+      "key": "meva",
+      "value": 20
+     },
+     {
+      "key": "enmity",
+      "value": 4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21031,
+   "name": "Sensui",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "dex",
+      "value": 7
+     },
+     {
+      "key": "acc",
+      "value": 20
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ],
+    "B": [
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "subtle_blow",
+      "value": 7
+     },
+     {
+      "key": "da",
+      "value": 3
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 20
+     }
+    ],
+    "D": [
+     {
+      "key": "eva",
+      "value": 20
+     },
+     {
+      "key": "meva",
+      "value": 20
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21092,
+   "name": "Nibiru Cudgel",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "cure_potency",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "int",
+      "value": 10
+     },
+     {
+      "key": "mab",
+      "value": 15
+     }
+    ],
+    "C": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "macc",
+      "value": 15
+     },
+     {
+      "key": "fast_cast",
+      "value": 3
+     }
+    ],
+    "D": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "pet_dt",
+      "value": -3
+     },
+     {
+      "key": "pet_regen",
+      "value": 2
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21156,
+   "name": "Nibiru Staff",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "mab",
+      "value": 25
+     },
+     {
+      "key": "enmity",
+      "value": -5
+     }
+    ],
+    "B": [
+     {
+      "key": "mdt",
+      "value": -3
+     },
+     {
+      "key": "mnd",
+      "value": 10
+     },
+     {
+      "key": "macc",
+      "value": 25
+     }
+    ],
+    "C": [
+     {
+      "key": "pet_regen",
+      "value": 2
+     },
+     {
+      "key": "pet_macc",
+      "value": 20
+     },
+     {
+      "key": "pet_mab",
+      "value": 25
+     }
+    ],
+    "D": [
+     {
+      "key": "pet_acc",
+      "value": 20
+     },
+     {
+      "key": "pet_attack",
+      "value": 20
+     },
+     {
+      "key": "pet_da",
+      "value": 3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21699,
+   "name": "Nibiru Faussar",
+   "kind": "weapon",
+   "slot": "main",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 25
+     },
+     {
+      "key": "macc",
+      "value": 15
+     }
+    ],
+    "B": [
+     {
+      "key": "acc",
+      "value": 10
+     },
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ],
+    "C": [
+     {
+      "key": "eva",
+      "value": 20
+     },
+     {
+      "key": "meva",
+      "value": 20
+     },
+     {
+      "key": "fast_cast",
+      "value": 5
+     }
+    ],
+    "D": [
+     {
+      "key": "vit",
+      "value": 10
+     },
+     {
+      "key": "acc",
+      "value": 25
+     },
+     {
+      "key": "pdt",
+      "value": -4
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21216,
+   "name": "Nibiru Bow",
+   "kind": "weapon",
+   "slot": "range",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 25
+     },
+     {
+      "key": "enmity",
+      "value": -6
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "ratt",
+      "value": 25
+     },
+     {
+      "key": "rapid_shot",
+      "value": 10
+     }
+    ],
+    "C": [
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "ratt",
+      "value": 20
+     },
+     {
+      "key": "recycle",
+      "value": 15
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21273,
+   "name": "Nibiru Gun",
+   "kind": "weapon",
+   "slot": "range",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "stp",
+      "value": 3
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "agi",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 20
+     }
+    ],
+    "C": [
+     {
+      "key": "str",
+      "value": 10
+     },
+     {
+      "key": "racc",
+      "value": 15
+     },
+     {
+      "key": "ratt",
+      "value": 15
+     }
+    ],
+    "D": [
+     {
+      "key": "str",
+      "value": 15
+     },
+     {
+      "key": "agi",
+      "value": 7
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 21399,
+   "name": "Nibiru Harp",
+   "kind": "weapon",
+   "slot": "range",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "macc",
+      "value": 10
+     },
+     {
+      "key": "all_songs",
+      "value": 2
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 50
+     },
+     {
+      "key": "chr",
+      "value": 10
+     },
+     {
+      "key": "all_songs",
+      "value": 2
+     }
+    ],
+    "C": [
+     {
+      "key": "mp",
+      "value": 50
+     },
+     {
+      "key": "cure_potency",
+      "value": 5
+     },
+     {
+      "key": "all_songs",
+      "value": 2
+     }
+    ],
+    "D": [
+     {
+      "key": "meva",
+      "value": 20
+     },
+     {
+      "key": "pdt",
+      "value": -3
+     },
+     {
+      "key": "mdt",
+      "value": -3
+     }
+    ]
+   }
+  },
+  {
+   "item_id": 27642,
+   "name": "Nibiru Shield",
+   "kind": "weapon",
+   "slot": "sub",
+   "zone": "Escha - Zi'Tah",
+   "group": "Escha - Zi'Tah",
+   "paths": {
+    "A": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "enmity",
+      "value": 7
+     },
+     {
+      "key": "pdt",
+      "value": -5
+     }
+    ],
+    "B": [
+     {
+      "key": "hp",
+      "value": 80
+     },
+     {
+      "key": "mp",
+      "value": 80
+     },
+     {
+      "key": "fast_cast",
+      "value": 7
+     }
+    ],
+    "C": [
+     {
+      "key": "mnd",
+      "value": 15
+     },
+     {
+      "key": "cure_potency",
+      "value": 5
+     },
+     {
+      "key": "cure_received",
+      "value": 5
+     }
+    ],
+    "D": [
+     {
+      "key": "acc",
+      "value": 15
+     },
+     {
+      "key": "attack",
+      "value": 15
+     },
+     {
+      "key": "stp",
+      "value": 5
+     }
+    ]
+   }
+  }
+ ]
+}

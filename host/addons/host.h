@@ -126,6 +126,25 @@ int xi_ability_commands(uint16_t* out, int max);
 int xi_chat_input(char* out, size_t n);
 int xi_chat_input_open(void);
 void xi_chat_set_input(const char* text);
+/* The same, with the caret left at `caret` bytes in (the typeahead puts it before its ghost). */
+void xi_chat_set_input_caret(const char* text, int caret);
+/* The caret's byte offset in the line, or -1. */
+int xi_chat_caret(void);
+/* The input line's typeahead (//hint): the completion of the typed text, written after the caret
+ * in a second colour so it is visibly not typed.  Tab and Enter take it; the frame call keeps it
+ * in step with the text. */
+void xi_chat_ghost_frame(void);
+int xi_chat_ghost_accept(void); /* Tab: take the suggestion into the text; 1 when there was one */
+void xi_chat_ghost_drop(void);  /* Backspace/Delete: take the suggestion out before they edit */
+void xi_chat_ghost_enter(void); /* Enter: take it (or drop stray codes) before the game submits */
+void xi_chat_hint(int on);      /* //hint on|off */
+int xi_chat_hint_on(void);
+/* Put `text` in the chat line a frame after it next opens empty (NULL cancels it): what
+ * //hint probe uses to show a sample in the line the player is about to type in. */
+void xi_chat_probe(const char* text);
+/* The same with the caret left `caret` bytes in (-1: at the end), so text can be left after it,
+ * as the typeahead's suggestion is. */
+void xi_chat_probe_at(const char* text, int caret);
 /* Packets queued for the next buffer (whole packets: header included), handled by the addons there. */
 void xi_packet_inject(int outgoing, const uint8_t* p, size_t n);
 /* An addon's packet (Ashita's AddOutgoingPacket/AddIncomingPacket, Windower's packets.inject): through
@@ -203,6 +222,8 @@ int xi_key_down(uint32_t dik);
 int xi_key_code(const char* name);
 /* Presses (down 1) or releases a key for the game, as the keyboard would (focus or not). */
 void xi_key_inject(uint32_t dik, int down);
+/* A mouse-wheel turn (one notch is 120 in DirectInput units), as input_inject_wheel. */
+void xi_wheel_inject(int32_t dz);
 
 /* --- the overlay (gui.cpp) ------------------------------------------------------------------- */
 

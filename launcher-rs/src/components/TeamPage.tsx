@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import {
   AlertTriangle,
   Crown,
@@ -25,7 +25,17 @@ import type {
   TeamView,
   Tenant,
 } from "../types";
-import { JOBS, inWorld, jobName, orphanedSession } from "../lib/format";
+import {
+  JOBS,
+  characterJobPair,
+  inWorld,
+  instanceJobPair,
+  jobPairAbbr,
+  jobPairName,
+  orphanedSession,
+} from "../lib/format";
+import { buildTeamJobEntries } from "../lib/teamJobs";
+import { TeamJobs } from "./TeamJobs";
 import {
   Badge,
   Button,
@@ -101,6 +111,21 @@ export function TeamPage({
   );
   const openSlots = Math.max(0, limit - subs.length);
   const mainInstance = runningByAccount.get(session.account.username.toLowerCase());
+  const mainJobPair =
+    mainInstance && Number(mainInstance.character?.id) === Number(activeCharacter?.id)
+      ? instanceJobPair(mainInstance)
+      : characterJobPair(activeCharacter);
+  const jobEntries = useMemo(
+    () =>
+      buildTeamJobEntries({
+        session,
+        team,
+        activeCharacter,
+        instances,
+        tenantCharacterId: tenant ? Number(tenant.character.id) : null,
+      }),
+    [session, team, activeCharacter, instances, tenant],
+  );
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -191,10 +216,7 @@ export function TeamPage({
               {activeCharacter ? (
                 <>
                   <strong>{activeCharacter.name}</strong>
-                  <span>
-                    {jobName(Number(activeCharacter.main_job))} · Lv{" "}
-                    {Number(activeCharacter.main_level ?? 1)}
-                  </span>
+                  <span title={jobPairName(mainJobPair)}>{jobPairAbbr(mainJobPair)}</span>
                 </>
               ) : (
                 <span>No character yet — create one on the Characters page.</span>
@@ -210,6 +232,8 @@ export function TeamPage({
           <span>boxes</span>
         </div>
       </Card>
+
+      <TeamJobs entries={jobEntries} />
 
       {adding && (
         <Card className="team-add-card">
@@ -291,6 +315,11 @@ export function TeamPage({
             const inGame = inWorld(runningInstance);
             const orphaned = orphanedSession(runningInstance);
             const suspended = sub.status !== "active";
+            const cardJobPair =
+              runningInstance &&
+              Number(runningInstance.character?.id) === Number(character?.id)
+                ? instanceJobPair(runningInstance)
+                : characterJobPair(character);
             return (
               <Card
                 key={sub.id}
@@ -347,9 +376,8 @@ export function TeamPage({
                 <div className="team-meta">
                   {character ? (
                     <>
-                      <span>
-                        {jobName(Number(character.main_job))} · Lv{" "}
-                        {Number(character.main_level ?? 1)}
+                      <span title={jobPairName(cardJobPair)}>
+                        {jobPairAbbr(cardJobPair)}
                       </span>
                       <span>Character #{character.id}</span>
                     </>

@@ -21,6 +21,7 @@
 #include "sewave.h"
 #include "signin.h"
 #include "uidraw.h"
+#include "user32.h"
 
 
 /* ---- what is remembered ---- */
@@ -1637,6 +1638,9 @@ int signin_run(const SigninSetup* setup, SigninResult* out)
     /* a macOS Space is only for a window with a frame (full screen hides it) */
     SDL_Window* win = SDL_CreateWindow("FINAL FANTASY XI", ww, wh,
         (mode >= 2 && !(full && c->space) ? SDL_WINDOW_BORDERLESS : 0) | (SDL_WindowFlags)gfx_window_flags());
+    /* the launcher's display (FANXI_DISPLAY), before going full screen: full screen picks the one
+     * the window is on */
+    user32_place_window(win, full);
     if (win && full)
     {
         SDL_SetWindowFullscreenMode(win, NULL);

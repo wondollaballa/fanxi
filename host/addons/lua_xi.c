@@ -699,8 +699,17 @@ static int i_inject(lua_State* L)
     xi_key_inject((uint32_t)d, lua_toboolean(L, 2));
     return 0;
 }
+/* wheel(notches): a mouse-wheel turn the game reads (1 = one notch up, -1 = down).  The
+ * camera's distance is a wheel setting, and this is the only way an addon can reach it. */
+static int i_wheel(lua_State* L)
+{
+    lua_Number notches = luaL_optnumber(L, 1, 0);
+    xi_wheel_inject((int32_t)(notches * 120));
+    return 0;
+}
+
 static const luaL_Reg INPUT_FNS[] = { { "bind", i_bind }, { "unbind", i_unbind }, { "key_down", i_key_down },
-    { "code", i_code }, { "inject", i_inject }, { NULL, NULL } };
+    { "code", i_code }, { "inject", i_inject }, { "wheel", i_wheel }, { NULL, NULL } };
 
 /* --- xi.addons -------------------------------------------------------------------------------- */
 

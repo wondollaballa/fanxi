@@ -171,6 +171,7 @@ impl ControlClient {
     pub async fn phase(
         &self,
         path: Option<&str>,
+        source: Option<&str>,
         enabled: bool,
         engaged: Option<&str>,
         idle_town: Option<&str>,
@@ -181,6 +182,11 @@ impl ControlClient {
         let mut args = json!({"enabled": enabled});
         if let Some(path) = path {
             args["path"] = json!(path);
+        }
+        // The launcher owns the library file, so a plan for a client on another machine carries
+        // the library's own text: that client cannot read the launcher's path.
+        if let Some(source) = source {
+            args["source"] = json!(source);
         }
         if let Some(name) = engaged {
             args["engaged"] = json!(name);
@@ -266,9 +272,15 @@ impl ControlClient {
             .await
     }
 
-    pub async fn gearswap(&self, path: &str) -> AppResult<Value> {
-        self.call("gearswap", json!({"path": path}), Duration::from_secs(20))
-            .await
+    /// Parse a GearSwap library's text in the client's sandbox. `path` is the library's name, for
+    /// errors and the reply: the client may be on a machine where that file does not exist.
+    pub async fn gearswap_source(&self, source: &str, path: &str) -> AppResult<Value> {
+        self.call(
+            "gearswap",
+            json!({"source": source, "path": path}),
+            Duration::from_secs(20),
+        )
+        .await
     }
 
     pub async fn icons(&self, ids: &[u32]) -> AppResult<Value> {
@@ -278,6 +290,13 @@ impl ControlClient {
 
     pub async fn item_ids(&self, names: &[String]) -> AppResult<Value> {
         self.call("item_ids", json!({"names": names}), Duration::from_secs(10))
+            .await
+    }
+
+    /// Run a read-only Lua snippet in the client addon. Used for item descriptions, which the
+    /// client's resource layer exposes but the older `item_ids` command does not return.
+    pub async fn lua(&self, code: &str) -> AppResult<Value> {
+        self.call("lua", json!({"code": code}), Duration::from_secs(20))
             .await
     }
 }
@@ -440,7 +459,8 @@ impl InstanceManager {
                 // until the box has been unreachable for a while.
                 let port = self.instances[index].port;
                 let addr = std::net::SocketAddr::from(([127, 0, 0, 1], port));
-                if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_err() {
+                if std::net::TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_err()
+                {
                     let now = game::now_epoch();
                     let instance = &self.instances[index];
                     let reference = if instance.last_seen > 0 {
@@ -569,8 +589,16 @@ impl InstanceManager {
         let port = self.allocate_port()?;
         let log_path =
             crate::config::log_dir()?.join(format!("game-{}.log", game::safe_name(account)));
-        let child =
-            game::spawn_host64(config, game_dir, client, login_token, port, account, headless).await?;
+        let child = game::spawn_host64(
+            config,
+            game_dir,
+            client,
+            login_token,
+            port,
+            account,
+            headless,
+        )
+        .await?;
         let pid = child.id().unwrap_or(0);
         let instance = Instance {
             account: account.to_string(),
@@ -728,10 +756,7 @@ impl InstanceManager {
                 .and_then(Value::as_str)
                 .unwrap_or("?")
                 .to_string();
-            let name = item
-                .get("character")
-                .and_then(Value::as_str)
-                .unwrap_or("?");
+            let name = item.get("character").and_then(Value::as_str).unwrap_or("?");
             let ssh = item
                 .get("ssh")
                 .and_then(Value::as_str)
@@ -742,14 +767,8 @@ impl InstanceManager {
                 // the launcher owns that process as a child and must not adopt a stale pid.
                 continue;
             }
-            let remote_pid = item
-                .get("remote_pid")
-                .and_then(Value::as_u64)
-                .unwrap_or(0) as u32;
-            let tunnel_pid = item
-                .get("tunnel_pid")
-                .and_then(Value::as_u64)
-                .unwrap_or(0) as u32;
+            let remote_pid = item.get("remote_pid").and_then(Value::as_u64).unwrap_or(0) as u32;
+            let tunnel_pid = item.get("tunnel_pid").and_then(Value::as_u64).unwrap_or(0) as u32;
             let log = item
                 .get("log")
                 .and_then(Value::as_str)
@@ -759,15 +778,25 @@ impl InstanceManager {
                 .get("started")
                 .and_then(Value::as_u64)
                 .unwrap_or_else(game::now_epoch);
-            let headless = item.get("headless").and_then(Value::as_bool).unwrap_or(true);
-            let sleeping = item.get("sleeping").and_then(Value::as_bool).unwrap_or(false);
+            let headless = item
+                .get("headless")
+                .and_then(Value::as_bool)
+                .unwrap_or(true);
+            let sleeping = item
+                .get("sleeping")
+                .and_then(Value::as_bool)
+                .unwrap_or(false);
             let character = json!({
                 "name": name,
                 "id": item.get("character_id").cloned().unwrap_or(Value::Null),
             });
             // The helper restarts a box on the same tunnel port. Refresh the metadata of the
             // attached instance so Stop targets the new remote pid instead of the old one.
-            if let Some(index) = self.instances.iter().position(|instance| instance.port == port) {
+            if let Some(index) = self
+                .instances
+                .iter()
+                .position(|instance| instance.port == port)
+            {
                 if self.instances[index].remote.is_some() {
                     let instance = &mut self.instances[index];
                     instance.account = account;
@@ -979,6 +1008,85 @@ mod tests {
 
         let error = ControlClient::new(port).metrics().await.unwrap_err();
         assert!(error.to_string().contains("not in the world yet"));
+    }
+
+    /// A one-shot control server that records the next request and answers it with an empty
+    /// result. The client and the server run in the same test, so the request can be checked.
+    async fn recording_port() -> (u16, tokio::sync::oneshot::Receiver<Value>) {
+        let listener = tokio::net::TcpListener::bind(("127.0.0.1", 0))
+            .await
+            .expect("bind test listener");
+        let port = listener.local_addr().unwrap().port();
+        let (tx, rx) = tokio::sync::oneshot::channel();
+        tokio::spawn(async move {
+            let (mut socket, _) = listener.accept().await.unwrap();
+            let mut lines = BufReader::new(&mut socket).lines();
+            let line = lines.next_line().await.unwrap().unwrap();
+            let request: Value = serde_json::from_str(&line).unwrap();
+            let reply = json!({"id": request["id"], "ok": true, "result": {}});
+            tx.send(request).ok();
+            socket
+                .write_all(format!("{reply}\n").as_bytes())
+                .await
+                .unwrap();
+        });
+        (port, rx)
+    }
+
+    #[tokio::test]
+    async fn item_descriptions_use_the_generic_lua_command() {
+        let (port, request) = recording_port().await;
+        ControlClient::new(port)
+            .lua("return { id = 26250 }")
+            .await
+            .unwrap();
+        let request = request.await.unwrap();
+        assert_eq!(request["cmd"], "lua");
+        assert_eq!(request["args"]["code"], "return { id = 26250 }");
+    }
+
+    #[tokio::test]
+    async fn a_library_reaches_a_client_on_another_machine_as_source() {
+        let (port, request) = recording_port().await;
+        ControlClient::new(port)
+            .gearswap_source(
+                "sets = { idle = { body = 'X' } }",
+                "/launcher/gearswap/SCH.lua",
+            )
+            .await
+            .unwrap();
+        let request = request.await.unwrap();
+        assert_eq!(request["cmd"], "gearswap");
+        // The path is only the library's name for the client; the text is what it parses.
+        assert_eq!(request["args"]["path"], "/launcher/gearswap/SCH.lua");
+        assert_eq!(
+            request["args"]["source"],
+            "sets = { idle = { body = 'X' } }"
+        );
+    }
+
+    #[tokio::test]
+    async fn a_plan_carries_the_library_text() {
+        let (port, request) = recording_port().await;
+        ControlClient::new(port)
+            .phase(
+                Some("/launcher/gearswap/SCH.lua"),
+                Some("sets = {}"),
+                true,
+                Some("engaged.tp"),
+                None,
+                None,
+                None,
+                None,
+            )
+            .await
+            .unwrap();
+        let request = request.await.unwrap();
+        assert_eq!(request["cmd"], "phase");
+        assert_eq!(request["args"]["path"], "/launcher/gearswap/SCH.lua");
+        assert_eq!(request["args"]["source"], "sets = {}");
+        assert_eq!(request["args"]["enabled"], true);
+        assert_eq!(request["args"]["engaged"], "engaged.tp");
     }
 
     #[test]

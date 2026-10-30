@@ -41,6 +41,81 @@ JOB_NAMES = {
     "geo": "Geomancer", "run": "Rune Fencer",
 }
 
+# Job-point gift spells, from LandSandBoat's ``RefreshGiftMods`` (the job-point gifts
+# are not ordinary level rows).  A spell listed here is castable by that job's main job
+# at level 99 and is refused to every other job: the "New Spell(s)" gifts at 100, 550
+# and 1200 JP are what RDM's Fire V line and Addle II / Distract III / Frazzle III /
+# Refresh III / Temper II come from.  Names are the spells table's own spelling; the
+# resolver ignores a name the table does not have (GEO's Fira III line is imported
+# later, for example).
+SPELL_GRANTS: dict[int, dict[str, int]] = {
+    3: {  # White Mage
+        "Reraise IV": 100,
+        "Full Cure": 1200,
+    },
+    4: {  # Black Mage
+        "Fire VI": 100, "Blizzard VI": 100, "Aero VI": 100,
+        "Stone VI": 100, "Thunder VI": 100, "Water VI": 100,
+        "Aspir III": 550,
+        "Death": 1200,
+    },
+    5: {  # Red Mage
+        "Fire V": 100, "Blizzard V": 100, "Aero V": 100,
+        "Stone V": 100, "Thunder V": 100, "Water V": 100,
+        "Addle II": 550, "Distract III": 550, "Frazzle III": 550,
+        "Refresh III": 1200, "Temper II": 1200,
+    },
+    7: {  # Paladin
+        "Enlight II": 100,
+    },
+    8: {  # Dark Knight
+        "Endark II": 100,
+        "Drain III": 550,
+    },
+    10: {  # Bard
+        "Fire Threnody II": 100, "Ice Threnody II": 100,
+        "Wind Threnody II": 100, "Earth Threnody II": 100,
+        "Ltng Threnody II": 100, "Water Threnody II": 100,
+        "Light Threnody II": 100, "Dark Threnody II": 100,
+    },
+    13: {  # Ninja
+        "Utsusemi San": 100,
+    },
+    21: {  # Geomancer
+        "Fire V": 100, "Blizzard V": 100, "Aero V": 100,
+        "Stone V": 100, "Thunder V": 100, "Water V": 100,
+        "Aspir III": 550,
+        "Fira III": 1200, "Blizzara III": 1200, "Aera III": 1200,
+        "Stonera III": 1200, "Thundara III": 1200, "Watera III": 1200,
+    },
+    22: {  # Rune Fencer
+        "Temper": 550,
+    },
+}
+
+
+def _spell_key(name: str) -> str:
+    return "".join(str(name or "").split()).casefold()
+
+
+_ALL_SPELL_GRANT_KEYS = frozenset(
+    _spell_key(name) for grants in SPELL_GRANTS.values() for name in grants)
+
+
+def spell_grants(job_id: int) -> dict[str, int]:
+    """The job-point spells one job's main job can learn, name -> JP required."""
+    return dict(SPELL_GRANTS.get(int(job_id or 0), {}))
+
+
+def all_spell_grants() -> frozenset[str]:
+    """Every job-point spell name in the table, as casefolded keys."""
+    return _ALL_SPELL_GRANT_KEYS
+
+
+def is_job_point_spell(name: str) -> bool:
+    """True when a spell is only learnable from a job-point gift on some job."""
+    return _spell_key(name) in _ALL_SPELL_GRANT_KEYS
+
 # Gift name -> (modifier id, multiplier).  The value is the number in the gift
 # description; percentages stay in percent-integers, matching the modifier table.
 GIFT_RULES: dict[str, tuple[tuple[int, int], ...]] = {
@@ -61,7 +136,8 @@ GIFT_RULES: dict[str, tuple[tuple[int, int], ...]] = {
     "healing magic cast time": ((mod.FASTCAST, 1),),
     "elemental celerity effect": ((mod.FASTCAST, 1),),
     "elemental celerity bonus": ((mod.FASTCAST, 1),),
-    "song spellcasting time": ((mod.FASTCAST, 1),),
+    "song spellcasting time": ((mod.SONG_SPELLCASTING_TIME, 1),),
+    "song effect duration": ((mod.SONG_DURATION_BONUS, 1),),
     "subtle blow effect": ((mod.SUBTLE_BLOW, 1),),
     "subtle blow effect bonus": ((mod.SUBTLE_BLOW, 1),),
     '"subtle blow" effect bonus': ((mod.SUBTLE_BLOW, 1),),
@@ -80,6 +156,11 @@ GIFT_RULES: dict[str, tuple[tuple[int, int], ...]] = {
     'enhances "fencer" effect': ((mod.FENCER_TP_BONUS, 1),),
     "store tp effect": ((mod.STORETP, 1),),
     "dual wield effect": ((mod.DUAL_WIELD, 1),),
+    # Red Mage's En-spell gifts.  LandSandBoat stores them on mod 432, the same
+    # flat "Sword enhancement spell damage" line the Sworn R30 suit uses, and the
+    # en-spell hit already reads that modifier for both hands.
+    '"en"spell damage': ((mod.ENSPELL_DMG_BONUS, 1),),
+    "enspell damage": ((mod.ENSPELL_DMG_BONUS, 1),),
 }
 
 SKILL_RULES: dict[str, int] = {
@@ -124,7 +205,8 @@ CATEGORY_RULES: dict[str, tuple[tuple[int, int], ...]] = {
     "martial arts effect": ((mod.MARTIAL_ARTS, 1),),
     "ranged accuracy bonus": ((mod.RACC, 1),),
     "ninjutsu accuracy bonus": ((mod.MACC, 1),),
-    "song accuracy bonus": ((mod.MACC, 1),),
+    # "song accuracy bonus" is not here: it is applied to songs only, by
+    # zone._cast_numbers, so a Bard's nukes do not inherit it.
     "double attack effect": ((mod.ATT, 1),),
     "triple attack effect": ((mod.ATT, 1),),
     "kick attacks effect": ((mod.ATT, 1),),
@@ -270,6 +352,50 @@ def ability_status(ability_id: int) -> int | None:
     """The client status id for an ability that has one, or None."""
     entry = _ability_status_table().get("abilities", {}).get(str(int(ability_id)))
     return int(entry["status"]) if entry else None
+
+
+@lru_cache(maxsize=1)
+def _status_ability_names() -> dict[int, str]:
+    """Status effect id -> the job ability that puts it up."""
+    out: dict[int, str] = {}
+    for entry in _ability_status_table().get("abilities", {}).values():
+        try:
+            status = int(entry.get("status") or 0)
+        except (TypeError, ValueError):
+            continue
+        if status:
+            out[status] = str(entry.get("name") or "Ability")
+    return out
+
+
+def ability_name_for_status(status_id: int) -> str | None:
+    """The ability behind one active status effect, or None for a spell/song buff."""
+    return _status_ability_names().get(int(status_id))
+
+
+def ability_name(ability_id: int) -> str | None:
+    entry = _ability_status_table().get("abilities", {}).get(str(int(ability_id)))
+    return str(entry.get("name")) if entry else None
+
+
+def _category_ability(job_id: int, category_name: str) -> int | None:
+    return _ability_status_table().get("categories", {}).get(
+        f"{JOB_KEYS.get(int(job_id), '')}|{category_name}")
+
+
+def _category_label(job_id: int, category_name: str) -> str:
+    ability_id = _category_ability(job_id, category_name)
+    if ability_id is None:
+        # The category table is hand-written with its own capitalisation; match it
+        # case-insensitively so a lower-cased data row still names its ability.
+        wanted = category_name.casefold()
+        prefix = JOB_KEYS.get(int(job_id), "") + "|"
+        for key, value in _ability_status_table().get("categories", {}).items():
+            if key.startswith(prefix) and key[len(prefix):].casefold() == wanted:
+                ability_id = value
+                break
+    name = ability_name(int(ability_id)) if ability_id is not None else None
+    return name or category_name
 
 
 def _ability_categories(ability_id: int) -> list[tuple[int, str, dict]]:
@@ -429,6 +555,11 @@ def gift_totals(job_id: int) -> dict:
             flags.add(name)
         elif "master" in name:
             flags.add("master")
+            # The Master gift ("★Master!") cuts the one-hour abilities' recast by
+            # 15 minutes.  It is a real modifier, not just the Master stars.
+            if "one-hour" in description.casefold() and value:
+                mods[mod.ONE_HOUR_RECAST] = (
+                    mods.get(mod.ONE_HOUR_RECAST, 0) + value)
         elif name.startswith("new "):
             flags.add("new_spells")
         elif name in {"capacity point bonus", "capacity points bonus"}:
@@ -459,10 +590,15 @@ def category_mods(job_id: int) -> dict[int, int]:
     return mods
 
 
-def conditional_mods(job_id: int, active_effects) -> dict[int, int]:
-    """Modifiers from ability-conditional categories for the effects that are active."""
+def conditional_sources(job_id: int, active_effects) -> list[dict]:
+    """Per-ability modifiers from the job-point categories that are live right now.
+
+    The stat sheet merges these; the launcher's checkparam-style sheet keeps the ability
+    name beside each row so a buffed Attack total can say which job ability supplied it.
+    A category is only counted once, even when several of its trigger effects are up.
+    """
     active = {int(effect) for effect in active_effects or ()}
-    mods: dict[int, int] = {}
+    out: list[dict] = []
     for category in _job(job_id).get("categories", ()):
         name = _name(category, "category")
         rule = CONDITIONAL_RULES.get(name)
@@ -474,8 +610,9 @@ def conditional_mods(job_id: int, active_effects) -> dict[int, int]:
         value = _number(_value_text(category)) * RANK
         if not value:
             continue
-        for mod_id, scale in per_rank:
-            mods[int(mod_id)] = mods.get(int(mod_id), 0) + value * scale
+        mods = {int(mod_id): value * int(scale) for mod_id, scale in per_rank if scale}
+        if mods:
+            out.append({"name": _category_label(job_id, str(name)), "mods": mods})
     for category in _job(job_id).get("categories", ()):
         name = str(category.get("category") or "")
         key = name.casefold()
@@ -484,7 +621,16 @@ def conditional_mods(job_id: int, active_effects) -> dict[int, int]:
         rule = category_generic_rule(job_id, name)
         if rule is None or rule["status"] not in active:
             continue
-        for mod_id, value in rule["mods"].items():
+        if rule["mods"]:
+            out.append({"name": _category_label(job_id, name), "mods": dict(rule["mods"])})
+    return out
+
+
+def conditional_mods(job_id: int, active_effects) -> dict[int, int]:
+    """Modifiers from ability-conditional categories for the effects that are active."""
+    mods: dict[int, int] = {}
+    for source in conditional_sources(job_id, active_effects):
+        for mod_id, value in source["mods"].items():
             mods[int(mod_id)] = mods.get(int(mod_id), 0) + int(value)
     return mods
 

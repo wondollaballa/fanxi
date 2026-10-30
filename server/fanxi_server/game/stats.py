@@ -47,6 +47,10 @@ class Weapon:
     dmg: int = 0
     delay: int = 0
     ilvl_skill: int = 0
+    # The item's level (119 for an iLvl weapon).  The magical weapon-skill base uses
+    # it -- retail's ``floor((WeaponLevel - 99) * 2.45)`` term -- so it is kept apart
+    # from the player's own level (still 99 at master rank).
+    item_level: int = 0
 
     @property
     def h2h(self) -> bool:
@@ -70,25 +74,62 @@ class Sheet:
     base_attributes: dict[str, int] = field(default_factory=dict)  # base only
     weapon: Weapon = field(default_factory=Weapon)
     delay: int = UNARMED_DELAY
+    # The delay before Dual Wield / Martial Arts, used only for the 80% floor: retail
+    # caps the final delay at a fifth of the *base* delay, so a capped dual-wield round
+    # is not allowed to fall to a fifth of an already-halved delay.  Zero means "the
+    # same as delay" for callers that construct a Sheet directly.
+    base_delay: int = 0
     haste: float = 0.0
+    haste_magic: float = 0.0
+    haste_ability: float = 0.0
     max_hp: int = 1
     max_mp: int = 0
     shield_size: int = 0
-    # The off-hand half of a dual-wielded attack round.  Both are None whenever the
-    # character cannot dual wield (no trait, a shield in the sub slot, a two-hander).
+    # The off-hand half of a two-weapon attack round.  Both are None whenever the sub
+    # slot is not a one-handed weapon (a shield, a grip, an empty slot, a two-hander).
     sub_weapon: Weapon | None = None
     sub_fighter: combat.Fighter | None = None
     dual_wield: bool = False
-    # The Dual Wield trait's percent, kept for the per-hand TP delay.
+    # The Dual Wield trait's percent, kept for the per-hand delay.  Without the trait
+    # this stays 0 and the round's delay is the plain average of the two weapons.
     dual_wield_percent: int = 0
+    # The ranged half of the sheet.  Archery and marksmanship weapon skills do not use
+    # the main-hand fighter: they use the ranged weapon and its ammo, with Ranged
+    # Attack/Accuracy and the ranged weapon's own skill.  ``ammo`` is kept for TP and
+    # damage display; the combined damage is already on ``ranged_fighter``.
+    ranged_weapon: Weapon | None = None
+    ammo: Weapon | None = None
+    ranged_fighter: combat.Fighter | None = None
+
+    @property
+    def haste_pools(self) -> tuple[float, float, float]:
+        """The three capped haste pools as fractions: (gear, magic, ability).
+
+        Retail caps each pool separately (25%, 43.75%, 25%) and then adds them.  The
+        individual caps matter because Haste, a March and a GEO bubble can all be up at
+        once: past 43.75% magic haste buys nothing, but a Haste Samba or Hasso in the
+        job-ability pool still does.
+        """
+        return (max(-1.0, min(0.25, self.haste)),
+                max(0.0, min(0.4375, self.haste_magic)),
+                max(0.0, min(0.25, self.haste_ability)))
+
+    @property
+    def total_haste(self) -> float:
+        """The effective delay reduction, after every pool's own cap."""
+        return sum(self.haste_pools)
 
     @property
     def attack_delay_ms(self) -> int:
-        """Swing interval in milliseconds, after equipment haste.
+        """Swing interval in milliseconds, after the three haste pools.
 
         Item delay is in sixtieths of a second, which is why a 450-delay katana swings
-        every 7.5 seconds at zero haste.  Equipment haste caps at 25%, and the swing
-        interval itself cannot drop below a fifth of the base delay.
+        every 7.5 seconds at zero haste.  Retail caps equipment haste at 25%, magic
+        haste at 43.75% and job-ability haste at 25%; the three add, and the resulting
+        delay cannot drop below a fifth of the *base* delay (the 80% delay floor).
+        The floor is taken from ``base_delay``, before Dual Wield or Martial Arts:
+        those two reduce delay outside the haste pools, and retail still applies the
+        80% total cap to their result.
 
         ``delay`` is already the per-hand delay: for dual wield it is
         ``(main + sub) * (1 - Dual Wield%) / 2``, because both hands swing together
@@ -96,22 +137,39 @@ class Sheet:
         ``tp_per_hit``).
         """
         base_ms = max(1, int(self.delay)) * 1000.0 / 60.0
-        haste = min(0.25, max(-1.0, self.haste))
-        return max(1, int(base_ms * max(0.2, 1.0 - haste)))
+        haste = self.total_haste
+        floor_ms = max(1, int(self.base_delay or self.delay)) * 1000.0 / 60.0 * 0.2
+        return max(1, int(max(floor_ms, base_ms * max(0.2, 1.0 - haste))))
 
-    def tp_per_hit(self, off_hand: bool = False) -> int:
+    def tp_per_hit(self, off_hand: bool = False, ranged: bool = False) -> int:
         """TP from one landed hit by this hand, in tenths.
 
         Retail computes TP from *that weapon's* base delay, with Dual Wield halving the
         reduced delay for each hand, and does not give the off hand the main hand's
-        number.  Store TP is applied by ``combat.tp_gain`` after this.
+        number.  A ranged weapon skill uses the ranged weapon's delay; its ammo does
+        not add a second delay to the return.  Store TP is applied by
+        ``combat.tp_gain`` after this.
         """
-        weapon = (self.sub_weapon if off_hand and self.sub_weapon is not None
-                  else self.weapon)
+        if ranged:
+            weapon = self.ranged_weapon
+        else:
+            weapon = (self.sub_weapon if off_hand and self.sub_weapon is not None
+                      else self.weapon)
         delay = max(1, int((weapon.delay if weapon is not None else 0) or UNARMED_DELAY))
-        if self.dual_wield:
+        if self.dual_wield and not ranged:
             delay = combat.tp_delay(delay, dual_wield=self.dual_wield_percent)
         return combat.tp_return(delay)
+
+    def tp_per_hit_with_store_tp(self, off_hand: bool = False,
+                                 ranged: bool = False) -> int:
+        """TP from one landed hit after Store TP, in tenths.
+
+        The sheet's ``fighter.mods`` already contains gear, traits, food and buffs, so
+        this is the number the swing in ``ZoneSession._apply_swing`` pays.
+        """
+        store_tp = int(self.fighter.mods.get(mod.STORETP, 0))
+        return combat.tp_gain(self.tp_per_hit(off_hand=off_hand, ranged=ranged),
+                              store_tp)
 
     @property
     def attack(self) -> int:
@@ -178,12 +236,22 @@ def _food_percent(base: int, mods: dict[int, int], percent_id: int,
 
 
 def _attack_value(mods: dict[int, int], strength: int, skill_value: int,
-                  str_multiplier: float) -> int:
+                  str_multiplier: float, *, smite: bool = False) -> int:
+    """Attack from level, gear, STR and the weapon skill.
+
+    ``smite`` is the Dark Knight/Warrior/Monk/Dragoon/Puppetmaster trait: with a
+    two-handed or hand-to-hand weapon it adds its 1/256 value as a percentage of
+    Attack (76 -> +29%), the same term LandSandBoat folds into ``ATTP``.  It never
+    applies to a one-handed main hand or to an off-hand swing.
+    """
     attack = 8 + int(mods.get(mod.ATT, 0))
     attack += int(strength * str_multiplier)
     attack += skill_value
     attack += _food_percent(attack, mods, mod.FOOD_ATT_PERCENT, mod.FOOD_ATT_CAP)
-    return max(1, attack + attack * int(mods.get(mod.ATT_PERCENT, 0)) // 100)
+    percent = int(mods.get(mod.ATT_PERCENT, 0))
+    if smite:
+        percent += int(mods.get(mod.SMITE, 0)) * 100 // 256
+    return max(1, attack + attack * percent // 100)
 
 
 def _accuracy_value(mods: dict[int, int], dexterity: int, skill_value: int) -> int:
@@ -191,6 +259,31 @@ def _accuracy_value(mods: dict[int, int], dexterity: int, skill_value: int) -> i
     accuracy += int(dexterity * combat.DEX_TO_ACC)
     accuracy += int(mods.get(mod.ACC, 0))
     accuracy += _food_percent(accuracy, mods, mod.FOOD_ACC_PERCENT, mod.FOOD_ACC_CAP)
+    return accuracy
+
+
+def _ranged_attack_value(mods: dict[int, int], strength: int, skill_value: int) -> int:
+    """Ranged Attack: R.Attack, STR at the ranged multiplier, and the ranged skill.
+
+    Retail keeps melee Attack and Ranged Attack separate; bow/gun damage reads this
+    number, never the main hand's Attack.  R.Attack% and the ranged food cap are the
+    same two tail terms as the melee version.
+    """
+    attack = 8 + int(mods.get(mod.RATT, 0))
+    attack += int(strength * combat.STR_TO_ATT_RANGED)
+    attack += skill_value
+    attack += _food_percent(attack, mods, mod.FOOD_RATT_PERCENT, mod.FOOD_RATT_CAP)
+    percent = int(mods.get(mod.RATT_PERCENT, 0))
+    return max(1, attack + attack * percent // 100)
+
+
+def _ranged_accuracy_value(mods: dict[int, int], dexterity: int,
+                           skill_value: int) -> int:
+    """Ranged Accuracy: R.Accuracy, DEX and the ranged weapon's skill."""
+    accuracy = combat.acc_from_skill(skill_value)
+    accuracy += int(dexterity * combat.DEX_TO_ACC)
+    accuracy += int(mods.get(mod.RACC, 0))
+    accuracy += _food_percent(accuracy, mods, mod.FOOD_RACC_PERCENT, mod.FOOD_RACC_CAP)
     return accuracy
 
 
@@ -208,14 +301,18 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
                     main_weapon: Weapon | None = None,
                     sub_weapon: Weapon | None = None,
                     shield_size: int = 0,
-                    dual_wield: bool | None = None) -> Sheet:
+                    dual_wield: bool | None = None,
+                    ranged_weapon: Weapon | None = None,
+                    ammo: Weapon | None = None) -> Sheet:
     """The sheet for a player character.
 
-    Dual wield is a job trait, not just two weapons: with both one-handed hands filled
-    and the trait active, the sheet carries a second ``Fighter`` for the off hand and
-    an attack-round delay built from both weapons.  ``dual_wield`` is the trait gate;
-    it defaults to "the modifier is present" so direct callers and tests can build a
-    sheet from a modifier dict alone.
+    Two one-handed weapons fill both hands, so the sheet carries a second ``Fighter``
+    for the off hand and an attack-round delay built from both weapons.  The Dual
+    Wield trait is not the gate: the equip rules already let any job put a one-hander
+    in the sub slot, and a weapon that is worn has to swing.  The trait only supplies
+    the delay reduction (``dual_wield_percent``); without it the round is the plain
+    average of the two delays.  ``dual_wield=False`` explicitly builds a one-hand-only
+    sheet for callers that need to model a sub slot without a second swing.
     """
     level = max(1, int(char.get("main_level", 1)))
     job = int(char.get("main_job", 1))
@@ -233,7 +330,9 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
     skill_value = _weapon_skill_value(weapon, skill_values)
     damage_rating = _damage_rating(weapon, skill_value)
 
-    attack = _attack_value(mods, attributes["str"], skill_value, _str_multiplier(weapon))
+    attack = _attack_value(
+        mods, attributes["str"], skill_value, _str_multiplier(weapon),
+        smite=weapon.two_handed or weapon.h2h)
 
     defense = 8 + int(attributes["vit"] * 1.5)
     defense += _level_defense_factor(level)
@@ -264,12 +363,15 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
         shield_skill=shield_skill, shield_size=int(shield_size))
 
     dual_wield_percent = int(mods.get(mod.DUAL_WIELD, 0))
-    if dual_wield is None:
-        # Direct callers with only a modifier dict: treat the modifier as the trait.
-        dual_wield = dual_wield_percent > 0
-    dual_wield = bool(
-        dual_wield and sub_weapon is not None and sub_weapon.one_handed
-        and weapon.one_handed and dual_wield_percent > 0)
+    # Two one-handed weapons always make an off-hand swing.  The Dual Wield trait
+    # (and gear "Dual Wield +N") only lowers the round's delay: a Red Mage with a
+    # sword and a club can wear both, so both have to swing.  An explicit False keeps
+    # the old one-hand-only shape for tests and direct callers.
+    if dual_wield is False:
+        dual_wield = False
+    else:
+        dual_wield = bool(sub_weapon is not None and sub_weapon.one_handed
+                          and weapon.one_handed)
 
     sub_fighter = None
     if dual_wield:
@@ -290,22 +392,57 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
             parry_skill=parry_skill, guard_skill=guard_skill,
             shield_skill=shield_skill, shield_size=0)
 
+    # Ranged weapon skills use the ranged slot, not the main hand.  The ammo's damage
+    # rating joins the ranged weapon's for the base, and the ranged weapon's skill type
+    # (archery/marksmanship) owns the skill value, accuracy and TP delay.  Ammo only
+    # contributes when it belongs to the same skill family; a jug or a tool in the ammo
+    # slot must not turn a gun into a 245-DMG weapon.
+    ranged_fighter = None
+    if ranged_weapon is not None and int(ranged_weapon.skill) in (25, 26, 27):
+        ranged_skill_value = _weapon_skill_value(ranged_weapon, skill_values)
+        ammo_damage = 0
+        if ammo is not None and int(ammo.skill) in (0, int(ranged_weapon.skill)):
+            ammo_damage = max(0, int(ammo.dmg))
+        ranged_damage = _damage_rating(ranged_weapon, ranged_skill_value) + ammo_damage
+        ranged_attack = _ranged_attack_value(
+            mods, attributes["str"], ranged_skill_value)
+        ranged_accuracy = _ranged_accuracy_value(
+            mods, attributes["dex"], ranged_skill_value)
+        ranged_fighter = combat.Fighter(
+            level=level, attack=ranged_attack, defense=defense,
+            accuracy=ranged_accuracy, evasion=evasion,
+            strength=attributes["str"], dexterity=attributes["dex"],
+            vitality=attributes["vit"], agility=attributes["agi"], is_pc=True,
+            weapon_skill=ranged_weapon.skill, weapon_dmg=ranged_damage,
+            weapon_rank=combat.weapon_rank(ranged_damage),
+            two_handed=False, h2h=False, mods=dict(mods),
+            skill_value=ranged_skill_value)
+    else:
+        ranged_weapon = None
+        ammo = None
+
     delay = max(1, int(weapon.delay or UNARMED_DELAY))
+    # Before Dual Wield / Martial Arts: this is the base the 80% floor is measured from.
+    base_delay = delay
     if weapon.skill == combat.H2H_SKILL:
         # Martial Arts is a flat hand-to-hand delay reduction; job-point and trait
         # rows add to the same modifier.
         delay = max(1, delay - max(0, int(mods.get(mod.MARTIAL_ARTS, 0))))
     if dual_wield:
         # (main + sub) x (1 - Dual Wield%) / 2: both hands swing once per round, so
-        # the round interval is the average of the two reduced delays.
+        # the round interval is the average of the two reduced delays.  The floor
+        # still uses the average *before* Dual Wield, not the already-reduced value.
         sub_delay = max(1, int(sub_weapon.delay or UNARMED_DELAY))
         reduction = min(100, max(0, dual_wield_percent)) / 100.0
+        base_delay = max(1, int((delay + sub_delay) / 2.0))
         delay = max(1, int((delay + sub_delay) * (1.0 - reduction) / 2.0))
 
     return Sheet(
         fighter=fighter, attributes=attributes, base_attributes=base,
-        weapon=weapon, delay=delay,
+        weapon=weapon, delay=delay, base_delay=base_delay,
         haste=mod.percent(mods.get(mod.HASTE_GEAR, 0)),
+        haste_magic=mod.percent(mods.get(mod.HASTE_MAGIC, 0)),
+        haste_ability=mod.percent(mods.get(mod.HASTE_ABILITY, 0)),
         max_hp=_with_percent(
             base_stats.base_hp(int(char.get("race", 1)), job, level, sub_job, sub_level)
             + int(mods.get(mod.HP, 0)) + int(mods.get(mod.MAX_HP_BOOST, 0))
@@ -319,7 +456,8 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
         shield_size=int(shield_size),
         sub_weapon=sub_weapon if dual_wield else None,
         sub_fighter=sub_fighter, dual_wield=dual_wield,
-        dual_wield_percent=dual_wield_percent if dual_wield else 0)
+        dual_wield_percent=dual_wield_percent if dual_wield else 0,
+        ranged_weapon=ranged_weapon, ammo=ammo, ranged_fighter=ranged_fighter)
 
 
 # --- monsters -------------------------------------------------------------------------------

@@ -125,6 +125,34 @@ class PresenceTest(unittest.TestCase):
         self.assertEqual(len(updates), 1)
         self.assertEqual(updates[0]["walk"], 0)
 
+    def test_a_stationary_player_refreshes_its_position(self):
+        """A late-loading observer converges without waiting for the leader to move again.
+
+        A box that zoned in while its leader walked can miss every position packet the
+        walk broadcast and keep the copy it spawned with.  The 1 Hz refresh is what puts
+        the observer back on the leader where it actually stands.
+        """
+        self.a.sync_players()
+        self.b.sync_players()
+        self.a.queue.clear()
+        now = time.time()
+        self.b.moving = False
+        self.b.next_position_refresh = 0.0
+        self.b.next_player_sync = now + 100.0
+        self.b.next_entity_sync = now + 100.0
+        self.b.tick(now)
+        updates = [player_fields(message) for message in player_messages(self.a)]
+        self.assertEqual(len(updates), 1)
+        self.assertEqual(updates[0]["mask"], packets.SEND_POSITION)
+        self.assertAlmostEqual(updates[0]["x"], self.b.pos[0], places=2)
+
+        # A moving player is already covered by the movement broadcasts.
+        self.a.queue.clear()
+        self.b.moving = True
+        self.b.next_position_refresh = 0.0
+        self.b.tick(now + 2.0)
+        self.assertEqual(player_messages(self.a), [])
+
     def test_zone_change_despawns_player(self):
         self.a.sync_players()
         self.b.sync_players()
@@ -444,6 +472,32 @@ class LoginSessionTest(unittest.TestCase):
         login[-16:] = md5(bytes(login[HDR:-16]))
         return session, login, ack
 
+    def test_fast_same_zone_reconnect_continues_the_handoff(self):
+        """A same-zone warp reconnects inside the retry window; it is not a failed zone-in.
+
+        The 0x00A after 0x00B used to look like a client retrying the zone-in because the
+        previous packet was recent.  That replay path rebuilt a zone-in the client was
+        already about to acknowledge, and some boxes looped on it forever.
+        """
+        addr = ("127.0.0.1", 54111)
+        account, row = self.character("Zeta")
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        self.game_session(account)
+        session.last_packet_at = time.time()  # fast reconnect, not an old idle packet
+
+        session.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        session.build(bytearray(HDR))
+        self.assertEqual(session.zone_in_tries, 0)
+
+        reply = ZoneSession.incoming(self.world, session, addr, self.login_packet(row["char_id"]))
+
+        self.assertIsNotNone(reply)
+        self.assertEqual(session.zone_in_tries, 0)
+        self.assertFalse(session.zoning)
+        self.assertEqual(int(session.zone), 100)
+        self.assertEqual(int(session.char["id"]), int(row["id"]))
+
     def test_zone_change_reply_answers_the_acked_packet(self):
         """The zone-in id is the ack + 1, not the client's body counter.
 
@@ -487,6 +541,228 @@ class LoginSessionTest(unittest.TestCase):
             ZoneSession.incoming(self.world, session, addr, login)
         self.assertTrue(session.gone)
         self.assertIsNone(self.world.session_by_char(int(session.char["char_id"])))
+
+    def opened_body(self, packet: bytes, key: bytes):
+        """The plaintext of a server packet under ``key``, or None if it does not open."""
+        body = bytearray(packet[HDR:])
+        self.world.zone_cipher_for(key).run(body, 0, (len(body) // 4) & ~1, False)
+        if md5(bytes(body[:-16])) != bytes(body[-16:]):
+            return None
+        nbits = struct.unpack_from("<I", body, len(body) - 20)[0]
+        return self.world.huff.decompress(bytes(body[:len(body) - 20]), nbits)
+
+    def test_zone_in_copies_cover_keys_the_client_may_have_kept(self):
+        """A client can be several 0x00B bumps behind; one copy must always open.
+
+        The old retry alternated only the newest key and the one before it, so a client
+        that missed two hand-offs was on a key the server no longer sent under: it sat on
+        "Downloading" and the only recovery was a relaunch.
+        """
+        addr = ("127.0.0.1", 54116)
+        account, row = self.character("Iota")
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        self.game_session(account)
+        session.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        session.build(bytearray(HDR))        # the hand-off the client did receive
+        client_key = bytes(session.key)
+        session.bump_key()                   # ...and these two never reached it
+        session.bump_key()
+        newest = bytes(session.key)
+
+        reply = ZoneSession.incoming(self.world, session, addr,
+                                     self.login_packet(row["char_id"]))
+        self.assertIsNotNone(reply)
+        self.assertEqual(bytes(session.key), newest)
+        self.assertIsNotNone(self.opened_body(reply, newest))
+        self.assertTrue(session.extra_packets)
+        opened = [self.opened_body(packet, client_key) for packet in session.extra_packets]
+        self.assertTrue(any(body is not None for body in opened),
+                        "no zone-in copy opens under the key the client kept")
+        self.assertTrue(any(0x00A in [message_type(body[off:off + 4])
+                                      for off in range(0, len(body) - 3, 4)]
+                            for body in opened if body))
+
+    def test_a_relog_after_a_failed_handoff_resumes_the_clients_key(self):
+        """The drop-after-four-retries path must not reset to the sign-in key.
+
+        The client keeps the key it advanced to when it relogs on the same game session;
+        sending the zone-in under the sign-in key is exactly the permanent loop the live
+        boxes showed (ack 0, start over, repeat forever).
+        """
+        addr = ("127.0.0.1", 54117)
+        account, row = self.character("Kappa")
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        session.session_hash = self.game_session(account)
+        session.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        session.build(bytearray(HDR))
+        advanced = bytes(session.key)
+        login = self.login_packet(row["char_id"])
+        for _ in range(ZONE_IN_REBUILDS + 2):
+            ZoneSession.incoming(self.world, session, addr, login)
+        self.assertTrue(session.gone)
+
+        reply = ZoneSession.incoming(self.world, session, addr,
+                                     self.login_packet(row["char_id"]))
+        self.assertIsNotNone(reply)
+        relogged = self.world.sessions[addr]
+        self.assertEqual(bytes(relogged.key), advanced)
+        self.assertNotEqual(bytes(relogged.key), bytes(20))
+        self.assertIsNotNone(self.opened_body(reply, advanced))
+
+    def test_a_relog_that_replaces_a_live_session_keeps_the_advanced_key(self):
+        """A reconnect can replace a box that was already in the world.
+
+        The old session was not mid-hand-off, so its key was never parked; the next login
+        then reset to the sign-in key and looped forever.  The live session's sequence has
+        to be parked even though it had finished its zone-in.
+        """
+        addr = ("127.0.0.1", 54119)
+        account, row = self.character("Muon")
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        session.session_hash = self.game_session(account)
+        session.bump_key()                 # the client processed an earlier 0x00B
+        advanced = bytes(session.key)
+        self.assertTrue(session.zone_loaded)
+
+        self.world.evict_session(session, save=True, reason="replaced by a login")
+        self.assertTrue(session.gone)
+
+        reply = ZoneSession.incoming(self.world, None, addr,
+                                     self.login_packet(row["char_id"]))
+        self.assertIsNotNone(reply)
+        relogged = self.world.sessions[addr]
+        self.assertEqual(bytes(relogged.key), advanced)
+        self.assertIsNotNone(self.opened_body(reply, advanced))
+
+    def test_a_boxes_handoff_survives_another_login_taking_its_old_port(self):
+        """Two boxes on one host can be handed each other's ports after a zone change.
+
+        The live log showed a box cross a line, then another box log in from the address
+        the first had just given up.  Clearing that "recycled port" evicted the first
+        box's prepared hand-off: it left the party and lost the advanced cipher it was
+        about to prove.  The hand-off must survive and its own login must continue it.
+        """
+        old_addr = ("127.0.0.1", 54602)
+        new_addr = ("127.0.0.1", 54858)
+        one_account, one_row = self.character("Fourdough")
+        _two_account, two_row = self.character("Fivedough")
+        one = self.session(one_row, old_addr)
+        one.session_hash = self.game_session(one_account)
+        one.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        one.build(bytearray(HDR))                  # the 0x00B the client received
+        advanced = bytes(one.key)
+
+        # Fivedough's client reconnects on the port Fourdough just released.
+        other, _continuing = self.world.take_login(
+            old_addr, self.world.character_record(two_row), int(two_row["char_id"]))
+        self.world.sessions[old_addr] = other
+
+        self.assertFalse(one.gone)
+        self.assertIn(one, self.world.by_char.values())
+
+        # Fourdough's own login then resumes the hand-off from its new port, under the
+        # key its client advanced to.
+        reply = ZoneSession.incoming(self.world, None, new_addr,
+                                     self.login_packet(one_row["char_id"]))
+        self.assertIsNotNone(reply)
+        resumed = self.world.sessions[new_addr]
+        self.assertIs(resumed, one)
+        self.assertFalse(resumed.zoning)
+        self.assertEqual(bytes(resumed.key), advanced)
+        self.assertIsNotNone(self.opened_body(reply, advanced))
+        self.assertFalse(other.gone)
+
+    def test_a_shorter_parked_sequence_does_not_forget_the_advanced_key(self):
+        """A fresh replacement login can know fewer keys than the hand-off it replaced.
+
+        Parking its one key over the longer sequence is what left a live box retrying the
+        same zone-in forever: the server kept sending copies under a key the client had
+        already advanced past.
+        """
+        addr = ("127.0.0.1", 54120)
+        account, row = self.character("Nuon")
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        session.session_hash = self.game_session(account)
+        session.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        session.build(bytearray(HDR))
+        advanced = bytes(session.key)
+        self.world.evict_session(session, save=True, reason="replaced by a login")
+
+        fresh = self.session(self.service.character(row["id"]), addr)
+        fresh.set_key(bytes(20))
+        fresh.session_hash = session.session_hash
+        self.world.evict_session(fresh, save=True, reason="zone-in never acknowledged")
+
+        history = self.world.parked_history(row)
+        self.assertIn(advanced, history)
+        self.assertIn(bytes(20), history)
+
+    def test_a_fresh_login_gets_a_dropped_handoffs_keys_as_copies(self):
+        """The game session that parked a sequence can be gone by the next login.
+
+        A relaunch creates a new game session, so the hash check cannot resume the entry.
+        The client the player did not restart still holds the advanced key: the parked
+        sequence has to ride along as extra copies while the sign-in key stays primary.
+        """
+        addr = ("127.0.0.1", 54121)
+        account, row = self.character("Xion")
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        session.session_hash = self.game_session(account)
+        session.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        session.build(bytearray(HDR))
+        advanced = bytes(session.key)
+        self.world.evict_session(session, save=True, reason="replaced by a login")
+
+        self.game_session(account)          # a relaunch: a different game session hash
+        reply = ZoneSession.incoming(self.world, None, addr,
+                                     self.login_packet(row["char_id"]))
+        self.assertIsNotNone(reply)
+        relogged = self.world.sessions[addr]
+        self.assertNotEqual(bytes(relogged.key), advanced)
+        self.assertTrue(relogged.extra_packets)
+        opened = [self.opened_body(packet, advanced)
+                  for packet in relogged.extra_packets]
+        self.assertTrue(any(body is not None for body in opened),
+                        "no copy opens under the key the client still holds")
+
+    def test_a_zone_change_during_a_handoff_is_deferred_not_bumped(self):
+        """A second warp mid-load used to send another 0x00B and advance the key again."""
+        addr = ("127.0.0.1", 54118)
+        account, row = self.character("Lambda")
+        session = self.session(row, addr)
+        session.set_key(bytes(20))
+        self.game_session(account)
+        session.change_zone(100, [-126.0, -62.0, 273.0, 99])
+        session.build(bytearray(HDR))
+        first_key = bytes(session.key)
+
+        session.change_zone(101, [1.0, 2.0, 3.0, 4.0])
+
+        self.assertEqual(bytes(session.key), first_key)
+        self.assertEqual(session.pending_zone[0], 101)
+        self.assertEqual(len([m for m in session.queue if message_type(m) == 0x00B]), 0)
+
+        ZoneSession.incoming(self.world, session, addr, self.login_packet(row["char_id"]))
+        self.assertFalse(session.zoning)
+        session.handle(0x00C, bytes(8))
+
+        # The deferred move runs only now that the client has acknowledged the zone.
+        self.assertTrue(session.zoning)
+        self.assertEqual(int(session.zone), 101)
+        zone_outs = [m for m in session.queue if message_type(m) == 0x00B]
+        self.assertEqual(len(zone_outs), 1)
+        # The next packet carries the 0x00B; that is what moves the cipher on.  The
+        # zone-in burst queued ahead of it may take more than one packet.
+        for _ in range(10):
+            session.build(bytearray(HDR))
+            if bytes(session.key) != first_key:
+                break
+        self.assertNotEqual(bytes(session.key), first_key)
 
 
 if __name__ == "__main__":

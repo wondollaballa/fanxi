@@ -36,7 +36,7 @@ The current schema is migrations `0001_initial.sql`, `0002_world_content.sql` an
 | `api_sessions` | Launcher Bearer tokens | `token_hash` (unique SHA-256), `account_id`, `expires_at`, `revoked_at` |
 | `game_sessions` | In-game sessions | `session_hash` (16-byte BLOB, unique), `account_id`, `character_id` (the launched mule), `expires_at` |
 | `login_tokens` | Launcher → host64 hand-off | `token_hash` (unique), `character_id` (the chosen mule), `used_at`, `expires_at` |
-| `characters` | Adventurers | `account_id`, `char_id` (content id), `name` (unique), stats, zone/position, looks, `hp_current`, `mp_current`, `exp`, `gil`, home point, playtime |
+| `characters` | Adventurers | `account_id`, `char_id` (content id), `name` (unique), stats, zone/position, looks, `hp_current`, `mp_current`, `exp`, `gil`, home point, playtime, `mount` (the last mount called, migration 0135; being mounted is live session state) |
 | `worlds` | World name and advertised ports | `name`, `host`, ports, `status` |
 | `zones` | Zone names and default positions/music | `id`, `name`, `pos_*`, `music_*` |
 | `zone_lines` | Optional zone-line triggers | `rect`, `to_zone`, `x/y/z/rot` |
@@ -47,34 +47,65 @@ The current schema is migrations `0001_initial.sql`, `0002_world_content.sql` an
 | `schema_migrations` | Applied migration files | `version`, `name`, `applied_at` |
 | `world_npcs` | Placed city NPCs | `zone`, `name`, `script`, `pos_*`, `rot`, `model`, `triggerable`, `widescan` |
 | `npc_lines` | Ambient lines | `npc_id`, `line_no`, `text` |
-| `monster_templates` | Monster templates | `name`, `model`, `level_min/max`, `hp`, combat stats, `aggro`, `roam_radius`, `respawn_seconds` |
+| `monster_templates` | Monster templates | `name`, `model`, `level_min/max`, `hp`, combat stats, `aggro`, `roam_radius`, `respawn_seconds`, `skill_list_id` (migration 148) |
+| `mob_skills` | Monster TP moves imported from LandSandBoat | `id`, `name`, `animation`, `aoe`/`aoe_radius`, `distance`, `prepare_time`, `valid_targets`, `flag` (migration 148) |
+| `mob_skill_lists` | The moves one monster family uses | `skill_list_id`, `mob_skill_id`, `skill_list_name` (migration 148) |
 | `monster_spawns` | Monster placements | `template_id`, `zone`, `pos_*`, `rot`, `level`, `respawn_seconds` |
-| `trusts` | Factual alter-ego data behind the 122 Trust spells (migration 115) | `spell_id` (primary key), `name`, `job`/`sub_job`, `look_hex`, `model`, `delay`, `damage_mult`, `passive` |
+| `trusts` | Factual alter-ego data behind the 122 Trust spells (migrations 115 and 151) | `spell_id` (primary key), `name`, `job`/`sub_job`, `species` (LandSandBoat id; migration 151), `look_hex`, `model`, `delay`, `damage_mult`, `passive` |
 | `trust_spells` | Spells each alter ego can cast, joined from its `mob_spell_lists` row (migration 117) | `trust_spell_id`, `spell_id`, `min_level`, `max_level` |
-| `items` | Item catalogue | `item_id`, `name`, `stack`, `usable`, `equip_slot`, `level`, `item_level`, `rare`, `ex`, `price`, `base_sell` (retail flags; a Rare item is one per character) |
-| `char_purchases` | Armory purchase history | `character_id`, `item_id`, `quantity`, `price`, `created_at` |
+| `trust_gear` | The weapons a Trust is designed with (migration 159; Joachim's horn became the Prime Loughnashade in 167); their `item_mods` row produces the numbers the AI reads | `trust_spell_id`, `item_id` |
+| `items` | Item catalogue | `item_id`, `name`, `stack`, `usable`, `equip_slot`, `level`, `item_level`, `rare`, `ex`, `price`, `base_sell`, `category` (empty for equipment; migration 0156 fills it for general items) |
+| `char_purchases` | Armory and Items purchase history | `character_id`, `item_id`, `quantity`, `price`, `created_at` |
 | `item_models` | Grap model per visible item (migration 95) | `item_id`, `model`; triggers on `items`/`char_inventory`/`char_equip` keep it applied |
 | `char_inventory` | Character slots | `character_id`, `container`, `slot`, `item_id`, `quantity`; slot 0 / item 65535 is gil |
 | `char_warps` | `//warp` saved places (migration 110) | `character_id`, `slot` 1-1000, `alias` (unique per character when non-empty), `zone`, `pos_*`, `rot` |
 | `item_storage` | Storage Slip eligibility | `item_id`, `slip` (1–33) |
 | `char_storage` | Items on a character's slips | `character_id`, `item_id`, `quantity`, `slip`, `stored_at` |
-| `char_locker` | Hidden 9999-item locker | `character_id`, `item_id`, `extra`, `quantity`, `stored_at` |
+| `char_locker` | Hidden 9,999-slot locker | `character_id`, `item_id`, `extra`, `quantity`, `stored_at` |
+| `char_live_state` | What a reconnect gets back (migration 0145) | `character_id` (primary key), `effects`, `food`, `recasts` (JSON), `updated_at` |
+| `char_settings` | Per-character gameplay preferences (migration 0133) | `character_id`, `key` (`auto_open_doors`, `battle_profile`, `joachim_songs`, `trust_actions`), `value` |
 | `quests` | Quest definitions | `quest_key`, `name`, reward, `required_template_id`, `required_kills` |
 | `char_quests` | Quest progress | `character_id`, `quest_id`, `state` (`active`/`complete`), `progress` |
 
 `items.rare` is retail's one-per-character flag. `FanxiService.add_item` and the shop refuse a
 second copy, and the ownership check looks in the bags, the storage slips and the hidden locker.
 `items.ex` means untradeable; on its own it does **not** limit copies for a normal grant (the
-augmented job capes depend on owning several builds of the same Ex cape). The Armory is stricter:
-it refuses a second copy of any Rare **or** Ex piece, because it is a shop and an Ex item cannot
-leave the character once bought.
+augmented job capes depend on owning several builds of the same Ex cape). The Armory and the
+Items store are stricter about **Rare**: they refuse a second copy while the character holds one,
+because it is a shop. Ex-only pieces can still be bought again; Ex stops trading and selling, not
+holding two.
 
+`item_aliases` (migrations 138 and 139) holds long spellings for the 2,068 client-abbreviated
+equipment names, such as `Mousai Crackows +1` and `Marduk's Crackows +1`; the Armory search
+matches either spelling without duplicating the item.
 `items.price` is the Armory's deterministic gil price (migration 111): ten times the square of
 the item level (or level), raised to ten times the NPC resale value when that is higher, and
 doubled for Rare/Ex. Migration 111 also imports every equippable item the retail client names,
 so the Armory typeahead covers the whole catalogue rather than the hand-curated rows earlier
 migrations happened to need. Migration 113 fills the armour models LandSandBoat leaves at MId
-0, so those pieces do not wear the previous slot's look.
+0, so those pieces do not wear the previous slot's look. Migration 170 copies a weapon's
+combat type from `item_weapon.skill` into `items.skill` when the GearSwap grant row kept the
+placeholder 0; Armageddon, Annihilator, Gleti's Crossbow, Chrono Bullet, Daurdabla and
+Loughnashade were the six rows, and a zero type made the equipped weapon's whole 0x0AC
+weapon-skill block disappear.
+
+Migration 0164 keeps the Prime weapon families on their final form. The sortie weapons have up
+to five rows whose names repeat (the stage-1 `Prime ...` item, then four upgraded forms sharing
+the final's name); the Armory maps every stage id to the iLvl 119 III item and the migration
+retargets earlier-stage copies in the bags, storage, locker, equipped set and purchase history.
+The weapons are Rare, so a family is one item: the migration keeps the equipped bag row, else an
+existing final, else the highest stage, and drops the other copies. The id table lives in
+`server/fanxi_server/game/prime_weapons.py` and mirrors migration 125's afterglow model list.
+
+Migration 0156 adds `items.category` and imports the general-item store: ninja tools, Call Beast
+jugs, pet food, consumables, ingredients, crafting materials, food, crystals, scrolls,
+ammunition, furnishings and other non-equipment items. It is generated by
+`tools/import_lsb_store_items.py` from LandSandBoat's `item_basic` / `item_usable` data and the
+retail client names for the equipment-like rows (jugs, pet food and ammunition). The category is
+the Items tab's shelf; equipment rows keep an empty category. General-item prices are
+`10 × NPC resale`, or 1,000 gil when the item has no resale value (Reraizer, quest spell scrolls,
+event food). Existing hand-curated rows keep their display name, equip slot, stack size and
+usable bit, so the import cannot change how the server already handles those items.
 
 Relationships:
 
@@ -91,6 +122,7 @@ characters 1──n char_storage
 characters 1──n char_locker
 characters 1──n char_warps ── zones.id (zone)
 characters 1──n char_quests ──n quests
+characters 1──0..1 char_live_state
 monster_templates 1──n monster_spawns
 world_npcs 1──n npc_lines
 quests   ── monster_templates (required_template_id)
@@ -112,6 +144,15 @@ old visible Storage/Locker containers into `char_storage`.
 slip column; `0069_generic_locker.sql` creates it, and `0116_all_capes_locker.sql` adds the
 24-byte `extra` augment block and makes `(character_id, item_id, extra)` the primary key so the
 198 same-id cape builds can coexist. The server enforces a 9999-quantity cap.
+
+`char_live_state` is the one row a character has only while it is worth holding: the status
+effects (the bard song list included), the food being eaten and the job-ability recasts. A
+dropped link builds a new zone session, so the old one writes this row on the way out and the
+next login reads it back; effect and recast times are absolute Unix timestamps, so time spent
+offline counts. A deliberate `/logout` rewrites the row with the recasts only (retail takes the
+buffs with the logout and keeps the cooldowns). The payload is small JSON from
+`game/live_state.py`; the server never grows it beyond one row per character, and the foreign key
+drops it with the character. See [world](world.md#recovering-a-dropped-client).
 
 All times are ISO-8601 UTC strings (`2026-10-20T02:34:18.331Z`), written by the server. Sorting
 the text sorts the times.

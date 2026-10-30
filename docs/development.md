@@ -34,6 +34,7 @@ python3 -m unittest discover -s server/tests -v
 cargo test --manifest-path launcher-rs/src-tauri/Cargo.toml
 
 # game-free client checks
+tests/battle_hub_test.sh --game <FFXI folder>   # Battle hub widget code, mock ImGui
 python3 tools/build_posix.py vfstest
 python3 tests/replay_test.py -v
 python3 tests/geometry_simd_test.py
@@ -171,6 +172,42 @@ Useful environment for development:
 FANXI_LOG_LEVEL=debug FANXI_ZONE_DEBUG=1 ./scripts/server.sh
 FANXI_LAUNCHER_DIR=/tmp/fanxi-test ./scripts/launcher.sh
 ```
+
+## Diagnosing a client crash
+
+A client started from the launcher writes its stdout and stderr to a per-account log; this is
+where a `[recomp] FATAL` and the gear trace land:
+
+| Log | What it holds |
+|---|---|
+| `~/Library/Application Support/Fanxi/logs/game-<account>.log` | The client's stdout/stderr: `[recomp]` startup and `FATAL`, `[addons]` load and Lua errors, `[gear]` plan/state/action lines |
+| `~/Library/Application Support/Fanxi/logs/build.log` | The launcher's `tools/build_posix.py host64` output |
+| `data/server.log` | Zone and gateway work, including every `0x050` equipment request the server decoded |
+| `data/watchdog.log` | Recovery sweeps and relaunches |
+| `~/Library/Logs/DiagnosticReports/Retired/host64-*.ips` | Native macOS crash reports (the recompiler's own `rt_fatal` aborts do produce one) |
+
+A fatal from translated game code looks like this; the address is a guest FFXiMain address, not
+a host or Lua address:
+
+```
+[recomp] FATAL at 1015d7f0: jump to an address with no translation
+  eax=... ecx=... esp=... esi=...
+  guest stack: ...
+```
+
+The `[gear]` lines immediately before it name the batch that was going out:
+
+```
+[addons] [gear] plan: 128 sets, 255 rules, job 9, zone 4
+[addons] [gear] wear idle.town: 13 pieces
+[addons] [gear] action 9/387: pre 7, mid 0
+```
+
+`[gear] wear` and `[gear] action` only print for six or more pieces, so the log stays small in
+normal play. The server log is the other half: group its `equip raw` lines by second to see the
+burst the client received. The watchdog calls the dialog "needs recovery (dialog)" when the
+client has stopped at the box; the last `[gear]` line and the last server-side `equip` burst
+are the two timestamps to compare.
 
 ## Pull requests
 

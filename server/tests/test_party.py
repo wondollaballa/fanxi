@@ -11,6 +11,7 @@ from pathlib import Path
 import support  # noqa: F401  (puts server/ on sys.path)
 
 from fanxi_server.game import packets
+from fanxi_server.game.entities import ZoneEntity
 from fanxi_server.game.party import (
     ALLIANCE_LEADER,
     PARTY_KIND_ALLIANCE,
@@ -157,6 +158,74 @@ class PartyFlowTest(unittest.TestCase):
                 return message
         self.fail("no %03X in the queue: %s" % (kind, message_types(session)))
 
+    def add_trust(self, session, name: str = "Shantotto", targid: int = 0x700):
+        trust = ZoneEntity(
+            kind="trust", id=0x01000000 | targid, targid=targid,
+            zone=int(session.zone), name=name, hp_max=1111, hp=1111,
+            mp_max=1779, mp=1779, level=99, job=4, race=5,
+            owner_char_id=int(session.char["char_id"]))
+        session.trust_entities.append(trust)
+        return trust
+
+    def test_a_plain_solo_client_gets_its_own_job_row(self):
+        """Solo still needs the self GROUP_LIST row: the HUD reads its job pair from it.
+
+        Without this, a fresh login reports MainJob 0 and the spell/Trust windows are
+        empty until the player joins a party or calls a Trust (the "trusts vanished" HUD).
+        """
+        self.assertEqual(self.world.party_packets(self.a), [])
+        messages = self.world.solo_roster_packets(self.a)
+        self.assertEqual([message_type(message) for message in messages], [0x0C8, 0x0DD])
+        table, row = messages
+        self.assertEqual(struct.unpack_from("<I", table, 4)[0], 0)  # no player rows
+        self.assertEqual((row[0x22], row[0x23]), (1, 10))           # job / level
+        self.assertEqual(struct.unpack_from("<H", row, 0x18)[0], 0x400)
+
+    def test_solo_player_with_a_trust_gets_a_solo_party_roster(self):
+        trust = self.add_trust(self.a)
+        messages = self.world.party_packets(self.a)
+        self.assertEqual([message_type(message) for message in messages],
+                         [0x0C8, 0x0DD, 0x0DD])
+        table = messages[0]
+        self.assertEqual(table[4], 0)
+        self.assertEqual(struct.unpack_from("<IHBBHH", table, 8),
+                         (1, 0x400, PARTY_LEADER, 0, 230, 0))
+        self.assertEqual(struct.unpack_from("<IHBBHH", table, 20),
+                         (trust.id, 0x700, 0, 0, 230, 0))
+        row = messages[2]
+        self.assertEqual(struct.unpack_from("<I", row, 4)[0], trust.id)
+        self.assertEqual(struct.unpack_from("<I", row, 0x14)[0], 0)  # no party flags
+        self.assertEqual(struct.unpack_from("<H", row, 0x18)[0], 0x700)
+        self.assertEqual(row[0x1A], 1)                              # MemberNumber
+        self.assertEqual((row[0x22], row[0x23]), (4, 99))           # job/level
+        self.assertEqual(bytes(row[0x28:0x31]), b"Shantotto")
+
+    def test_a_party_with_a_trust_shows_the_row_to_every_member(self):
+        self.make_party(self.a, self.b)
+        trust = self.add_trust(self.a)
+        self.a.queue.clear()
+        self.b.queue.clear()
+        self.world.reload_party(self.world.party_of(1))
+        for session in (self.a, self.b):
+            rows = [message for message in session.queue
+                    if message_type(message) == 0x0DD]
+            self.assertEqual(len(rows), 3)
+            # The Trust is injected right after its owner's row, as in LandSandBoat.
+            self.assertEqual(struct.unpack_from("<I", rows[1], 4)[0], trust.id)
+            self.assertEqual(struct.unpack_from("<H", rows[1], 0x18)[0], 0x700)
+
+    def test_trust_vitals_are_billboarded_on_group_attr(self):
+        trust = self.add_trust(self.a)
+        self.a.queue.clear()
+        self.world._sync_trust_vitals()
+        self.assertEqual(message_types(self.a), [0x0DF])
+        self.a.queue.clear()
+        self.world._sync_trust_vitals()
+        self.assertEqual(message_types(self.a), [])
+        trust.mp = 10
+        self.world._sync_trust_vitals()
+        self.assertEqual(message_types(self.a), [0x0DF])
+
     def test_invite_prompt_goes_to_the_invitee(self):
         self.assertEqual(self.world.invite(self.a, 2, 0x402, 0), "")
         self.assertEqual(message_types(self.b), [0x0DC])
@@ -284,6 +353,14 @@ class PartyFlowTest(unittest.TestCase):
         self.a.queue.clear()
         self.a.party_checkid(sub(0x078, bytes(4)))
         self.assertEqual(self.a.queue, [])
+
+    def test_checkid_reports_the_solo_trust_page(self):
+        # Trusts give a solo player the same synthetic party page; its id is the char id.
+        self.add_trust(self.a)
+        self.a.queue.clear()
+        self.a.party_checkid(sub(0x078, bytes(4)))
+        check = self.first_of(self.a, 0x0E1)
+        self.assertEqual(struct.unpack_from("<I", check, 4)[0], 1)
 
 
 class SubAccountInviteTest(unittest.TestCase):

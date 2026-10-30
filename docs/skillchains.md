@@ -3,8 +3,8 @@
 This is the verified design for the skillchain state machine and Magic Burst pipeline.
 It follows LandSandBoat's implementation rather than a generic formula summary.  The
 pure logic is in `server/fanxi_server/game/skillchain.py`, the weapon-skill properties
-are in `data/skillchains.json`, and the runtime is **not wired yet** (see the stages at
-the end).
+are in `data/weapon_skill_properties.json`/`data/skillchains.json`, and the runtime is
+wired into `ZoneSession.weaponskill` and the magic path (see the stages at the end).
 
 ## What the reference actually does
 
@@ -79,25 +79,40 @@ The full 29-pair table is in `skillchain.TRANSITIONS`, transcribed from
 From `GetSkillChainEffect`:
 
 1. **Opening WS.** No skillchain forms.  A `Skillchain` effect is stored on the target:
-   tier 0, power = packed properties, duration **10 s**, start = now.
+   tier 0, power = packed properties, duration **11 s**, start = now.
 2. **Next WS.**  The call is skipped entirely when the WS misses, the target is dead, or
    the WS's primary property is 0 (LSB gates on `primary_sc != 0`).  Otherwise:
    - If the effect is **absent or expired**, the new WS becomes the opening.
    - If the new WS lands **at or before 3.0 s** after the start, it does **not** chain;
-     it replaces the opening state with its own properties and a fresh 10 s window.
+     it replaces the opening state with its own properties and a fresh 11 s window.
    - If it lands **after 3.0 s and before expiry**, try `FormSkillchain`.
    - No match → replace the opening with the new WS's properties.
    - Match → the state becomes tier = SC tier, power = SC id,
-     count = `min(count + 1, 5)`, start = now, and duration = **old duration − 1 s**
-     (10 → 9 → 8 …).
+     count = `min(count + 1, 5)`, start = now, and duration = **11 s for a level-1
+     link**; a level-2/3 link gets **old duration − 1 s** (11 → 10 → 9 …).
 3. Every successful link counts as one step; the first link is count 1.  The maximum
    count is 5.
 4. A weapon skill with no properties does not touch the state.  A miss or a dead target
    does not touch it either (the LSB gate is inside the landed-hit/HP>0 branch).
 
-The often-quoted "3.0 to 9.5 s" window is wrong: the closing WS must be **strictly more
-than 3 s** after the opening/last link, and the effect expires 10 s after it was created
-(9 s after the first link, 8 s after the second, …).
+The closing WS must be **strictly more than 3 s** after the opening/last link.  Fanxi's
+window is one second longer than AutoSkillchains' (`delay 3 + 8 − step`): the opener is
+**11 s**, a level-1 link keeps **11 s**, and a level-2/3 link shrinks by one second per
+step (10/9/8… for the wide chains).  That makes the Fusion-to-Light window 10 s (3 s
+lockout + 7 s to close) and the 4th step 9 s (6 s after the lockout).  The server accepts
+a close up to **0.5 s after** that boundary, which is the status-effect container's tick;
+without it a close at exactly the 10.0 s or 9.0 s mark loses the chain even though the
+same close works in retail.
+
+**Level-1 loops are deliberately infinite on Fanxi.**  In retail every link shrinks the
+window, so `Savage Blade → Hot Shot → Savage Blade` dies once the window falls below the
+player's WS cadence unless the closer wears the **Diamond Aspis** (item `26488`).  COR,
+the job that owns both of those skills, cannot equip the Aspis (WAR/WHM/RDM/THF/PLD/BST
+only), which made the classic loop impossible here.  A level-1 link therefore keeps the
+full 11 s window; the level-2/3 chains still shrink exactly as retail does.  The Aspis
+remains the exception for those wider chains: when the closing weapon skill's owner wears
+it, the next window is **11 s at every step** (the Battle hub planner has the same
+per-closer checkbox).
 
 ### Skillchain damage
 
@@ -127,6 +142,12 @@ deferred.  `MAGIC_DAMAGE` is added after the bonus multiplier, before Skillchain
 The resistance rank defaults to 0 (multiplier 1.0) because Fanxi's monsters do not carry
 elemental resistance ranks yet.
 
+The final clamp is `combat.DAMAGE_CAP` (99,999), the same ceiling every other damage
+event uses: a capped 99,999 closing weapon skill times a tier-3 link still prints at
+most 99,999, not 149,998.  The closing weapon skill's own total is capped before it is
+used as this base, so the two lines of a 99,999 WS + 99,999 SC chain are each the most
+the client can show.
+
 ### The action packet
 
 The skillchain is **not a separate 0x028 action**.  It is the closing WS result's
@@ -144,8 +165,9 @@ The skillchain is **not a separate 0x028 action**.  It is the closing WS result'
 - `proc_message` (10 bits) = `287 + proc_kind` for damage, `384 + proc_kind` for absorb.
 
 Fusion therefore uses proc 6 and message 293; Light II uses proc 1 and message 288.
-The existing 0x028 builder must learn this block; it currently writes two zero flags for
-"no additional effect" and "no reaction effect" per result.
+`packets.battle_action` writes the block, and `ZoneSession.weaponskill` puts it on the
+closing weapon skill's result.  A separate 0x028 with the same message prints a chat line
+but carries no add-effect, so the client does not play the skillchain animation.
 
 ### Magic Burst
 
@@ -191,7 +213,7 @@ hit-rate/resist work, not in the same change as the skillchain state machine.
 | Transition table with `(A, B)` tier precedence | Directional 29-pair `skillchain_map`, first match in resonance/property order |
 | E.g. `(Liquefaction, Impaction) -> Fusion` | Correct only when Liquefaction is the **resonance** and Impaction the **closing** property; reversed gives Liquefaction |
 | `(Detonation, Scission) -> Gravitation`, `(Transfixion, Scission) -> Fragmentation` | Both wrong; Gravitation is Detonation→Compression, Fragmentation is Induration→Reverberation |
-| Opening window `now+3` to `now+9.5` | Opening is 10 s; the close must be **strictly >3 s**; after a link the duration is 9 s and drops 1 s per link |
+| Opening window `now+3` to `now+9.5` | Opening is 11 s; the close must be **strictly >3 s**; a level-1 link keeps 11 s, a level-2/3 link drops 1 s per link.  A close up to 0.5 s past the boundary is accepted (status-tick grace); Diamond Aspis keeps the next window at 11 s at every tier |
 | SC damage "Level 1 50%, Level 2 60%, Level 3 100%, scaling per step" | Correct for the first link; the full `chainMultipliers[tier][count]` table applies and count caps at 5 |
 | SC emitted as its own action/animation | Additional-effect block on the closing WS result, with a proc id and `287+proc` message |
 | Magic Burst sets a flag | Set message 252 (274 for drain); the damage is the normal result value |
@@ -204,20 +226,22 @@ hit-rate/resist work, not in the same change as the skillchain state machine.
 ## Implementation stages
 
 - **A. Data and pure logic — done.** `data/skillchains.json`, `weapon_skills.sc`,
-  `skillchain.py` (ids, map, state, damage, MB helpers), 24 tests in
+  `skillchain.py` (ids, map, state, damage, MB helpers), the tests in
   `server/tests/test_skillchain.py`.
-- **B. Runtime skillchains.** Add `SkillchainState` to the monster, call
-  `skillchain.advance` from `ZoneSession.weaponskill` only on a landed, non-lethal hit
-  with `primary_sc != 0`, compute the closing-WS-based damage, apply it, and attach the
-  add-effect block to the last WS result.  Extend the 0x028 builder for the optional
-  additional-effect block.
-- **C. Magic hit rate and resist tiers.** Port the relevant parts of
-  `scripts/combat/basic/magic_hit_rate.lua`: `macc - meva + 25`, `(50 + hit)/100`
-  clamped 5–95%, three successive resist rolls, 1/2^tier.  Add RNG injection and update
-  the spell tests.  This is the prerequisite for a correct MB.
-- **D. Magic Burst.** Pass `spell.element` into the magic path, compute the burst tier
-  from the target state, apply `magic_burst_multiplier` and `magic_burst_bonus`, add the
-  +100 MAcc, and set message 252.
+- **B. Runtime skillchains — done.** `SkillchainState` lives on the monster;
+  `ZoneSession._advance_skillchain` runs from `weaponskill` only on a landed, non-lethal
+  hit with properties, computes the closing-WS-based damage, applies it, and returns the
+  add-effect block that rides the closing WS result.  The state is cleared by
+  `kill_mob`/`reset_mob`, so a respawn cannot inherit the previous life's chain (which
+  let the first WS of a new fight close a chain nobody opened).  `SkillchainState.opener`
+  records who opened it, and the log line names the `closer`, `opener` and `target`.
+- **C. Magic hit rate and resist tiers — partial.** `combat.magic_resist` is still the
+  deterministic 0.5–1.0 approximation; the full three-roll 1/2^tier model is pending.
+- **D. Magic Burst — wired to the deterministic model.** `spell.element` reaches the
+  state, the burst tier/multiplier, the `MAGIC_BURST_BONUS_CAPPED` / `..._UNCAPPED`
+  bonus (the Red Mage trait is 274; SCH/BLM job points and gear are 487) and message
+  252 are applied; the +100 MAcc rides the deterministic resist roll, and the exact
+  resist tier waits on stage C.
 - **E. Verification.** Packet decode tests (add-effect block), multi-step chain tests,
   a LSB cross-check table, and live log lines for each SC/MB event.
 

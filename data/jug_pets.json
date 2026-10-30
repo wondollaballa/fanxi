@@ -1,0 +1,2721 @@
+{
+  "source": "LandSandBoat item_weapon/pet_list/mob_pools/mob_skill_lists/pet_skills",
+  "jugs": {
+    "17860": {
+      "item": "Carrot Broth",
+      "pet_id": 22,
+      "pet": "Hare Familiar",
+      "model": 268,
+      "level": 23,
+      "moves": [
+        {
+          "name": "Foot Kick",
+          "id": 672,
+          "mob_skill": 3840
+        },
+        {
+          "name": "Dust Cloud",
+          "id": 673,
+          "mob_skill": 3841
+        },
+        {
+          "name": "Whirl Claws",
+          "id": 674,
+          "mob_skill": 3842
+        },
+        {
+          "name": "Wild Carrot",
+          "id": 735,
+          "mob_skill": 3903
+        }
+      ]
+    },
+    "17861": {
+      "item": "F. Carrot Broth",
+      "pet_id": 37,
+      "pet": "Keeneared Steffi",
+      "model": 268,
+      "level": 43,
+      "moves": [
+        {
+          "name": "Foot Kick",
+          "id": 672,
+          "mob_skill": 3840
+        },
+        {
+          "name": "Dust Cloud",
+          "id": 673,
+          "mob_skill": 3841
+        },
+        {
+          "name": "Whirl Claws",
+          "id": 674,
+          "mob_skill": 3842
+        },
+        {
+          "name": "Wild Carrot",
+          "id": 735,
+          "mob_skill": 3903
+        }
+      ]
+    },
+    "17862": {
+      "item": "Bug Broth",
+      "pet_id": 31,
+      "pet": "Mayfly Familiar",
+      "model": 448,
+      "level": 33,
+      "moves": [
+        {
+          "name": "Cursed Sphere",
+          "id": 712,
+          "mob_skill": 3880
+        },
+        {
+          "name": "Venom",
+          "id": 713,
+          "mob_skill": 3881
+        },
+        {
+          "name": "Somersault",
+          "id": 772,
+          "mob_skill": 3938
+        }
+      ]
+    },
+    "17863": {
+      "item": "Qdv. Bug Broth",
+      "pet_id": 41,
+      "pet": "Shellbuster Orob",
+      "model": 448,
+      "level": 53,
+      "moves": [
+        {
+          "name": "Cursed Sphere",
+          "id": 712,
+          "mob_skill": 3880
+        },
+        {
+          "name": "Venom",
+          "id": 713,
+          "mob_skill": 3881
+        },
+        {
+          "name": "Somersault",
+          "id": 772,
+          "mob_skill": 3938
+        }
+      ]
+    },
+    "17864": {
+      "item": "Herbal Broth",
+      "pet_id": 21,
+      "pet": "Sheep Familiar",
+      "model": 340,
+      "level": 23,
+      "moves": [
+        {
+          "name": "Lamb Chop",
+          "id": 689,
+          "mob_skill": 3857
+        },
+        {
+          "name": "Rage",
+          "id": 690,
+          "mob_skill": 3858
+        },
+        {
+          "name": "Sheep Charge",
+          "id": 691,
+          "mob_skill": 3859
+        },
+        {
+          "name": "Sheep Song",
+          "id": 692,
+          "mob_skill": 3860
+        }
+      ]
+    },
+    "17865": {
+      "item": "S. Herbal Broth",
+      "pet_id": 36,
+      "pet": "Lullaby Melodia",
+      "model": 340,
+      "level": 43,
+      "moves": [
+        {
+          "name": "Lamb Chop",
+          "id": 689,
+          "mob_skill": 3857
+        },
+        {
+          "name": "Rage",
+          "id": 690,
+          "mob_skill": 3858
+        },
+        {
+          "name": "Sheep Charge",
+          "id": 691,
+          "mob_skill": 3859
+        },
+        {
+          "name": "Sheep Song",
+          "id": 692,
+          "mob_skill": 3860
+        }
+      ]
+    },
+    "17866": {
+      "item": "Carrion Broth",
+      "pet_id": 30,
+      "pet": "Lizard Familiar",
+      "model": 328,
+      "level": 33,
+      "moves": [
+        {
+          "name": "Tail Blow",
+          "id": 683,
+          "mob_skill": 3851
+        },
+        {
+          "name": "Fireball",
+          "id": 684,
+          "mob_skill": 3852
+        },
+        {
+          "name": "Blockhead",
+          "id": 685,
+          "mob_skill": 3853
+        },
+        {
+          "name": "Brain Crush",
+          "id": 686,
+          "mob_skill": 3854
+        },
+        {
+          "name": "Infrasonics",
+          "id": 687,
+          "mob_skill": 3855
+        },
+        {
+          "name": "Secretion",
+          "id": 688,
+          "mob_skill": 3856
+        }
+      ]
+    },
+    "17867": {
+      "item": "C. Carrion Broth",
+      "pet_id": 40,
+      "pet": "Coldblood Como",
+      "model": 328,
+      "level": 53,
+      "moves": [
+        {
+          "name": "Tail Blow",
+          "id": 683,
+          "mob_skill": 3851
+        },
+        {
+          "name": "Fireball",
+          "id": 684,
+          "mob_skill": 3852
+        },
+        {
+          "name": "Blockhead",
+          "id": 685,
+          "mob_skill": 3853
+        },
+        {
+          "name": "Brain Crush",
+          "id": 686,
+          "mob_skill": 3854
+        },
+        {
+          "name": "Infrasonics",
+          "id": 687,
+          "mob_skill": 3855
+        },
+        {
+          "name": "Secretion",
+          "id": 688,
+          "mob_skill": 3856
+        }
+      ]
+    },
+    "17868": {
+      "item": "Humus",
+      "pet_id": 28,
+      "pet": "Flowerpot Bill",
+      "model": 300,
+      "level": 28,
+      "moves": [
+        {
+          "name": "Head Butt",
+          "id": 675,
+          "mob_skill": 3843
+        },
+        {
+          "name": "Dream Flower",
+          "id": 676,
+          "mob_skill": 3844
+        },
+        {
+          "name": "Wild Oats",
+          "id": 677,
+          "mob_skill": 3845
+        },
+        {
+          "name": "Leaf Dagger",
+          "id": 678,
+          "mob_skill": 3846
+        },
+        {
+          "name": "Scream",
+          "id": 679,
+          "mob_skill": 3847
+        }
+      ]
+    },
+    "17869": {
+      "item": "Rich Humus",
+      "pet_id": 38,
+      "pet": "Flowerpot Ben",
+      "model": 300,
+      "level": 51,
+      "moves": [
+        {
+          "name": "Head Butt",
+          "id": 675,
+          "mob_skill": 3843
+        },
+        {
+          "name": "Dream Flower",
+          "id": 676,
+          "mob_skill": 3844
+        },
+        {
+          "name": "Wild Oats",
+          "id": 677,
+          "mob_skill": 3845
+        },
+        {
+          "name": "Leaf Dagger",
+          "id": 678,
+          "mob_skill": 3846
+        },
+        {
+          "name": "Scream",
+          "id": 679,
+          "mob_skill": 3847
+        }
+      ]
+    },
+    "17870": {
+      "item": "Meat Broth",
+      "pet_id": 27,
+      "pet": "Tiger Familiar",
+      "model": 308,
+      "level": 28,
+      "moves": [
+        {
+          "name": "Roar",
+          "id": 680,
+          "mob_skill": 3848
+        },
+        {
+          "name": "Razor Fang",
+          "id": 681,
+          "mob_skill": 3849
+        },
+        {
+          "name": "Claw Cyclone",
+          "id": 682,
+          "mob_skill": 3850
+        },
+        {
+          "name": "Crossthrash",
+          "id": 795,
+          "mob_skill": 3959
+        },
+        {
+          "name": "Predatory Glare",
+          "id": 796,
+          "mob_skill": 3960
+        }
+      ]
+    },
+    "17871": {
+      "item": "W. Meat Broth",
+      "pet_id": 39,
+      "pet": "Saber Siravarde",
+      "model": 308,
+      "level": 51,
+      "moves": [
+        {
+          "name": "Roar",
+          "id": 680,
+          "mob_skill": 3848
+        },
+        {
+          "name": "Razor Fang",
+          "id": 681,
+          "mob_skill": 3849
+        },
+        {
+          "name": "Claw Cyclone",
+          "id": 682,
+          "mob_skill": 3850
+        },
+        {
+          "name": "Crossthrash",
+          "id": 795,
+          "mob_skill": 3959
+        },
+        {
+          "name": "Predatory Glare",
+          "id": 796,
+          "mob_skill": 3960
+        }
+      ]
+    },
+    "17872": {
+      "item": "Tree Sap",
+      "pet_id": 33,
+      "pet": "Beetle Familiar",
+      "model": 408,
+      "level": 38,
+      "moves": [
+        {
+          "name": "Power Attack",
+          "id": 707,
+          "mob_skill": 3875
+        },
+        {
+          "name": "Hi-Freq Field",
+          "id": 708,
+          "mob_skill": 3876
+        },
+        {
+          "name": "Rhino Attack",
+          "id": 709,
+          "mob_skill": 3877
+        },
+        {
+          "name": "Rhino Guard",
+          "id": 710,
+          "mob_skill": 3878
+        },
+        {
+          "name": "Spoil",
+          "id": 711,
+          "mob_skill": 3879
+        }
+      ]
+    },
+    "17873": {
+      "item": "Scarlet Sap",
+      "pet_id": 45,
+      "pet": "Panzer Galahad",
+      "model": 408,
+      "level": 63,
+      "moves": [
+        {
+          "name": "Power Attack",
+          "id": 707,
+          "mob_skill": 3875
+        },
+        {
+          "name": "Hi-Freq Field",
+          "id": 708,
+          "mob_skill": 3876
+        },
+        {
+          "name": "Rhino Attack",
+          "id": 709,
+          "mob_skill": 3877
+        },
+        {
+          "name": "Rhino Guard",
+          "id": 710,
+          "mob_skill": 3878
+        },
+        {
+          "name": "Spoil",
+          "id": 711,
+          "mob_skill": 3879
+        }
+      ]
+    },
+    "17874": {
+      "item": "Cng. Brain Broth",
+      "pet_id": 49,
+      "pet": "Crafty Clyvonne",
+      "model": 367,
+      "level": 76,
+      "moves": [
+        {
+          "name": "Chaotic Eye",
+          "id": 730,
+          "mob_skill": 3898
+        },
+        {
+          "name": "Blaster",
+          "id": 731,
+          "mob_skill": 3899
+        }
+      ]
+    },
+    "17875": {
+      "item": "Rzr. Brain Broth",
+      "pet_id": 50,
+      "pet": "Bloodclaw Shasr",
+      "model": 2246,
+      "level": 90,
+      "moves": [
+        {
+          "name": "Chaotic Eye",
+          "id": 730,
+          "mob_skill": 3898
+        },
+        {
+          "name": "Blaster",
+          "id": 731,
+          "mob_skill": 3899
+        },
+        {
+          "name": "Charged Whisker",
+          "id": 746,
+          "mob_skill": 3912
+        },
+        {
+          "name": "Frenzied Rage",
+          "id": 790,
+          "mob_skill": 3954
+        }
+      ]
+    },
+    "17876": {
+      "item": "Fish Broth",
+      "pet_id": 23,
+      "pet": "Crab Familiar",
+      "model": 356,
+      "level": 23,
+      "moves": [
+        {
+          "name": "Bubble Shower",
+          "id": 693,
+          "mob_skill": 3861
+        },
+        {
+          "name": "Bubble Curtain",
+          "id": 694,
+          "mob_skill": 3862
+        },
+        {
+          "name": "Big Scissors",
+          "id": 695,
+          "mob_skill": 3863
+        },
+        {
+          "name": "Scissor Guard",
+          "id": 696,
+          "mob_skill": 3864
+        },
+        {
+          "name": "Metallic Body",
+          "id": 697,
+          "mob_skill": 3865
+        }
+      ]
+    },
+    "17877": {
+      "item": "Fish Oil Broth",
+      "pet_id": 24,
+      "pet": "Courier Carrie",
+      "model": 360,
+      "level": 23,
+      "moves": [
+        {
+          "name": "Bubble Shower",
+          "id": 693,
+          "mob_skill": 3861
+        },
+        {
+          "name": "Bubble Curtain",
+          "id": 694,
+          "mob_skill": 3862
+        },
+        {
+          "name": "Big Scissors",
+          "id": 695,
+          "mob_skill": 3863
+        },
+        {
+          "name": "Scissor Guard",
+          "id": 696,
+          "mob_skill": 3864
+        },
+        {
+          "name": "Metallic Body",
+          "id": 697,
+          "mob_skill": 3865
+        }
+      ]
+    },
+    "17878": {
+      "item": "L. Carrot Broth",
+      "pet_id": 51,
+      "pet": "Lucky Lulush",
+      "model": 270,
+      "level": 76,
+      "moves": [
+        {
+          "name": "Foot Kick",
+          "id": 672,
+          "mob_skill": 3840
+        },
+        {
+          "name": "Whirl Claws",
+          "id": 674,
+          "mob_skill": 3842
+        },
+        {
+          "name": "Snow Cloud",
+          "id": 734,
+          "mob_skill": 3902
+        },
+        {
+          "name": "Wild Carrot",
+          "id": 735,
+          "mob_skill": 3903
+        }
+      ]
+    },
+    "17879": {
+      "item": "C. Plasma Broth",
+      "pet_id": 52,
+      "pet": "Fatso Fargann",
+      "model": 276,
+      "level": 81,
+      "moves": [
+        {
+          "name": "Suction",
+          "id": 732,
+          "mob_skill": 3900
+        },
+        {
+          "name": "Drainkiss",
+          "id": 733,
+          "mob_skill": 3901
+        },
+        {
+          "name": "Acid Mist",
+          "id": 740,
+          "mob_skill": 3907
+        },
+        {
+          "name": "TP Drainkiss",
+          "id": 741,
+          "mob_skill": 3908
+        }
+      ]
+    },
+    "17880": {
+      "item": "Seedbed Soil",
+      "pet_id": 32,
+      "pet": "Funguar Familiar",
+      "model": 376,
+      "level": 33,
+      "moves": [
+        {
+          "name": "Frogkick",
+          "id": 700,
+          "mob_skill": 3868
+        },
+        {
+          "name": "Spore",
+          "id": 701,
+          "mob_skill": 3869
+        },
+        {
+          "name": "Queasyshroom",
+          "id": 702,
+          "mob_skill": 3870
+        },
+        {
+          "name": "Numbshroom",
+          "id": 703,
+          "mob_skill": 3871
+        },
+        {
+          "name": "Shakeshroom",
+          "id": 704,
+          "mob_skill": 3872
+        },
+        {
+          "name": "Silence Gas",
+          "id": 705,
+          "mob_skill": 3873
+        },
+        {
+          "name": "Dark Spore",
+          "id": 706,
+          "mob_skill": 3874
+        }
+      ]
+    },
+    "17881": {
+      "item": "Deepbed Soil",
+      "pet_id": 53,
+      "pet": "Discreet Louise",
+      "model": 376,
+      "level": 79,
+      "moves": [
+        {
+          "name": "Frogkick",
+          "id": 700,
+          "mob_skill": 3868
+        },
+        {
+          "name": "Spore",
+          "id": 701,
+          "mob_skill": 3869
+        },
+        {
+          "name": "Queasyshroom",
+          "id": 702,
+          "mob_skill": 3870
+        },
+        {
+          "name": "Numbshroom",
+          "id": 703,
+          "mob_skill": 3871
+        },
+        {
+          "name": "Shakeshroom",
+          "id": 704,
+          "mob_skill": 3872
+        },
+        {
+          "name": "Silence Gas",
+          "id": 705,
+          "mob_skill": 3873
+        },
+        {
+          "name": "Dark Spore",
+          "id": 706,
+          "mob_skill": 3874
+        }
+      ]
+    },
+    "17882": {
+      "item": "Alchemist Water",
+      "pet_id": 25,
+      "pet": "Homunculus",
+      "model": 301,
+      "level": 23,
+      "moves": [
+        {
+          "name": "Head Butt",
+          "id": 675,
+          "mob_skill": 3843
+        },
+        {
+          "name": "Dream Flower",
+          "id": 676,
+          "mob_skill": 3844
+        },
+        {
+          "name": "Wild Oats",
+          "id": 677,
+          "mob_skill": 3845
+        },
+        {
+          "name": "Leaf Dagger",
+          "id": 678,
+          "mob_skill": 3846
+        },
+        {
+          "name": "Scream",
+          "id": 679,
+          "mob_skill": 3847
+        }
+      ]
+    },
+    "17883": {
+      "item": "Mlw. Bird Broth",
+      "pet_id": 54,
+      "pet": "Swift Sieghard",
+      "model": 316,
+      "level": 86,
+      "moves": [
+        {
+          "name": "Scythe Tail",
+          "id": 743,
+          "mob_skill": 3909
+        },
+        {
+          "name": "Ripper Fang",
+          "id": 744,
+          "mob_skill": 3910
+        },
+        {
+          "name": "Chomp Rush",
+          "id": 745,
+          "mob_skill": 3911
+        }
+      ]
+    },
+    "17884": {
+      "item": "Sun Water",
+      "pet_id": 47,
+      "pet": "Amigo Sabotender",
+      "model": 372,
+      "level": 75,
+      "moves": [
+        {
+          "name": "Needleshot",
+          "id": 698,
+          "mob_skill": 3866
+        },
+        {
+          "name": "Random Needles",
+          "id": 699,
+          "mob_skill": 3867
+        }
+      ]
+    },
+    "17885": {
+      "item": "Grass. Broth",
+      "pet_id": 26,
+      "pet": "Flytrap Familiar",
+      "model": 1345,
+      "level": 28,
+      "moves": [
+        {
+          "name": "Soporific",
+          "id": 718,
+          "mob_skill": 3886
+        },
+        {
+          "name": "Gloeosuccus",
+          "id": 719,
+          "mob_skill": 3887
+        },
+        {
+          "name": "Palsy Pollen",
+          "id": 720,
+          "mob_skill": 3888
+        }
+      ]
+    },
+    "17886": {
+      "item": "N. Grass. Broth",
+      "pet_id": 42,
+      "pet": "Voracious Audrey",
+      "model": 1345,
+      "level": 53,
+      "moves": [
+        {
+          "name": "Soporific",
+          "id": 718,
+          "mob_skill": 3886
+        },
+        {
+          "name": "Gloeosuccus",
+          "id": 719,
+          "mob_skill": 3887
+        },
+        {
+          "name": "Palsy Pollen",
+          "id": 720,
+          "mob_skill": 3888
+        }
+      ]
+    },
+    "17887": {
+      "item": "Mole Broth",
+      "pet_id": 29,
+      "pet": "Eft Familiar",
+      "model": 1349,
+      "level": 33,
+      "moves": [
+        {
+          "name": "Geist Wall",
+          "id": 721,
+          "mob_skill": 3889
+        },
+        {
+          "name": "Numbing Noise",
+          "id": 722,
+          "mob_skill": 3890
+        },
+        {
+          "name": "Nimble Snap",
+          "id": 723,
+          "mob_skill": 3891
+        },
+        {
+          "name": "Cyclotail",
+          "id": 724,
+          "mob_skill": 3892
+        },
+        {
+          "name": "Toxic Spit",
+          "id": 725,
+          "mob_skill": 3893
+        }
+      ]
+    },
+    "17888": {
+      "item": "L. Mole Broth",
+      "pet_id": 43,
+      "pet": "Ambusher Allie",
+      "model": 1349,
+      "level": 58,
+      "moves": [
+        {
+          "name": "Geist Wall",
+          "id": 721,
+          "mob_skill": 3889
+        },
+        {
+          "name": "Numbing Noise",
+          "id": 722,
+          "mob_skill": 3890
+        },
+        {
+          "name": "Nimble Snap",
+          "id": 723,
+          "mob_skill": 3891
+        },
+        {
+          "name": "Cyclotail",
+          "id": 724,
+          "mob_skill": 3892
+        },
+        {
+          "name": "Toxic Spit",
+          "id": 725,
+          "mob_skill": 3893
+        }
+      ]
+    },
+    "17889": {
+      "item": "Blood Broth",
+      "pet_id": 35,
+      "pet": "Mite Familiar",
+      "model": 1353,
+      "level": 43,
+      "moves": [
+        {
+          "name": "Double Claw",
+          "id": 726,
+          "mob_skill": 3894
+        },
+        {
+          "name": "Grapple",
+          "id": 727,
+          "mob_skill": 3895
+        },
+        {
+          "name": "Spinning Top",
+          "id": 728,
+          "mob_skill": 3897
+        },
+        {
+          "name": "Filamented Hold",
+          "id": 729,
+          "mob_skill": 3896
+        }
+      ]
+    },
+    "17890": {
+      "item": "C. Blood Broth",
+      "pet_id": 44,
+      "pet": "Lifedrinker Lars",
+      "model": 1353,
+      "level": 63,
+      "moves": [
+        {
+          "name": "Double Claw",
+          "id": 726,
+          "mob_skill": 3894
+        },
+        {
+          "name": "Grapple",
+          "id": 727,
+          "mob_skill": 3895
+        },
+        {
+          "name": "Spinning Top",
+          "id": 728,
+          "mob_skill": 3897
+        },
+        {
+          "name": "Filamented Hold",
+          "id": 729,
+          "mob_skill": 3896
+        }
+      ]
+    },
+    "17891": {
+      "item": "Antica Broth",
+      "pet_id": 34,
+      "pet": "Antlion Familiar",
+      "model": 1347,
+      "level": 38,
+      "moves": [
+        {
+          "name": "Sandblast",
+          "id": 714,
+          "mob_skill": 3882
+        },
+        {
+          "name": "Sandpit",
+          "id": 715,
+          "mob_skill": 3883
+        },
+        {
+          "name": "Venom Spray",
+          "id": 716,
+          "mob_skill": 3884
+        },
+        {
+          "name": "Mandibular Bite",
+          "id": 717,
+          "mob_skill": 3885
+        }
+      ]
+    },
+    "17892": {
+      "item": "F. Antica Broth",
+      "pet_id": 46,
+      "pet": "Chopsuey Chucky",
+      "model": 1347,
+      "level": 63,
+      "moves": [
+        {
+          "name": "Sandblast",
+          "id": 714,
+          "mob_skill": 3882
+        },
+        {
+          "name": "Sandpit",
+          "id": 715,
+          "mob_skill": 3883
+        },
+        {
+          "name": "Venom Spray",
+          "id": 716,
+          "mob_skill": 3884
+        },
+        {
+          "name": "Mandibular Bite",
+          "id": 717,
+          "mob_skill": 3885
+        }
+      ]
+    },
+    "17893": {
+      "item": "Wool Grease",
+      "pet_id": 55,
+      "pet": "Dipper Yuly",
+      "model": 2018,
+      "level": 76,
+      "moves": [
+        {
+          "name": "Sudden Lunge",
+          "id": 736,
+          "mob_skill": 3904
+        },
+        {
+          "name": "Spiral Spin",
+          "id": 737,
+          "mob_skill": 3905
+        },
+        {
+          "name": "Noisome Powder",
+          "id": 738,
+          "mob_skill": 3906
+        }
+      ]
+    },
+    "17894": {
+      "item": "Vermihumus",
+      "pet_id": 56,
+      "pet": "Flowerpot Merle",
+      "model": 2247,
+      "level": 76,
+      "moves": [
+        {
+          "name": "Head Butt",
+          "id": 675,
+          "mob_skill": 3843
+        },
+        {
+          "name": "Dream Flower",
+          "id": 676,
+          "mob_skill": 3844
+        },
+        {
+          "name": "Wild Oats",
+          "id": 677,
+          "mob_skill": 3845
+        },
+        {
+          "name": "Leaf Dagger",
+          "id": 678,
+          "mob_skill": 3846
+        },
+        {
+          "name": "Scream",
+          "id": 679,
+          "mob_skill": 3847
+        }
+      ]
+    },
+    "17895": {
+      "item": "D. Herbal Broth",
+      "pet_id": 57,
+      "pet": "Nursery Nazuna",
+      "model": 340,
+      "level": 76,
+      "moves": [
+        {
+          "name": "Lamb Chop",
+          "id": 689,
+          "mob_skill": 3857
+        },
+        {
+          "name": "Rage",
+          "id": 690,
+          "mob_skill": 3858
+        },
+        {
+          "name": "Sheep Charge",
+          "id": 691,
+          "mob_skill": 3859
+        },
+        {
+          "name": "Sheep Song",
+          "id": 692,
+          "mob_skill": 3860
+        }
+      ]
+    },
+    "17896": {
+      "item": "Gob. Bug Broth",
+      "pet_id": 58,
+      "pet": "Mailbuster Ceta",
+      "model": 448,
+      "level": 85,
+      "moves": [
+        {
+          "name": "Cursed Sphere",
+          "id": 712,
+          "mob_skill": 3880
+        },
+        {
+          "name": "Venom",
+          "id": 713,
+          "mob_skill": 3881
+        },
+        {
+          "name": "Somersault",
+          "id": 772,
+          "mob_skill": 3938
+        }
+      ]
+    },
+    "17897": {
+      "item": "Bub. Carrion Broth",
+      "pet_id": 59,
+      "pet": "Audacious Anna",
+      "model": 328,
+      "level": 85,
+      "moves": [
+        {
+          "name": "Tail Blow",
+          "id": 683,
+          "mob_skill": 3851
+        },
+        {
+          "name": "Fireball",
+          "id": 684,
+          "mob_skill": 3852
+        },
+        {
+          "name": "Blockhead",
+          "id": 685,
+          "mob_skill": 3853
+        },
+        {
+          "name": "Brain Crush",
+          "id": 686,
+          "mob_skill": 3854
+        },
+        {
+          "name": "Infrasonics",
+          "id": 687,
+          "mob_skill": 3855
+        },
+        {
+          "name": "Secretion",
+          "id": 688,
+          "mob_skill": 3856
+        }
+      ]
+    },
+    "17898": {
+      "item": "C. Grass. Broth",
+      "pet_id": 60,
+      "pet": "Presto Julio",
+      "model": 1345,
+      "level": 83,
+      "moves": [
+        {
+          "name": "Soporific",
+          "id": 718,
+          "mob_skill": 3886
+        },
+        {
+          "name": "Gloeosuccus",
+          "id": 719,
+          "mob_skill": 3887
+        },
+        {
+          "name": "Palsy Pollen",
+          "id": 720,
+          "mob_skill": 3888
+        }
+      ]
+    },
+    "17899": {
+      "item": "Svg. Mole Broth",
+      "pet_id": 61,
+      "pet": "Bugeyed Broncha",
+      "model": 1349,
+      "level": 90,
+      "moves": [
+        {
+          "name": "Geist Wall",
+          "id": 721,
+          "mob_skill": 3889
+        },
+        {
+          "name": "Numbing Noise",
+          "id": 722,
+          "mob_skill": 3890
+        },
+        {
+          "name": "Nimble Snap",
+          "id": 723,
+          "mob_skill": 3891
+        },
+        {
+          "name": "Cyclotail",
+          "id": 724,
+          "mob_skill": 3892
+        },
+        {
+          "name": "Toxic Spit",
+          "id": 725,
+          "mob_skill": 3893
+        }
+      ]
+    },
+    "17900": {
+      "item": "Cl. Wheat Broth",
+      "pet_id": 62,
+      "pet": "Gooey Gerard",
+      "model": 2021,
+      "level": 95,
+      "moves": [
+        {
+          "name": "Purulent Ooze",
+          "id": 747,
+          "mob_skill": 3913
+        },
+        {
+          "name": "Corrosive Ooze",
+          "id": 748,
+          "mob_skill": 3914
+        }
+      ]
+    },
+    "17901": {
+      "item": "Bur. Carrion Broth",
+      "pet_id": 63,
+      "pet": "Gorefang Hobs",
+      "model": 2248,
+      "level": 93,
+      "moves": [
+        {
+          "name": "Roar",
+          "id": 680,
+          "mob_skill": 3848
+        },
+        {
+          "name": "Razor Fang",
+          "id": 681,
+          "mob_skill": 3849
+        },
+        {
+          "name": "Claw Cyclone",
+          "id": 682,
+          "mob_skill": 3850
+        },
+        {
+          "name": "Crossthrash",
+          "id": 795,
+          "mob_skill": 3959
+        },
+        {
+          "name": "Predatory Glare",
+          "id": 796,
+          "mob_skill": 3960
+        }
+      ]
+    },
+    "17902": {
+      "item": "Lucky Broth",
+      "pet_id": 64,
+      "pet": "Faithful Falcor",
+      "model": 1365,
+      "level": 86,
+      "moves": [
+        {
+          "name": "Back Heel",
+          "id": 749,
+          "mob_skill": 3915
+        },
+        {
+          "name": "Jettatura",
+          "id": 750,
+          "mob_skill": 3916
+        },
+        {
+          "name": "Choke Breath",
+          "id": 751,
+          "mob_skill": 3917
+        },
+        {
+          "name": "Fantod",
+          "id": 752,
+          "mob_skill": 3918
+        },
+        {
+          "name": "Hoof Volley",
+          "id": 797,
+          "mob_skill": 3961
+        },
+        {
+          "name": "Nihility Song",
+          "id": 798,
+          "mob_skill": 3962
+        }
+      ]
+    },
+    "17903": {
+      "item": "Shadowy Broth",
+      "pet_id": 65,
+      "pet": "Crude Raphie",
+      "model": 2382,
+      "level": 96,
+      "moves": [
+        {
+          "name": "Tortoise Stomp",
+          "id": 753,
+          "mob_skill": 3919
+        },
+        {
+          "name": "Harden Shell",
+          "id": 754,
+          "mob_skill": 3920
+        },
+        {
+          "name": "Aqua Breath",
+          "id": 755,
+          "mob_skill": 3921
+        }
+      ]
+    },
+    "17904": {
+      "item": "Briny Broth",
+      "pet_id": 66,
+      "pet": "Dapper Mac",
+      "model": 1723,
+      "level": 76,
+      "moves": [
+        {
+          "name": "Wing Slap",
+          "id": 756,
+          "mob_skill": 3922
+        },
+        {
+          "name": "Beak Lunge",
+          "id": 757,
+          "mob_skill": 3923
+        }
+      ]
+    },
+    "17905": {
+      "item": "Wormy Broth",
+      "pet_id": 67,
+      "pet": "Slippery Silas",
+      "model": 2239,
+      "level": 23,
+      "moves": []
+    },
+    "17906": {
+      "item": "Auroral Broth",
+      "pet_id": 68,
+      "pet": "Turbid Toloi",
+      "model": 350,
+      "level": 75,
+      "moves": [
+        {
+          "name": "Intimidate",
+          "id": 758,
+          "mob_skill": 3924
+        },
+        {
+          "name": "Recoil Dive",
+          "id": 759,
+          "mob_skill": 3925
+        },
+        {
+          "name": "Water Wall",
+          "id": 760,
+          "mob_skill": 3926
+        }
+      ]
+    },
+    "17907": {
+      "item": "Swirling Broth",
+      "pet_id": 118,
+      "pet": "Droopy Dortwin",
+      "model": 270,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Foot Kick",
+          "id": 672,
+          "mob_skill": 3840
+        },
+        {
+          "name": "Dust Cloud",
+          "id": 673,
+          "mob_skill": 3841
+        },
+        {
+          "name": "Whirl Claws",
+          "id": 674,
+          "mob_skill": 3842
+        },
+        {
+          "name": "Wild Carrot",
+          "id": 735,
+          "mob_skill": 3903
+        }
+      ]
+    },
+    "17908": {
+      "item": "Shimmering Broth",
+      "pet_id": 110,
+      "pet": "Sunburst Malfik",
+      "model": 357,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Bubble Shower",
+          "id": 693,
+          "mob_skill": 3861
+        },
+        {
+          "name": "Bubble Curtain",
+          "id": 694,
+          "mob_skill": 3862
+        },
+        {
+          "name": "Big Scissors",
+          "id": 695,
+          "mob_skill": 3863
+        },
+        {
+          "name": "Scissor Guard",
+          "id": 696,
+          "mob_skill": 3864
+        },
+        {
+          "name": "Metallic Body",
+          "id": 697,
+          "mob_skill": 3865
+        }
+      ]
+    },
+    "17909": {
+      "item": "Spicy Broth",
+      "pet_id": 112,
+      "pet": "Scissorleg Xerin",
+      "model": 2545,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Sensilla Blades",
+          "id": 761,
+          "mob_skill": 3927
+        },
+        {
+          "name": "Tegmina Buffet",
+          "id": 762,
+          "mob_skill": 3928
+        }
+      ]
+    },
+    "17911": {
+      "item": "Salubrious Broth",
+      "pet_id": 108,
+      "pet": "Attentive Ibuki",
+      "model": 2595,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Molting Plumage",
+          "id": 763,
+          "mob_skill": 3929
+        },
+        {
+          "name": "Swooping Frenzy",
+          "id": 764,
+          "mob_skill": 3930
+        },
+        {
+          "name": "Pentapeck",
+          "id": 767,
+          "mob_skill": 3933
+        }
+      ]
+    },
+    "17912": {
+      "item": "Fizzy Broth",
+      "pet_id": 90,
+      "pet": "Caring Kiyomaro",
+      "model": 2600,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Sweeping Gouge",
+          "id": 765,
+          "mob_skill": 3931
+        },
+        {
+          "name": "Zealous Snort",
+          "id": 766,
+          "mob_skill": 3932
+        }
+      ]
+    },
+    "17913": {
+      "item": "Saline Broth",
+      "pet_id": 105,
+      "pet": "Sharpwit Hermes",
+      "model": 301,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Head Butt",
+          "id": 675,
+          "mob_skill": 3843
+        },
+        {
+          "name": "Dream Flower",
+          "id": 676,
+          "mob_skill": 3844
+        },
+        {
+          "name": "Wild Oats",
+          "id": 677,
+          "mob_skill": 3845
+        },
+        {
+          "name": "Leaf Dagger",
+          "id": 678,
+          "mob_skill": 3846
+        },
+        {
+          "name": "Scream",
+          "id": 679,
+          "mob_skill": 3847
+        }
+      ]
+    },
+    "17914": {
+      "item": "Wispy Broth",
+      "pet_id": 125,
+      "pet": "Brave Hero Glenn",
+      "model": 2666,
+      "level": 99,
+      "moves": []
+    },
+    "17915": {
+      "item": "Vis. Broth",
+      "pet_id": 119,
+      "pet": "Pondering Peter",
+      "model": 270,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Foot Kick",
+          "id": 672,
+          "mob_skill": 3840
+        },
+        {
+          "name": "Dust Cloud",
+          "id": 673,
+          "mob_skill": 3841
+        },
+        {
+          "name": "Whirl Claws",
+          "id": 674,
+          "mob_skill": 3842
+        },
+        {
+          "name": "Wild Carrot",
+          "id": 735,
+          "mob_skill": 3903
+        }
+      ]
+    },
+    "17916": {
+      "item": "Ferm. Broth",
+      "pet_id": 111,
+      "pet": "Aged Angus",
+      "model": 356,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Bubble Shower",
+          "id": 693,
+          "mob_skill": 3861
+        },
+        {
+          "name": "Bubble Curtain",
+          "id": 694,
+          "mob_skill": 3862
+        },
+        {
+          "name": "Big Scissors",
+          "id": 695,
+          "mob_skill": 3863
+        },
+        {
+          "name": "Scissor Guard",
+          "id": 696,
+          "mob_skill": 3864
+        },
+        {
+          "name": "Metallic Body",
+          "id": 697,
+          "mob_skill": 3865
+        }
+      ]
+    },
+    "17917": {
+      "item": "Bubbly Broth",
+      "pet_id": 113,
+      "pet": "Bouncing Bertha",
+      "model": 2545,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Sensilla Blades",
+          "id": 761,
+          "mob_skill": 3927
+        },
+        {
+          "name": "Tegmina Buffet",
+          "id": 762,
+          "mob_skill": 3928
+        }
+      ]
+    },
+    "17918": {
+      "item": "Windy Greens",
+      "pet_id": 109,
+      "pet": "Swooping Zhivago",
+      "model": 2595,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Molting Plumage",
+          "id": 763,
+          "mob_skill": 3929
+        },
+        {
+          "name": "Swooping Frenzy",
+          "id": 764,
+          "mob_skill": 3930
+        },
+        {
+          "name": "Pentapeck",
+          "id": 767,
+          "mob_skill": 3933
+        }
+      ]
+    },
+    "17919": {
+      "item": "Tant. Broth",
+      "pet_id": 91,
+      "pet": "Vivacious Vickie",
+      "model": 2600,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Sweeping Gouge",
+          "id": 765,
+          "mob_skill": 3931
+        },
+        {
+          "name": "Zealous Snort",
+          "id": 766,
+          "mob_skill": 3932
+        }
+      ]
+    },
+    "17920": {
+      "item": "Meaty Broth",
+      "pet_id": 97,
+      "pet": "Blackbeard Randy",
+      "model": 308,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Roar",
+          "id": 680,
+          "mob_skill": 3848
+        },
+        {
+          "name": "Razor Fang",
+          "id": 681,
+          "mob_skill": 3849
+        },
+        {
+          "name": "Claw Cyclone",
+          "id": 682,
+          "mob_skill": 3850
+        },
+        {
+          "name": "Crossthrash",
+          "id": 795,
+          "mob_skill": 3959
+        },
+        {
+          "name": "Predatory Glare",
+          "id": 796,
+          "mob_skill": 3960
+        }
+      ]
+    },
+    "17921": {
+      "item": "Muddy Broth",
+      "pet_id": 98,
+      "pet": "Threestar Lynn",
+      "model": 2018,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Sudden Lunge",
+          "id": 736,
+          "mob_skill": 3904
+        },
+        {
+          "name": "Spiral Spin",
+          "id": 737,
+          "mob_skill": 3905
+        },
+        {
+          "name": "Noisome Powder",
+          "id": 738,
+          "mob_skill": 3906
+        }
+      ]
+    },
+    "17922": {
+      "item": "Blackwater Broth",
+      "pet_id": 79,
+      "pet": "Headbreaker Ken",
+      "model": 449,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Cursed Sphere",
+          "id": 712,
+          "mob_skill": 3880
+        },
+        {
+          "name": "Venom",
+          "id": 713,
+          "mob_skill": 3881
+        },
+        {
+          "name": "Somersault",
+          "id": 772,
+          "mob_skill": 3938
+        }
+      ]
+    },
+    "21438": {
+      "item": "Poisonous Broth",
+      "pet_id": 100,
+      "pet": "Acuex Familiar",
+      "model": 2570,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Foul Waters",
+          "id": 774,
+          "mob_skill": 3939
+        },
+        {
+          "name": "Pestilent Plume",
+          "id": 775,
+          "mob_skill": 3940
+        }
+      ]
+    },
+    "21439": {
+      "item": "Venomous Broth",
+      "pet_id": 101,
+      "pet": "Fluffy Bredo",
+      "model": 2570,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Foul Waters",
+          "id": 774,
+          "mob_skill": 3939
+        },
+        {
+          "name": "Pestilent Plume",
+          "id": 775,
+          "mob_skill": 3940
+        }
+      ]
+    },
+    "21440": {
+      "item": "Sugary Broth",
+      "pet_id": 116,
+      "pet": "Colibri Familiar",
+      "model": 1720,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Pecking Flurry",
+          "id": 776,
+          "mob_skill": 3941
+        }
+      ]
+    },
+    "21441": {
+      "item": "Glazed Broth",
+      "pet_id": 117,
+      "pet": "Choral Leera",
+      "model": 1720,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Pecking Flurry",
+          "id": 776,
+          "mob_skill": 3941
+        }
+      ]
+    },
+    "21442": {
+      "item": "Sticky Webbing",
+      "pet_id": 114,
+      "pet": "Spider Familiar",
+      "model": 310,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Sickle Slash",
+          "id": 777,
+          "mob_skill": 3942
+        },
+        {
+          "name": "Acid Spray",
+          "id": 778,
+          "mob_skill": 3943
+        },
+        {
+          "name": "Spider Web",
+          "id": 779,
+          "mob_skill": 3944
+        }
+      ]
+    },
+    "21443": {
+      "item": "Slimy Webbing",
+      "pet_id": 115,
+      "pet": "Gussy Hachirobe",
+      "model": 310,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Sickle Slash",
+          "id": 777,
+          "mob_skill": 3942
+        },
+        {
+          "name": "Acid Spray",
+          "id": 778,
+          "mob_skill": 3943
+        },
+        {
+          "name": "Spider Web",
+          "id": 779,
+          "mob_skill": 3944
+        }
+      ]
+    },
+    "21444": {
+      "item": "Livid Broth",
+      "pet_id": 95,
+      "pet": "Warlike Patrick",
+      "model": 328,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Tail Blow",
+          "id": 683,
+          "mob_skill": 3851
+        },
+        {
+          "name": "Fireball",
+          "id": 684,
+          "mob_skill": 3852
+        },
+        {
+          "name": "Blockhead",
+          "id": 685,
+          "mob_skill": 3853
+        },
+        {
+          "name": "Brain Crush",
+          "id": 686,
+          "mob_skill": 3854
+        },
+        {
+          "name": "Infrasonics",
+          "id": 687,
+          "mob_skill": 3855
+        },
+        {
+          "name": "Secretion",
+          "id": 688,
+          "mob_skill": 3856
+        }
+      ]
+    },
+    "21445": {
+      "item": "Lyrical Broth",
+      "pet_id": 96,
+      "pet": "Rhyming Shizuna",
+      "model": 340,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Lamb Chop",
+          "id": 689,
+          "mob_skill": 3857
+        },
+        {
+          "name": "Rage",
+          "id": 690,
+          "mob_skill": 3858
+        },
+        {
+          "name": "Sheep Charge",
+          "id": 691,
+          "mob_skill": 3859
+        },
+        {
+          "name": "Sheep Song",
+          "id": 692,
+          "mob_skill": 3860
+        }
+      ]
+    },
+    "21446": {
+      "item": "Airy Broth",
+      "pet_id": 78,
+      "pet": "Amiable Roche",
+      "model": 350,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Intimidate",
+          "id": 758,
+          "mob_skill": 3924
+        },
+        {
+          "name": "Recoil Dive",
+          "id": 759,
+          "mob_skill": 3925
+        },
+        {
+          "name": "Water Wall",
+          "id": 760,
+          "mob_skill": 3926
+        }
+      ]
+    },
+    "21447": {
+      "item": "Crumbly Soil",
+      "pet_id": 82,
+      "pet": "Brainy Waluis",
+      "model": 376,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Frogkick",
+          "id": 700,
+          "mob_skill": 3868
+        },
+        {
+          "name": "Spore",
+          "id": 701,
+          "mob_skill": 3869
+        },
+        {
+          "name": "Queasyshroom",
+          "id": 702,
+          "mob_skill": 3870
+        },
+        {
+          "name": "Numbshroom",
+          "id": 703,
+          "mob_skill": 3871
+        },
+        {
+          "name": "Shakeshroom",
+          "id": 704,
+          "mob_skill": 3872
+        },
+        {
+          "name": "Silence Gas",
+          "id": 705,
+          "mob_skill": 3873
+        },
+        {
+          "name": "Dark Spore",
+          "id": 706,
+          "mob_skill": 3874
+        }
+      ]
+    },
+    "21448": {
+      "item": "Pale Sap",
+      "pet_id": 99,
+      "pet": "Hurler Percival",
+      "model": 408,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Power Attack",
+          "id": 707,
+          "mob_skill": 3875
+        },
+        {
+          "name": "Hi-Freq Field",
+          "id": 708,
+          "mob_skill": 3876
+        },
+        {
+          "name": "Rhino Attack",
+          "id": 709,
+          "mob_skill": 3877
+        },
+        {
+          "name": "Rhino Guard",
+          "id": 710,
+          "mob_skill": 3878
+        },
+        {
+          "name": "Spoil",
+          "id": 711,
+          "mob_skill": 3879
+        }
+      ]
+    },
+    "21449": {
+      "item": "Dire Broth",
+      "pet_id": 85,
+      "pet": "Generous Arthur",
+      "model": 2021,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Purulent Ooze",
+          "id": 747,
+          "mob_skill": 3913
+        },
+        {
+          "name": "Corrosive Ooze",
+          "id": 748,
+          "mob_skill": 3914
+        }
+      ]
+    },
+    "21450": {
+      "item": "Electrified Broth",
+      "pet_id": 86,
+      "pet": "Redolent Candi",
+      "model": 2550,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Tickling Tendrils",
+          "id": 768,
+          "mob_skill": 3934
+        },
+        {
+          "name": "Stink Bomb",
+          "id": 769,
+          "mob_skill": 3935
+        },
+        {
+          "name": "Nectarous Deluge",
+          "id": 770,
+          "mob_skill": 3936
+        },
+        {
+          "name": "Nepenthic Plunge",
+          "id": 771,
+          "mob_skill": 3937
+        }
+      ]
+    },
+    "21451": {
+      "item": "Bug-ridden Broth",
+      "pet_id": 87,
+      "pet": "Alluring Honey",
+      "model": 2550,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Tickling Tendrils",
+          "id": 768,
+          "mob_skill": 3934
+        },
+        {
+          "name": "Stink Bomb",
+          "id": 769,
+          "mob_skill": 3935
+        },
+        {
+          "name": "Nectarous Deluge",
+          "id": 770,
+          "mob_skill": 3936
+        },
+        {
+          "name": "Nepenthic Plunge",
+          "id": 771,
+          "mob_skill": 3937
+        }
+      ]
+    },
+    "21464": {
+      "item": "Rancid Broth",
+      "pet_id": 106,
+      "pet": "P. Crab Familiar",
+      "model": 358,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Venom Shower",
+          "id": 788,
+          "mob_skill": 3952
+        },
+        {
+          "name": "Bubble Curtain",
+          "id": 694,
+          "mob_skill": 3862
+        },
+        {
+          "name": "Mega Scissors",
+          "id": 789,
+          "mob_skill": 3953
+        },
+        {
+          "name": "Scissor Guard",
+          "id": 696,
+          "mob_skill": 3864
+        },
+        {
+          "name": "Metallic Body",
+          "id": 697,
+          "mob_skill": 3865
+        }
+      ]
+    },
+    "21465": {
+      "item": "Pungent Broth",
+      "pet_id": 107,
+      "pet": "Jovial Edwin",
+      "model": 358,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Venom Shower",
+          "id": 788,
+          "mob_skill": 3952
+        },
+        {
+          "name": "Bubble Curtain",
+          "id": 694,
+          "mob_skill": 3862
+        },
+        {
+          "name": "Mega Scissors",
+          "id": 789,
+          "mob_skill": 3953
+        },
+        {
+          "name": "Scissor Guard",
+          "id": 696,
+          "mob_skill": 3864
+        },
+        {
+          "name": "Metallic Body",
+          "id": 697,
+          "mob_skill": 3865
+        }
+      ]
+    },
+    "21466": {
+      "item": "Frizzante Broth",
+      "pet_id": 88,
+      "pet": "Lynx Familiar",
+      "model": 2246,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Chaotic Eye",
+          "id": 730,
+          "mob_skill": 3898
+        },
+        {
+          "name": "Blaster",
+          "id": 731,
+          "mob_skill": 3899
+        },
+        {
+          "name": "Charged Whisker",
+          "id": 746,
+          "mob_skill": 3912
+        },
+        {
+          "name": "Frenzied Rage",
+          "id": 790,
+          "mob_skill": 3954
+        }
+      ]
+    },
+    "21467": {
+      "item": "Spumante Broth",
+      "pet_id": 89,
+      "pet": "Vivacious Gaston",
+      "model": 2246,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Chaotic Eye",
+          "id": 730,
+          "mob_skill": 3898
+        },
+        {
+          "name": "Blaster",
+          "id": 731,
+          "mob_skill": 3899
+        },
+        {
+          "name": "Charged Whisker",
+          "id": 746,
+          "mob_skill": 3912
+        },
+        {
+          "name": "Frenzied Rage",
+          "id": 790,
+          "mob_skill": 3954
+        }
+      ]
+    },
+    "21468": {
+      "item": "Zestful Sap",
+      "pet_id": 126,
+      "pet": "Y. Beetle Familiar",
+      "model": 410,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Power Attack",
+          "id": 707,
+          "mob_skill": 3875
+        },
+        {
+          "name": "Hi-Freq Field",
+          "id": 708,
+          "mob_skill": 3876
+        },
+        {
+          "name": "Rhino Attack",
+          "id": 709,
+          "mob_skill": 3877
+        },
+        {
+          "name": "Rhino Guard",
+          "id": 710,
+          "mob_skill": 3878
+        },
+        {
+          "name": "Spoil",
+          "id": 711,
+          "mob_skill": 3879
+        },
+        {
+          "name": "Rhinowrecker",
+          "id": 791,
+          "mob_skill": 3955
+        }
+      ]
+    },
+    "21469": {
+      "item": "Gassy Sap",
+      "pet_id": 127,
+      "pet": "Energized Sefina",
+      "model": 410,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Power Attack",
+          "id": 707,
+          "mob_skill": 3875
+        },
+        {
+          "name": "Hi-Freq Field",
+          "id": 708,
+          "mob_skill": 3876
+        },
+        {
+          "name": "Rhino Attack",
+          "id": 709,
+          "mob_skill": 3877
+        },
+        {
+          "name": "Rhino Guard",
+          "id": 710,
+          "mob_skill": 3878
+        },
+        {
+          "name": "Spoil",
+          "id": 711,
+          "mob_skill": 3879
+        },
+        {
+          "name": "Rhinowrecker",
+          "id": 791,
+          "mob_skill": 3955
+        }
+      ]
+    },
+    "21470": {
+      "item": "Decaying Broth",
+      "pet_id": 83,
+      "pet": "Slime Familiar",
+      "model": 292,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Fluid Toss",
+          "id": 792,
+          "mob_skill": 3956
+        },
+        {
+          "name": "Fluid Spread",
+          "id": 793,
+          "mob_skill": 3957
+        },
+        {
+          "name": "Digest",
+          "id": 794,
+          "mob_skill": 3958
+        }
+      ]
+    },
+    "21471": {
+      "item": "Putrescent Broth",
+      "pet_id": 84,
+      "pet": "Sultry Patrice",
+      "model": 292,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Fluid Toss",
+          "id": 792,
+          "mob_skill": 3956
+        },
+        {
+          "name": "Fluid Spread",
+          "id": 793,
+          "mob_skill": 3957
+        },
+        {
+          "name": "Digest",
+          "id": 794,
+          "mob_skill": 3958
+        }
+      ]
+    },
+    "21472": {
+      "item": "Turpid Broth",
+      "pet_id": 121,
+      "pet": "Hip. Familiar",
+      "model": 1365,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Back Heel",
+          "id": 749,
+          "mob_skill": 3915
+        },
+        {
+          "name": "Jettatura",
+          "id": 750,
+          "mob_skill": 3916
+        },
+        {
+          "name": "Choke Breath",
+          "id": 751,
+          "mob_skill": 3917
+        },
+        {
+          "name": "Fantod",
+          "id": 752,
+          "mob_skill": 3918
+        },
+        {
+          "name": "Hoof Volley",
+          "id": 797,
+          "mob_skill": 3961
+        },
+        {
+          "name": "Nihility Song",
+          "id": 798,
+          "mob_skill": 3962
+        }
+      ]
+    },
+    "21473": {
+      "item": "Feculent Broth",
+      "pet_id": 122,
+      "pet": "Daring Roland",
+      "model": 1365,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Back Heel",
+          "id": 749,
+          "mob_skill": 3915
+        },
+        {
+          "name": "Jettatura",
+          "id": 750,
+          "mob_skill": 3916
+        },
+        {
+          "name": "Choke Breath",
+          "id": 751,
+          "mob_skill": 3917
+        },
+        {
+          "name": "Fantod",
+          "id": 752,
+          "mob_skill": 3918
+        },
+        {
+          "name": "Hoof Volley",
+          "id": 797,
+          "mob_skill": 3961
+        },
+        {
+          "name": "Nihility Song",
+          "id": 798,
+          "mob_skill": 3962
+        }
+      ]
+    },
+    "21488": {
+      "item": "Pristine Sap",
+      "pet_id": 102,
+      "pet": "Weevil Familiar",
+      "model": 2943,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Disembowel",
+          "id": 786,
+          "mob_skill": 3950
+        },
+        {
+          "name": "Extirpating Salvo",
+          "id": 787,
+          "mob_skill": 3951
+        }
+      ]
+    },
+    "21489": {
+      "item": "T. Pristine Sap",
+      "pet_id": 103,
+      "pet": "Stalwart Angelina",
+      "model": 2943,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Disembowel",
+          "id": 786,
+          "mob_skill": 3950
+        },
+        {
+          "name": "Extirpating Salvo",
+          "id": 787,
+          "mob_skill": 3951
+        }
+      ]
+    },
+    "21490": {
+      "item": "Aged Humus",
+      "pet_id": 77,
+      "pet": "Sweet Caroline",
+      "model": 2958,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Head Butt",
+          "id": 675,
+          "mob_skill": 3843
+        },
+        {
+          "name": "Wild Oats",
+          "id": 677,
+          "mob_skill": 3845
+        },
+        {
+          "name": "Leaf Dagger",
+          "id": 678,
+          "mob_skill": 3846
+        },
+        {
+          "name": "Scream",
+          "id": 679,
+          "mob_skill": 3847
+        }
+      ]
+    },
+    "21492": {
+      "item": "Insipid Broth",
+      "pet_id": 93,
+      "pet": "Surging Storm",
+      "model": 1723,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Wing Slap",
+          "id": 756,
+          "mob_skill": 3922
+        },
+        {
+          "name": "Beak Lunge",
+          "id": 757,
+          "mob_skill": 3923
+        }
+      ]
+    },
+    "21493": {
+      "item": "Deepwater Broth",
+      "pet_id": 94,
+      "pet": "Submerged Iyo",
+      "model": 1723,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Wing Slap",
+          "id": 756,
+          "mob_skill": 3922
+        },
+        {
+          "name": "Beak Lunge",
+          "id": 757,
+          "mob_skill": 3923
+        }
+      ]
+    },
+    "21494": {
+      "item": "Wetlands Broth",
+      "pet_id": 123,
+      "pet": "Mosquito Familiar",
+      "model": 2919,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Infected Leech",
+          "id": 781,
+          "mob_skill": 3945
+        },
+        {
+          "name": "Gloom Spray",
+          "id": 782,
+          "mob_skill": 3946
+        }
+      ]
+    },
+    "21495": {
+      "item": "Heavenly Broth",
+      "pet_id": 124,
+      "pet": "Left-Handed Yoko",
+      "model": 2919,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Infected Leech",
+          "id": 781,
+          "mob_skill": 3945
+        },
+        {
+          "name": "Gloom Spray",
+          "id": 782,
+          "mob_skill": 3946
+        }
+      ]
+    },
+    "21496": {
+      "item": "Furious Broth",
+      "pet_id": 92,
+      "pet": "Suspicious Alice",
+      "model": 1349,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Geist Wall",
+          "id": 721,
+          "mob_skill": 3889
+        },
+        {
+          "name": "Numbing Noise",
+          "id": 722,
+          "mob_skill": 3890
+        },
+        {
+          "name": "Nimble Snap",
+          "id": 723,
+          "mob_skill": 3891
+        },
+        {
+          "name": "Cyclotail",
+          "id": 724,
+          "mob_skill": 3892
+        },
+        {
+          "name": "Toxic Spit",
+          "id": 725,
+          "mob_skill": 3893
+        }
+      ]
+    },
+    "21497": {
+      "item": "Rapid Broth",
+      "pet_id": 104,
+      "pet": "Fleet Reinhard",
+      "model": 316,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Scythe Tail",
+          "id": 743,
+          "mob_skill": 3909
+        },
+        {
+          "name": "Ripper Fang",
+          "id": 744,
+          "mob_skill": 3910
+        },
+        {
+          "name": "Chomp Rush",
+          "id": 745,
+          "mob_skill": 3911
+        }
+      ]
+    },
+    "21498": {
+      "item": "Crackling Broth",
+      "pet_id": 80,
+      "pet": "Anklebiter Jedd",
+      "model": 1353,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Double Claw",
+          "id": 726,
+          "mob_skill": 3894
+        },
+        {
+          "name": "Grapple",
+          "id": 727,
+          "mob_skill": 3895
+        },
+        {
+          "name": "Spinning Top",
+          "id": 728,
+          "mob_skill": 3897
+        },
+        {
+          "name": "Filamented Hold",
+          "id": 729,
+          "mob_skill": 3896
+        }
+      ]
+    },
+    "21499": {
+      "item": "Creepy Broth",
+      "pet_id": 81,
+      "pet": "Cursed Annabelle",
+      "model": 1347,
+      "level": 99,
+      "moves": [
+        {
+          "name": "Sandblast",
+          "id": 714,
+          "mob_skill": 3882
+        },
+        {
+          "name": "Sandpit",
+          "id": 715,
+          "mob_skill": 3883
+        },
+        {
+          "name": "Venom Spray",
+          "id": 716,
+          "mob_skill": 3884
+        },
+        {
+          "name": "Mandibular Bite",
+          "id": 717,
+          "mob_skill": 3885
+        }
+      ]
+    }
+  }
+}

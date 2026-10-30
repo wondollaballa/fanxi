@@ -23,7 +23,7 @@ Nyame paths, Sakpata's, Gleti's and Agwu's armour and the seven Odyssey weapons,
 | `MNK.lua` | Monk | hand-to-hand, counter/HP | 29 |
 | `WHM.lua` | White Mage | healer, divine magic | 34 |
 | `BLM.lua` | Black Mage | elemental nuker | 32 |
-| `RDM.lua` | Red Mage | enfeebler/enspell hybrid | 35 |
+| `RDM.lua` | Red Mage | enfeebler/enspell hybrid | 40 |
 | `THF.lua` | Thief | dual-wield dagger, TH | 34 |
 | `PLD.lua` | Paladin | sword-and-shield tank | 39 |
 | `DRK.lua` | Dark Knight | scythe, drain/aspir | 44 |
@@ -43,7 +43,7 @@ Nyame paths, Sakpata's, Gleti's and Agwu's armour and the seven Odyssey weapons,
 | `RUN.lua` | Rune Fencer | great-sword tank, runes | 42 |
 
 "Sets" is what the launcher lists after import (empty group tables are not
-counted). Together the folder defines **751 importable sets**, counted with the
+counted). Together the folder defines **756 importable sets**, counted with the
 launcher's own flatten pass.
 
 The same files also carry the five **Limbus** top-tier suits: a `local limbus`
@@ -111,6 +111,11 @@ cast), so picking one on the page releases the other.
 The plan is built from static set tables; user functions (`precast`, `midcast`, `aftercast`,
 `rule`) are still not run — see the note below.
 
+Call Beast and Bestial Loyalty are the one exception: the HUD's jug picker wears the chosen
+jug first and gives the phase engine a one-shot precast piece for it, so the jug is still on
+behind the held action packet and the normal state set returns afterwards. No `sets.precast`
+edit is needed.
+
 ## Where the requested categories live
 
 Paths are exactly what the launcher displays (`sets.midcast.Enfeebling Magic`,
@@ -134,7 +139,7 @@ not `sets.midcast["Enfeebling Magic"]`).
 | MAB (elemental) | `sets.midcast.Elemental Magic` | SCH free nuke: Indomitable head/body/legs + Arbatel Loafers +3; Nyame MAB + Eschan Stone + Friomisi/Crematio + Metamorph/Mujin elsewhere |
 | Magic burst (elemental) | `sets.midcast.Elemental Magic MB` | SCH only: Nyame C keeps Magic Burst Damage II +5–7 |
 | Helix | `sets.midcast.Helix` | SCH only: Indomitable head/body/legs, Arbatel Bracers +3 and Loafers +3 |
-| Cure | `sets.midcast.Healing Magic` | WHM, RDM, PLD, SCH, RUN |
+| Cure | `sets.midcast.Healing Magic`; RDM also has `sets.midcast.Cure` / `CureHP` | WHM, RDM, PLD, SCH, RUN |
 | Regen | `sets.midcast.Regen_Potency`, `sets.midcast.Regen_Duration` | SCH only: Telchine carries both `"Regen" potency +10` and `Enh. Mag. eff. dur. +10`; Bookworm's both; duration adds Arbatel Bracers +3 and Lugh's Cape |
 | Enmity+ | `sets.enmity.up` | PLD, RUN, WAR, DRK |
 | Enmity− | `sets.enmity.down` | WHM, BRD, RNG, COR |
@@ -143,6 +148,15 @@ not `sets.midcast["Enfeebling Magic"]`).
 | Pets | `sets.pet.*`, `sets.avatar.*`, `sets.automaton.*`, `sets.wyvern.*` | BST, SMN, PUP, DRG |
 | Ranged | `sets.ranged.tp`/`.acc`/`.snapshot` (RNG), `.tp`/`.acc`/`.mab` (COR) | RNG, COR |
 | Treasure Hunter | `sets.TH` | THF |
+
+RDM carries two cure sets. `sets.midcast.Cure` is the max-potency build (Daybreak +
+Telchine Gloves + Jann's Ring); `sets.midcast.CureHP` uses the Sworn body, the max-HP
+neck and rings, Daybreak and Jann's Ring.  Its max HP is slightly above
+`sets.idle.maxhp`, so a percentage-based auto-heal cannot clamp the bar down on the
+midcast swap, return to the larger idle set and immediately cross its threshold again.
+If you idle in max HP gear and heal automatically, point **Curing → Potency** at
+`midcast.CureHP` (or latch the auto-heal rule); the max-potency set is about 190 HP
+below `sets.idle.maxhp` and can re-trigger a 90% rule.
 
 ## Why the files look like this
 
@@ -229,8 +243,8 @@ Consequences:
 - **Import always works** — the importer never looks items up.
 - **Wear set** finds every library item that is in a bag after migration 0066 and a
   zone/relog. The control addon searches containers 0–17, so wardrobe items are
-  wearable. An item you deliberately put on a storage slip with `//storage store`
-  must be returned with `//storage grab <job|all>` first.
+  wearable. An item you deliberately put into storage with `//storage store`
+  must be returned with `//storage grab <job|all>` or `//storage organize` first.
 - A database that has not run 0066 only has the seed slice (WAR, NIN, SCH, BST
   and a few weapons); there, Wear set reports the missing items as before.
 
@@ -296,8 +310,8 @@ exact build matters.
 4. Open an augmented set (for example `sets.idle.pdt`); items with an augment
    build are marked `*`, or `R30` for Nyame/Sakpata's, and the first one is selected so the augment line shows
    the R30 values. **Wear set** still equips by base name; items deliberately on
-   a storage slip are reported missing until `//storage grab <job|all>` returns
-   them.
+   storage are reported missing until `//storage grab <job|all>` or `//storage organize`
+   returns them.
 5. **Save version…**; the `.lua` should appear in the chosen folder with a
    `-YYYYMMDD-HHMMSS` suffix, and a JSON copy under
    `<data dir>/gearswap/<version>.json`. The saved file is flattened: it keeps

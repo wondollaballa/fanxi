@@ -62,8 +62,17 @@ EXTRA = {
 ASSIGN = re.compile(r"params\.([A-Za-z_0-9]+)\s*=\s*")
 NUMBER = re.compile(r"-?\d+(?:\.\d+)?")
 TABLE = re.compile(r"\{([^{}]*)\}")
+ELEMENT = re.compile(r"xi\.element\.([A-Za-z_]+)")
 OPENERS = re.compile(r"\b(if|for|while|function)\b")
 END = re.compile(r"\bend\b")
+
+# Per-skill values the Adoulin script does not carry.  Sanguine Blade is published as
+# dSTAT = (player INT - target INT) * 2 (BG-wiki); Seraph Blade and Seraph Strike are 0,
+# which is the default.  The element itself comes from ``params.ele`` when the script
+# names it.
+PUBLISHED = {
+    47: {"dstat": {"stat": "int", "mult": 2.0, "cap": 0}},
+}
 
 
 def slug(name: str) -> str:
@@ -208,6 +217,10 @@ def parse_script(path: Path) -> dict:
         row["hybrid"] = True
     if "doMagicWeaponskill" in text:
         row["magic"] = True
+    if "ele" in parameters:
+        element = ELEMENT.search(parameters["ele"])
+        if element is not None:
+            row["element"] = element.group(1).lower()
     return row
 
 
@@ -245,6 +258,7 @@ def main() -> int:
         row = parse_script(path)
         if not row:
             continue
+        row.update(PUBLISHED.get(ws_id, {}))
         row.update(id=ws_id, name=name, skill=skill)
         table[str(ws_id)] = row
 

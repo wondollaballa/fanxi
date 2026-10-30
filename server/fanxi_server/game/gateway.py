@@ -300,12 +300,8 @@ class Gateway:
         sockets.append(_listen(bind, ports["data_port"], self.data))
         sockets.append(_listen(bind, ports["view_port"], self.lobby.serve))
         sockets.append(_listen(bind, ports["search_port"], self.search.serve))
-        udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        udp.bind((bind, ports["zone_port"]))
-        udp.settimeout(0.25)
+        udp = self._bind_zone_socket()
         sockets.append(udp)
-        self._udp = udp
-        self.world.udp = udp
         self.world.sockets.extend(sockets)
         # Only publish the live roster once every socket exists: a half-started gateway must
         # not make the HTTP API claim it can see zone sessions.
@@ -429,25 +425,77 @@ class Gateway:
             conn.close()
 
     # --- zone ----------------------------------------------------------------------------------
+    def _bind_zone_socket(self) -> socket.socket:
+        """Bind the zone gateway's UDP socket (also used to rebind a socket that went deaf)."""
+        udp = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        udp.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        udp.bind((self.config.bind, self.config.ports["zone_port"]))
+        udp.settimeout(0.25)
+        self._udp = udp
+        self.world.udp = udp
+        return udp
+
+    def _zone_sessions_live(self) -> bool:
+        return any(getattr(session, "logged_in", False) and not getattr(session, "gone", False)
+                   for session in list(self.world.sessions.values()))
+
+    def _rebind_zone(self, udp: socket.socket) -> socket.socket:
+        """Replace a zone socket that stopped receiving, keeping the port and sessions."""
+        try:
+            udp.close()
+        except OSError:
+            pass
+        try:
+            self.world.sockets.remove(udp)
+        except ValueError:
+            pass
+        fresh = self._bind_zone_socket()
+        self.world.sockets.append(fresh)
+        log.warning("zone socket rebound on %s:%d", self.config.bind,
+                    self.config.ports["zone_port"])
+        return fresh
+
     def zone_loop(self, udp: socket.socket):
         last_flush = 0.0
+        last_packet = time.time()
         while True:
             try:
                 data, addr = udp.recvfrom(4096)
+                last_packet = time.time()
             except socket.timeout:
+                now = time.time()
+                # A client's UDP socket can keep working while this bound socket stops
+                # receiving (a route/interface flap under a long-lived socket).  That looks
+                # exactly like every client going silent at once and strands them on
+                # FFXI-4001, while a fresh socket on the same port answers normally.  When
+                # sessions are online and nothing has arrived for a few heartbeats, replace
+                # the socket; the clients' next packet lands on the new one and resumes.
                 try:
-                    self.world.tick(time.time())
+                    self.world.tick(now)
                 except Exception as exc:
                     log.warning("world tick: %s: %s", type(exc).__name__, exc)
-                last_flush = time.time()
+                last_flush = now
                 continue
-            except OSError:
-                return
+            except OSError as exc:
+                # One bad read must not kill the zone gateway for the rest of the process
+                # (the HTTP API would keep running while every client lost the game).
+                log.warning("zone socket: %s; rebinding", exc)
+                udp = self._rebind_zone(udp)
+                last_packet = time.time()
+                continue
             try:
                 session = self.world.sessions.get(addr)
                 out = ZoneSession.incoming(self.world, session, addr, bytearray(data))
                 if out:
                     udp.sendto(out, addr)
+                # A login also sends its zone-in sealed under the older keys this
+                # hand-off used (see ZoneSession.zone_in_copies): a client that missed a
+                # 0x00B is on one of those, and one readable copy is enough.
+                reply_session = self.world.sessions.get(addr)
+                if reply_session is not None and reply_session.extra_packets:
+                    extra, reply_session.extra_packets = reply_session.extra_packets, []
+                    for packet in extra:
+                        udp.sendto(packet, addr)
             except Exception as exc:  # one bad packet must not stop the zone
                 log.warning("zone %s: %s: %s", addr, type(exc).__name__, exc)
             # Do not let one busy client starve the others: the socket only times out when

@@ -104,6 +104,28 @@ style rows (34% total) reach the attack round's per-hand multi-attack roll.
 | Clem. Haidate | legs | 24191 | 495 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-8 | "Quadruple Attack"+4% | Pet: Accuracy+30 Mag. Acc.+30 |
 | Clem. Sune-Ate | feet | 24194 | 496 | Accuracy+30 Rng. Acc.+30 Mag. Acc.+30 | Enmity-9 | "Quadruple Attack"+5% | Pet: Accuracy+30 Mag. Acc.+30 |
 
+## Temenos Furnace: Alabaster and Murky Matter
+
+The four Furnace pieces are Limbus gear too, but they do not use the armour
+sets' augment bundles: their Rank 30 rows are fixed. Alabaster Mantle, Murky
+Mantle and Murky Ring map onto the client's **standard** augment ids, so each
+copy carries the same 24-byte block an Ambuscade cape does. Alabaster Earring's
+`All Attr.+10` row has no standard id, so it carries client bundle **468**
+instead, which encodes exactly its three Rank 30 rows. `data/temenos_r30.json`
+holds the fixed picks and the bundle; the RP card caps them in one click and the
+stat sheet reads them through `augment_stats`.
+
+| Piece | Slot | Item ID | Rank 30 rows |
+| --- | --- | --- | --- |
+| Alabaster Mantle | back | 26275 | Accuracy+25 Rng. Acc.+25 · Attack+25 Rng. Atk.+25 · STR/DEX+15 · Enmity-10 |
+| Murky Mantle | back | 26276 | Mag. Acc.+25 · Magic Damage+25 · INT+15 · Enmity-10 |
+| Murky Ring | ring | 26234 | Accuracy+15 Rng. Acc.+15 Mag. Acc.+15 · Evasion+10 Mag. Evasion+10 · Critical hit rate+5% |
+| Alabaster Earring | ear | 26119 | Accuracy+15 Rng. Acc.+15 Mag. Acc.+15 · All Attr.+10 · "Store TP"+5 |
+
+The client prints the two-stat rows as its own augment ids, so the Mantle shows
+**Accuracy+Attack** and **Ranged Accuracy+Ranged Attack** rather than the wiki's
+Accuracy/Ranged Accuracy split; the totals are the same.
+
 ## Where they go in the libraries
 
 The community read (a Japanese dragoon's January 2026 run-down of all five

@@ -9,6 +9,8 @@ from __future__ import annotations
 import json
 import math
 import secrets
+from functools import lru_cache
+from pathlib import Path
 import sqlite3
 import time
 import logging
@@ -18,7 +20,14 @@ from datetime import datetime, timedelta
 from . import __version__
 from .config import Config
 from .db import Database
-from .game import augment_gear, augment_stats, capes, design as character_design, oboro
+from .game import (ascension, augment_gear, augment_stats, capes, design as character_design,
+                   effects, glyptics, item_effects, job_points, magian, merit_menus,
+                   merits as merit_table, mezzotint, moonshade, oboro, sinister, skirmish)
+from .game import modifiers as mod, prime_weapons, rema_weapons
+
+SPELL_LEVELS_PATH = Path(__file__).resolve().parents[2] / "data" / "spell_levels.json"
+WEAPON_SKILL_PROPERTIES_PATH = (Path(__file__).resolve().parents[2]
+                                / "data" / "weapon_skill_properties.json")
 from .security import (
     ValidationError,
     expired,
@@ -40,6 +49,8 @@ from .security import (
 
 log = logging.getLogger("fanxi.service")
 
+BATTLE_SHARED_KEYS = ("roster", "camp", "support_camp", "camp_assign", "combat_style", "rules")
+
 CHAR_ID_BASE = 0x01000000
 DEFAULT_ZONE = 246
 # The original starting city for each nation: San d'Oria, Bastok, Windurst.
@@ -52,10 +63,14 @@ STARTER_ITEMS = ((1, 4112, 2), (2, 16534, 1))  # slot, item id, quantity
 # The client's container numbers.  Storage is 2; the wardrobes are 8 and 10-16.
 CONTAINER_INVENTORY = 0
 CONTAINER_STORAGE = 2
+CONTAINER_RECYCLE = 17         # the client's Recycle Bin
 CONTAINER_SLOTS = 81           # 0-80 in the inventory, 1-80 in every storage bag
+RECYCLE_DAYS = 30
 STORAGE_CAPACITY = CONTAINER_SLOTS - 1
 # The hidden general-purpose locker is not a client container; the client's own bag
-# capacity is one byte, so 9999 is a server-side limit, not a visible bag size.
+# capacity is one byte, so 9999 is a server-side limit, not a visible bag size.  Capacity
+# counts storage entries (one row per item id + augment block), not units: a 99-item jug
+# stack is one slot, which is also how the client's storage menus are laid out.
 LOCKER_CAPACITY = 9999
 # Items kept visible in the inventory because the client refuses to use what it cannot
 # see.  The bulk lives in char_locker; refill_working_stock() tops these up after use.
@@ -78,6 +93,21 @@ STORAGE_DESTINATIONS = (0, 8, 10, 11, 12, 13, 14, 15, 16, 1, 9, 5, 6, 7)
 # uses: they are permanent, visible in the equipment window, and can hold worn gear.
 WARDROBE_CONTAINERS = (8, 10, 11, 12, 13, 14, 15, 16)
 WORKING_STOCK_IDS = frozenset(item_id for item_id, _target in WORKING_STOCK)
+# The organizer's order: weapons, then armour, then accessories.  A pulled set reads in
+# the same order the equipment window does instead of arriving in item-id order.
+EQUIP_ORDER = {
+    "main": 0, "sub": 1, "ranged": 2, "range": 2, "ammo": 3,
+    "head": 4, "body": 5, "hands": 6, "legs": 7, "feet": 8,
+    "neck": 9, "waist": 10, "ear1": 11, "ear2": 12,
+    "ring1": 13, "ring2": 14, "back": 15,
+}
+# A job's active set lives in the Mog Wardrobes first; the inventory is the overflow.
+# The Safe/Satchel/Sack/Case are sources for the tidy, never destinations: a set there
+# cannot be auto-equipped, and it would just be another place to look.
+ORGANIZE_DESTINATIONS = WARDROBE_CONTAINERS + (CONTAINER_INVENTORY,)
+# Bags whose loose job gear the tidy moves into the wardrobes.  Wardrobes are already
+# the destination, so they are not sources here.
+ORGANIZE_HOME_BAGS = (CONTAINER_INVENTORY, 1, 5, 6, 7, 9)
 
 # The Data page: values the launcher assigns instead of waiting for gameplay to derive.
 GIL_MAX = 2_147_483_647
@@ -96,6 +126,30 @@ ARMORY_SLOTS = {
     "ammo": ("ammo",),
 }
 
+# The Items tab groups the general-item catalogue by this list.  The category
+# text is stored on each item by migration 0156; this list only fixes the order
+# of the filter chips, so a future category appended by a migration still shows
+# up (at the end) without a server change.
+ITEM_CATEGORY_ORDER = (
+    "Ninja Tools",
+    "Jug Pets",
+    "Consumables",
+    "Ingredients",
+    "Materials",
+    "Food & Drink",
+    "Magic Scrolls",
+    "Ammunition",
+    "Crystals",
+    "Pet Items",
+    "Automaton Attachments",
+    "Fishing Gear",
+    "Furnishings",
+    "Miscellaneous",
+)
+
+ITEM_SCOPE = "items"
+ARMORY_SCOPE = "armory"
+
 
 def _like_escape(text: str) -> str:
     """Escape a user's typeahead text for a SQL LIKE ... ESCAPE '\\' clause."""
@@ -109,6 +163,7 @@ RANK_MAX = 10
 MOG_GARDEN_MAX = 10
 FAME_MAX = 255
 EXEMPLAR_PER_LEVEL = 30000
+MASTER_LEVEL_MAX = 50
 CRAFT_MAX = 100
 # //warp: each character has slots 1-1000.  The number is the target the chat command
 # takes, the alias is the friendly name the Warps page edits and the chat command also
@@ -158,8 +213,15 @@ CURRENCY_CATALOG = (
 
 
 def exp_for_level(level: int) -> int:
-    """Experience needed to reach the next level. Fanxi's own curve, not retail's table."""
-    return max(100, int(100 * (max(1, int(level)) ** 1.5)))
+    """Experience needed to reach the next level. Fanxi's own curve, not retail's table.
+
+    Level 99 has no next level: retail sends a zero requirement and the client shows the
+    Master Level/Exemplar block instead of an EXP bar.
+    """
+    level = max(1, int(level))
+    if level >= 99:
+        return 0
+    return max(100, int(100 * (level ** 1.5)))
 
 
 class ApiError(Exception):
@@ -197,6 +259,9 @@ class FanxiService:
         # "who is really in a zone" can only be answered through it; a game_sessions row
         # survives a server restart and is not proof that a client is still connected.
         self.zone_world = None
+        # Prime weapon item id -> its stage, or None for a non-Prime item.  The item
+        # table only changes with a migration, so one lookup per item is enough.
+        self._prime_weapon_cache: dict[int, prime_weapons.PrimeWeapon | None] = {}
 
     # --- accounts ------------------------------------------------------------------------------
     def account(self, account_id: int) -> dict:
@@ -561,6 +626,9 @@ class FanxiService:
             "variant": blueprint["variant"],
             "design": blueprint,
             "nation": row["nation"],
+            # The last mount the character called (-1 until it calls one).  Being mounted
+            # is live state on the zone session, not a column: a relog starts on foot.
+            "mount": int(row["mount"]) if row.get("mount") is not None else -1,
             "main_job": row["main_job"],
             "sub_job": row["sub_job"],
             "main_level": row["main_level"],
@@ -569,7 +637,9 @@ class FanxiService:
             "mp": row["mp"],
             "hp_current": row.get("hp_current", row["hp"]),
             "mp_current": row.get("mp_current", row["mp"]),
-            "exp": row.get("exp", 0),
+            # Level 99 is the Master Level band: the launcher and the client show the
+            # Exemplar block, not a stale EXP total with a zero requirement.
+            "exp": 0 if int(row["main_level"]) >= 99 else row.get("exp", 0),
             "exp_next": exp_for_level(row["main_level"]),
             "gil": row.get("gil", 0),
             "mastery_rank": int(row.get("mastery_rank") or 0),
@@ -799,8 +869,8 @@ class FanxiService:
         page can move them.
         """
         character = self.character(int(character_id))
-        merits = self.merits_for_character(int(character_id))
-        merit_cap = min(255, 127 + max(0, int(merits.get(0x0044, 0))))
+        merit_counts = self.merits_for_character(int(character_id))
+        merit_cap = min(255, 127 + max(0, int(merit_counts.get(0x0044, 0))))
         total_home_points = self.db.one(
             "SELECT COUNT(DISTINCT hp_index) AS n FROM home_points")["n"]
         total_guides = self.db.one("SELECT COUNT(*) AS n FROM survival_guides")["n"]
@@ -814,7 +884,17 @@ class FanxiService:
             (int(character_id),))]
         owned = self.owned_item_ids(character_id, [int(row["item_id"]) for row in purchases])
         for row in purchases:
-            row["owned"] = int(row["item_id"]) in owned
+            item_id = int(row["item_id"])
+            row["owned"] = item_id in owned
+            prime = prime_weapons.form(item_id)
+            if prime is not None:
+                row["prime_final"] = prime.is_final
+                row["prime_stage"] = prime.stage
+                row["prime_stages"] = prime_weapons.PRIME_STAGE_COUNT
+            rema = rema_weapons.form(item_id)
+            if rema is not None:
+                row["rema_final"] = rema.is_final
+                row["rema_family"] = rema.family
         currencies = [dict(r) for r in self.db.all(
             "SELECT name, amount, updated_at FROM char_currency WHERE character_id = ? "
             "ORDER BY name COLLATE NOCASE", (int(character_id),))]
@@ -827,7 +907,12 @@ class FanxiService:
                 "gil": int(character.get("gil") or 0),
                 "mastery_rank": int(character.get("mastery_rank") or 0),
             },
-            "merits": {"points": int(character.get("merit_points") or 0), "cap": int(merit_cap)},
+            "merits": {
+                "points": int(character.get("merit_points") or 0),
+                "cap": int(merit_cap),
+                "spent": int(merit_table.total_cost(merit_counts)),
+                "categories": merit_menus.catalog(merit_counts),
+            },
             "job_points": {
                 "all_capped": True,
                 "jobs": JOB_COUNT,
@@ -874,9 +959,19 @@ class FanxiService:
             "trusts": self.trust_summary(),
             "augments": augment_gear.inventory_items(self, int(character_id)),
             "oboro": oboro.catalog(self, int(character_id)),
+            "capes": capes.catalog(self, int(character_id)),
+            "nolan": mezzotint.catalog(self, int(character_id)),
+            "glyptics": glyptics.catalog(self, int(character_id)),
+            "skirmish": skirmish.catalog(self, int(character_id)),
+            "sinister": sinister.catalog(self, int(character_id)),
+            "moonshade": moonshade.catalog(self, int(character_id)),
+            "magian": magian.catalog(self, int(character_id)),
+            "ascension": ascension.catalog(self, int(character_id)),
             "currencies": currencies,
             "currency_catalog": list(CURRENCY_CATALOG),
+            "item_categories": self.item_categories(),
             "purchases": purchases,
+            "mounts": self._mount_summary(character),
         }
 
     def set_mastery_rank(self, character_id: int, rank: int) -> int:
@@ -959,75 +1054,292 @@ class FanxiService:
             (int(character_id), int(character_id), int(character_id), *ids))
         return {int(row["item_id"]) for row in rows}
 
-    def search_items(self, character_id: int, query: str, kind: str | None = None,
-                     limit: int = 40) -> list[dict]:
-        """Armoury search: equippable items by name, narrowed to a paperdoll kind.
+    def held_item_quantities(self, character_id: int, item_ids) -> dict[int, int]:
+        """How many units of each item the character holds across every permanent bag.
 
-        The catalogue now holds every named equipment item the client knows, so this
-        is also the typeahead the Data page queries on each keystroke.  Exact names
-        come first, then names that start with the query, then every other substring
-        match; within a group the higher-level piece wins.
+        The Armory only needs a boolean, but the Items tab shows the held count so a
+        stack purchase reads sensibly (``Held 99`` after buying a stack of shihei).
+        Bags, storage slips and the hidden locker all count, the same places the
+        Rare check and purchase history use.
         """
-        slots = ARMORY_SLOTS.get(str(kind or "").strip().lower())
-        where = ["equip_slot != ''"]
-        args: list = []
-        if slots:
-            where.append("equip_slot IN (%s)" % ",".join("?" for _ in slots))
-            args.extend(slots)
+        ids = sorted({int(item) for item in item_ids if int(item) > 0})[:400]
+        if not ids:
+            return {}
+        marks = ",".join("?" for _ in ids)
+        rows = self.db.all(
+            "SELECT item_id, SUM(quantity) AS quantity FROM ("
+            "  SELECT item_id, quantity FROM char_inventory"
+            "   WHERE character_id = ? AND quantity > 0"
+            "  UNION ALL SELECT item_id, quantity FROM char_storage"
+            "   WHERE character_id = ? AND quantity > 0"
+            "  UNION ALL SELECT item_id, quantity FROM char_locker"
+            "   WHERE character_id = ? AND quantity > 0"
+            ") WHERE item_id IN (%s) GROUP BY item_id" % marks,
+            (int(character_id), int(character_id), int(character_id), *ids))
+        return {int(row["item_id"]): int(row["quantity"]) for row in rows}
+
+    def item_categories(self) -> list[dict]:
+        """The Items tab filter chips, in the shop's display order."""
+        counts = {
+            str(row["category"]): int(row["count"])
+            for row in self.db.all(
+                "SELECT category, COUNT(*) AS count FROM items "
+                "WHERE category != '' AND price > 0 GROUP BY category")
+        }
+        ordered = [name for name in ITEM_CATEGORY_ORDER if counts.get(name)]
+        ordered += sorted(name for name in counts if name not in ITEM_CATEGORY_ORDER)
+        return [{"name": name, "count": counts[name]} for name in ordered]
+
+    def _collapse_final_rows(self, rows: list[dict], final_id_for) -> list[dict]:
+        """Collapse upgrade stages to one final row per family, first occurrence wins.
+
+        *final_id_for* maps a catalogue item id to its family's final id, or None
+        when the item has no later form.  A final row the query did not return is
+        fetched from the catalogue so the replacement still points at a complete
+        row.
+        """
+        replacements: dict[int, int] = {}
+        for row in rows:
+            item_id = int(row["item_id"])
+            final_id = final_id_for(item_id)
+            if final_id is not None and final_id != item_id:
+                replacements[item_id] = final_id
+        if not replacements:
+            return rows
+
+        by_id = {int(row["item_id"]): row for row in rows}
+        missing = sorted({
+            final_id for final_id in replacements.values() if final_id not in by_id
+        })
+        if missing:
+            marks = ",".join("?" for _ in missing)
+            for row in self.db.all(
+                    "SELECT item_id, name, category, equip_slot, level, item_level, jobs, "
+                    "rare, ex, stack, skill, price, base_sell, description "
+                    "FROM items WHERE item_id IN (%s)" % marks, tuple(missing)):
+                by_id[int(row["item_id"])] = dict(row)
+
+        out: list[dict] = []
+        seen: set[int] = set()
+        for row in rows:
+            item_id = int(row["item_id"])
+            final_id = replacements.get(item_id, item_id)
+            if final_id in seen:
+                continue
+            final = by_id.get(final_id)
+            if final is None:
+                continue
+            out.append(final)
+            seen.add(final_id)
+        return out
+
+    def _prime_final_rows(self, rows: list[dict]) -> list[dict]:
+        """Collapse Prime weapon stages to the one form the Armory sells.
+
+        A Prime family stores up to five rows that share a name: the four upgraded
+        forms are all called ``Foenaria``, so the typeahead showed four identical
+        entries and Enter picked the weakest one.  Every stage maps to the iLvl 119
+        III form, and the stage-1 ``Prime ...`` row maps too, so a search for
+        ``Prime Scythe`` still finds Foenaria.
+        """
+        return self._collapse_final_rows(rows, prime_weapons.final_item_id)
+
+    def _rema_final_rows(self, rows: list[dict]) -> list[dict]:
+        """Collapse REMA stages to the one final afterglow form the Armory sells.
+
+        The family table maps every Relic, Empyrean, Mythic and Aeonic stage -- and
+        the handful of final rows suffixed ``119 III`` -- to the family's final id.
+        A search for Masamune therefore returns one row instead of eight, and a
+        search for Kikoku 119 III still finds the final row.
+        """
+        return self._collapse_final_rows(rows, rema_weapons.final_item_id)
+
+    def search_items(self, character_id: int, query: str, kind: str | None = None,
+                     limit: int = 40, scope: str = ARMORY_SCOPE,
+                     category: str | None = None) -> list[dict]:
+        """Search the Armory (equipment) or the Items tab's general-item shop.
+
+        The Armory keeps its paperdoll ``kind`` filter and level-first ordering.
+        The Items scope instead filters on migration 0156's ``items.category`` and
+        sorts by name; an empty query with a category is how the tab browses a
+        shelf, and a name match still puts exact and prefix hits first.  The Items
+        text also matches the category name, so "jug" finds the Jug Pets shelf
+        without the player having to know a broth's name.  Both scopes return the
+        held quantity the Items tab displays.
+        """
+        scope = str(scope or ARMORY_SCOPE).strip().lower()
+        if scope not in (ARMORY_SCOPE, ITEM_SCOPE):
+            scope = ARMORY_SCOPE
         text = " ".join(str(query or "").split()).strip()
-        order_args: list = []
-        order = "level DESC, name COLLATE NOCASE"
-        if text:
-            where.append("name LIKE ? ESCAPE '\\'")
-            args.append("%" + _like_escape(text) + "%")
-            order = ("CASE WHEN name = ? COLLATE NOCASE THEN 0 "
-                     "WHEN name LIKE ? ESCAPE '\\' THEN 1 ELSE 2 END, "
-                     "level DESC, name COLLATE NOCASE")
-            order_args = [text, _like_escape(text) + "%"]
-        if not text and not slots:
-            return []
         try:
             limit = max(1, min(100, int(limit)))
         except (TypeError, ValueError):
             limit = 40
+
+        args: list = []
+        order_args: list = []
+        if scope == ITEM_SCOPE:
+            selected_category = " ".join(str(category or "").split()).strip()
+            where = ["category != ''", "price > 0"]
+            if selected_category:
+                where.append("category = ?")
+                args.append(selected_category)
+            order = "name COLLATE NOCASE"
+            if text:
+                # Match on the punctuation-free form as well as the stored name so
+                # "noble's bed" finds the generated "Noble's Bed" and vice versa.
+                plain = text.replace("'", "")
+                pattern = "%" + _like_escape(plain) + "%"
+                category_match = (
+                    " OR category LIKE ? ESCAPE '\\'" if len(plain) >= 3 else "")
+                where.append(
+                    "(REPLACE(name, '''', '') LIKE ? ESCAPE '\\' OR EXISTS ("
+                    " SELECT 1 FROM item_aliases a"
+                    " WHERE a.item_id = items.item_id"
+                    " AND REPLACE(a.alias, '''', '') LIKE ? ESCAPE '\\')"
+                    + category_match + ")")
+                args.extend([pattern, pattern] + ([pattern] if category_match else []))
+                prefix = _like_escape(plain) + "%"
+                order = ("CASE WHEN REPLACE(name, '''', '') = ? COLLATE NOCASE OR EXISTS ("
+                         " SELECT 1 FROM item_aliases a"
+                         " WHERE a.item_id = items.item_id"
+                         " AND REPLACE(a.alias, '''', '') = ? COLLATE NOCASE) THEN 0 "
+                         "WHEN REPLACE(name, '''', '') LIKE ? ESCAPE '\\' OR EXISTS ("
+                         " SELECT 1 FROM item_aliases a"
+                         " WHERE a.item_id = items.item_id"
+                         " AND REPLACE(a.alias, '''', '') LIKE ? ESCAPE '\\') THEN 1 "
+                         "ELSE 2 END, name COLLATE NOCASE")
+                order_args = [plain, plain, prefix, prefix]
+        else:
+            slots = ARMORY_SLOTS.get(str(kind or "").strip().lower())
+            where = ["equip_slot != ''"]
+            if slots:
+                where.append("equip_slot IN (%s)" % ",".join("?" for _ in slots))
+                args.extend(slots)
+            order = "level DESC, name COLLATE NOCASE"
+            if text:
+                pattern = "%" + _like_escape(text) + "%"
+                where.append(
+                    "(name LIKE ? ESCAPE '\\' OR EXISTS ("
+                    " SELECT 1 FROM item_aliases a"
+                    " WHERE a.item_id = items.item_id"
+                    " AND a.alias LIKE ? ESCAPE '\\'))")
+                args.extend([pattern, pattern])
+                order = ("CASE WHEN name = ? COLLATE NOCASE OR EXISTS ("
+                         " SELECT 1 FROM item_aliases a"
+                         " WHERE a.item_id = items.item_id"
+                         " AND a.alias = ? COLLATE NOCASE) THEN 0 "
+                         "WHEN name LIKE ? ESCAPE '\\' OR EXISTS ("
+                         " SELECT 1 FROM item_aliases a"
+                         " WHERE a.item_id = items.item_id"
+                         " AND a.alias LIKE ? ESCAPE '\\') THEN 1 ELSE 2 END, "
+                         "level DESC, name COLLATE NOCASE")
+                prefix = _like_escape(text) + "%"
+                order_args = [text, text, prefix, prefix]
+            if not text and not slots:
+                return []
+
         rows = [dict(row) for row in self.db.all(
-            "SELECT item_id, name, equip_slot, level, item_level, jobs, rare, ex, "
+            "SELECT item_id, name, category, equip_slot, level, item_level, jobs, rare, ex, "
             "stack, skill, price, base_sell, description "
             "FROM items WHERE " + " AND ".join(where) +
             " ORDER BY " + order + " LIMIT ?", (*args, *order_args, limit))]
-        owned = self.owned_item_ids(character_id, [int(row["item_id"]) for row in rows])
+        family_ids: dict[int, tuple[int, ...]] = {}
+        if scope == ARMORY_SCOPE:
+            rows = self._prime_final_rows(rows)
+            rows = self._rema_final_rows(rows)
+            for row in rows:
+                ids = (prime_weapons.family_item_ids(row["item_id"])
+                       or rema_weapons.family_item_ids(row["item_id"]))
+                if ids:
+                    family_ids[int(row["item_id"])] = ids
+        held_ids = [int(row["item_id"]) for row in rows]
+        held_ids.extend(item_id for ids in family_ids.values() for item_id in ids)
+        held = self.held_item_quantities(character_id, held_ids)
         for row in rows:
             item_id = int(row["item_id"])
-            row["owned"] = item_id in owned
-            row["exclusive"] = bool(int(row.get("rare") or 0) or int(row.get("ex") or 0))
+            # A Prime or REMA weapon is one Rare item per family, so an earlier stage
+            # the character still holds counts as owning the final form.
+            row["held"] = sum(held.get(candidate, 0)
+                              for candidate in family_ids.get(item_id, (item_id,)))
+            row["owned"] = row["held"] > 0
+            # Only Rare limits the character to one copy.  Ex alone means the item
+            # cannot be traded or sold, so several copies can still be held.
+            row["unique"] = bool(int(row.get("rare") or 0))
+            if scope == ARMORY_SCOPE:
+                prime = prime_weapons.form(item_id)
+                if prime is not None:
+                    row["prime_final"] = prime.is_final
+                    row["prime_stage"] = prime.stage
+                    row["prime_stages"] = prime_weapons.PRIME_STAGE_COUNT
+                    row["prime_family"] = prime.family
+                rema = rema_weapons.form(item_id)
+                if rema is not None:
+                    row["rema_final"] = rema.is_final
+                    row["rema_family"] = rema.family
         return rows
 
     def armory_add(self, character_id: int, item_id: int, quantity: int = 1) -> dict:
-        """Buy one catalogue item for a character.
+        """Buy one equipment item for a character, from the Armory catalogue."""
+        return self._purchase_catalogue_item(
+            character_id, item_id, quantity, scope=ARMORY_SCOPE)
 
-        Rare and Ex pieces are one-per-character in the Armory even though the
-        general grant helper only enforces Rare: retail's Ex flag means the item
-        cannot be traded, and the Armory should not hand out a second copy by
-        accident.  The price is charged before the inventory insert and refunded if
-        the insert fails, so a full bag never costs the character gil.
+    def item_add(self, character_id: int, item_id: int, quantity: int = 1) -> dict:
+        """Buy one general item for a character, from the Items tab catalogue."""
+        return self._purchase_catalogue_item(
+            character_id, item_id, quantity, scope=ITEM_SCOPE)
+
+    def _purchase_catalogue_item(self, character_id: int, item_id: int,
+                                 quantity: int = 1, *, scope: str = ARMORY_SCOPE) -> dict:
+        """Charge the wallet, add the item and record the purchase.
+
+        Only Rare is one-per-character: the Ex flag alone means the item cannot be
+        traded or sold, not that a second copy cannot be held, so an Ex-only piece
+        (Linos, Andartia's Mantle) can be bought again.  The price is charged before
+        the inventory insert and refunded if the insert fails, so a full bag never
+        costs the character gil.  A Prime or REMA weapon is always granted in its
+        final iLvl 119 III (afterglow) form, even if the caller asks for an earlier
+        stage.
         """
+        requested_id = int(item_id)
+        item_id = (prime_weapons.final_item_id(requested_id)
+                   or rema_weapons.final_item_id(requested_id)
+                   or requested_id)
         item = self.item(int(item_id))
         if item is None:
             raise ApiError(404, "not_found", "no item with that id")
-        if str(item.get("equip_slot") or "") not in {
-                slot for slots in ARMORY_SLOTS.values() for slot in slots}:
-            raise ApiError(422, "validation_error",
-                           "%s is not armour, an accessory, ammo or a weapon" % item["name"])
+        scope = str(scope or ARMORY_SCOPE).strip().lower()
+        if scope == ITEM_SCOPE:
+            if not str(item.get("category") or "").strip():
+                raise ApiError(422, "validation_error",
+                               "%s is not in the item shop" % item["name"])
+            if int(item.get("price") or 0) <= 0:
+                raise ApiError(422, "validation_error",
+                               "%s is not for sale" % item["name"])
+        elif scope == ARMORY_SCOPE:
+            if str(item.get("equip_slot") or "") not in {
+                    slot for slots in ARMORY_SLOTS.values() for slot in slots}:
+                raise ApiError(
+                    422, "validation_error",
+                    "%s is not armour, an accessory, ammo or a weapon" % item["name"])
+        else:
+            raise ApiError(422, "validation_error", "unknown item scope")
         try:
             quantity = max(1, min(99, int(quantity)))
         except (TypeError, ValueError):
             quantity = 1
-        unique = bool(int(item.get("rare") or 0) or int(item.get("ex") or 0))
+        unique = bool(int(item.get("rare") or 0))
         if unique:
             if quantity != 1:
                 raise ApiError(422, "rare_item",
-                               "only one copy of a Rare or Ex item can be obtained at a time")
-            if self.owns_item(int(character_id), int(item_id)):
+                               "only one copy of a Rare item can be obtained at a time")
+            # A Prime or REMA family is one Rare item: holding an earlier stage
+            # blocks the final form just as holding the final blocks another purchase.
+            candidates = (prime_weapons.family_item_ids(item_id)
+                          or rema_weapons.family_item_ids(item_id)
+                          or (int(item_id),))
+            if any(self.owns_item(int(character_id), candidate)
+                   for candidate in candidates):
                 raise ApiError(409, "already_owned",
                                "the character already possesses %s" % item["name"])
         price = max(0, int(item.get("price") or 0)) * quantity
@@ -1043,15 +1355,14 @@ class FanxiService:
             self.set_gil(int(character_id), gil - price)
             charged = True
         try:
-            added = self.add_item(int(character_id), int(item_id), quantity,
-                                  one_per_character=True)
+            added = self.add_item(int(character_id), int(item_id), quantity)
         except Exception:
             if charged:
                 try:
                     self.set_gil(int(character_id), gil)
                 except Exception:
                     log.exception(
-                        "%s could not refund a failed Armory purchase of item %d",
+                        "%s could not refund a failed purchase of item %d",
                         character_id, int(item_id))
             raise
         try:
@@ -1062,7 +1373,7 @@ class FanxiService:
         except Exception:
             # The item is in the bag and the gil is spent; a missing history row is
             # not worth rolling either back.  Log it and keep the purchase.
-            log.exception("%s could not record the Armory purchase of item %d",
+            log.exception("%s could not record the purchase of item %d",
                           character_id, int(item_id))
         return {"item_id": int(item_id), "name": added["name"], "quantity": quantity,
                 "price": price, "purchased": True}
@@ -1440,7 +1751,7 @@ class FanxiService:
             "mp": row["mp"],
             "hp_current": row.get("hp_current", row["hp"]),
             "mp_current": row.get("mp_current", row["mp"]),
-            "exp": row.get("exp", 0),
+            "exp": 0 if int(row["main_level"]) >= 99 else row.get("exp", 0),
             "exp_next": exp_for_level(row["main_level"]),
             "gil": row.get("gil", 0),
             "mastery_rank": int(row.get("mastery_rank") or 0),
@@ -1679,10 +1990,23 @@ class FanxiService:
             "SELECT s.*, t.name AS template_name, t.model, t.size, t.level_min, t.level_max, "
             "t.hp AS template_hp, t.mp AS template_mp, t.attack, t.defense, t.accuracy, t.evasion, "
             "t.attack_delay_ms, t.aggro, t.links, t.roam_radius, t.respawn_seconds AS template_respawn, "
-            "t.name_prefix, t.behavior, t.content_tag "
+            "t.name_prefix, t.behavior, t.content_tag, t.skill_list_id "
             "FROM monster_spawns s JOIN monster_templates t ON t.id = s.template_id "
             "WHERE s.zone = ? AND s.enabled = 1 ORDER BY s.id", (int(zone),))
         return [dict(r) for r in rows]
+
+    def mob_skills(self, skill_list_id: int) -> list[dict]:
+        """The TP moves a monster's ``skill_list_id`` names, as full rows.
+
+        The list table carries one row per ability; the join and ORDER BY make the
+        world's random choice stable across restarts (the server shuffles the copy).
+        """
+        if int(skill_list_id or 0) <= 0:
+            return []
+        return [dict(row) for row in self.db.all(
+            "SELECT k.* FROM mob_skill_lists l JOIN mob_skills k "
+            "ON k.id = l.mob_skill_id WHERE l.skill_list_id = ? ORDER BY k.id",
+            (int(skill_list_id),))]
 
     def inventory(self, character_id: int) -> list[dict]:
         return [dict(r) for r in self.db.all(
@@ -1694,10 +2018,32 @@ class FanxiService:
             "COALESCE(i.jobs, 0) AS jobs, COALESCE(i.skill, 0) AS skill, "
             "COALESCE(i.rare, 0) AS rare, COALESCE(i.ex, 0) AS ex, "
             "COALESCE(st.slip, 0) AS storage_slip, "
+            "COALESCE(ci.dropped_at, '') AS dropped_at, "
             "COALESCE(ci.extra, X'') AS extra "
             "FROM char_inventory ci LEFT JOIN items i ON i.item_id = ci.item_id "
             "LEFT JOIN item_storage st ON st.item_id = ci.item_id "
             "WHERE ci.character_id = ? ORDER BY ci.container, ci.slot", (int(character_id),))]
+
+    def apply_ascension(self, character_id: int, container, slot, choices) -> None:
+        """Write a Shantotto's Ascension augment block to one bag copy."""
+        try:
+            container = int(container)
+            slot = int(slot)
+        except (TypeError, ValueError):
+            raise ApiError(422, "validation_error",
+                           "container and slot must be numbers") from None
+        row = self.inventory_slot(int(character_id), container, slot)
+        if row is None:
+            raise ApiError(404, "not_found", "no item in that bag slot")
+        if int(row["item_id"]) not in ascension.ITEM_IDS:
+            raise ApiError(422, "validation_error",
+                           "that item is not Shantotto's Ascension gear")
+        try:
+            block = ascension.block_for(choices)
+        except ValueError as exc:
+            raise ApiError(422, "validation_error", str(exc)) from None
+        if not self.set_item_extra(int(character_id), container, slot, block):
+            raise ApiError(404, "not_found", "the bag copy disappeared")
 
     def set_item_extra(self, character_id: int, container: int, slot: int,
                        extra: bytes) -> bool:
@@ -1707,6 +2053,22 @@ class FanxiService:
                 "UPDATE char_inventory SET extra = ? "
                 "WHERE character_id = ? AND container = ? AND slot = ?",
                 (sqlite3.Binary(bytes(extra)), int(character_id), int(container), int(slot)))
+            return cursor.rowcount > 0
+
+    def set_item_and_extra(self, character_id: int, container: int, slot: int,
+                           item_id: int, extra: bytes) -> bool:
+        """Replace a bag copy's item id and attribute block in one write.
+
+        The Magian trials turn one weapon or armour piece into another (a relic
+        stage, an Empyrean +1/+2, a different trial weapon) and the reward carries
+        its own augment block, so both columns move together.
+        """
+        with self.db.transaction() as conn:
+            cursor = conn.execute(
+                "UPDATE char_inventory SET item_id = ?, extra = ? "
+                "WHERE character_id = ? AND container = ? AND slot = ?",
+                (int(item_id), sqlite3.Binary(bytes(extra)), int(character_id),
+                 int(container), int(slot)))
             return cursor.rowcount > 0
 
     def npc_shop(self, zone: int, script: str) -> list[dict]:
@@ -1759,6 +2121,128 @@ class FanxiService:
             "SELECT kind, container, slot, item_id FROM char_equip WHERE character_id = ?"
             " ORDER BY kind", (int(character_id),))]
 
+    def character_bags(self, character_id: int) -> list[dict]:
+        """Every bag copy with its item metadata and augment text.
+
+        The set editor's item picker reads this in one call and filters by the slot
+        bit and the character's job.  Two copies of the same item can carry different
+        augment blocks, so each row has its container/slot and the decoded rows.
+        """
+        rows = self.db.all(
+            "SELECT ci.container, ci.slot, ci.item_id, ci.quantity, ci.extra, "
+            "COALESCE(i.name, 'Item ' || ci.item_id) AS name, "
+            "COALESCE(i.equip_slot, '') AS equip_slot, "
+            "COALESCE(i.slot_mask, 0) AS slot_mask, COALESCE(i.jobs, 0) AS jobs, "
+            "COALESCE(i.level, 0) AS level, COALESCE(i.skill, 0) AS skill, "
+            "COALESCE(i.item_level, 0) AS item_level, "
+            "COALESCE(i.rare, 0) AS rare, COALESCE(i.ex, 0) AS ex "
+            "FROM char_inventory ci LEFT JOIN items i ON i.item_id = ci.item_id "
+            "WHERE ci.character_id = ? AND ci.item_id <> 65535 "
+            "ORDER BY ci.container, ci.slot", (int(character_id),))
+        out = []
+        for row in rows:
+            extra = bytes(row["extra"] or b"")
+            out.append({
+                "container": int(row["container"]),
+                "slot": int(row["slot"]),
+                "item_id": int(row["item_id"]),
+                "quantity": int(row["quantity"]),
+                "name": str(row["name"]),
+                "equip_slot": str(row["equip_slot"]),
+                "slot_mask": int(row["slot_mask"]),
+                "jobs": int(row["jobs"]),
+                "level": int(row["level"]),
+                "skill": int(row["skill"]),
+                "item_level": int(row["item_level"]),
+                "rare": int(row["rare"]),
+                "ex": int(row["ex"]),
+                "extra": extra.hex(),
+                "augments": augment_stats.describe_augments(int(row["item_id"]), extra),
+            })
+        return out
+
+    def character_all_items(self, character_id: int) -> list[dict]:
+        """Every item a character owns, for the Magic Bag HUD.
+
+        Visible bag rows keep their container/slot; the hidden Storage Slips and locker
+        are returned as synthetic containers 100/101 with no slot, so one list can show
+        the whole account-side collection.  ``source`` tells the HUD which action path a
+        row uses.
+        """
+        out = []
+        for row in self.character_bags(character_id):
+            row = dict(row)
+            row["source"] = "bag"
+            out.append(row)
+        for row in self.db.all(
+                "SELECT cs.item_id, cs.quantity, cs.slip, "
+                "COALESCE(i.name, 'Item ' || cs.item_id) AS name, "
+                "COALESCE(i.equip_slot, '') AS equip_slot, "
+                "COALESCE(i.slot_mask, 0) AS slot_mask, COALESCE(i.jobs, 0) AS jobs, "
+                "COALESCE(i.level, 0) AS level, COALESCE(i.skill, 0) AS skill, "
+                "COALESCE(i.item_level, 0) AS item_level, "
+                "COALESCE(i.rare, 0) AS rare, COALESCE(i.ex, 0) AS ex "
+                "FROM char_storage cs LEFT JOIN items i ON i.item_id = cs.item_id "
+                "WHERE cs.character_id = ? ORDER BY cs.slip, cs.item_id",
+                (int(character_id),)):
+            out.append({
+                "source": "slip", "container": 100, "slot": 0,
+                "item_id": int(row["item_id"]), "quantity": int(row["quantity"]),
+                "name": str(row["name"]), "equip_slot": str(row["equip_slot"]),
+                "slot_mask": int(row["slot_mask"]), "jobs": int(row["jobs"]),
+                "level": int(row["level"]), "skill": int(row["skill"]),
+                "item_level": int(row["item_level"]), "rare": int(row["rare"]),
+                "ex": int(row["ex"]), "extra": "", "augments": [],
+                "slip": int(row["slip"]),
+            })
+        # The Armory keeps a purchase record even after the item is consumed; expose it
+        # as Claim Storage so the one Magic Bag list can account for every DB row.
+        for row in self.db.all(
+                "SELECT p.id AS purchase_id, p.item_id, p.quantity, p.price, p.created_at, "
+                "COALESCE(i.name, 'Item ' || p.item_id) AS name, "
+                "COALESCE(i.equip_slot, '') AS equip_slot, "
+                "COALESCE(i.slot_mask, 0) AS slot_mask, COALESCE(i.jobs, 0) AS jobs, "
+                "COALESCE(i.level, 0) AS level, COALESCE(i.skill, 0) AS skill, "
+                "COALESCE(i.item_level, 0) AS item_level, "
+                "COALESCE(i.rare, 0) AS rare, COALESCE(i.ex, 0) AS ex "
+                "FROM char_purchases p LEFT JOIN items i ON i.item_id = p.item_id "
+                "WHERE p.character_id = ? ORDER BY p.id",
+                (int(character_id),)):
+            out.append({
+                "source": "claim", "container": 102, "slot": 0,
+                "item_id": int(row["item_id"]), "quantity": int(row["quantity"]),
+                "name": str(row["name"]), "equip_slot": str(row["equip_slot"]),
+                "slot_mask": int(row["slot_mask"]), "jobs": int(row["jobs"]),
+                "level": int(row["level"]), "skill": int(row["skill"]),
+                "item_level": int(row["item_level"]), "rare": int(row["rare"]),
+                "ex": int(row["ex"]), "extra": "", "augments": [],
+                "purchase_id": int(row["purchase_id"]), "price": int(row["price"]),
+                "purchased_at": str(row["created_at"]),
+            })
+        for row in self.db.all(
+                "SELECT cl.item_id, cl.quantity, COALESCE(cl.extra, X'') AS extra, "
+                "COALESCE(i.name, 'Item ' || cl.item_id) AS name, "
+                "COALESCE(i.equip_slot, '') AS equip_slot, "
+                "COALESCE(i.slot_mask, 0) AS slot_mask, COALESCE(i.jobs, 0) AS jobs, "
+                "COALESCE(i.level, 0) AS level, COALESCE(i.skill, 0) AS skill, "
+                "COALESCE(i.item_level, 0) AS item_level, "
+                "COALESCE(i.rare, 0) AS rare, COALESCE(i.ex, 0) AS ex "
+                "FROM char_locker cl LEFT JOIN items i ON i.item_id = cl.item_id "
+                "WHERE cl.character_id = ? ORDER BY cl.item_id",
+                (int(character_id),)):
+            extra = bytes(row["extra"] or b"")
+            out.append({
+                "source": "locker", "container": 101, "slot": 0,
+                "item_id": int(row["item_id"]), "quantity": int(row["quantity"]),
+                "name": str(row["name"]), "equip_slot": str(row["equip_slot"]),
+                "slot_mask": int(row["slot_mask"]), "jobs": int(row["jobs"]),
+                "level": int(row["level"]), "skill": int(row["skill"]),
+                "item_level": int(row["item_level"]), "rare": int(row["rare"]),
+                "ex": int(row["ex"]), "extra": extra.hex(),
+                "augments": augment_stats.describe_augments(int(row["item_id"]), extra),
+            })
+        return out
+
     def equipped_skill_bonuses(self, character_id: int) -> dict[int, int]:
         """Skill id -> total from every equipped item (both dual-wielded weapons count)."""
         rows = self.db.all(
@@ -1776,6 +2260,8 @@ class FanxiService:
         block, so each equipped row is joined back to its inventory copy and run through
         :mod:`augment_stats`.  That is what makes a Rank 30 set's ``"Double Attack"+7%``
         rows reach the attack round, and a cape's five-slot build reach the stat sheet.
+        Items whose values depend on character state rather than fixed data -- today the
+        Hoxne Earring's Mastery Rank attributes -- are merged from :mod:`item_effects`.
         """
         rows = self.db.all(
             "SELECT m.mod_id, SUM(m.value) AS value FROM char_equip e "
@@ -1787,14 +2273,104 @@ class FanxiService:
             "LEFT JOIN char_inventory i ON i.character_id = e.character_id "
             "AND i.container = e.container AND i.slot = e.slot "
             "WHERE e.character_id = ?", (int(character_id),))
+        mastery_rank = (self._mastery_rank(int(character_id))
+                        if any(int(row["item_id"]) == item_effects.HOXNE_EARRING
+                               for row in equipped) else 0)
         for row in equipped:
+            item_id = int(row["item_id"])
             try:
-                augment_stats.add_item_mods(mods, int(row["item_id"]), row["extra"])
+                augment_stats.add_item_mods(mods, item_id, row["extra"])
             except (KeyError, TypeError, ValueError):
                 # A malformed block must never stop the outfit from loading.
                 logging.getLogger("fanxi.stats").debug(
-                    "augments unreadable for item %s", row["item_id"], exc_info=True)
+                    "augments unreadable for item %s", item_id, exc_info=True)
+            item_effects.add_item_mods(mods, item_id, mastery_rank)
         return mods
+
+    def _mastery_rank(self, character_id: int) -> int:
+        """The stored Mastery Rank byte (0 when the character row is gone)."""
+        row = self.db.one(
+            "SELECT mastery_rank FROM characters WHERE id = ?", (int(character_id),))
+        return int(row["mastery_rank"] or 0) if row is not None else 0
+
+    def character_stat_report(self, character_id: int) -> dict:
+        """The live checkparam-style sheet for a character in a zone.
+
+        Buffs, food and the job-ability layer only exist in the game process, so this
+        resolves the live session through the world the gateway attached rather than
+        rebuilding the sheet from the database.
+        """
+        row = self.character(int(character_id))
+        world = self.zone_world
+        session = (world.session_by_character_ids(int(row["id"]), int(row["char_id"]))
+                   if world is not None else None)
+        if session is None:
+            raise ApiError(404, "not_found", "character is not in a zone")
+        return session.stat_report()
+
+    def character_target_report(self, character_id: int, entity_id: int = 0) -> dict:
+        """The live target's debuffs for the in-game Target Debuffs window."""
+        row = self.character(int(character_id))
+        world = self.zone_world
+        session = (world.session_by_character_ids(int(row["id"]), int(row["char_id"]))
+                   if world is not None else None)
+        if session is None:
+            raise ApiError(404, "not_found", "character is not in a zone")
+        return session.target_effect_report(int(entity_id or 0))
+
+    def equipped_slot_mods(self, character_id: int) -> list[dict]:
+        """One row per equipped slot with that copy's modifiers, augments included.
+
+        ``equipped_mods`` sums the outfit for the combat path; this keeps the same
+        rows apart so the launcher can show which piece supplied a stat.  The inventory
+        copy is joined by container/slot, which is what lets two copies of the same
+        item id carry different augment blocks.  Character-state items (the Hoxne
+        Earring) are resolved here too, so the report's gear rows add up to the same
+        total combat uses.
+        """
+        rows = self.db.all(
+            "SELECT e.kind, e.container, e.slot, e.item_id, "
+            "COALESCE(i.name, 'Item ' || e.item_id) AS name, "
+            "COALESCE(ci.extra, X'') AS extra "
+            "FROM char_equip e "
+            "LEFT JOIN items i ON i.item_id = e.item_id "
+            "LEFT JOIN char_inventory ci ON ci.character_id = e.character_id "
+            "  AND ci.container = e.container AND ci.slot = e.slot "
+            "WHERE e.character_id = ? ORDER BY e.kind", (int(character_id),))
+        mastery_rank = (self._mastery_rank(int(character_id))
+                        if any(int(row["item_id"]) == item_effects.HOXNE_EARRING
+                               for row in rows) else 0)
+        out = []
+        for row in rows:
+            item_id = int(row["item_id"])
+            mods = self.item_mods(item_id)
+            try:
+                augment_stats.add_item_mods(mods, item_id, row["extra"])
+            except (KeyError, TypeError, ValueError):
+                logging.getLogger("fanxi.stats").debug(
+                    "augments unreadable for item %s", item_id, exc_info=True)
+            item_effects.add_item_mods(mods, item_id, mastery_rank)
+            try:
+                augments = augment_stats.describe_augments(item_id, row["extra"])
+            except (KeyError, TypeError, ValueError):
+                augments = ""
+            out.append({
+                "kind": int(row["kind"]),
+                "container": int(row["container"]),
+                "slot": int(row["slot"]),
+                "item_id": item_id,
+                "name": str(row["name"]),
+                "augments": augments,
+                "mods": {int(key): int(value) for key, value in mods.items()},
+            })
+        return out
+
+    def monster_steal_items(self, template_id: int) -> list[dict]:
+        """The weighted steal table for one monster template."""
+        return [dict(row) for row in self.db.all(
+            "SELECT item_id, weight FROM monster_steal_items "
+            "WHERE monster_template_id = ? ORDER BY item_id",
+            (int(template_id),))]
 
     def equipped_weapons(self, character_id: int) -> dict[int, dict]:
         """Equip kind -> weapon data (skill, damage, delay, item-level skill, shield size).
@@ -1805,9 +2381,10 @@ class FanxiService:
         """
         rows = self.db.all(
             "SELECT e.kind, e.item_id, w.skill, w.dmg, w.delay, w.ilvl_skill, "
-            "s.size AS shield_size "
+            "i.item_level, s.size AS shield_size "
             "FROM char_equip e "
             "LEFT JOIN item_weapon w ON w.item_id = e.item_id "
+            "LEFT JOIN items i ON i.item_id = e.item_id "
             "LEFT JOIN item_shield s ON s.item_id = e.item_id "
             "WHERE e.character_id = ?", (int(character_id),))
         return {int(row["kind"]): dict(row) for row in rows}
@@ -1852,10 +2429,92 @@ class FanxiService:
                 return dict(row)
         return None
 
+    @lru_cache(maxsize=1)
+    def spell_ids_by_name(self) -> dict[str, tuple[int, ...]]:
+        """Spell name -> the ids carrying it, normalised like ``spell_by_name``.
+
+        A job-point gift names its spell, not its id (LandSandBoat resolves a
+        ``SpellID`` at compile time; Fanxi's data is the spells table), so the zone
+        resolves the gift names once per job pair through this index.
+        """
+        out: dict[str, list[int]] = {}
+        for row in self.db.all("SELECT id, name FROM spells ORDER BY id"):
+            key = "".join(str(row["name"] or "").split()).casefold()
+            if key:
+                out.setdefault(key, []).append(int(row["id"]))
+        return {key: tuple(ids) for key, ids in out.items()}
+
+    @lru_cache(maxsize=1)
+    def _spell_levels(self) -> dict[int, tuple[tuple[int, int], ...]]:
+        """Spell id -> ((job, level), ...) from ``data/spell_levels.json``.
+
+        Retail gates a spell by the levels its jobs learn it at; a spell with no row
+        (a Trust, a job-point or merit spell, a monster-only id) is not level-gated.
+        """
+        try:
+            raw = json.loads(SPELL_LEVELS_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        out: dict[int, tuple[tuple[int, int], ...]] = {}
+        for spell_id, entries in (raw.get("spells") or {}).items():
+            try:
+                out[int(spell_id)] = tuple((int(job), int(level)) for job, level in entries)
+            except (TypeError, ValueError):
+                continue
+        return out
+
+    def spell_levels(self, spell_id: int) -> tuple[tuple[int, int], ...]:
+        """The (job, level) pairs that learn this spell, empty when it is not gated."""
+        return self._spell_levels().get(int(spell_id), ())
+
+    def spell_level_table(self) -> dict[int, tuple[tuple[int, int], ...]]:
+        """Every gated spell's (job, level) rows, for building the client's bitmap."""
+        return self._spell_levels()
+
+    @lru_cache(maxsize=1)
+    def _weaponskill_properties(self) -> dict[int, tuple[int, int, int]]:
+        """Weapon skill id -> its three skillchain property ids (0 when unset)."""
+        try:
+            raw = json.loads(WEAPON_SKILL_PROPERTIES_PATH.read_text(encoding="utf-8"))
+        except (OSError, ValueError):
+            return {}
+        out: dict[int, tuple[int, int, int]] = {}
+        for key, props in (raw.get("weapon_skills") or {}).items():
+            try:
+                values = [int(value) for value in props][:3]
+            except (TypeError, ValueError):
+                continue
+            values.extend([0] * (3 - len(values)))
+            out[int(key)] = (values[0], values[1], values[2])
+        return out
+
+    def weaponskill_properties(self, ws_id: int) -> tuple[int, int, int]:
+        """The (primary, secondary, tertiary) skillchain properties of a weapon skill."""
+        return self._weaponskill_properties().get(int(ws_id), (0, 0, 0))
+
     def spell(self, spell_id: int) -> dict | None:
         """One spell row: name, MP cost, cast time and the client's animation id."""
         row = self.db.one("SELECT * FROM spells WHERE id = ?", (int(spell_id),))
         return dict(row) if row else None
+
+    def trust_gear(self, trust_spell_id: int) -> list[int]:
+        """The item ids one Trust carries (migration 159), in item order."""
+        rows = self.db.all(
+            "SELECT item_id FROM trust_gear WHERE trust_spell_id = ? ORDER BY item_id",
+            (int(trust_spell_id),))
+        return [int(row["item_id"]) for row in rows]
+
+    def equipped_gear_rating(self, character_id: int) -> int:
+        """The average item level of the worn pieces, 0 when none of them carry one.
+
+        This is the "how well geared is the Master" number a Trust's share scales with;
+        older level-75 gear and empty slots contribute nothing.
+        """
+        row = self.db.one(
+            "SELECT AVG(i.item_level) AS rating FROM char_equip e "
+            "JOIN items i ON i.item_id = e.item_id "
+            "WHERE e.character_id = ? AND i.item_level > 0", (int(character_id),))
+        return int(row["rating"] or 0) if row is not None else 0
 
     def trust(self, spell_id: int) -> dict | None:
         """The alter ego a Trust spell calls, or None for an ordinary spell."""
@@ -1894,8 +2553,21 @@ class FanxiService:
                 self.db.all("SELECT id FROM weapon_skills WHERE id > 0 ORDER BY id")]
 
     def item_skill(self, item_id: int) -> int:
-        """The client's xi.skill type for a weapon item, or 0 for shields/grips/unknown."""
-        row = self.db.one("SELECT skill FROM items WHERE item_id = ?", (int(item_id),))
+        """The client's xi.skill type for a weapon item, or 0 for shields/grips/unknown.
+
+        ``item_weapon.skill`` is the combat table's authoritative type and is always
+        present for a real weapon.  The GearSwap default-library rows (migration 66)
+        predate the full catalogue and kept ``items.skill`` 0 through migration 111's
+        upsert, which only refreshes price/flags; migration 170 fills those rows in.
+        Fall back to the weapon row anyway so a database that has not run 170 yet, or
+        another hand-written item, cannot make the equipped weapon look non-weapon and
+        drop its whole weapon-skill menu (a COR's Armageddon lost Marksmanship and the
+        HUD's Wildfire tab until a Sword skill set equipped a skill-26 gun).
+        """
+        row = self.db.one(
+            "SELECT COALESCE(NULLIF(i.skill, 0), w.skill, 0) AS skill "
+            "FROM items i LEFT JOIN item_weapon w ON w.item_id = i.item_id "
+            "WHERE i.item_id = ?", (int(item_id),))
         return int(row["skill"] or 0) if row else 0
 
     def weapon_skill_ids_for(self, skill_id: int, max_skill: int) -> list[int]:
@@ -1927,9 +2599,43 @@ class FanxiService:
         rows = self.db.all(
             "SELECT DISTINCT m.value AS ws_id FROM char_equip e "
             "JOIN item_mods m ON m.item_id = e.item_id "
-            "WHERE e.character_id = ? AND m.mod_id = 355",
-            (int(character_id),))
+            "WHERE e.character_id = ? AND m.mod_id = ?",
+            (int(character_id), int(mod.ADDS_WEAPONSKILL)))
         return {int(row["ws_id"]) for row in rows}
+
+    def prime_weapon(self, item_id: int) -> prime_weapons.PrimeWeapon | None:
+        """The Prime-weapon stage for an item, or None when it is not a Prime weapon.
+
+        A Prime weapon's ``355`` modifier names its own skill, and the item's damage
+        rank inside that family is its stage: highest is the iL119 III stage 5, the next
+        is the iL119 II stage 4, and the third is the iL119 stage 3.  Stage 3 items do
+        not carry ``355`` on this server, so in practice only stages 4 and 5 reach here.
+        The result is cached because the item table is static until a migration.
+        """
+        item_id = int(item_id)
+        if item_id in self._prime_weapon_cache:
+            return self._prime_weapon_cache[item_id]
+        result = None
+        row = self.db.one(
+            "SELECT value FROM item_mods WHERE item_id = ? AND mod_id = ? LIMIT 1",
+            (item_id, int(mod.ADDS_WEAPONSKILL)))
+        if row is not None:
+            ws_id = int(row["value"])
+            if ws_id in prime_weapons.PRIME_WEAPON_SKILLS:
+                rows = self.db.all(
+                    "SELECT m.item_id AS item_id FROM item_mods m "
+                    "JOIN item_weapon w ON w.item_id = m.item_id "
+                    "WHERE m.mod_id = ? AND m.value = ? "
+                    "ORDER BY w.dmg DESC, m.item_id DESC",
+                    (int(mod.ADDS_WEAPONSKILL), ws_id))
+                rank = next((index for index, sibling in enumerate(rows)
+                             if int(sibling["item_id"]) == item_id), None)
+                stages = (5, 4, 3)
+                if rank is not None and rank < len(stages):
+                    result = prime_weapons.PrimeWeapon(
+                        item_id=item_id, ws_id=ws_id, stage=stages[rank])
+        self._prime_weapon_cache[item_id] = result
+        return result
 
     def weaponskill_by_name(self, name: str) -> dict | None:
         row = self.db.one("SELECT id, name, skill, skill_level, element, animation "
@@ -2043,6 +2749,42 @@ class FanxiService:
         row = self.db.one("SELECT * FROM items WHERE item_id = ?", (int(item_id),))
         return dict(row) if row else None
 
+    def item_mods(self, item_id: int) -> dict[int, int]:
+        """Modifier id -> value for one item, without per-copy augments.
+
+        ``equipped_mods`` is the total an outfit contributes.  This is the one-item view,
+        which the attack round needs to tell the swinging weapon's own "Sword
+        enhancement spell damage"+n apart from the other hand's.
+        """
+        rows = self.db.all(
+            "SELECT mod_id, value FROM item_mods WHERE item_id = ?", (int(item_id),))
+        return {int(row["mod_id"]): int(row["value"]) for row in rows}
+
+    def equipped_item_mods(self, character_id: int, item_id: int) -> dict[int, int]:
+        """One equipped item's modifiers, including the augment block of that copy.
+
+        A weapon's own "Sword enhancement spell damage" line applies only to that
+        weapon, so the attack round subtracts the *other* hand's line from the outfit
+        total.  The other weapon may carry its line in a Dynamis-Divergence augment
+        (Crocea Mors path C is +500%), which ``item_mods`` alone cannot see.  A
+        character-state item's row (the Hoxne Earring) is included as well.
+        """
+        mods = self.item_mods(item_id)
+        row = self.db.one(
+            "SELECT COALESCE(i.extra, X'') AS extra FROM char_equip e "
+            "LEFT JOIN char_inventory i ON i.character_id = e.character_id "
+            "AND i.container = e.container AND i.slot = e.slot "
+            "WHERE e.character_id = ? AND e.item_id = ? LIMIT 1",
+            (int(character_id), int(item_id)))
+        if row is not None:
+            try:
+                augment_stats.add_item_mods(mods, int(item_id), row["extra"])
+            except (KeyError, TypeError, ValueError):
+                pass
+            item_effects.add_item_mods(
+                mods, int(item_id), self._mastery_rank(int(character_id)))
+        return mods
+
     def food_effect(self, item_id: int) -> dict | None:
         """The duration, modifiers and eating animation for an edible item, or None."""
         row = self.db.one(
@@ -2057,6 +2799,12 @@ class FanxiService:
             mods = {}
         return {"item_id": int(row["item_id"]), "duration": int(row["duration"]),
                 "mods": mods, "animation": int(row["animation"] or 0)}
+
+    def dispense_items(self) -> list[dict]:
+        """Every charged dispense item (RMEA pouches and quivers), keyed by item id."""
+        return [dict(row) for row in self.db.all(
+            "SELECT item_id, ammo_id, quantity, max_charges, use_delay, reuse_delay, "
+            "cast_time, animation FROM item_dispense ORDER BY item_id")]
 
     def save_vitals(self, character_id: int, hp: int, mp: int) -> None:
         self.db.execute(
@@ -2092,6 +2840,102 @@ class FanxiService:
                     "ON CONFLICT(character_id, merit_id) DO UPDATE SET upgrades = excluded.upgrades",
                     (int(character_id), int(merit_id), int(upgrades)))
 
+    def save_merit_layout(self, character_id: int, upgrades, *, spend: bool = False) -> dict:
+        """Assign a batch of merit ranks, validating row and category caps.
+
+        ``upgrades`` maps a merit id (or its decimal string) to its new absolute rank.
+        Only the rows the launcher sends are changed, so a form can apply just the
+        menus the player touched.  ``spend`` charges the net point difference against
+        the unspent pool and refunds it when ranks are lowered; the Data page's editor
+        leaves it off so a character can be laid out like the other assignment cards.
+        """
+        if not isinstance(upgrades, dict):
+            raise ApiError(422, "validation_error",
+                           "send upgrades as a merit id -> ranks object")
+        counts = self.merits_for_character(int(character_id))
+        new_counts = dict(counts)
+        for raw_id, raw_value in upgrades.items():
+            try:
+                merit_id = int(raw_id)
+            except (TypeError, ValueError):
+                raise ApiError(422, "validation_error",
+                               "merit ids must be whole numbers")
+            if merit_id not in merit_table.MERITS:
+                raise ApiError(422, "validation_error",
+                               "unknown merit id %s" % merit_id)
+            if isinstance(raw_value, bool) or (
+                    isinstance(raw_value, float) and not raw_value.is_integer()):
+                raise ApiError(422, "validation_error",
+                               "merit ranks must be whole numbers")
+            try:
+                value = int(raw_value)
+            except (TypeError, ValueError):
+                raise ApiError(422, "validation_error",
+                               "merit ranks must be whole numbers")
+            maximum = merit_table.max_upgrades(merit_id)
+            if not 0 <= value <= maximum:
+                name = merit_menus.MERIT_NAMES.get(merit_id, "this merit")
+                raise ApiError(422, "validation_error",
+                               "%s is between 0 and %d ranks" % (name, maximum))
+            new_counts[merit_id] = value
+
+        category_totals: dict[int, int] = {}
+        old_totals: dict[int, int] = {}
+        for merit_id, value in new_counts.items():
+            category = merit_table.category_of(merit_id)
+            if category is None:
+                continue
+            category_totals[category] = category_totals.get(category, 0) + int(value)
+        for merit_id, value in counts.items():
+            category = merit_table.category_of(merit_id)
+            if category is None:
+                continue
+            old_totals[category] = old_totals.get(category, 0) + int(value)
+        for category, total in category_totals.items():
+            maximum = int(merit_table.CATEGORY_MAX.get(category, 0))
+            # A character assigned outside this editor can already hold more than the
+            # menu's cap.  Let those characters be lowered or reshuffled; only a layout
+            # that pushes the category further over its cap is refused.
+            if total > maximum and total > old_totals.get(category, 0):
+                name = merit_menus.CATEGORY_INFO[category]["name"]
+                raise ApiError(422, "merit_category_full",
+                               "%s allows %d upgrades; this layout asks for %d"
+                               % (name, maximum, total))
+
+        old_cost = merit_table.total_cost(counts)
+        new_cost = merit_table.total_cost(new_counts)
+        delta = new_cost - old_cost
+        character = self.character(int(character_id))
+        points = max(0, int(character.get("merit_points") or 0))
+        if spend:
+            if delta > points:
+                raise ApiError(422, "insufficient_merit_points",
+                               "this layout needs %d more merit points than the character has"
+                               % (delta - points))
+            new_cap = min(255, 127 + max(0, int(new_counts.get(0x0044, 0))))
+            points = min(new_cap, max(0, points - delta))
+
+        changed = {merit_id: value for merit_id, value in new_counts.items()
+                   if int(counts.get(merit_id, 0)) != int(value)}
+        if changed or spend:
+            with self.db.transaction() as conn:
+                for merit_id, value in changed.items():
+                    if value <= 0:
+                        conn.execute(
+                            "DELETE FROM char_merits WHERE character_id = ? AND merit_id = ?",
+                            (int(character_id), int(merit_id)))
+                    else:
+                        conn.execute(
+                            "INSERT INTO char_merits (character_id, merit_id, upgrades) "
+                            "VALUES (?, ?, ?) ON CONFLICT(character_id, merit_id) "
+                            "DO UPDATE SET upgrades = excluded.upgrades",
+                            (int(character_id), int(merit_id), int(value)))
+                if spend:
+                    conn.execute(
+                        "UPDATE characters SET merit_points = ?, updated_at = ? WHERE id = ?",
+                        (int(points), now_iso(), int(character_id)))
+        return new_counts
+
     def set_merit_points(self, character_id: int, points: int) -> None:
         self.db.execute(
             "UPDATE characters SET merit_points = ?, updated_at = ? WHERE id = ?",
@@ -2105,6 +2949,8 @@ class FanxiService:
     def move_item(self, character_id: int, from_container: int, from_slot: int,
                   to_container: int, to_slot: int, quantity: int) -> bool:
         """Move (or split) one stack between containers; the client sends 0x029."""
+        if int(from_container) == CONTAINER_RECYCLE or int(to_container) == CONTAINER_RECYCLE:
+            return False
         with self.db.transaction() as conn:
             src = conn.execute(
                 "SELECT item_id, quantity FROM char_inventory WHERE character_id = ? AND container = ? AND slot = ?",
@@ -2167,6 +3013,286 @@ class FanxiService:
                     "ON CONFLICT(character_id, container, slot) DO UPDATE SET item_id = excluded.item_id, quantity = excluded.quantity",
                     (int(character_id), int(to_container), int(target), item_id, quantity))
             return True
+
+    def drop_item(self, character_id: int, container: int, slot: int,
+                  quantity: int = 1) -> dict | None:
+        """Move a stack to the Recycle Bin (C2S 0x028); return the source slot's new state.
+
+        The client's Drop action is the Recycle Bin, not destruction.  The stack leaves
+        its bag, lands in container 17 with ``dropped_at``, and can be restored for 30
+        days.  A partial drop leaves the rest in the source slot.  Gil is never
+        droppable, the Recycle Bin itself cannot be dropped into, and a full bin leaves
+        the item where it is.
+        """
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT item_id, quantity, COALESCE(extra, X'') AS extra "
+                "FROM char_inventory WHERE character_id = ? AND container = ? AND slot = ?",
+                (int(character_id), int(container), int(slot))).fetchone()
+            if row is None:
+                return None
+            item_id, have = int(row["item_id"]), int(row["quantity"])
+            if item_id == 65535 or have <= 0 or int(container) == CONTAINER_RECYCLE:
+                return None
+            take = min(max(1, int(quantity)), have)
+            extra = bytes(row["extra"] or b"")
+            stack = int(conn.execute(
+                "SELECT COALESCE(stack, 1) FROM items WHERE item_id = ?",
+                (item_id,)).fetchone()[0] or 1)
+            # Reuse a matching Recycle Bin stack with room before taking a new slot.
+            destination = None
+            for candidate in conn.execute(
+                    "SELECT slot, quantity FROM char_inventory "
+                    "WHERE character_id = ? AND container = ? AND item_id = ? AND extra = ? "
+                    "ORDER BY slot", (int(character_id), CONTAINER_RECYCLE, item_id,
+                                      sqlite3.Binary(extra))):
+                if int(candidate["quantity"]) + take <= stack:
+                    destination = int(candidate["slot"])
+                    break
+            if destination is None:
+                occupied = {int(r["slot"]) for r in conn.execute(
+                    "SELECT slot FROM char_inventory WHERE character_id = ? "
+                    "AND container = ?", (int(character_id), CONTAINER_RECYCLE))}
+                destination = next((candidate for candidate in range(1, CONTAINER_SLOTS)
+                                    if candidate not in occupied), None)
+            if destination is None:
+                return {"item_id": item_id, "container": int(container), "slot": int(slot),
+                        "quantity": have, "recycled": 0, "recycle_full": True}
+            conn.execute(
+                "INSERT INTO char_inventory "
+                "(character_id, container, slot, item_id, quantity, extra, dropped_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?) "
+                "ON CONFLICT(character_id, container, slot) DO UPDATE SET "
+                "item_id = excluded.item_id, quantity = quantity + excluded.quantity, "
+                "extra = excluded.extra, dropped_at = excluded.dropped_at",
+                (int(character_id), CONTAINER_RECYCLE, int(destination), item_id, take,
+                 sqlite3.Binary(extra), now_iso()))
+            left = have - take
+            if left > 0:
+                conn.execute(
+                    "UPDATE char_inventory SET quantity = ? "
+                    "WHERE character_id = ? AND container = ? AND slot = ?",
+                    (left, int(character_id), int(container), int(slot)))
+            else:
+                conn.execute(
+                    "DELETE FROM char_inventory "
+                    "WHERE character_id = ? AND container = ? AND slot = ?",
+                    (int(character_id), int(container), int(slot)))
+            return {"item_id": item_id, "container": int(container), "slot": int(slot),
+                    "quantity": left, "recycled": take,
+                    "recycle_slot": int(destination)}
+
+    def restore_recycle_item(self, character_id: int, slot: int,
+                             quantity: int | None = None) -> dict | None:
+        """Take a stack back out of the Recycle Bin into the normal inventory.
+
+        Restored items are usable again immediately.  The inventory is the destination
+        (the point of the Recycle Bin is that the item is not equipped or used while it
+        is inside); if the inventory is full the item stays in the bin.
+        """
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT item_id, quantity, COALESCE(extra, X'') AS extra "
+                "FROM char_inventory WHERE character_id = ? AND container = ? AND slot = ?",
+                (int(character_id), CONTAINER_RECYCLE, int(slot))).fetchone()
+            if row is None:
+                return None
+            item_id, have = int(row["item_id"]), int(row["quantity"])
+            take = have if quantity is None else min(max(1, int(quantity)), have)
+            extra = bytes(row["extra"] or b"")
+            stack = int(conn.execute(
+                "SELECT COALESCE(stack, 1) FROM items WHERE item_id = ?",
+                (item_id,)).fetchone()[0] or 1)
+            destination = None
+            for candidate in conn.execute(
+                    "SELECT slot, quantity FROM char_inventory "
+                    "WHERE character_id = ? AND container = 0 AND item_id = ? AND extra = ? "
+                    "ORDER BY slot", (int(character_id), item_id, sqlite3.Binary(extra))):
+                if int(candidate["quantity"]) + take <= stack:
+                    destination = int(candidate["slot"])
+                    break
+            if destination is None:
+                occupied = {int(r["slot"]) for r in conn.execute(
+                    "SELECT slot FROM char_inventory WHERE character_id = ? AND container = 0",
+                    (int(character_id),))}
+                destination = next((candidate for candidate in range(1, CONTAINER_SLOTS)
+                                    if candidate not in occupied), None)
+            if destination is None:
+                return {"item_id": item_id, "quantity": have, "restored": 0,
+                        "inventory_full": True}
+            conn.execute(
+                "INSERT INTO char_inventory "
+                "(character_id, container, slot, item_id, quantity, extra) "
+                "VALUES (?, 0, ?, ?, ?, ?) "
+                "ON CONFLICT(character_id, container, slot) DO UPDATE SET "
+                "item_id = excluded.item_id, quantity = quantity + excluded.quantity, "
+                "extra = excluded.extra",
+                (int(character_id), destination, item_id, take, sqlite3.Binary(extra)))
+            left = have - take
+            if left > 0:
+                conn.execute(
+                    "UPDATE char_inventory SET quantity = ? "
+                    "WHERE character_id = ? AND container = ? AND slot = ?",
+                    (left, int(character_id), CONTAINER_RECYCLE, int(slot)))
+            else:
+                conn.execute(
+                    "DELETE FROM char_inventory "
+                    "WHERE character_id = ? AND container = ? AND slot = ?",
+                    (int(character_id), CONTAINER_RECYCLE, int(slot)))
+            return {"item_id": item_id, "slot": int(destination),
+                    "quantity": take, "restored": take, "left": left}
+
+    def pull_magic_item(self, character_id: int, source: str, item_id: int,
+                        extra: bytes = b"", quantity: int | None = None) -> dict | None:
+        """Move one exact stack from the hidden slips/locker into the inventory.
+
+        This is the HUD's Pull button for a row that is not in a client bag.  The source
+        row is removed only after the inventory row is written; a full inventory leaves
+        it where it was.
+        """
+        source = str(source or "").casefold()
+        if source not in ("slip", "locker"):
+            return None
+        with self.db.transaction() as conn:
+            if source == "slip":
+                row = conn.execute(
+                    "SELECT quantity FROM char_storage WHERE character_id = ? AND item_id = ?",
+                    (int(character_id), int(item_id))).fetchone()
+                extra = b""
+            else:
+                row = conn.execute(
+                    "SELECT quantity FROM char_locker "
+                    "WHERE character_id = ? AND item_id = ? AND extra = ?",
+                    (int(character_id), int(item_id), sqlite3.Binary(bytes(extra)))).fetchone()
+            if row is None:
+                return None
+            have = int(row["quantity"])
+            take = have if quantity is None else min(max(1, int(quantity)), have)
+            stack = int(conn.execute(
+                "SELECT COALESCE(stack, 1) FROM items WHERE item_id = ?",
+                (int(item_id),)).fetchone()[0] or 1)
+            destination = None
+            for candidate in conn.execute(
+                    "SELECT slot, quantity FROM char_inventory "
+                    "WHERE character_id = ? AND container = 0 AND item_id = ? AND extra = ? "
+                    "ORDER BY slot", (int(character_id), int(item_id),
+                                      sqlite3.Binary(bytes(extra)))):
+                if int(candidate["quantity"]) + take <= stack:
+                    destination = int(candidate["slot"])
+                    break
+            if destination is None:
+                occupied = {int(r["slot"]) for r in conn.execute(
+                    "SELECT slot FROM char_inventory WHERE character_id = ? AND container = 0",
+                    (int(character_id),))}
+                destination = next((candidate for candidate in range(1, CONTAINER_SLOTS)
+                                    if candidate not in occupied), None)
+            if destination is None:
+                return {"item_id": int(item_id), "quantity": have, "pulled": 0,
+                        "inventory_full": True}
+            conn.execute(
+                "INSERT INTO char_inventory "
+                "(character_id, container, slot, item_id, quantity, extra) "
+                "VALUES (?, 0, ?, ?, ?, ?) "
+                "ON CONFLICT(character_id, container, slot) DO UPDATE SET "
+                "item_id = excluded.item_id, quantity = quantity + excluded.quantity, "
+                "extra = excluded.extra",
+                (int(character_id), destination, int(item_id), take,
+                 sqlite3.Binary(bytes(extra))))
+            left = have - take
+            if source == "slip":
+                if left:
+                    conn.execute(
+                        "UPDATE char_storage SET quantity = ? "
+                        "WHERE character_id = ? AND item_id = ?",
+                        (left, int(character_id), int(item_id)))
+                else:
+                    conn.execute(
+                        "DELETE FROM char_storage WHERE character_id = ? AND item_id = ?",
+                        (int(character_id), int(item_id)))
+            else:
+                if left:
+                    conn.execute(
+                        "UPDATE char_locker SET quantity = ? "
+                        "WHERE character_id = ? AND item_id = ? AND extra = ?",
+                        (left, int(character_id), int(item_id),
+                         sqlite3.Binary(bytes(extra))))
+                else:
+                    conn.execute(
+                        "DELETE FROM char_locker WHERE character_id = ? "
+                        "AND item_id = ? AND extra = ?",
+                        (int(character_id), int(item_id), sqlite3.Binary(bytes(extra))))
+            return {"item_id": int(item_id), "slot": int(destination),
+                    "quantity": take, "pulled": take, "left": left, "source": source}
+
+    def store_visible_in_locker(self, character_id: int, container: int, slot: int,
+                                quantity: int | None = None) -> dict | None:
+        """Move one visible bag slot into the hidden 9,999-slot Magic Bag."""
+        with self.db.transaction() as conn:
+            row = conn.execute(
+                "SELECT item_id, quantity, COALESCE(extra, X'') AS extra "
+                "FROM char_inventory WHERE character_id = ? AND container = ? AND slot = ?",
+                (int(character_id), int(container), int(slot))).fetchone()
+            if row is None or int(row["item_id"]) == 65535:
+                return None
+            item_id, have = int(row["item_id"]), int(row["quantity"])
+            take = have if quantity is None else min(max(1, int(quantity)), have)
+            extra = bytes(row["extra"] or b"")
+            existing = conn.execute(
+                "SELECT quantity FROM char_locker WHERE character_id = ? "
+                "AND item_id = ? AND extra = ?",
+                (int(character_id), item_id, sqlite3.Binary(extra))).fetchone()
+            slots = int(conn.execute(
+                "SELECT COUNT(*) FROM char_locker WHERE character_id = ?",
+                (int(character_id),)).fetchone()[0])
+            if existing is None and slots >= LOCKER_CAPACITY:
+                return {"item_id": item_id, "quantity": have, "stored": 0,
+                        "locker_full": True}
+            conn.execute(
+                "INSERT INTO char_locker (character_id, item_id, extra, quantity) "
+                "VALUES (?, ?, ?, ?) "
+                "ON CONFLICT(character_id, item_id, extra) "
+                "DO UPDATE SET quantity = quantity + excluded.quantity",
+                (int(character_id), item_id, sqlite3.Binary(extra), take))
+            left = have - take
+            if left:
+                conn.execute(
+                    "UPDATE char_inventory SET quantity = ? "
+                    "WHERE character_id = ? AND container = ? AND slot = ?",
+                    (left, int(character_id), int(container), int(slot)))
+            else:
+                conn.execute(
+                    "DELETE FROM char_inventory "
+                    "WHERE character_id = ? AND container = ? AND slot = ?",
+                    (int(character_id), int(container), int(slot)))
+            return {"item_id": item_id, "stored": take, "left": left,
+                    "locker_slot": slots + (1 if existing is None else 0)}
+
+    def purge_recycle(self, character_id: int | None = None) -> int:
+        """Delete Recycle Bin rows whose 30 days are up; return how many slots went."""
+        cutoff = iso(utcnow() - timedelta(days=RECYCLE_DAYS))
+        with self.db.transaction() as conn:
+            if character_id is None:
+                cursor = conn.execute(
+                    "DELETE FROM char_inventory WHERE container = ? "
+                    "AND dropped_at IS NOT NULL AND dropped_at < ?",
+                    (CONTAINER_RECYCLE, cutoff))
+            else:
+                cursor = conn.execute(
+                    "DELETE FROM char_inventory WHERE character_id = ? AND container = ? "
+                    "AND dropped_at IS NOT NULL AND dropped_at < ?",
+                    (int(character_id), CONTAINER_RECYCLE, cutoff))
+            return int(cursor.rowcount or 0)
+
+    def recycle_items(self, character_id: int) -> list[dict]:
+        """The Recycle Bin contents with names and the time each stack has left."""
+        rows = self.db.all(
+            "SELECT ci.slot, ci.item_id, ci.quantity, COALESCE(ci.extra, X'') AS extra, "
+            "COALESCE(ci.dropped_at, '') AS dropped_at, "
+            "COALESCE(i.name, 'Item') AS name "
+            "FROM char_inventory ci LEFT JOIN items i ON i.item_id = ci.item_id "
+            "WHERE ci.character_id = ? AND ci.container = ? ORDER BY ci.slot",
+            (int(character_id), CONTAINER_RECYCLE))
+        return [dict(row) for row in rows]
 
     def stack_container(self, character_id: int, container: int) -> list[dict]:
         """Merge partial stacks of one item in a container (C2S 0x03A, the client's sort).
@@ -2460,6 +3586,404 @@ class FanxiService:
             return {"moved": moved, "kept": kept, "remaining": remaining,
                     "free": free_slots}
 
+    # --- job storage ---------------------------------------------------------------------------
+
+    @staticmethod
+    def _job_mask(job: int) -> int:
+        """The item-table job bit for one job id, with the same 1..22 rule as the client."""
+        job = int(job)
+        if not 1 <= job <= 22:
+            raise ValueError("job must be 1..22")
+        return 1 << (job - 1)
+
+    @staticmethod
+    def _auto_equipment(row) -> bool:
+        """Is this row a single-copy piece of equipment the organizer may move?
+
+        The 9,999 locker also holds consumables (Call Beast jugs, ammo stacks) and the
+        player may keep materials there.  Those have a stack size above one or no equip
+        slot; pulling them out on every job change would bury the wardrobes.  The
+        organizer therefore moves single-copy gear only, and ``//locker`` remains the
+        tool for everything else.
+        """
+        return (int(row["item_id"]) != 65535
+                and int(row["jobs"] or 0) != 0
+                and str(row["equip_slot"] or "").strip() != ""
+                and int(row["stack"] or 1) == 1)
+
+    @staticmethod
+    def _equipped_slots(conn: sqlite3.Connection,
+                        character_id: int) -> set[tuple[int, int]]:
+        return {(int(row["container"]), int(row["slot"]))
+                for row in conn.execute(
+                    "SELECT container, slot FROM char_equip WHERE character_id = ?",
+                    (int(character_id),))}
+
+    @staticmethod
+    def _next_free(occupied: dict[int, set[int]], container: int) -> int | None:
+        """The first free slot in a bag (slot 0 is gil in the inventory, never free)."""
+        for slot in range(1, CONTAINER_SLOTS):
+            if slot not in occupied[container]:
+                occupied[container].add(slot)
+                return slot
+        return None
+
+    @staticmethod
+    def _locker_totals(conn: sqlite3.Connection, character_id: int) -> tuple[int, int]:
+        """Return ``(slots, items)``: distinct locker entries and their total quantity."""
+        row = conn.execute(
+            "SELECT COUNT(*) AS slots, COALESCE(SUM(quantity), 0) AS items "
+            "FROM char_locker WHERE character_id = ?", (int(character_id),)).fetchone()
+        return int(row["slots"] or 0), int(row["items"] or 0)
+
+    def _stored_gear(self, character_id: int) -> list[dict]:
+        """Slip and locker rows joined to their item, for //storage list and the status.
+
+        ``source`` is ``slip`` or ``locker``; the two stores are presented as one
+        storage because the player should not have to remember which 80-slot bag a
+        piece used to live in.
+        """
+        rows = self.db.all(
+            "SELECT 'slip' AS source, cs.item_id, cs.quantity, X'' AS extra, cs.slip, "
+            "COALESCE(i.name, 'Item') AS name, COALESCE(i.jobs, 0) AS jobs, "
+            "COALESCE(i.equip_slot, '') AS equip_slot, COALESCE(i.stack, 1) AS stack "
+            "FROM char_storage cs LEFT JOIN items i ON i.item_id = cs.item_id "
+            "WHERE cs.character_id = ? "
+            "UNION ALL "
+            "SELECT 'locker', cl.item_id, cl.quantity, COALESCE(cl.extra, X''), 0, "
+            "COALESCE(i.name, 'Item'), COALESCE(i.jobs, 0), "
+            "COALESCE(i.equip_slot, ''), COALESCE(i.stack, 1) "
+            "FROM char_locker cl LEFT JOIN items i ON i.item_id = cl.item_id "
+            "WHERE cl.character_id = ?",
+            (int(character_id), int(character_id)))
+        return [dict(row) for row in rows]
+
+    def storage_contents(self, character_id: int, job: int | None = None) -> list[dict]:
+        """Stored gear, optionally limited to what one job can equip."""
+        rows = self._stored_gear(character_id)
+        if job is None:
+            return rows
+        mask = self._job_mask(job)
+        return [row for row in rows
+                if self._auto_equipment(row) and (int(row["jobs"]) & mask)]
+
+    def storage_overview(self, character_id: int, job: int) -> dict:
+        """Counts for //storage with no verb: both stores and the bags for other jobs."""
+        mask = self._job_mask(job)
+        stored = self._stored_gear(character_id)
+        slip_total = sum(int(row["quantity"]) for row in stored if row["source"] == "slip")
+        locker_items = sum(int(row["quantity"]) for row in stored if row["source"] == "locker")
+        locker_slots = sum(1 for row in stored if row["source"] == "locker")
+        stored_for_job = sum(
+            int(row["quantity"]) for row in stored
+            if self._auto_equipment(row) and (int(row["jobs"]) & mask))
+        equipped = {(int(row["container"]), int(row["slot"])) for row in self.db.all(
+            "SELECT container, slot FROM char_equip WHERE character_id = ?",
+            (int(character_id),))}
+        placeholders = ",".join("?" for _ in PERMANENT_BAGS)
+        away = 0
+        for row in self.db.all(
+                "SELECT ci.container, ci.slot, ci.item_id, ci.quantity, "
+                "COALESCE(i.jobs, 0) AS jobs, COALESCE(i.equip_slot, '') AS equip_slot, "
+                "COALESCE(i.stack, 1) AS stack "
+                "FROM char_inventory ci LEFT JOIN items i ON i.item_id = ci.item_id "
+                "WHERE ci.character_id = ? AND ci.container IN (%s)" % placeholders,
+                (int(character_id), *PERMANENT_BAGS)):
+            if not self._auto_equipment(row):
+                continue
+            if int(row["jobs"]) & mask:
+                continue
+            if (int(row["container"]), int(row["slot"])) in equipped:
+                continue
+            away += int(row["quantity"])
+        return {"slip_total": slip_total,
+                "locker_total": locker_items, "locker_items": locker_items,
+                "locker_slots": locker_slots, "stored_for_job": stored_for_job,
+                "away": away, "locker_capacity": LOCKER_CAPACITY}
+
+    def storage_job_counts(self, character_id: int) -> dict:
+        """Per-job stored counts and one shared bucket, for //storage list all."""
+        counts = {job: 0 for job in range(1, 23)}
+        shared = 0
+        for row in self._stored_gear(character_id):
+            if not self._auto_equipment(row):
+                continue
+            jobs = int(row["jobs"])
+            quantity = int(row["quantity"])
+            if jobs & (jobs - 1):
+                shared += quantity
+                continue
+            job = jobs.bit_length()
+            if 1 <= job <= 22:
+                counts[job] += quantity
+        return {"jobs": counts, "shared": shared}
+
+    def organize_job_storage(self, character_id: int, job: int, *,
+                             scope: str = "unusable", store: bool = True,
+                             pull: bool = True, relocate: bool = True) -> dict:
+        """Make the bags match one job: put away what it cannot equip, bring out what it can.
+
+        Slip items go to ``char_storage``; gear without a slip -- the Ambuscade capes,
+        relic weapons, job accessories -- goes to the hidden 9,999-slot locker, which is
+        the "storage" the client's 80-slot Storage bag cannot represent.  A copy with a
+        non-empty augment block always goes to the locker, because ``char_storage`` has
+        no ``extra`` column and a slip would silently drop the augment.
+
+        ``scope='unusable'`` moves everything the job cannot equip (the job-change and
+        ``//storage organize`` rule); ``scope='exclusive'`` moves only that job's own
+        gear (``//storage store <job>``).  Pulling mirrors it: ``unusable`` brings back
+        every stored piece the job can equip, ``exclusive`` only its own.  Pulled gear
+        fills the Mog Wardrobes in equip-slot order, then the inventory; the tidy moves
+        the job's loose inventory/Safe pieces into the wardrobes too.  Equipped pieces
+        and working stock never move, and every move is one transaction: the source row
+        is deleted only after the destination row is written.
+        """
+        job = int(job)
+        mask = self._job_mask(job)
+        scope = str(scope or "unusable").casefold()
+        if scope not in ("unusable", "exclusive"):
+            raise ValueError("scope must be 'unusable' or 'exclusive'")
+        with self.db.transaction() as conn:
+            equipped = self._equipped_slots(conn, character_id)
+            source_placeholders = ",".join("?" for _ in PERMANENT_BAGS)
+            source_rows = conn.execute(
+                "SELECT ci.container, ci.slot, ci.item_id, ci.quantity, "
+                "COALESCE(ci.extra, X'') AS extra, "
+                "COALESCE(i.name, 'Item') AS name, COALESCE(i.jobs, 0) AS jobs, "
+                "COALESCE(i.equip_slot, '') AS equip_slot, COALESCE(i.stack, 1) AS stack, "
+                "COALESCE(st.slip, 0) AS slip "
+                "FROM char_inventory ci LEFT JOIN items i ON i.item_id = ci.item_id "
+                "LEFT JOIN item_storage st ON st.item_id = ci.item_id "
+                "WHERE ci.character_id = ? AND ci.container IN (%s) "
+                "ORDER BY ci.container, ci.slot" % source_placeholders,
+                (int(character_id), *PERMANENT_BAGS)).fetchall()
+            locker_slots, locker_items = self._locker_totals(conn, character_id)
+            stored: list[dict] = []
+            stored_slip = stored_locker = locker_full = equipped_left = 0
+            if store:
+                for row in source_rows:
+                    if not self._auto_equipment(row):
+                        continue
+                    jobs = int(row["jobs"])
+                    if scope == "exclusive":
+                        if jobs != mask:
+                            continue
+                    elif jobs & mask:
+                        continue  # the job can equip it, so it stays out
+                    source = (int(row["container"]), int(row["slot"]))
+                    if source in equipped:
+                        equipped_left += 1
+                        continue
+                    item_id = int(row["item_id"])
+                    if item_id in WORKING_STOCK_IDS:
+                        continue
+                    quantity = int(row["quantity"])
+                    extra = bytes(row["extra"] or b"")
+                    slip = int(row["slip"] or 0)
+                    if slip and not extra:
+                        conn.execute(
+                            "INSERT INTO char_storage (character_id, item_id, quantity, slip) "
+                            "VALUES (?, ?, ?, ?) "
+                            "ON CONFLICT(character_id, item_id) "
+                            "DO UPDATE SET quantity = quantity + excluded.quantity",
+                            (int(character_id), item_id, quantity, slip))
+                        stored_slip += quantity
+                        destination = "slip"
+                    else:
+                        existing = conn.execute(
+                            "SELECT 1 FROM char_locker WHERE character_id = ? "
+                            "AND item_id = ? AND extra = ?",
+                            (int(character_id), item_id,
+                             sqlite3.Binary(extra))).fetchone()
+                        if existing is None and locker_slots >= LOCKER_CAPACITY:
+                            locker_full += quantity
+                            continue
+                        conn.execute(
+                            "INSERT INTO char_locker "
+                            "(character_id, item_id, extra, quantity) VALUES (?, ?, ?, ?) "
+                            "ON CONFLICT(character_id, item_id, extra) "
+                            "DO UPDATE SET quantity = quantity + excluded.quantity",
+                            (int(character_id), item_id, sqlite3.Binary(extra), quantity))
+                        if existing is None:
+                            locker_slots += 1
+                        locker_items += quantity
+                        stored_locker += quantity
+                        destination = "locker"
+                    conn.execute(
+                        "DELETE FROM char_inventory WHERE character_id = ? "
+                        "AND container = ? AND slot = ?",
+                        (int(character_id), source[0], source[1]))
+                    stored.append({
+                        "from_container": source[0], "from_slot": source[1],
+                        "item_id": item_id, "quantity": quantity,
+                        "name": str(row["name"] or "Item"),
+                        "extra": extra, "slip": slip, "destination": destination,
+                    })
+
+            pulled: list[dict] = []
+            pulled_slip = pulled_locker = remaining = 0
+            occupied = {container: set() for container in ORGANIZE_DESTINATIONS}
+            destination_placeholders = ",".join("?" for _ in ORGANIZE_DESTINATIONS)
+            for row in conn.execute(
+                    "SELECT container, slot FROM char_inventory WHERE character_id = ? "
+                    "AND container IN (%s)" % destination_placeholders,
+                    (int(character_id), *ORGANIZE_DESTINATIONS)):
+                occupied[int(row["container"])].add(int(row["slot"]))
+            if pull:
+                candidates = conn.execute(
+                    "SELECT 'slip' AS source, cs.item_id, cs.quantity, X'' AS extra, cs.slip, "
+                    "COALESCE(i.name, 'Item') AS name, COALESCE(i.jobs, 0) AS jobs, "
+                    "COALESCE(i.equip_slot, '') AS equip_slot, COALESCE(i.stack, 1) AS stack "
+                    "FROM char_storage cs LEFT JOIN items i ON i.item_id = cs.item_id "
+                    "WHERE cs.character_id = ? "
+                    "UNION ALL "
+                    "SELECT 'locker', cl.item_id, cl.quantity, COALESCE(cl.extra, X''), 0, "
+                    "COALESCE(i.name, 'Item'), COALESCE(i.jobs, 0), "
+                    "COALESCE(i.equip_slot, ''), COALESCE(i.stack, 1) "
+                    "FROM char_locker cl LEFT JOIN items i ON i.item_id = cl.item_id "
+                    "WHERE cl.character_id = ?",
+                    (int(character_id), int(character_id))).fetchall()
+                candidates = [row for row in candidates
+                              if self._auto_equipment(row)
+                              and ((int(row["jobs"]) == mask) if scope == "exclusive"
+                                   else bool(int(row["jobs"]) & mask))]
+                candidates.sort(key=lambda row: (
+                    EQUIP_ORDER.get(str(row["equip_slot"] or ""), 99),
+                    str(row["name"] or "").casefold(), int(row["item_id"]),
+                    bytes(row["extra"] or b"")))
+                for row in candidates:
+                    source = str(row["source"])
+                    item_id = int(row["item_id"])
+                    extra = bytes(row["extra"] or b"")
+                    left = int(row["quantity"])
+                    stack = max(1, int(row["stack"] or 1))
+                    moved_qty = 0
+                    while left > 0:
+                        target = None
+                        for container in ORGANIZE_DESTINATIONS:
+                            slot = self._next_free(occupied, container)
+                            if slot is not None:
+                                target = (container, slot)
+                                break
+                        if target is None:
+                            break
+                        put = min(left, stack)
+                        conn.execute(
+                            "INSERT INTO char_inventory "
+                            "(character_id, container, slot, item_id, quantity, extra) "
+                            "VALUES (?, ?, ?, ?, ?, ?) "
+                            "ON CONFLICT(character_id, container, slot) "
+                            "DO UPDATE SET item_id = excluded.item_id, "
+                            "quantity = excluded.quantity, extra = excluded.extra",
+                            (int(character_id), target[0], target[1], item_id, put,
+                             sqlite3.Binary(extra)))
+                        pulled.append({
+                            "to_container": target[0], "to_slot": target[1],
+                            "item_id": item_id, "quantity": put,
+                            "name": str(row["name"] or "Item"),
+                            "extra": extra, "source": source,
+                        })
+                        left -= put
+                        moved_qty += put
+                    if moved_qty:
+                        if source == "slip":
+                            pulled_slip += moved_qty
+                        else:
+                            pulled_locker += moved_qty
+                    if not moved_qty:
+                        remaining += int(row["quantity"])
+                        continue
+                    if left:
+                        remaining += left
+                        if source == "slip":
+                            conn.execute(
+                                "UPDATE char_storage SET quantity = ? "
+                                "WHERE character_id = ? AND item_id = ?",
+                                (left, int(character_id), item_id))
+                        else:
+                            conn.execute(
+                                "UPDATE char_locker SET quantity = ? "
+                                "WHERE character_id = ? AND item_id = ? AND extra = ?",
+                                (left, int(character_id), item_id, sqlite3.Binary(extra)))
+                    else:
+                        if source == "slip":
+                            conn.execute(
+                                "DELETE FROM char_storage "
+                                "WHERE character_id = ? AND item_id = ?",
+                                (int(character_id), item_id))
+                        else:
+                            conn.execute(
+                                "DELETE FROM char_locker WHERE character_id = ? "
+                                "AND item_id = ? AND extra = ?",
+                                (int(character_id), item_id, sqlite3.Binary(extra)))
+
+            relocated: list[dict] = []
+            if relocate:
+                home_placeholders = ",".join("?" for _ in ORGANIZE_HOME_BAGS)
+                home_rows = conn.execute(
+                    "SELECT ci.container, ci.slot, ci.item_id, ci.quantity, "
+                    "COALESCE(ci.extra, X'') AS extra, "
+                    "COALESCE(i.name, 'Item') AS name, COALESCE(i.jobs, 0) AS jobs, "
+                    "COALESCE(i.equip_slot, '') AS equip_slot, COALESCE(i.stack, 1) AS stack "
+                    "FROM char_inventory ci LEFT JOIN items i ON i.item_id = ci.item_id "
+                    "WHERE ci.character_id = ? AND ci.container IN (%s) "
+                    "ORDER BY ci.container, ci.slot" % home_placeholders,
+                    (int(character_id), *ORGANIZE_HOME_BAGS)).fetchall()
+                for row in home_rows:
+                    if not self._auto_equipment(row):
+                        continue
+                    jobs = int(row["jobs"])
+                    if scope == "exclusive":
+                        if jobs != mask:
+                            continue
+                    elif not (jobs & mask):
+                        continue
+                    source = (int(row["container"]), int(row["slot"]))
+                    if source in equipped:
+                        continue
+                    target = None
+                    for container in WARDROBE_CONTAINERS:
+                        slot = self._next_free(occupied, container)
+                        if slot is not None:
+                            target = (container, slot)
+                            break
+                    if target is None:
+                        continue
+                    conn.execute(
+                        "UPDATE char_inventory SET container = ?, slot = ? "
+                        "WHERE character_id = ? AND container = ? AND slot = ?",
+                        (target[0], target[1], int(character_id), source[0], source[1]))
+                    if source[0] in occupied:
+                        occupied[source[0]].discard(source[1])
+                    relocated.append({
+                        "from_container": source[0], "from_slot": source[1],
+                        "to_container": target[0], "to_slot": target[1],
+                        "item_id": int(row["item_id"]), "quantity": int(row["quantity"]),
+                        "name": str(row["name"] or "Item"),
+                        "extra": bytes(row["extra"] or b""),
+                    })
+
+            storage_count = int(conn.execute(
+                "SELECT COALESCE(SUM(quantity), 0) FROM char_storage WHERE character_id = ?",
+                (int(character_id),)).fetchone()[0])
+            locker_slots, locker_items = self._locker_totals(conn, character_id)
+            free = sum(CONTAINER_SLOTS - 1 - len(occupied[container])
+                       for container in WARDROBE_CONTAINERS)
+            return {
+                "job": job, "scope": scope,
+                "stored": stored, "stored_slip": stored_slip,
+                "stored_locker": stored_locker,
+                "stored_total": stored_slip + stored_locker,
+                "locker_full": locker_full, "equipped": equipped_left,
+                "pulled": pulled, "pulled_slip": pulled_slip,
+                "pulled_locker": pulled_locker,
+                "pulled_total": pulled_slip + pulled_locker,
+                "remaining": remaining, "relocated": relocated,
+                "free": free, "storage_count": storage_count,
+                "locker_count": locker_slots, "locker_items": locker_items,
+                "locker_capacity": LOCKER_CAPACITY,
+            }
+
     def storage_summary(self, character_id: int) -> dict[int, int]:
         """Slip number -> stored quantity, for //storage with no arguments."""
         return {int(row["slip"]): int(row["quantity"]) for row in self.db.all(
@@ -2496,7 +4020,7 @@ class FanxiService:
         return False
 
     def store_in_locker(self, character_id: int, selector: dict) -> dict:
-        """Move matching items from every permanent bag into the hidden 9999-item locker.
+        """Move matching items from every permanent bag into the hidden 9,999-slot locker.
 
         The locker is not a client container: the item's char_inventory row is deleted, so
         it disappears from every bag until ``take_from_locker`` puts it back.  The item's
@@ -2517,9 +4041,7 @@ class FanxiService:
             equipped = {(int(row["container"]), int(row["slot"])) for row in conn.execute(
                 "SELECT container, slot FROM char_equip WHERE character_id = ?",
                 (int(character_id),))}
-            current = int(conn.execute(
-                "SELECT COALESCE(SUM(quantity), 0) FROM char_locker WHERE character_id = ?",
-                (int(character_id),)).fetchone()[0])
+            locker_slots, locker_items = self._locker_totals(conn, character_id)
             moved: list[dict] = []
             equipped_left = 0
             remaining = 0
@@ -2535,7 +4057,11 @@ class FanxiService:
                 item_id = int(row["item_id"])
                 quantity = int(row["quantity"])
                 extra = bytes(row["extra"] or b"")
-                if current + quantity > LOCKER_CAPACITY:
+                existing = conn.execute(
+                    "SELECT 1 FROM char_locker WHERE character_id = ? "
+                    "AND item_id = ? AND extra = ?",
+                    (int(character_id), item_id, sqlite3.Binary(extra))).fetchone()
+                if existing is None and locker_slots >= LOCKER_CAPACITY:
                     remaining += quantity
                     continue
                 conn.execute(
@@ -2548,14 +4074,17 @@ class FanxiService:
                     "ON CONFLICT(character_id, item_id, extra) "
                     "DO UPDATE SET quantity = quantity + excluded.quantity",
                     (int(character_id), item_id, sqlite3.Binary(extra), quantity))
-                current += quantity
+                if existing is None:
+                    locker_slots += 1
+                locker_items += quantity
                 moved.append({
                     "from_container": source[0], "from_slot": source[1],
                     "item_id": item_id, "quantity": quantity, "extra": extra,
                     "name": str(row["name"] or "Item"),
                 })
             return {"moved": moved, "equipped": equipped_left, "remaining": remaining,
-                    "locker_count": current, "locker_capacity": LOCKER_CAPACITY}
+                    "locker_count": locker_slots, "locker_items": locker_items,
+                    "locker_capacity": LOCKER_CAPACITY}
 
     def take_from_locker(self, character_id: int, selector: dict,
                          limit: int | None = None,
@@ -2647,19 +4176,23 @@ class FanxiService:
                         (int(character_id), item_id, sqlite3.Binary(extra)))
                 if limit is not None:
                     limit -= moved_qty
-            stored = int(conn.execute(
-                "SELECT COALESCE(SUM(quantity), 0) FROM char_locker WHERE character_id = ?",
-                (int(character_id),)).fetchone()[0])
+            locker_slots, locker_items = self._locker_totals(conn, character_id)
             return {"moved": moved, "skipped": skipped, "remaining": remaining,
-                    "locker_count": stored, "locker_capacity": LOCKER_CAPACITY}
+                    "locker_count": locker_slots, "locker_items": locker_items,
+                    "locker_capacity": LOCKER_CAPACITY}
 
     def locker_summary(self, character_id: int) -> dict:
-        """Filled/capacity totals for //locker with no arguments."""
+        """Filled/capacity totals for //locker with no arguments.
+
+        ``slots`` is what the 9,999 limit counts (one per item id + augment block), so a
+        99-item jug stack is one slot; ``items`` is the total quantity behind them.
+        """
         row = self.db.one(
-            "SELECT COUNT(*) AS kinds, COALESCE(SUM(quantity), 0) AS items "
+            "SELECT COUNT(*) AS slots, COALESCE(SUM(quantity), 0) AS items "
             "FROM char_locker WHERE character_id = ?", (int(character_id),))
-        return {"kinds": int(row["kinds"] or 0), "items": int(row["items"] or 0),
-                "capacity": LOCKER_CAPACITY}
+        slots = int(row["slots"] or 0)
+        return {"slots": slots, "kinds": slots, "items": int(row["items"] or 0),
+                "capacity": LOCKER_CAPACITY, "free": LOCKER_CAPACITY - slots}
 
     def locker_items(self, character_id: int) -> list[dict]:
         """Everything in the hidden locker, for //locker list."""
@@ -2683,7 +4216,7 @@ class FanxiService:
     def inventory_slot(self, character_id: int, container: int, slot: int) -> dict | None:
         """The item in one exact bag slot, or None when the slot is empty."""
         row = self.db.one(
-            "SELECT container, slot, item_id, quantity FROM char_inventory "
+            "SELECT container, slot, item_id, quantity, extra FROM char_inventory "
             "WHERE character_id = ? AND container = ? AND slot = ?",
             (int(character_id), int(container), int(slot)))
         return dict(row) if row is not None else None
@@ -2898,18 +4431,16 @@ class FanxiService:
         with self.db.connection() as conn:
             return self._owns_item(conn, character_id, item_id)
 
-    def add_item(self, character_id: int, item_id: int, quantity: int = 1,
-                 one_per_character: bool = False) -> dict:
+    def add_item(self, character_id: int, item_id: int, quantity: int = 1) -> dict:
         if quantity <= 0:
             raise ApiError(422, "validation_error", "quantity must be positive")
         item = self.item(item_id)
-        rare = bool(item and int(item.get("rare") or 0))
-        # The Armory treats Ex as one-per-character too; a normal grant does not,
-        # because the augmented job capes are Ex and several builds share an id.
-        unique = rare or bool(one_per_character and item and int(item.get("ex") or 0))
+        # Only Rare caps the character at one copy; Ex items can be held in
+        # multiples (the augmented job capes are Ex and several builds share an id).
+        unique = bool(item and int(item.get("rare") or 0))
         if unique and quantity > 1:
             raise ApiError(422, "rare_item",
-                           "only one copy of this item can be obtained at a time")
+                           "only one copy of an item can be obtained at a time")
         stack = int(item["stack"]) if item else 1
         with self.db.transaction() as conn:
             # The uniqueness check runs inside the write transaction so two
@@ -2945,46 +4476,95 @@ class FanxiService:
                 quantity -= put
         return {"item_id": int(item_id), "name": item["name"] if item else str(item_id)}
 
-    def award_exp_gil(self, character_id: int, exp: int, gil: int) -> dict:
-        """Add experience and gil, level up while the experience covers the next level."""
+    def award_exp_gil(self, character_id: int, exp: int, gil: int,
+                      *, exemplar: bool = False) -> dict:
+        """Add experience (or Exemplar Points) and gil.
+
+        At level 99 a kill earns Exemplar Points, not experience: the EXP bar is done and
+        the Master Level menu reads ``characters.exemplar_points``.  ``exemplar`` lets the
+        caller force that path (the zone does it as soon as the main level is 99); it also
+        triggers automatically for a level-99 character.  Every ``EXEMPLAR_PER_LEVEL``
+        points buys one Master Level up to 50 while there is a job row to write.
+        """
         exp, gil = max(0, int(exp)), max(0, int(gil))
         levels = 0
+        exemplar_result = None
         with self.db.transaction() as conn:
             row = conn.execute("SELECT * FROM characters WHERE id = ?", (int(character_id),)).fetchone()
             if row is None:
                 raise ApiError(404, "not_found", "character not found")
             level = int(row["main_level"])
-            total_exp = int(row["exp"]) + exp
-            hp, mp = int(row["hp"]), int(row["mp"])
-            while level < 99 and total_exp >= exp_for_level(level):
-                total_exp -= exp_for_level(level)
-                level += 1
-                levels += 1
-            if levels:
-                # Max HP/MP follow race, job, level and subjob; the zone session adds the
-                # gear's HP/MP on top when it next builds the sheet.
-                from .game import base_stats
-                hp = base_stats.base_hp(int(row["race"]), int(row["main_job"]), level,
-                                        int(row["sub_job"]), int(row["sub_level"]))
-                mp = base_stats.base_mp(int(row["race"]), int(row["main_job"]), level,
-                                        int(row["sub_job"]), int(row["sub_level"]))
-            current_hp = hp if levels else int(row["hp_current"])
-            current_mp = mp if levels else int(row["mp_current"])
             total_gil = int(row["gil"]) + gil
-            conn.execute(
-                "UPDATE characters SET main_level = ?, exp = ?, hp = ?, mp = ?, hp_current = ?, "
-                "mp_current = ?, gil = ?, updated_at = ? WHERE id = ?",
-                (level, total_exp, hp, mp, current_hp, current_mp,
-                 total_gil, now_iso(), int(character_id)),
-            )
-            conn.execute(
-                "INSERT INTO char_inventory (character_id, container, slot, item_id, quantity) "
-                "VALUES (?, 0, 0, 65535, ?) ON CONFLICT(character_id, container, slot) "
-                "DO UPDATE SET item_id = 65535, quantity = excluded.quantity",
-                (int(character_id), total_gil),
-            )
+            if exemplar or level >= 99:
+                points = exp
+                master = 0
+                job_row = conn.execute(
+                    "SELECT master_level FROM character_jobs WHERE character_id = ? AND job = ?",
+                    (int(character_id), int(row["main_job"]))).fetchone()
+                if job_row is not None:
+                    master = int(job_row["master_level"] or 0)
+                total_points = int(row["exemplar_points"] or 0) + points
+                master_levels = 0
+                while (master < MASTER_LEVEL_MAX
+                       and total_points >= EXEMPLAR_PER_LEVEL):
+                    total_points -= EXEMPLAR_PER_LEVEL
+                    master += 1
+                    master_levels += 1
+                conn.execute(
+                    "UPDATE characters SET exemplar_points = ?, gil = ?, updated_at = ? "
+                    "WHERE id = ?",
+                    (total_points, total_gil, now_iso(), int(character_id)))
+                conn.execute(
+                    "INSERT INTO char_inventory (character_id, container, slot, item_id, quantity) "
+                    "VALUES (?, 0, 0, 65535, ?) ON CONFLICT(character_id, container, slot) "
+                    "DO UPDATE SET item_id = 65535, quantity = excluded.quantity",
+                    (int(character_id), total_gil))
+                if master_levels:
+                    conn.execute(
+                        "INSERT INTO character_jobs (character_id, job, master_level) "
+                        "VALUES (?, ?, ?) ON CONFLICT(character_id, job) "
+                        "DO UPDATE SET master_level = excluded.master_level",
+                        (int(character_id), int(row["main_job"]), master))
+                exemplar_result = (points, total_points, master_levels, master)
+            else:
+                total_exp = int(row["exp"]) + exp
+                hp, mp = int(row["hp"]), int(row["mp"])
+                while level < 99 and total_exp >= exp_for_level(level):
+                    total_exp -= exp_for_level(level)
+                    level += 1
+                    levels += 1
+                if levels:
+                    # Max HP/MP follow race, job, level and subjob; the zone session adds
+                    # the gear's HP/MP on top when it next builds the sheet.
+                    from .game import base_stats
+                    hp = base_stats.base_hp(int(row["race"]), int(row["main_job"]), level,
+                                            int(row["sub_job"]), int(row["sub_level"]))
+                    mp = base_stats.base_mp(int(row["race"]), int(row["main_job"]), level,
+                                            int(row["sub_job"]), int(row["sub_level"]))
+                current_hp = hp if levels else int(row["hp_current"])
+                current_mp = mp if levels else int(row["mp_current"])
+                conn.execute(
+                    "UPDATE characters SET main_level = ?, exp = ?, hp = ?, mp = ?, hp_current = ?, "
+                    "mp_current = ?, gil = ?, updated_at = ? WHERE id = ?",
+                    (level, total_exp, hp, mp, current_hp, current_mp,
+                     total_gil, now_iso(), int(character_id)),
+                )
+                conn.execute(
+                    "INSERT INTO char_inventory (character_id, container, slot, item_id, quantity) "
+                    "VALUES (?, 0, 0, 65535, ?) ON CONFLICT(character_id, container, slot) "
+                    "DO UPDATE SET item_id = 65535, quantity = excluded.quantity",
+                    (int(character_id), total_gil),
+                )
         character = self.character(int(character_id))
-        character["levels_gained"] = levels
+        if exemplar_result is not None:
+            points, total_points, master_levels, master = exemplar_result
+            character["levels_gained"] = 0
+            character["exemplar_gained"] = points
+            character["exemplar_points"] = total_points
+            character["master_levels_gained"] = master_levels
+            character["master_level"] = master
+        else:
+            character["levels_gained"] = levels
         return character
 
     def quest_by_key(self, key: str) -> dict | None:
@@ -3102,10 +4682,388 @@ class FanxiService:
         ))
 
     # --- status and settings -------------------------------------------------------------------
+    def gearswap_settings(self, account_id: int) -> dict | None:
+        """The account's saved GearSwap/phase config, or None before the first save."""
+        row = self.db.one(
+            "SELECT config FROM gearswap_settings WHERE account_id = ?",
+            (int(account_id),))
+        if row is None:
+            return None
+        try:
+            value = json.loads(row["config"])
+        except (TypeError, ValueError):
+            return None
+        return value if isinstance(value, dict) else None
+
+    def save_gearswap_settings(self, account_id: int, config) -> dict:
+        """Replace one account's GearSwap config after a light size/type check."""
+        if not isinstance(config, dict):
+            raise ApiError(422, "validation_error", "the GearSwap config must be an object")
+        encoded = json.dumps(config, ensure_ascii=False, separators=(",", ":"))
+        if len(encoded.encode("utf-8")) > 256 * 1024:
+            raise ApiError(422, "validation_error", "the GearSwap config is too large")
+        self.db.execute(
+            "INSERT INTO gearswap_settings (account_id, config, updated_at) VALUES (?, ?, ?) "
+            "ON CONFLICT(account_id) DO UPDATE SET "
+            "config = excluded.config, updated_at = excluded.updated_at",
+            (int(account_id), encoded, now_iso()))
+        return config
+
     def registration_open(self) -> bool:
         if not self.config.registration_open:
             return False
         return (self.db.setting("registration_open", "1") or "1") != "0"
+
+    def character_setting(self, character_id: int, key: str,
+                          default: str | None = None) -> str | None:
+        """One per-character gameplay preference (the char_settings table)."""
+        row = self.db.one(
+            "SELECT value FROM char_settings WHERE character_id = ? AND key = ?",
+            (int(character_id), str(key)))
+        return default if row is None else str(row["value"])
+
+    def set_character_setting(self, character_id: int, key: str, value: str) -> None:
+        self.db.execute(
+            "INSERT INTO char_settings (character_id, key, value) VALUES (?, ?, ?) "
+            "ON CONFLICT(character_id, key) DO UPDATE SET value = excluded.value",
+            (int(character_id), str(key), str(value)))
+
+    # --- live character state (buffs, food and ability recasts) --------------------------------
+    # The zone session owns this state, but a fresh login builds a new session, so it is
+    # written here (migration 0145) and read back on the next login.  The payload is JSON from
+    # game/live_state.py; the server treats it as opaque apart from decoding it for the caller.
+    def save_live_state(self, character_id: int, payload: dict) -> None:
+        """Write the reconnect snapshot: {"effects", "food", "recasts", "version"}."""
+        self.db.execute(
+            "INSERT INTO char_live_state (character_id, effects, food, recasts, updated_at) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(character_id) DO UPDATE SET "
+            "effects = excluded.effects, food = excluded.food, "
+            "recasts = excluded.recasts, updated_at = excluded.updated_at",
+            (int(character_id),
+             json.dumps(payload.get("effects") or [], separators=(",", ":")),
+             json.dumps(payload.get("food") or {}, separators=(",", ":")),
+             json.dumps(payload.get("recasts") or {}, separators=(",", ":")),
+             now_iso()))
+
+    def live_state(self, character_id: int) -> dict | None:
+        """The saved reconnect snapshot, or None when the character has none.
+
+        The JSON is decoded here so the zone session gets plain Python values.  A row
+        from an older build (or a hand-edited one) is still returned with whatever parts
+        decode; ``game/live_state.py`` validates each field on the way in.
+        """
+        row = self.db.one(
+            "SELECT effects, food, recasts, updated_at FROM char_live_state "
+            "WHERE character_id = ?", (int(character_id),))
+        if row is None:
+            return None
+
+        def decode(text, fallback):
+            try:
+                value = json.loads(text)
+            except (TypeError, ValueError):
+                return fallback
+            return value if isinstance(value, type(fallback)) else fallback
+
+        return {
+            "effects": decode(row["effects"], []),
+            "food": decode(row["food"], {}),
+            "recasts": decode(row["recasts"], {}),
+            "updated_at": row["updated_at"],
+        }
+
+    def clear_live_state(self, character_id: int) -> None:
+        """Forget a character's snapshot (a deleted character cascades; this is for resets)."""
+        self.db.execute("DELETE FROM char_live_state WHERE character_id = ?",
+                        (int(character_id),))
+
+    # --- mounts --------------------------------------------------------------------------------
+    # A mount is client-side art with a server-side id (game/mounts.py).  The server keeps
+    # only two things: the character's last choice, and whether it is riding right now,
+    # which lives on the live zone session alongside the model flags the client reads.
+    def mount_catalog(self) -> list[dict]:
+        """Every mount the client knows, in id order."""
+        from .game import mounts as mount_table
+        return [{"id": mount.id, "name": mount.name,
+                 "description": mount.description, "japanese": mount.japanese,
+                 "chocobo_index": mount.chocobo_index()}
+                for mount in mount_table.all_mounts()]
+
+    def set_character_mount(self, character_id: int, mount_id: int) -> None:
+        """Remember the last mount a character called (the HUD preselects it)."""
+        self.db.execute(
+            "UPDATE characters SET mount = ?, updated_at = ? WHERE id = ?",
+            (int(mount_id), now_iso(), int(character_id)))
+
+    def character_mount(self, character_id: int) -> dict:
+        """A character's live mount (if online) and the last one it called."""
+        row = self.db.one(
+            "SELECT id, char_id, name, mount FROM characters WHERE id = ?",
+            (int(character_id),))
+        if row is None:
+            raise ApiError(404, "not_found", "no such character")
+        current = None
+        world = self.zone_world
+        session = world.session_by_char(int(row["char_id"])) if world is not None else None
+        if session is not None and int(session.mount_id) >= 0:
+            current = int(session.mount_id)
+        last = int(row["mount"] if row["mount"] is not None else -1)
+        from .game import mounts as mount_table
+        return {
+            "character_id": int(row["id"]),
+            "name": str(row["name"]),
+            "online": session is not None,
+            "mount": mount_table.by_id(current).name if current is not None else None,
+            "mount_id": current,
+            "last_mount": mount_table.by_id(last).name if last >= 0 else None,
+            "last_mount_id": last if last >= 0 else None,
+        }
+
+    def mount_character(self, character_id: int, query, family: bool = False) -> dict:
+        """Call a mount for one character (and, with ``family``, its whole sub team).
+
+        An offline character simply remembers the choice — there is no session to show it
+        on, and the next login starts on foot like retail.
+        """
+        from .game import mounts as mount_table
+        row = self.db.one(
+            "SELECT id, char_id, name, account_id FROM characters WHERE id = ?",
+            (int(character_id),))
+        if row is None:
+            raise ApiError(404, "not_found", "no such character")
+        text = str(query if query is not None else "").strip()
+        if text.casefold() in ("off", "dismount", "none", "stop"):
+            return self.dismount_character(int(row["id"]), family=family)
+        mount, error = mount_table.find(text)
+        if mount is None:
+            raise ApiError(422, "validation_error", error)
+        world = self.zone_world
+        session = world.session_by_char(int(row["char_id"])) if world is not None else None
+        mounted: list[str] = []
+        if session is not None:
+            targets = session.mount_family(mount) if family else [session]
+            if not family:
+                session.set_mount(mount.id)
+            mounted = [str(target.char.get("name") or "") for target in targets]
+        else:
+            self.set_character_mount(int(row["id"]), int(mount.id))
+        return {
+            "ok": True,
+            "named": "all" if family else "me",
+            "mount": {"id": mount.id, "name": mount.name,
+                      "description": mount.description},
+            "online": session is not None,
+            "mounted": [name for name in mounted if name],
+        }
+
+    def dismount_character(self, character_id: int, family: bool = False) -> dict:
+        """Back on foot, for one character or the whole sub team."""
+        row = self.db.one(
+            "SELECT id, char_id, name FROM characters WHERE id = ?", (int(character_id),))
+        if row is None:
+            raise ApiError(404, "not_found", "no such character")
+        world = self.zone_world
+        session = world.session_by_char(int(row["char_id"])) if world is not None else None
+        dismounted: list[str] = []
+        if session is not None:
+            targets = session.dismount_family() if family else (
+                [session] if session.dismount() else [])
+            dismounted = [str(target.char.get("name") or "") for target in targets]
+        return {"ok": True, "mount": None, "online": session is not None,
+                "dismounted": [name for name in dismounted if name]}
+
+    def _mount_summary(self, character) -> dict:
+        """The Data page's Mounts card: the client's table and this character's place in it."""
+        from .game import mounts as mount_table
+        last = int(character.get("mount") if character.get("mount") is not None else -1)
+        last_mount = mount_table.by_id(last)
+        world = self.zone_world
+        session = (world.session_by_char(int(character["char_id"]))
+                   if world is not None else None)
+        current = None
+        if session is not None and int(session.mount_id) >= 0:
+            current = mount_table.by_id(int(session.mount_id))
+        return {
+            "count": mount_table.count(),
+            "all_available": True,
+            "last": last_mount.name if last_mount is not None else None,
+            "current": current.name if current is not None else None,
+            "names": [mount.name for mount in mount_table.all_mounts()],
+        }
+
+    def resend_mounts(self, character_id: int) -> dict:
+        """Re-send the mount unlock table (0x0AE) to a live client, for the Data page."""
+        from .game import mounts as mount_table
+        row = self.db.one(
+            "SELECT id, char_id, name FROM characters WHERE id = ?", (int(character_id),))
+        if row is None:
+            raise ApiError(404, "not_found", "no such character")
+        world = self.zone_world
+        session = world.session_by_char(int(row["char_id"])) if world is not None else None
+        sent = bool(session is not None and session.resend_mounts())
+        return {"ok": True, "online": session is not None, "sent": sent,
+                "count": mount_table.count()}
+
+    # --- battle team control plane -------------------------------------------------------------
+    def battle_song_catalog(self, character_id: int) -> tuple[int, list[dict]]:
+        """Bard songs with server-computed durations from the character's equipped gear.
+
+        The whole modifier block goes to ``song_duration`` because Song+ gear
+        (All Songs and the family rows) adds 10% duration per point on top of the
+        454 lines, and that ratio only resolves per song family.
+        """
+        mods = {int(key): int(value)
+                for key, value in self.equipped_mods(int(character_id)).items()}
+        bonus = int(mods.get(mod.SONG_DURATION_BONUS, 0))
+        try:
+            character = self.character(int(character_id))
+            bonus += int(job_points.combat_mods(int(character["main_job"])).get(
+                mod.SONG_DURATION_BONUS, 0))
+        except Exception:
+            pass
+        mods[mod.SONG_DURATION_BONUS] = bonus
+        rows = self.db.all("SELECT name, skill FROM spells ORDER BY name")
+        out, seen = [], set()
+        for row in rows:
+            try:
+                skill = int(row["skill"] or 0)
+            except (TypeError, ValueError):
+                continue
+            if skill not in effects.SONG_SKILLS:
+                continue
+            name = str(row["name"] or "").strip()
+            key = name.casefold()
+            if not name or key in seen:
+                continue
+            # Trust-only bard songs are in the spell table but are not player-castable.
+            if key in {"cactuar fugue", "chocobo hum", "jesters operetta",
+                       "devotee serenade", "moogle rhapsody", "protected aria"}:
+                continue
+            spec = effects.SPELLS.get(key)
+            if spec is None or float(spec.duration or 0) <= 0:
+                continue
+            seen.add(key)
+            duration = effects.song_duration(spec, name=name, mods=mods)
+            out.append({"name": name, "base": float(spec.duration),
+                        "duration": round(duration, 1)})
+        out.sort(key=lambda item: item["name"].casefold())
+        return bonus, out
+
+    def battle_team_profiles(self, account_id: int) -> list[dict]:
+        """Every character in this account family with its server-side Battle profile.
+
+        Each row carries ``online`` and ``online_known`` so the in-game hub can keep its team
+        list to characters that are actually logged in.  A smaller party is the normal case:
+        the account family can own six characters and run only three.  ``online_known`` is
+        false when the game gateway is not attached, and callers then keep the old behaviour
+        instead of treating every character as offline.
+        """
+        family = sorted(self.account_family_ids(int(account_id)))
+        if not family:
+            return []
+        online_known = self.zone_world is not None
+        online = {}
+        if online_known:
+            for character in self.online_characters(int(account_id)):
+                online[int(character.get("id") or 0)] = character
+        holes = ",".join("?" for _ in family)
+        rows = self.db.all(
+            "SELECT c.id AS character_id, c.name, c.account_id, c.main_job, c.sub_job, "
+            "       c.main_level, c.sub_level, s.value AS profile_json "
+            "FROM characters c LEFT JOIN char_settings s "
+            "  ON s.character_id = c.id AND s.key = 'battle_profile' "
+            f"WHERE c.account_id IN ({holes}) ORDER BY c.id",
+            tuple(family))
+        out = []
+        for row in rows:
+            row = dict(row)
+            profile = None
+            if row.get("profile_json"):
+                try:
+                    profile = json.loads(row["profile_json"])
+                except (TypeError, ValueError):
+                    profile = None
+            main_job = int(row.get("main_job") or 0)
+            sub_job = int(row.get("sub_job") or 0)
+            main_level = int(row.get("main_level") or 0)
+            sub_level = int(row.get("sub_level") or 0)
+            abilities = self.db.all(
+                "SELECT name, job, level FROM job_abilities "
+                "WHERE (job = ? AND level <= ?) OR (job = ? AND level <= ?) "
+                "ORDER BY job, level, name",
+                (main_job, main_level, sub_job, sub_level))
+            seen = set()
+            ability_list = []
+            for ability in abilities:
+                name = ability["name"]
+                if name and name not in seen:
+                    seen.add(name)
+                    ability_list.append({"name": name, "job": int(ability["job"]),
+                                         "level": int(ability["level"])})
+            song_bonus, songs = (0, [])
+            if main_job == 10 or sub_job == 10:
+                song_bonus, songs = self.battle_song_catalog(int(row["character_id"]))
+            live = online.get(int(row["character_id"]))
+            out.append({
+                "character_id": int(row["character_id"]),
+                "name": row["name"],
+                "account_id": int(row["account_id"]),
+                "main_job": main_job,
+                "sub_job": sub_job,
+                "main_level": main_level,
+                "sub_level": sub_level,
+                "abilities": ability_list,
+                "song_duration_bonus": song_bonus,
+                "songs": songs,
+                "online": live is not None,
+                "online_known": online_known,
+                "zone": int(live.get("zone") or 0) if live else None,
+                "zone_name": str(live.get("zone_name") or "") if live else None,
+                "updated": int(profile.get("updated") or 0) if isinstance(profile, dict) else 0,
+                "profile": profile,
+            })
+        return out
+
+    def save_battle_profile(self, account_id: int, character_id: int, profile, shared: bool = False) -> dict:
+        """Store one character's Battle profile. The family owner (or the sub itself) may write it."""
+        if not self.account_can_manage_character(int(account_id), int(character_id)):
+            raise ApiError(404, "not_found", "character not found")
+        if not isinstance(profile, dict):
+            raise ApiError(422, "validation_error", "profile must be a JSON object")
+        encoded = json.dumps(profile, ensure_ascii=False, separators=(",", ":"))
+        if len(encoded.encode("utf-8")) > 65536:
+            raise ApiError(413, "too_large", "battle profile is too large")
+        profile = dict(profile)
+        profile["updated"] = int(time.time())
+        encoded = json.dumps(profile, ensure_ascii=False, separators=(",", ":"))
+        self.set_character_setting(int(character_id), "battle_profile", encoded)
+        if shared:
+            family = sorted(self.account_family_ids(int(account_id)))
+            holes = ",".join("?" for _ in family)
+            rows = self.db.all(
+                "SELECT c.id AS character_id, s.value AS profile_json "
+                "FROM characters c LEFT JOIN char_settings s "
+                "  ON s.character_id = c.id AND s.key = 'battle_profile' "
+                f"WHERE c.account_id IN ({holes}) AND c.id <> ?",
+                tuple(family) + (int(character_id),))
+            now = int(time.time())
+            for raw in rows:
+                row = dict(raw)
+                if not row.get("profile_json"):
+                    continue
+                try:
+                    other = json.loads(row["profile_json"])
+                except (TypeError, ValueError):
+                    continue
+                if not isinstance(other, dict):
+                    continue
+                for key in BATTLE_SHARED_KEYS:
+                    if key in profile:
+                        other[key] = profile[key]
+                other["updated"] = now
+                self.set_character_setting(int(row["character_id"]), "battle_profile",
+                                           json.dumps(other, ensure_ascii=False, separators=(",", ":")))
+        return profile
 
     def server_name(self) -> str:
         return self.db.setting("server_name", "Fanxi") or "Fanxi"

@@ -17,6 +17,7 @@ import {
   Wand2,
 } from "lucide-react";
 import type {
+  CharacterBagItem,
   GearDefaultFile,
   GearItem,
   GearLibrary,
@@ -31,11 +32,13 @@ import type {
   Tenant,
 } from "../types";
 import { backend } from "../lib/api";
-import { SLOT_KEYS, slotLabel } from "../lib/format";
+import { SLOT_KEYS, jobAbbr, jobName, slotLabel } from "../lib/format";
 import {
   loadPhaseConfig,
+  normalizeSpellModes,
   phaseOptions,
   phaseStateLabel,
+  reconcileSpellCategoryOverrides,
   savePhaseConfig,
   slotMask,
   slotsFromMask,
@@ -44,6 +47,10 @@ import {
 import { PhasePanel } from "./PhasePanel";
 import { EquipViewer } from "./EquipViewer";
 import { SetEquipmentPreview } from "./SetEquipmentPreview";
+import { SetStatTotals } from "./SetStatTotals";
+import { LiveSetStats } from "./LiveSetStats";
+import { useCharacterStatReport } from "../lib/characterstats";
+import { useGearStats } from "../lib/gearstats";
 import {
   Badge,
   Button,
@@ -58,9 +65,19 @@ import {
   cn,
 } from "./ui";
 
+type PickedItem = {
+  name: string;
+  augments: string;
+  container?: number;
+  slot?: number;
+  item_id?: number;
+  extra?: string;
+};
+
 type EditorState = {
   path: string;
   items: Record<string, string>;
+  details?: Record<string, PickedItem>;
   originalPath: string | null;
   keepOriginal: boolean;
   title: string;
@@ -73,6 +90,87 @@ type DetailedSets = Record<string, Record<string, GearItem>>;
 type GearTab = "sets" | "manage";
 
 const WEAPON_SLOT_BITS: Record<string, number> = { main: 1, sub: 2, range: 4, ammo: 8 };
+
+/** The client's equipment-slot bits, used to filter bag copies for the picker. */
+const SLOT_BITS: Record<string, number> = {
+  main: 1,
+  sub: 2,
+  range: 4,
+  ammo: 8,
+  head: 16,
+  body: 32,
+  hands: 64,
+  legs: 128,
+  feet: 256,
+  neck: 512,
+  waist: 1024,
+  ear1: 2048,
+  ear2: 4096,
+  ring1: 8192,
+  ring2: 16384,
+  back: 32768,
+};
+
+function bagLabel(container: number): string {
+  if (container === 0) return "Inventory";
+  if (container === 8) return "Wardrobe 1";
+  if (container >= 10 && container <= 16) return `Wardrobe ${container - 8}`;
+  return `Bag ${container}`;
+}
+
+function jobBit(jobId: number): number {
+  return jobId > 0 ? 1 << (jobId - 1) : 0;
+}
+
+/** "set" edits the set form that is already open, "library" writes the selected set's slot
+ * straight back to the library file, and "equip" wears the row on the live character. */
+type ItemPickerMode = "set" | "library" | "equip";
+
+type ItemPickerState = {
+  slot: string;
+  mode: ItemPickerMode;
+  query: string;
+};
+
+type JobPair = {
+  mainBit: number;
+  subBit: number;
+  mainLevel: number;
+  subLevel: number;
+  /** "COR 99 / DNC 49", or empty while no live job is known. */
+  label: string;
+};
+
+/** The bag copies that can fill `slot` on this job pair, with the name/augment search applied.
+ * Shared by the set editor's picker and the EquipViewer's quick equip so both offer the same
+ * wearable copies in the same order. */
+function wearableCopies(
+  items: CharacterBagItem[],
+  slot: string | null,
+  query: string,
+  pair: JobPair,
+): CharacterBagItem[] {
+  if (!slot) return [];
+  const bit = SLOT_BITS[slot] ?? 0;
+  if (!bit) return [];
+  const needle = query.trim().toLowerCase();
+  return items
+    .filter((item) => {
+      if (!(item.slot_mask & bit)) return false;
+      // An item with no job bits is "All Jobs" in LSB, not "no job".
+      const mainOk = pair.mainBit !== 0 && (item.jobs === 0 || (item.jobs & pair.mainBit) !== 0)
+        && (!item.level || item.level <= pair.mainLevel);
+      const subOk = pair.subBit !== 0 && (item.jobs === 0 || (item.jobs & pair.subBit) !== 0)
+        && (!item.level || item.level <= pair.subLevel);
+      if (!mainOk && !subOk) return false;
+      if (!needle) return true;
+      return item.name.toLowerCase().includes(needle)
+        || item.augments.toLowerCase().includes(needle);
+    })
+    .sort((a, b) => a.name.localeCompare(b.name)
+      || a.container - b.container
+      || a.slot - b.slot);
+}
 
 // Weapon-skill ids for the two-handed families. A grip only fits a two-handed main, while
 // shields and off-hand weapons only fit a one-handed (or empty) main.
@@ -187,8 +285,8 @@ export function GearPage({
   const [busy, setBusy] = useState<string | null>(null);
   const [error, setError] = useState("");
   const [editor, setEditor] = useState<EditorState | null>(null);
-  const [equipSlot, setEquipSlot] = useState<string | null>(null);
-  const [equipItem, setEquipItem] = useState("");
+  const [picker, setPicker] = useState<ItemPickerState | null>(null);
+  const [pickerError, setPickerError] = useState("");
   const [config, setConfig] = useState<PhaseConfig>(loadPhaseConfig);
   const [phase, setPhase] = useState<PhaseStatus | null>(null);
   const [phaseLive, setPhaseLive] = useState<PhaseStatus | null>(null);
@@ -196,6 +294,7 @@ export function GearPage({
   const [spells, setSpells] = useState<JobSpell[]>([]);
   const [abilities, setAbilities] = useState<JobAbility[]>([]);
   const [weapons, setWeapons] = useState<GearWeapon[]>([]);
+  const [bagItems, setBagItems] = useState<CharacterBagItem[]>([]);
   const [lockBusy, setLockBusy] = useState(false);
   /** The job whose default library this window loaded last, so a manual pick of another job's
    * library is not immediately replaced. Cleared when the client goes away (logout). */
@@ -217,6 +316,39 @@ export function GearPage({
         (item) => Number(item.character?.id) === Number(tenant.character.id),
       ) ?? null
     : null;
+
+  // The picker uses the live job pair the client is on, not only the saved character row: a
+  // job change in the Mog House must not leave the list filtered by the old jobs.
+  const jobPair = useMemo<JobPair>(() => {
+    const live = instance?.state?.player;
+    const mainJob = Number(job?.jobId || live?.job || instance?.character?.main_job || 0);
+    const subJob = Number(
+      job?.subJobId || live?.sub_job || instance?.character?.sub_job || 0,
+    );
+    const mainLevel = Number(
+      job?.level || live?.level || instance?.character?.main_level || 0,
+    );
+    const subLevel = Number(
+      job?.subLevel || live?.sub_level || instance?.character?.sub_level || 0,
+    );
+    return {
+      mainBit: jobBit(mainJob),
+      subBit: jobBit(subJob),
+      mainLevel,
+      subLevel,
+      label: mainJob
+        ? `${jobAbbr(mainJob)}${mainLevel ? ` ${mainLevel}` : ""}${
+            subJob ? ` / ${jobAbbr(subJob)}${subLevel ? ` ${subLevel}` : ""}` : ""
+          }`
+        : "",
+    };
+  }, [instance, job]);
+
+  /** The bag copies that can fill the open slot for this character's job pair. */
+  const pickerItems = useMemo(
+    () => wearableCopies(bagItems, picker?.slot ?? null, picker?.query ?? "", jobPair),
+    [bagItems, jobPair, picker?.slot, picker?.query],
+  );
 
   useEffect(() => {
     if (!instance) {
@@ -250,6 +382,25 @@ export function GearPage({
       .catch((caught) => setError(caught instanceof Error ? caught.message : String(caught)))
       .finally(() => setLoading(false));
   }, [instance?.port, instance?.character.id]);
+
+  // The set picker reads every bag copy once per character. The server decodes the
+  // augment block, so two capes with the same name are distinguishable by their rows.
+  useEffect(() => {
+    if (!instance) {
+      setBagItems([]);
+      return;
+    }
+    let live = true;
+    backend
+      .characterBags(Number(instance.character.id))
+      .then((result) => {
+        if (live) setBagItems(result.items ?? []);
+      })
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [instance?.character.id]);
 
   // EquipViewer updates when the client equips something. The control port is request/response,
   // so a short poll is the closest equivalent to Windower's 0x050 packet hook.
@@ -336,19 +487,39 @@ export function GearPage({
     if (!instance) return;
     let busy = false;
     const tick = async () => {
-      if (busy || document.visibilityState !== "visible") return;
+      // Do not gate this on document.visibilityState: macOS WebKit marks the window
+      // hidden whenever another app is active, and this page is normally watched from a
+      // second display while the player is in the game.  The gear, job and server stat
+      // rows all have to follow the character while it is being played.
+      if (busy) return;
       busy = true;
       await Promise.all([refreshGear(), refreshJob()]);
       busy = false;
     };
     const timer = window.setInterval(() => void tick(), 2000);
-    return () => window.clearInterval(timer);
+    // Catch up at once after a minimised window or an app-napped timer.
+    const refresh = () => void tick();
+    window.addEventListener("focus", refresh);
+    document.addEventListener("visibilitychange", refresh);
+    return () => {
+      window.clearInterval(timer);
+      window.removeEventListener("focus", refresh);
+      document.removeEventListener("visibilitychange", refresh);
+    };
   }, [instance?.port, refreshGear, refreshJob]);
 
   // The whole auto-swap configuration (states, forced modes, spell/WS overrides) is persisted
-  // together, so the Gear page and the autostart effect push the same plan.
+  // together, so the Gear page and the autostart effect push the same plan. localStorage stays
+  // the synchronous cache the autostart effect reads; the account's DB row is the durable copy
+  // and is written after a short debounce so a burst of selector changes is one request.
   useEffect(() => {
     savePhaseConfig(config);
+    const timer = window.setTimeout(() => {
+      void backend
+        .saveGearswapSettings(config as unknown as Record<string, unknown>)
+        .catch(() => undefined);
+    }, 350);
+    return () => window.clearTimeout(timer);
   }, [config]);
 
   useEffect(() => {
@@ -418,28 +589,40 @@ export function GearPage({
     return () => {
       cancelled = true;
     };
-  }, [instance?.port, phaseOn, library?.path, config, job?.jobId]);
+  }, [instance?.port, instance?.startedAt, phaseOn, library, config, job?.jobId]);
 
   // What the engine is wearing right now: engaged, moving or idle, from its own counters.
+  // This runs faster than the gear poll because an action set (a weaponskill's) is only on for
+  // the ~second between the held action and its result.  The engine's history makes a swap
+  // impossible to miss; a fresh action set also refreshes the gear grid at once, so the
+  // EquipViewer draws that set instead of waiting for the two-second tick.
+  const lastActionSetRef = useRef<string | null>(null);
   useEffect(() => {
     if (!instance || !phase?.enabled) {
       setPhaseLive(null);
+      lastActionSetRef.current = null;
       return;
     }
     let cancelled = false;
     const tick = () => {
       backend
         .gearPhaseStatus(instance.port)
-        .then((status) => !cancelled && setPhaseLive(status))
+        .then((status) => {
+          if (cancelled) return;
+          setPhaseLive(status);
+          const next = status.actionSet ?? null;
+          if (next && next !== lastActionSetRef.current) void refreshGear();
+          lastActionSetRef.current = next;
+        })
         .catch(() => undefined);
     };
     tick();
-    const timer = window.setInterval(tick, 2000);
+    const timer = window.setInterval(tick, 400);
     return () => {
       cancelled = true;
       window.clearInterval(timer);
     };
-  }, [instance?.port, phase?.enabled]);
+  }, [instance?.port, phase?.enabled, refreshGear]);
 
   // A job change clears the host's session focus; reflect that in the picker instead of
   // showing a mode the engine is no longer in.
@@ -522,6 +705,10 @@ export function GearPage({
     const firstIdle = paths.find((path) => path.startsWith("idle."));
     setConfig((current) => {
       const next = { ...current };
+      const category = reconcileSpellCategoryOverrides(current.spellCategoryOverrides, paths);
+      const modes = normalizeSpellModes(current.spellModes, category.overrides);
+      if (category.changed) next.spellCategoryOverrides = category.overrides;
+      if (JSON.stringify(modes) !== JSON.stringify(current.spellModes)) next.spellModes = modes;
       if (!has(next.engaged)) next.engaged = firstEngaged ?? (has("engaged") ? "engaged" : "engaged.tp");
       if (!has(next.idleTown)) next.idleTown = has("idle.town") ? "idle.town" : firstIdle ?? "idle.town";
       if (!has(next.idleField)) {
@@ -542,7 +729,9 @@ export function GearPage({
         next.idleTown === current.idleTown &&
         next.idleField === current.idleField &&
         next.movement === current.movement &&
-        next.weaponset === current.weaponset
+        next.weaponset === current.weaponset &&
+        !category.changed &&
+        next.spellModes === current.spellModes
       ) {
         return current;
       }
@@ -581,7 +770,7 @@ export function GearPage({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [instance?.port, job?.jobId]);
+  }, [instance?.port, instance?.startedAt, job?.jobId]);
 
   const returnPaths = useMemo(() => {
     const paths = library
@@ -602,6 +791,30 @@ export function GearPage({
   }, [library]);
   const selectedDetails: Record<string, GearItem> =
     library && selected ? library.detailed[selected] ?? {} : {};
+  const statQueries = useMemo(
+    () =>
+      SLOT_KEYS.filter((slot) => selectedItems[slot]).map((slot) => ({
+        slot,
+        name: selectedItems[slot],
+        augments: selectedDetails[slot]?.augments ?? [],
+      })),
+    [selectedItems, selectedDetails],
+  );
+  const gearStats = useGearStats(
+    tab === "manage" ? instance?.port ?? null : null,
+    statQueries,
+  );
+  // The server owns the final numbers (food, buffs and the job-ability layer live only
+  // there), so the live sheet is polled from the HTTP API rather than rebuilt from the
+  // client's item tooltips. It is read only while the Sets tab is on screen.
+  const liveReport = useCharacterStatReport(
+    instance ? Number(instance.character.id) : null,
+    tab === "sets" && !!instance,
+  );
+  const statsBySlot = useMemo(
+    () => Object.fromEntries(gearStats.items.map((item) => [item.slot, item])),
+    [gearStats.items],
+  );
   const libraryName = library?.path.split(/[/\\]/).pop() ?? "";
   const librarySetCount = library ? Object.keys(library.sets).length : 0;
 
@@ -922,15 +1135,135 @@ export function GearPage({
     }
   }
 
+  function openItemPicker(slot: string, mode: ItemPickerMode) {
+    setPicker({ slot, mode, query: "" });
+    setPickerError("");
+    if (instance) {
+      // Re-read the bags on every open: an item can have been moved, equipped or
+      // granted since the page loaded, and the cached copy would keep filtering it
+      // with stale slot/job data (Farsha's off-hand bit was fixed in migration 149
+      // while this page was open).
+      backend
+        .characterBags(Number(instance.character.id))
+        .then((result) => setBagItems(result.items ?? []))
+        .catch(() => undefined);
+    }
+  }
+
+  function closePicker() {
+    setPicker(null);
+    setPickerError("");
+  }
+
+  /** Inline edit from the Manage tab's set preview: replace (or clear) one slot and write the
+   * library, so the preview and the .lua agree the moment a row is clicked. */
+  async function saveLibrarySlot(slot: string, item: CharacterBagItem | null) {
+    if (!library || !selected || busy === "apply") return;
+    const setPath = selected;
+    setBusy("apply");
+    setPickerError("");
+    setError("");
+    try {
+      const items = { ...(library.sets[setPath] ?? {}) };
+      const details = { ...(library.detailed[setPath] ?? {}) };
+      if (item) {
+        items[slot] = item.name;
+        details[slot] = {
+          name: item.name,
+          augments: item.augments ? item.augments.split(" | ") : [],
+          container: item.container,
+          slot: item.slot,
+          item_id: item.item_id,
+          extra: item.extra,
+        };
+      } else {
+        delete items[slot];
+        delete details[slot];
+      }
+      const sets = { ...library.sets, [setPath]: items };
+      const detailed = { ...library.detailed, [setPath]: details };
+      const written = await persistLibrary(sets);
+      setLibrary({ ...library, path: written.path, sets, detailed });
+      closePicker();
+      const name = setPath.replace(/^sets\./, "");
+      const what = item ? `${slotLabel(slot)} → ${item.name}` : `${slotLabel(slot)} cleared`;
+      if (written.saved) {
+        notify(`Saved ${what} in ${name}`, "success");
+      } else if (written.imported) {
+        notify(
+          `Changed ${what} in ${name} in this window only — imported libraries are never modified. Use Save version to keep it.`,
+          "info",
+        );
+      } else {
+        notify(`Changed ${what} in this window; the library file could not be written.`, "error");
+      }
+    } catch (caught) {
+      setPickerError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  function pickItem(item: CharacterBagItem) {
+    if (!picker) return;
+    if (picker.mode === "equip") {
+      void equipBagItem(item);
+      return;
+    }
+    if (picker.mode === "library") {
+      void saveLibrarySlot(picker.slot, item);
+      return;
+    }
+    if (!editor) return;
+    setEditor({
+      ...editor,
+      items: { ...editor.items, [picker.slot]: item.name },
+      details: {
+        ...(editor.details ?? {}),
+        [picker.slot]: {
+          name: item.name,
+          augments: item.augments,
+          container: item.container,
+          slot: item.slot,
+          item_id: item.item_id,
+          extra: item.extra,
+        },
+      },
+    });
+    setPicker(null);
+  }
+
+  function clearPickerSlot() {
+    if (!picker) return;
+    if (picker.mode === "library") {
+      void saveLibrarySlot(picker.slot, null);
+      return;
+    }
+    if (!editor) return;
+    const items = { ...editor.items };
+    const details = { ...(editor.details ?? {}) };
+    delete items[picker.slot];
+    delete details[picker.slot];
+    setEditor({ ...editor, items, details });
+    setPicker(null);
+  }
+
   function startEdit(path: string, asCopy: boolean) {
     if (!library) return;
     const items = { ...(library.sets[path] ?? {}) };
+    const details: Record<string, PickedItem> = Object.fromEntries(
+      Object.entries(library.detailed[path] ?? {}).map(([slot, item]) => [
+        slot,
+        { name: item.name, augments: (item.augments ?? []).join(" | ") },
+      ]),
+    );
     const weaponOnly = path.startsWith("sets.weaponset.");
     if (weaponOnly) void refreshWeapons();
     if (!asCopy) {
       setEditor({
         path,
         items,
+        details,
         originalPath: path,
         keepOriginal: false,
         title: `Edit ${path}`,
@@ -942,6 +1275,7 @@ export function GearPage({
     setEditor({
       path: suggestion,
       items,
+      details,
       originalPath: path,
       keepOriginal: true,
       title: "Duplicate set",
@@ -953,6 +1287,7 @@ export function GearPage({
     setEditor({
       path: "sets.idle.new",
       items: {},
+      details: {},
       originalPath: null,
       keepOriginal: false,
       title: "New set",
@@ -1003,7 +1338,24 @@ export function GearPage({
       const detailed: DetailedSets = { ...library.detailed };
       if (editor.originalPath && !editor.keepOriginal) delete detailed[editor.originalPath];
       detailed[result.path] = Object.fromEntries(
-        Object.entries(cleanItems).map(([slot, name]) => [slot, { name, augments: [] }]),
+        Object.entries(cleanItems).map(([slot, name]) => {
+          const picked = editor.details?.[slot];
+          return [
+            slot,
+            {
+              name,
+              augments: picked?.augments ? picked.augments.split(" | ") : [],
+              ...(picked && picked.container !== undefined
+                ? {
+                    container: picked.container,
+                    slot: picked.slot,
+                    item_id: picked.item_id,
+                    extra: picked.extra,
+                  }
+                : {}),
+            },
+          ];
+        }),
       );
       setLibrary({ ...library, path: written.path, sets: result.sets, detailed });
       setSelected(result.path);
@@ -1054,19 +1406,28 @@ export function GearPage({
     }
   }
 
-  async function equipSelected() {
-    if (!instance || !equipSlot || !equipItem.trim()) return;
+  async function equipBagItem(item: CharacterBagItem) {
+    if (!instance || !picker || picker.mode !== "equip" || busy === "equip") return;
+    const target = picker;
     setBusy("equip");
+    setPickerError("");
     setError("");
     try {
-      await backend.gearEquip(instance.port, equipSlot, equipItem.trim());
-      const gear = await backend.gearSlots(instance.port);
-      setSlots((gear as { slots?: Record<string, GearSlot> }).slots ?? {});
-      setEquipSlot(null);
-      setEquipItem("");
-      notify(`Equipped ${equipItem.trim()}`, "success");
+      await backend.gearEquip(instance.port, target.slot, item.name);
+      closePicker();
+      notify(`Equipped ${item.name}`, "success");
+      // The EquipViewer polls every two seconds; update it now so the grid and legend show
+      // the new piece without waiting for the next tick.
+      backend
+        .gearSlots(instance.port)
+        .then((gear) => {
+          setSlots((gear as { slots?: Record<string, GearSlot> }).slots ?? {});
+        })
+        .catch(() => undefined);
     } catch (caught) {
-      setError(caught instanceof Error ? caught.message : String(caught));
+      const message = caught instanceof Error ? caught.message : String(caught);
+      setPickerError(message);
+      setError(message);
     } finally {
       setBusy(null);
     }
@@ -1113,6 +1474,22 @@ export function GearPage({
       </div>
     );
   }
+
+  // The live job card follows the client's main job. The same control state carries the support
+  // job; an older client state without those fields falls back to the saved character row.
+  const livePlayer = instance.state?.player;
+  const supportJobId = Number(
+    livePlayer?.sub_job !== undefined ? livePlayer.sub_job : (instance.character?.sub_job ?? 0),
+  );
+  const supportLevel = Number(
+    livePlayer?.sub_level !== undefined
+      ? livePlayer.sub_level
+      : (instance.character?.sub_level ?? 0),
+  );
+  const supportJob = supportJobId >= 1 && supportJobId <= 22 ? supportJobId : 0;
+  const supportLabel = supportJob
+    ? `${jobAbbr(supportJob)}${supportLevel ? ` ${supportLevel}` : ""} · ${jobName(supportJob)}`
+    : "none";
 
   return (
     <div className="page" ref={pageRef}>
@@ -1249,8 +1626,30 @@ export function GearPage({
                   <strong>{stateTitle}</strong>
                   <span className="dot-sep" />
                   <span className="muted">wearing</span>
-                  <code>{phaseLive?.set ?? "—"}</code>
+                  <code className={phaseLive?.actionSet ? "phase-action-live" : undefined}>
+                    {phaseLive?.actionSet ?? phaseLive?.set ?? "—"}
+                  </code>
+                  {phaseLive?.actionSet ? (
+                    <Badge tone="success" dot>
+                      {((phaseLive.actionMs ?? 0) / 1000).toFixed(1)}s
+                    </Badge>
+                  ) : null}
                   {locked ? <Badge tone="accent">override</Badge> : null}
+                </div>
+              ) : null}
+              {phase?.enabled && phaseLive?.history?.length ? (
+                <div className="phase-history" title="The last action sets the engine wore">
+                  <span className="eyebrow">Recent</span>
+                  {phaseLive.history.slice(0, 6).map((swap, index) => (
+                    <span
+                      key={`${swap.set ?? "?"}-${swap.action}-${index}`}
+                      className={swap.active ? "phase-swap active" : "phase-swap"}
+                      title={`action ${swap.action} · ${(swap.ms / 1000).toFixed(2)}s`}
+                    >
+                      {swap.set ?? "?"}
+                      <em>{(swap.ms / 1000).toFixed(1)}s</em>
+                    </span>
+                  ))}
                 </div>
               ) : null}
               <div className="active-gear-viewer">
@@ -1259,20 +1658,14 @@ export function GearPage({
                   slots={slots}
                   encumbrance={encumbrance}
                   locked={Array.from(lockedSlots)}
-                  onSlotClick={(slot) => {
-                    setEquipSlot(slot);
-                    setEquipItem(slots[slot]?.name ?? "");
-                  }}
+                  onSlotClick={(slot) => openItemPicker(slot, "equip")}
                 />
                 <div className="active-gear-legend">
                   {SLOT_KEYS.filter((slot) => slots[slot]?.name).map((slot) => (
                     <button
                       key={slot}
                       className="gear-legend-row"
-                      onClick={() => {
-                        setEquipSlot(slot);
-                        setEquipItem(slots[slot]?.name ?? "");
-                      }}
+                      onClick={() => openItemPicker(slot, "equip")}
                     >
                       <span>{slotLabel(slot)}</span>
                       <strong>{slots[slot]?.name}</strong>
@@ -1286,9 +1679,17 @@ export function GearPage({
                   )}
                 </div>
               </div>
+              <LiveSetStats
+                characterName={instance.name}
+                report={liveReport.report}
+                loading={liveReport.loading}
+                error={liveReport.error}
+                onReload={liveReport.reload}
+              />
               <p className="gear-hint">
                 The same 4×4 layout, size, alpha, ammo count and encumbrance X as Windower's
-                EquipViewer. Click a slot to change it.
+                EquipViewer. Click a slot to change it; the totals above are the server's live
+                sheet, and clicking one opens every source behind it.
               </p>
             </Card>
 
@@ -1303,8 +1704,9 @@ export function GearPage({
                   <div className="job-name">{job.name}</div>
                   <div className="job-meta">
                     {job.character || instance.name}
-                    {job.level ? ` · Level ${job.level}` : ""}
+                    {job.level ? ` · Main Lv ${job.level}` : ""}
                   </div>
+                  <div className="job-meta job-meta-sub">Support · {supportLabel}</div>
                   <Button
                     className="job-load"
                     variant="secondary"
@@ -1472,26 +1874,47 @@ export function GearPage({
                           <SetEquipmentPreview
                             port={instance.port}
                             items={selectedItems}
-                            onSlotClick={(slot) => {
-                              setEquipSlot(slot);
-                              setEquipItem(selectedItems[slot] ?? "");
-                            }}
+                            onSlotClick={(slot) => openItemPicker(slot, "library")}
                             emptyLabel="This set has no items."
                           />
-                          <span className="muted">Click a slot to equip that piece.</span>
+                          <span className="muted">
+                            Click a slot to change that piece; the library saves it.
+                          </span>
+                          {statQueries.length > 0 ? (
+                            <SetStatTotals
+                              items={gearStats.items}
+                              loading={gearStats.loading}
+                              error={gearStats.error}
+                              onRetry={gearStats.reload}
+                            />
+                          ) : null}
                         </div>
                         <div className="set-items">
                           {SLOT_KEYS.filter((slot) => selectedItems[slot]).map((slot) => {
                             const detail = selectedDetails[slot];
+                            const stats = statsBySlot[slot];
                             return (
                               <div key={slot} className="set-item">
                                 <span className="set-slot">{slotLabel(slot)}</span>
                                 <div>
                                   <strong>{selectedItems[slot]}</strong>
+                                  {stats?.baseLines?.length ? (
+                                    <div
+                                      className="item-base-stats"
+                                      title="Base item stats from the game client"
+                                    >
+                                      {stats.baseLines.map((line, index) => (
+                                        <span key={`${line}-${index}`}>{line}</span>
+                                      ))}
+                                    </div>
+                                  ) : null}
                                   {detail?.augments?.length ? (
-                                    <div className="augments">
-                                      {detail.augments.map((augment) => (
-                                        <span key={augment}>{augment}</span>
+                                    <div
+                                      className="augments"
+                                      title="Augments recorded in this GearSwap set"
+                                    >
+                                      {detail.augments.map((augment, index) => (
+                                        <span key={`${augment}-${index}`}>{augment}</span>
                                       ))}
                                     </div>
                                   ) : null}
@@ -1573,7 +1996,13 @@ export function GearPage({
                       <span className="eyebrow">Weapons from bags</span>
                       <span className="muted">
                         {weapons.length} usable
-                        {job ? ` · ${job.abbr}${job.level ? ` ${job.level}` : ""}` : ""}
+                        {job
+                          ? ` · ${job.abbr}${job.level ? ` ${job.level}` : ""}${
+                              supportJob
+                                ? ` / ${jobAbbr(supportJob)}${supportLevel ? ` ${supportLevel}` : ""}`
+                                : ""
+                            }`
+                          : ""}
                       </span>
                     </div>
                     <p className="gear-hint">
@@ -1620,20 +2049,26 @@ export function GearPage({
                   </div>
                 ) : (
                   <div className="editor-grid">
-                    {SLOT_KEYS.map((slot) => (
-                      <Field key={slot} label={slotLabel(slot)}>
-                        <TextInput
-                          value={editor.items[slot] ?? ""}
-                          onChange={(event) =>
-                            setEditor({
-                              ...editor,
-                              items: { ...editor.items, [slot]: event.target.value },
-                            })
-                          }
-                          placeholder="—"
-                        />
-                      </Field>
-                    ))}
+                    {SLOT_KEYS.map((slot) => {
+                      const picked = editor.details?.[slot];
+                      return (
+                        <Field key={slot} label={slotLabel(slot)}>
+                          <button
+                            type="button"
+                            className={cn("item-pick", editor.items[slot] && "filled")}
+                            onClick={() => openItemPicker(slot, "set")}
+                            title={picked?.augments || undefined}
+                          >
+                            <span className="item-pick-name">
+                              {editor.items[slot] || "Choose item…"}
+                            </span>
+                            {picked?.augments ? (
+                              <span className="item-pick-aug">{picked.augments}</span>
+                            ) : null}
+                          </button>
+                        </Field>
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1645,7 +2080,7 @@ export function GearPage({
                   emptyLabel={
                     editor.weaponOnly
                       ? "Pick weapons and their icons appear here."
-                      : "Type item names and their icons appear here."
+                      : "Pick items and their icons appear here."
                   }
                 />
                 <span className="muted">
@@ -1657,32 +2092,94 @@ export function GearPage({
         </Modal>
       )}
 
-      {equipSlot && (
+      {picker && (
         <Modal
-          title={`Equip ${slotLabel(equipSlot)}`}
-          subtitle="The item must be in this character's bags."
-          onClose={() => setEquipSlot(null)}
+          title={`${picker.mode === "equip" ? "Equip" : "Choose"} ${slotLabel(picker.slot)}`}
+          subtitle={
+            picker.mode === "equip"
+              ? `Wearable copies${
+                  jobPair.label ? ` for ${jobPair.label}` : ""
+                } in this character's bags. Click one to equip it.`
+              : picker.mode === "library"
+                ? `Every copy in this character's bags. Click one to change ${slotLabel(
+                    picker.slot,
+                  ).toLowerCase()} in ${selected?.replace(/^sets\./, "") ?? "this set"}; the library is saved immediately.`
+                : "Every copy in this character's bags, with its augment rows."
+          }
+          wide
+          onClose={closePicker}
           footer={
             <>
-              <Button variant="ghost" onClick={() => setEquipSlot(null)}>
+              <Button variant="ghost" onClick={closePicker}>
                 Cancel
               </Button>
-              <Button loading={busy === "equip"} onClick={() => void equipSelected()}>
-                Equip
-              </Button>
+              {picker.mode !== "equip" ? (
+                <Button variant="ghost" onClick={clearPickerSlot}>
+                  Clear slot
+                </Button>
+              ) : null}
             </>
           }
         >
-          <Field label="Item name">
+          {pickerError ? (
+            <div className="picker-error">
+              <ErrorBanner message={pickerError} onClose={() => setPickerError("")} />
+            </div>
+          ) : null}
+          <Field label="Search">
             <TextInput
-              value={equipItem}
-              onChange={(event) => setEquipItem(event.target.value)}
+              value={picker.query}
+              onChange={(event) => setPicker({ ...picker, query: event.target.value })}
+              placeholder="Item name or augment…"
               autoFocus
-              onKeyDown={(event) => {
-                if (event.key === "Enter") void equipSelected();
-              }}
             />
           </Field>
+          <div className="item-picker-list">
+            {pickerItems.map((item) => {
+              const current = picker.mode === "equip" ? slots[picker.slot] : undefined;
+              const worn = current?.bag === item.container && current?.index === item.slot;
+              const inSet =
+                picker.mode === "library" &&
+                library?.sets[selected ?? ""]?.[picker.slot] === item.name;
+              return (
+                <button
+                  key={`${item.container}:${item.slot}`}
+                  type="button"
+                  className="item-picker-row"
+                  disabled={
+                    (picker.mode === "equip" && busy === "equip") ||
+                    (picker.mode === "library" && busy === "apply")
+                  }
+                  onClick={() => pickItem(item)}
+                >
+                  <span className="item-picker-head">
+                    <strong>{item.name}</strong>
+                    <span className="muted">
+                      {bagLabel(item.container)} · slot {item.slot}
+                      {item.item_level
+                        ? ` · iLv ${item.item_level}`
+                        : item.level
+                          ? ` · Lv ${item.level}`
+                          : ""}
+                      {item.quantity > 1 ? ` · ×${item.quantity}` : ""}
+                      {worn ? " · worn" : ""}
+                      {inSet ? " · in set" : ""}
+                    </span>
+                  </span>
+                  {item.augments ? <span className="augments">{item.augments}</span> : null}
+                </button>
+              );
+            })}
+            {pickerItems.length === 0 ? (
+              <div className="muted padded">
+                {bagItems.length === 0
+                  ? "Reading the character's bags…"
+                  : `No wearable ${slotLabel(picker.slot).toLowerCase()} copies match. The item must be in this character's bags${
+                      jobPair.label ? ` and usable by ${jobPair.label}` : ""
+                    }.`}
+              </div>
+            ) : null}
+          </div>
         </Modal>
       )}
     </div>

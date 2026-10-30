@@ -31,6 +31,38 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(account["id"], result.account["id"])
         self.assertNotIn("password_hash", result.account)
 
+    def test_gearswap_settings_round_trip(self):
+        result = self.register()
+        account_id = int(result.account["id"])
+        self.assertIsNone(self.service.gearswap_settings(account_id))
+        config = {
+            "engaged": "engaged.tp",
+            "spellModes": {"enhancing": "duration", "enspells": "damage"},
+            "spellCategoryOverrides": {"enspells": "midcast.Enspell"},
+        }
+        self.assertEqual(self.service.save_gearswap_settings(account_id, config), config)
+        self.assertEqual(self.service.gearswap_settings(account_id), config)
+        with self.assertRaises(ApiError) as ctx:
+            self.service.save_gearswap_settings(account_id, ["not", "an", "object"])
+        self.assertEqual(ctx.exception.status, 422)
+
+    def test_battle_team_profile_round_trip(self):
+        result = self.register()
+        account_id = int(result.account["id"])
+        character = self.service.create_character(account_id, {"name": "Testerone", "race": 1})
+        profile = {"name": "Team rules", "buffs": {"rows": [{"spell": "Haste", "target": "party"}]}}
+        saved = self.service.save_battle_profile(account_id, int(character["id"]), profile)
+        self.assertGreater(saved["updated"], 0)
+        team = self.service.battle_team_profiles(account_id)
+        self.assertEqual(len(team), 1)
+        self.assertEqual(team[0]["name"], "Testerone")
+        self.assertEqual(team[0]["profile"]["name"], "Team rules")
+        self.assertEqual(team[0]["updated"], saved["updated"])
+        # Without a game gateway there is no live roster; the hub must be able to tell the
+        # difference and keep showing the team instead of treating everyone as offline.
+        self.assertFalse(team[0]["online"])
+        self.assertFalse(team[0]["online_known"])
+
     def test_duplicate_username(self):
         self.register()
         with self.assertRaises(ApiError) as ctx:
@@ -69,6 +101,108 @@ class ServiceTest(unittest.TestCase):
         self.service.logout(result.token)
         with self.assertRaises(ApiError):
             self.service.authenticate(result.token)
+
+    def test_armory_search_matches_full_and_abbreviated_item_names(self):
+        account = self.register().account
+        character = self.service.create_character(
+            account["id"], {"name": "Aliases", "race": 1})
+        character_id = character["id"]
+        cases = {
+            "Mousai Crackows +1": 25969,
+            "Mou. Crackows +1": 25969,
+            "Mousai Seraweels +1": 25902,
+            "Mou. Seraweels +1": 25902,
+            "Mousai Manteel +1": 26538,
+            "Mou. Manteel +1": 26538,
+            "Mou. Gages +1": 25989,
+            "Mou. Turban +1": 25562,
+            "Marduk's Crackows +1": 28211,
+            "Abyss Burgeonet +1": 15252,
+            "Academic's Bracers +1": 27984,
+            "Pahluwan Crackows": 15695,
+            "Inyanga Dastanas +1": 25807,
+            "Ayanmo Cosciales +1": 25870,
+        }
+        for query, expected in cases.items():
+            with self.subTest(query=query):
+                rows = self.service.search_items(character_id, query)
+                self.assertEqual([row["item_id"] for row in rows], [expected])
+
+    def test_item_store_search_ignores_apostrophes_and_filters_the_shelf(self):
+        account = self.register().account
+        character = self.service.create_character(
+            account["id"], {"name": "General", "race": 1})
+        character_id = character["id"]
+        for query in ("nobles bed", "noble's bed", "Noble's Bed"):
+            with self.subTest(query=query):
+                rows = self.service.search_items(
+                    character_id, query, scope="items")
+                self.assertEqual(rows[0]["name"], "Noble's Bed")
+                self.assertEqual(rows[0]["category"], "Furnishings")
+
+        ninja = self.service.search_items(
+            character_id, "", scope="items", category="Ninja Tools", limit=100)
+        self.assertGreaterEqual(len(ninja), 40)
+        self.assertTrue(all(row["category"] == "Ninja Tools" for row in ninja))
+        # The category parameter is exact: a query's text cannot smuggle another
+        # shelf into the result.
+        self.assertEqual(
+            self.service.search_items(
+                character_id, "", scope="items", category="No Such Shelf"),
+            [],
+        )
+        categories = [row["name"] for row in self.service.item_categories()]
+        self.assertLess(categories.index("Ninja Tools"), categories.index("Materials"))
+        self.assertLess(categories.index("Jug Pets"), categories.index("Consumables"))
+
+        for query, shelf in (("jug pets", "Jug Pets"), ("ninja tools", "Ninja Tools")):
+            with self.subTest(query=query):
+                rows = self.service.search_items(
+                    character_id, query, scope="items", limit=100)
+                self.assertTrue(rows)
+                self.assertTrue(all(row["category"] == shelf for row in rows))
+
+    def test_spalirisos_has_its_item_level_skill_and_stat_block(self):
+        item = self.service.item(21730)
+        self.assertIsNotNone(item)
+        weapon = self.db.one(
+            "SELECT ilvl_skill FROM item_weapon WHERE item_id = 21730")
+        self.assertEqual(int(weapon["ilvl_skill"]), 277)
+        mods = self.service.item_mods(21730)
+        self.assertEqual(int(mods.get(8, 0)), 35)    # STR
+        self.assertEqual(int(mods.get(9, 0)), 35)    # DEX
+        self.assertEqual(int(mods.get(14, 0)), 35)   # CHR
+        self.assertEqual(int(mods.get(25, 0)), 35)   # Accuracy
+        self.assertEqual(int(mods.get(30, 0)), 35)   # Magic Accuracy
+        self.assertEqual(int(mods.get(165, 0)), 1500)  # Critical hit rate +15%
+
+    def test_bst_offhand_axes_carry_their_ilvl_skill_and_stats(self):
+        for item_id, mods_expected in (
+            (21723, {8: 15, 9: 15, 23: 30, 25: 40, 30: 40, 165: 1000, 840: 5}),
+            (21724, {9: 15, 14: 15, 23: 30, 25: 40, 30: 40, 73: 10, 840: 5}),
+        ):
+            weapon = self.db.one(
+                "SELECT ilvl_skill FROM item_weapon WHERE item_id = ?", (item_id,))
+            self.assertEqual(int(weapon["ilvl_skill"]), 255)
+            mods = self.service.item_mods(item_id)
+            for mod_id, value in mods_expected.items():
+                self.assertEqual(int(mods.get(mod_id, 0)), value)
+
+    def test_one_handed_axes_and_katanas_can_fill_either_hand(self):
+        """Farsha and the other 1H axe/katana rows must carry both weapon slot bits.
+
+        Migration 0149 repairs the hand-curated 119 III rows; the launcher's Sub
+        picker and the server's equip check both filter on ``slot_mask``.
+        """
+        rows = self.db.all(
+            "SELECT item_id, name, slot_mask FROM items "
+            "WHERE skill IN (5, 9) AND (slot_mask & 2) = 0")
+        self.assertEqual([(row["item_id"], row["name"]) for row in rows], [])
+        farsha = self.service.item(21752)
+        self.assertIsNotNone(farsha)
+        self.assertEqual(int(farsha["slot_mask"]) & 3, 3)
+        self.assertEqual(int(farsha["jobs"]) & (1 << 8), 1 << 8)  # BST
+        self.assertEqual(int(farsha["level"]), 99)
 
     def test_character_creation_and_unlimited_mules(self):
         account = self.register().account
@@ -149,6 +283,11 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(inventory[16534], 1)
         self.assertEqual(character["gil"], 1000)
 
+    def test_level_99_has_no_next_experience_requirement(self):
+        from fanxi_server.service import exp_for_level
+        self.assertGreater(exp_for_level(98), 0)
+        self.assertEqual(exp_for_level(99), 0)
+
     def test_experience_levels_up(self):
         account = self.register().account
         character = self.service.create_character(account["id"], {"name": "Fanxi", "race": 1})
@@ -160,6 +299,35 @@ class ServiceTest(unittest.TestCase):
         # Max HP follows the retail grade tables, not a flat +20 per level.
         self.assertEqual(updated["hp"], base_stats.base_hp(1, 1, 2))
         self.assertEqual(updated["mp"], base_stats.base_mp(1, 1, 2))
+
+    def test_level_99_awards_exemplar_points_not_experience(self):
+        account = self.register().account
+        character = self.service.create_character(account["id"], {"name": "Fanxi", "race": 1})
+        self.db.execute(
+            "UPDATE characters SET main_level = 99, exp = 123 WHERE id = ?",
+            (int(character["id"]),))
+        self.db.execute(
+            "INSERT OR REPLACE INTO character_jobs (character_id, job, level, master_level) "
+            "VALUES (?, 1, 99, 0)", (int(character["id"]),))
+        updated = self.service.award_exp_gil(character["id"], 250, 5, exemplar=True)
+        self.assertEqual(updated["exemplar_gained"], 250)
+        self.assertEqual(updated["exemplar_points"], 250)
+        self.assertEqual(updated["master_levels_gained"], 0)
+        self.assertEqual(updated["exp"], 123)        # the EXP bar is done at 99
+        self.assertEqual(updated["gil"], 1005)
+
+        # 30,000 points buys a Master Level; the remainder stays on the bar.
+        self.db.execute(
+            "UPDATE characters SET exemplar_points = 29990 WHERE id = ?",
+            (int(character["id"]),))
+        updated = self.service.award_exp_gil(character["id"], 20, 0)
+        self.assertEqual(updated["exemplar_points"], 10)
+        self.assertEqual(updated["master_levels_gained"], 1)
+        self.assertEqual(updated["master_level"], 1)
+        row = self.db.one(
+            "SELECT master_level FROM character_jobs WHERE character_id = ? AND job = 1",
+            (int(character["id"]),))
+        self.assertEqual(int(row["master_level"]), 1)
 
     def test_quest_rewards_once(self):
         account = self.register().account

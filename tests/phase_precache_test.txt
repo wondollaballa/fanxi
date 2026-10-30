@@ -1,0 +1,13 @@
+# One-shot pre-action gear for the jug picker (host/addons/phase.c).  Run by
+# tests/phase_precache_test.sh.  The first 0x01A (Bestial Loyalty, action 387) is held out of
+# the buffer while the jug's 0x050 is injected; the next buffer releases the held action.
+frames 2
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=9, sets={{{1,0,0}},{{13,3,0}}}, names={'ja','jug'}, idle=1, town=1, rules={{category=9, action=387, pre=2}}} return xi.phase.status().rules
+echo --- the picker queues the jug as the next action's precast
+lua control return xi.phase.precache(387, {{13,3,0}})
+echo --- the held action waits, and its jug goes out first
+packet_out 1a00000000000000000009008301
+echo --- a buffer with a sequence number releases the action behind the jug
+packet_out 1a0001000000000000000200000000
+echo --- the one-shot buffer is spent, not armed for a later action
+lua control return xi.phase.status().held, xi.phase.status().pendingAction

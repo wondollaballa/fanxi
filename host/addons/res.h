@@ -211,6 +211,11 @@ int res_trust_face_rgba(uint32_t spell, uint8_t** rgba, int* width, int* height)
 int res_sc_icon_rgba(uint32_t id, uint8_t** rgba, int* width, int* height);
 void res_trust_faces_shutdown(void);
 
+/* A zone's map image (the map DAT the in-game map screen draws) as top-down RGBA8.  `file_id` is
+ * the map DAT's resource id; the image is 8bpp paletted or DXT1/3/5 and usually 512x512 (HD map
+ * packs use 1024).  Free the result with free(). 0 when the file has no map image. */
+int res_map_rgba(uint32_t file_id, uint8_t** rgba, int* width, int* height);
+
 /* --- spells and abilities (file 81: mgc_ and comm chunks) ------------------------------------ */
 
 typedef struct ResSpell

@@ -1,7 +1,9 @@
-import { useMemo, useState, type DragEvent, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } from "react";
 import {
   Activity,
+  Backpack,
   Crosshair,
+  Eye,
   FileText,
   Gamepad2,
   LayoutGrid,
@@ -26,6 +28,7 @@ import {
   Wand2,
 } from "lucide-react";
 import type {
+  Character,
   ConfigView,
   HudItem,
   HudPatch,
@@ -34,18 +37,27 @@ import type {
   HudTypeState,
   InstanceView,
   SessionView,
+  TeamView,
+  Tenant,
 } from "../types";
 import {
+  characterJobPair,
   formatDuration,
   formatNumber,
   inWorld,
+  instanceJobPair,
+  jobLevel,
+  jobPairAbbr,
+  jobPairName,
   pct,
   serverSaysOffline,
   stateZone,
 } from "../lib/format";
 import { backend } from "../lib/api";
+import { buildTeamJobEntries } from "../lib/teamJobs";
 import { EquipViewer } from "./EquipViewer";
 import { FollowCard } from "./FollowCard";
+import { TeamJobs } from "./TeamJobs";
 import { Badge, Button, Card, EmptyState, Modal, Select, TextInput, cn } from "./ui";
 
 const QUICK_COMMANDS = [
@@ -138,7 +150,13 @@ function normalizeItem(value: unknown): HudItem | null {
   const key = typeof source.key === "string" ? source.key : "";
   const name = typeof source.name === "string" ? source.name : "";
   if (!key || !name) return null;
-  return { key, name, short: typeof source.short === "string" && source.short ? source.short : name.slice(0, 5) };
+  const tier = Number(source.tier);
+  return {
+    key,
+    name,
+    short: typeof source.short === "string" && source.short ? source.short : name.slice(0, 5),
+    tier: Number.isFinite(tier) && tier > 0 ? tier : null,
+  };
 }
 
 function normalizeHudType(key: HudTypeKey, raw: unknown): HudTypeState {
@@ -201,6 +219,9 @@ function normalizeHud(raw: unknown): HudState {
     show_weapon_skills: source.show_weapon_skills === true,
     show_battle_info: source.show_battle_info === true,
     show_party_info: source.show_party_info === true,
+    show_inventory: source.show_inventory === true,
+    show_target: source.show_target !== false,
+    show_battle_hud: source.show_battle_hud === true,
     edit: source.edit === true,
     opacity: Math.min(1, Math.max(0.45, numberOr(source.opacity, 0.9))),
     menu_hide: source.menu_hide !== false,
@@ -316,11 +337,11 @@ function HudControls({
         onClick={() => onChange({ show_weapon_skills: !hud.show_weapon_skills })}
       />
       <HudToggle
-        label="Show battle info"
+        label="Stats"
         icon={<Activity size={12} />}
         on={hud.show_battle_info}
         busy={busy}
-        title="Show the battle statistics hub: DPS, accuracy, TP to 1000 and FPS"
+        title="Show the stats hub: DPS, accuracy, TP to 1000 and FPS"
         onClick={() => onChange({ show_battle_info: !hud.show_battle_info })}
       />
       <HudToggle
@@ -330,6 +351,38 @@ function HudControls({
         busy={busy}
         title="Show the party and alliance hub with HP/MP/TP and status effects"
         onClick={() => onChange({ show_party_info: !hud.show_party_info })}
+      />
+      <HudToggle
+        label="Battle HUD"
+        icon={<Gamepad2 size={12} />}
+        on={hud.show_battle_hud}
+        busy={busy}
+        title="Show the Battle automation HUD (start/stop, follow, camp and menu)"
+        onClick={() => onChange({ show_battle_hud: !hud.show_battle_hud })}
+      />
+      <HudToggle
+        label="Target debuffs"
+        icon={<Eye size={12} />}
+        on={hud.show_target}
+        busy={busy}
+        title="Show the selected mob's live debuffs, straight from the zone server"
+        onClick={() => onChange({ show_target: !hud.show_target })}
+      />
+      <HudToggle
+        label="Equip View"
+        icon={<Shirt size={12} />}
+        on={hud.show_equipview === true}
+        busy={busy}
+        title="The in-game EquipViewer: collapsed it names the set being worn, expanded it shows the 4x4 equipment grid live"
+        onClick={() => onChange({ show_equipview: hud.show_equipview !== true })}
+      />
+      <HudToggle
+        label="Magic Bag"
+        icon={<Backpack size={12} />}
+        on={hud.show_inventory}
+        busy={busy}
+        title="Show the inventory and Recycle Bin HUD"
+        onClick={() => onChange({ show_inventory: !hud.show_inventory })}
       />
       <button
         type="button"
@@ -366,6 +419,7 @@ function HudPreview({
           key: `empty-${index}`,
           name: "Empty",
           short: "EMPTY",
+          tier: null,
         }));
   return (
     <div className="hud-preview" aria-hidden="true">
@@ -380,7 +434,7 @@ function HudPreview({
         <div className="hud-preview-bar">
           {sample.slice(0, 8).map((item) => (
             <i key={item.key} style={{ width: tile, height: tile + labelHeight }}>
-              {spec.labels === "always" && <small>{item.short}</small>}
+              {spec.labels === "always" && <small>{item.short}{item.tier ?? ""}</small>}
             </i>
           ))}
         </div>
@@ -400,7 +454,7 @@ function HudPreview({
         >
           {sample.map((item) => (
             <i key={item.key} style={{ width: tile, height: tile + labelHeight }}>
-              {spec.labels === "always" && <small>{item.short}</small>}
+              {spec.labels === "always" && <small>{item.short}{item.tier ?? ""}</small>}
             </i>
           ))}
         </div>
@@ -573,6 +627,8 @@ function HudGroupEditor({
 export function ControlPage({
   config,
   session,
+  team,
+  tenant,
   instances,
   onLaunch,
   onStop,
@@ -592,6 +648,8 @@ export function ControlPage({
 }: {
   config: ConfigView;
   session: SessionView;
+  team: TeamView | null;
+  tenant: Tenant | null;
   instances: InstanceView[];
   onLaunch: (account: string, characterId: number | null) => Promise<void>;
   onStop: (port: number) => Promise<void>;
@@ -627,8 +685,43 @@ export function ControlPage({
   const [logLoading, setLogLoading] = useState(false);
   const [hudOverrides, setHudOverrides] = useState<Record<number, HudState>>({});
   const [hudBusy, setHudBusy] = useState<number | null>(null);
+  const magicBagRefresh = useRef<() => void>(() => {});
+  magicBagRefresh.current = () => {
+    const open = running.filter(
+      (instance) => !instance.headless && hudFor(instance, hudOverrides[instance.port]).show_inventory,
+    );
+    for (const instance of open) {
+      void backend
+        .characterMagicBag(Number(instance.character.id))
+        .then((data) => onHud(instance.port, { inventory: data.items }))
+        .catch(() => {
+          // The addon keeps the last list if the server is briefly unavailable.
+        });
+    }
+  };
+  useEffect(() => {
+    const timer = window.setInterval(() => magicBagRefresh.current(), 8000);
+    return () => window.clearInterval(timer);
+  }, []);
   const [hudAccount, setHudAccount] = useState<string | null>(null);
   const [hudType, setHudType] = useState<HudTypeKey>("spells");
+
+  /** The main account's Play character, the same one the Team page calls the main slot. */
+  const activeCharacter: Character | null =
+    session.characters.find((character) => Number(character.id) === Number(config.characterId)) ??
+    session.characters[0] ??
+    null;
+  const jobEntries = useMemo(
+    () =>
+      buildTeamJobEntries({
+        session,
+        team,
+        activeCharacter,
+        instances,
+        tenantCharacterId: tenant ? Number(tenant.character.id) : null,
+      }),
+    [session, team, activeCharacter, instances, tenant],
+  );
 
   const selected = useMemo(
     () => running.find((instance) => instance.port === selectedPort) ?? running[0] ?? null,
@@ -691,7 +784,7 @@ export function ControlPage({
     if (!selected || !selectedInGame || warpingTeam) return;
     setWarpingTeam(true);
     try {
-      await onCommand(selected.port, "//warp all me");
+      await onCommand(selected.port, "/!warp all me");
     } catch {
       // onCommand already reported the control-port failure in a toast.
     } finally {
@@ -728,6 +821,9 @@ export function ControlPage({
     if (patch.show_weapon_skills !== undefined) next.show_weapon_skills = patch.show_weapon_skills;
     if (patch.show_battle_info !== undefined) next.show_battle_info = patch.show_battle_info;
     if (patch.show_party_info !== undefined) next.show_party_info = patch.show_party_info;
+    if (patch.show_inventory !== undefined) next.show_inventory = patch.show_inventory;
+    if (patch.show_target !== undefined) next.show_target = patch.show_target;
+    if (patch.show_battle_hud !== undefined) next.show_battle_hud = patch.show_battle_hud;
     if (patch.edit !== undefined) next.edit = patch.edit;
     if (patch.opacity !== undefined) next.opacity = patch.opacity;
     if (patch.menu_hide !== undefined) next.menu_hide = patch.menu_hide;
@@ -752,12 +848,23 @@ export function ControlPage({
 
   /** Optimistically paint a HUD patch, then replace it with the addon's saved state. */
   async function applyHud(instance: InstanceView, patch: HudPatch) {
+    let outbound = patch;
+    if (patch.show_inventory) {
+      // The in-game HUD can see the 18 client bags; the slips and 9,999 locker only
+      // exist on the server.  Fetch them here and send one merged list with the toggle.
+      try {
+        const data = await backend.characterMagicBag(Number(instance.character.id));
+        outbound = { ...patch, inventory: data.items };
+      } catch {
+        // Still open the HUD with the client-visible bags if the server call fails.
+      }
+    }
     const current = hudFor(instance, hudOverrides[instance.port]);
     const optimistic = mergeHud(current, patch);
     setHudOverrides((previous) => ({ ...previous, [instance.port]: optimistic }));
     setHudBusy(instance.port);
     try {
-      const next = normalizeHud(await onHud(instance.port, patch));
+      const next = normalizeHud(await onHud(instance.port, outbound));
       setHudOverrides((previous) => ({ ...previous, [instance.port]: next }));
       // Let the next metrics poll take over once the addon's own state has had time to settle.
       window.setTimeout(() => {
@@ -857,6 +964,11 @@ export function ControlPage({
               );
               const characters = account.characters;
               const choice = chosenCharacter(account.username, account.characterId);
+              const chosen =
+                characters.find((character) => Number(character.id) === Number(choice)) ??
+                characters[0] ??
+                null;
+              const jobPair = instance ? instanceJobPair(instance) : characterJobPair(chosen);
               const hud = hudFor(instance, instance ? hudOverrides[instance.port] : undefined);
               return (
                 <div className="party-manager-row" key={account.username}>
@@ -873,6 +985,11 @@ export function ControlPage({
                             ? "offline"
                             : "sign in again"}
                       </span>
+                      {characters.length > 0 || instance ? (
+                        <span className="party-manager-job" title={jobPairName(jobPair)}>
+                          {jobPairAbbr(jobPair)}
+                        </span>
+                      ) : null}
                     </div>
                   </div>
                   {characters.length > 0 ? (
@@ -894,14 +1011,6 @@ export function ControlPage({
                     </Select>
                   ) : (
                     <span className="muted">No characters</span>
-                  )}
-                  {instance && (
-                    <HudControls
-                      hud={hud}
-                      busy={hudBusy === instance.port}
-                      onChange={(patch) => void applyHud(instance, patch)}
-                      onLayout={() => openHud(account.username)}
-                    />
                   )}
                   {instance ? (
                     <Button
@@ -925,6 +1034,14 @@ export function ControlPage({
                       Launch client
                     </Button>
                   )}
+                  {instance && (
+                    <HudControls
+                      hud={hud}
+                      busy={hudBusy === instance.port}
+                      onChange={(patch) => void applyHud(instance, patch)}
+                      onLayout={() => openHud(account.username)}
+                    />
+                  )}
                 </div>
               );
             })}
@@ -938,6 +1055,7 @@ export function ControlPage({
               )
               .map((instance) => {
                 const hud = hudFor(instance, hudOverrides[instance.port]);
+                const jobPair = instanceJobPair(instance);
                 return (
                   <div className="party-manager-row" key={`hud-extra-${instance.account}`}>
                     <div className="party-manager-name">
@@ -949,15 +1067,12 @@ export function ControlPage({
                         <span>
                           box · {instance.name} · control :{instance.port}
                         </span>
+                        <span className="party-manager-job" title={jobPairName(jobPair)}>
+                          {jobPairAbbr(jobPair)}
+                        </span>
                       </div>
                     </div>
                     <span className="muted hud-extra-character">{instance.name}</span>
-                    <HudControls
-                      hud={hud}
-                      busy={hudBusy === instance.port}
-                      onChange={(patch) => void applyHud(instance, patch)}
-                      onLayout={() => openHud(instance.account)}
-                    />
                     <Button
                       variant="secondary"
                       size="sm"
@@ -967,12 +1082,25 @@ export function ControlPage({
                     >
                       Stop
                     </Button>
+                    <HudControls
+                      hud={hud}
+                      busy={hudBusy === instance.port}
+                      onChange={(patch) => void applyHud(instance, patch)}
+                      onLayout={() => openHud(instance.account)}
+                    />
                   </div>
                 );
               })}
           </div>
         )}
       </Card>
+
+      <TeamJobs
+        entries={jobEntries}
+        eyebrow="Whole team"
+        title="Party jobs"
+        hint="Every main and support job across the main account and its boxes, with the live job whenever that client is in the world."
+      />
 
       <FollowCard session={session} instances={instances} />
 
@@ -1056,6 +1184,7 @@ export function ControlPage({
                 <tr>
                   <th>Account</th>
                   <th>Character</th>
+                  <th>Job</th>
                   <th>Zone</th>
                   <th>HP</th>
                   <th>MP</th>
@@ -1075,6 +1204,7 @@ export function ControlPage({
                   const login = state?.login_status;
                   const orphaned = login === 2 && serverSaysOffline(instance);
                   const relaunching = busy === `relaunch-${instance.port}`;
+                  const jobPair = instanceJobPair(instance);
                   return (
                     <tr
                       key={instance.port}
@@ -1086,6 +1216,14 @@ export function ControlPage({
                       </td>
                       <td>
                         <strong>{instance.name}</strong>
+                      </td>
+                      <td className="live-job" title={jobPairName(jobPair)}>
+                        <strong>{jobLevel(jobPair.main, jobPair.mainLevel)}</strong>
+                        <span>
+                          {jobPair.sub
+                            ? jobLevel(jobPair.sub, jobPair.subLevel)
+                            : "no support"}
+                        </span>
                       </td>
                       <td>{stateZone(state)}</td>
                       <td>
@@ -1188,6 +1326,9 @@ export function ControlPage({
                 />
                 <div className="live-equipment-meta">
                   <strong>{selected.name}</strong>
+                  <span className="live-equipment-job">
+                    {jobPairName(instanceJobPair(selected))}
+                  </span>
                   <span>{stateZone(selected.state)}</span>
                   <span className="muted">
                     {selected.metrics?.gear?.slots
@@ -1205,7 +1346,9 @@ export function ControlPage({
               const kpi = instance.metrics?.kpi;
               return (
                 <div key={instance.port} className="summary-item">
-                  <span>{instance.name}</span>
+                  <span>
+                    {instance.name} · {jobPairAbbr(instanceJobPair(instance))}
+                  </span>
                   <strong>
                     {formatNumber(kpi?.exp_per_hour)} EXP/hr · {formatNumber(kpi?.dps, 1)} DPS
                   </strong>

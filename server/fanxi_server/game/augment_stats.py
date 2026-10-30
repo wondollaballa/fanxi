@@ -28,7 +28,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
-from . import augment_gear, augments, capes
+from . import augment_gear, augments, capes, magian, mezzotint
 from . import modifiers as mod
 
 # A value is always signed: "Accuracy+30", "Damage taken-10%", '"+7%"' after the name.
@@ -72,11 +72,17 @@ _FLAT = {
     "magdmg": mod.MAGIC_DAMAGE,
     "enmity": mod.ENMITY,
     "regenpotency": mod.REGEN_POTENCY,
+    "martialarts": mod.MARTIAL_ARTS,
+    "savetp": mod.SAVETP,
+    "magdefbns": mod.MDEF,
+    "magicdefensebonus": mod.MDEF,
+    "allsongs": mod.ALL_SONGS_EFFECT,
 }
 
 # Percent-integer modifiers: "Store TP"+7 stores 7; the engine divides by 100 itself.
 _PERCENT = {
     "storetp": mod.STORETP,
+    "conservetp": mod.CONSERVE_TP,
     "dualwield": mod.DUAL_WIELD,
     "fastcast": mod.FASTCAST,
     "doubleattack": mod.DOUBLE_ATTACK,
@@ -86,6 +92,7 @@ _PERCENT = {
     "subtleblow": mod.SUBTLE_BLOW,
     "subtleblowii": mod.SUBTLE_BLOW_II,
     "counter": mod.COUNTER,
+    "tpbonus": mod.TP_BONUS,
     "curepotency": mod.CURE_POTENCY,
     "drainandaspirpotency": mod.DRAIN_ASPIR,
     "refresh": mod.REFRESH,
@@ -94,9 +101,30 @@ _PERCENT = {
     "physdmglimit": mod.DAMAGE_LIMITP,
     "physicaldamagelimit": mod.DAMAGE_LIMITP,
     "weaponskilldamage": mod.WSD_ALL_HITS,
+    "crithitdamage": mod.CRIT_DMG_INCREASE,
+    "curepotencyreceived": mod.CURE_POTENCY_RCVD,
+    "sklchndmg": mod.SKILLCHAIN_BONUS,
     "weaponskilldmg": mod.WSD_ALL_HITS,
     "skillchaindmg": mod.SKILLCHAIN_BONUS,
     "skillchaindamage": mod.SKILLCHAIN_BONUS,
+    "tripleatk": mod.TRIPLE_ATTACK,
+    "potencyofcurereceived": mod.CURE_POTENCY_RCVD,
+    "enhancingmagicduration": mod.ENH_MAGIC_DURATION_AUGMENT,
+    # Oboro path C: the magical weapon-skill base multiplier on Crocea Mors,
+    # Vitiation Sword and Duelist's Sword.  Applied by the magical WS path.
+    "elementalweaponskilldamage": mod.ELEMENTAL_WS_DAMAGE,
+}
+
+# "Reduction" lines whose tooltip carries a minus but whose modifier is stored as a
+# positive amount the consumer subtracts.  "Song spellcasting time -15%" is the
+# percent the song branch of cast_magic takes off the cast, so it is +15.
+_REDUCTIONS = {
+    "phantomroll": mod.PHANTOM_ROLL,
+    "phantomrollabilitydelay": mod.PHANTOM_ROLL,
+    "songspellcastingtime": mod.SONG_SPELLCASTING_TIME,
+    "songcastingtime": mod.SONG_SPELLCASTING_TIME,
+    "songcasttime": mod.SONG_SPELLCASTING_TIME,
+    "songrecastdelay": mod.SONG_RECAST_DELAY,
 }
 
 # Hundredths-of-a-percent modifiers: "Damage taken-10%" stores -1000.
@@ -107,6 +135,10 @@ _HUNDREDTHS = {
     "magicdmgtaken": mod.DMGMAGIC,
     "magicdamagetaken": mod.DMGMAGIC,
     "crithitrate": mod.CRIT_HIT_RATE,
+    "criticalhitrate": mod.CRIT_HIT_RATE,
+    # Equipment haste is stored in hundredths, so "Haste+3%" is 300.
+    "haste": mod.HASTE_GEAR,
+    "breathdmgtaken": mod.DMGBREATH,
 }
 
 # The attributes "All Attr." raises together.
@@ -119,6 +151,7 @@ UNMODELLED = {
     "chanceofsuccessfulblock",  # block rate is derived from shield size only
     "dmg",                      # weapon damage rating comes from item_weapon
     "doubleattackdamage",       # "Double Attack" damage bonus
+    "tripleattackdamage",       # "Triple Attack" damage bonus
     "magicburstdamage",         # magic burst damage
     "magicburstdamageii",
     "occincresisttostatailments",
@@ -127,6 +160,12 @@ UNMODELLED = {
     "snapshot",
     "spellinterruptionratedown",
     "waltzpotency",             # Dancer waltz potency is not modelled
+    # Unity accessory rows the engine has no pool for yet.
+    "magicburstbonus",
+    "resistcharm",
+    "resistsleep",
+    "shieldblockrate",
+    "spellinterruptionrate",
     # Oboro Dynamis-Divergence weapon paths.  The chance-based rows are client
     # text only; the job-specific path C rows below need systems the engine does
     # not model (pets, songs, Utsusemi, Sekkanoki, Mana Wall, ...).
@@ -144,27 +183,84 @@ UNMODELLED = {
     "chanceoffollow-upattack",
     "chanceofrangedfollow-upattack",
     "drainpotency",
-    "elementalweaponskilldamage",
     "flourishrecasttime",
     "healingmagicrecastdelay",
     "magicburstaccuracy",
     "manawall",
     "ninjutsurecasttime",
-    "phantomroll",
     "phantomrolleffectduration",
+    "barrage",
+    "kickattacks",
+    "movementspeed",
+    "quickdrawabilitydelay",
+    "sicandreadyabilitydelay",
+    "waltzabilitydelay",
+    "waltztpcost",
     "phantomrollxirecoverhpandmp",
     "potencyofregeneffectsreceived",
     "sekkanokirecasttime",
     "sekkanokiweaponskilldamage",
     "songeffectsdoubleattack",
-    "songspellcastingtime",
     "stepduration",
-    "swordenhancementspelldamage",
     "tpduringevasion",
     "tpgainedwhenlandingcriticalhits",
     "vivaciouspulsepotency",
     "wyverndamagetaken",
     "wyvernhp",
+    # Oseem Arcane Glyptics rows the engine has no pool for yet.
+    "additionaleffectstun",
+    "avatarperpetuationcost",
+    "bloodpactabilitydelay",
+    "bloodboon",
+    "conservemp",
+    "curespellcastingtime",
+    "enfeeblingmagicskill",
+    "enfbmagskill",
+    "divinemagicskill",
+    "healingmagicskill",
+    "enhancingmagicskill",
+    "elementalmagicskill",
+    "darkmagicskill",
+    "summoningmagicskill",
+    "ninjutsuskill",
+    "singingskill",
+    "stringinstrumentskill",
+    "windinstrumentskill",
+    "bluemagicskill",
+    "geomancyskill",
+    "handbellskill",
+    "indieffectduration",
+    "magicburstdmg",
+    "magcrithitdmg",
+    "magiccrithitrate",
+    "occultacumen",
+    "rapidshot",
+    "repairpotency",
+    "resistparalyze",
+    "resistsilence",
+    "weaponskillacc",
+    "zanshin",
+    # Divainy-Gamainy Skirmish rows the engine has no model for yet.
+    "avatarperpetuationcost",
+    "callbeastabilitydelay",
+    "charm",
+    "delay",
+    "elementalsiphon",
+    "enemycrithitrate",
+    "latenteffectrefresh",
+    "latenteffectregain",
+    "mprecoveredwhilehealing",
+    "occgrantsdmgbonusbasedontp",
+    "occmaximizesmagicaccuracy",
+    "occquickensspellcasting",
+    "phalanx",
+    "recycle",
+    "daken",
+    "trueshot",
+    "shieldmastery",
+    "shieldskill",
+    # Sinister Reign rows the engine has no pool for yet.
+    "treasurehunter",
 }
 
 # Lines with no signed value at all cannot be tokenised; they are listed verbatim.
@@ -176,7 +272,8 @@ UNMODELLED_LINES = {
     "Enmity+10 for each Utsusemi",
 }
 
-MAPPED = set(_FLAT) | set(_PERCENT) | set(_HUNDREDTHS) | {"allattr"}
+MAPPED = set(_FLAT) | set(_PERCENT) | set(_HUNDREDTHS) | set(_REDUCTIONS) | {
+    "allattr", "swordenhancementspelldamage"}
 
 
 def _key(text: str) -> str:
@@ -196,8 +293,9 @@ def _names(chunk: str) -> list[str]:
     raw = chunk.strip().lstrip(" /,;|")
     if not raw:
         return []
-    # Pet lines ("Pet: Accuracy+30 Pet: Rng. Acc.+20") are not modelled.
-    if raw.casefold().startswith("pet:"):
+    # Pet, avatar and automaton lines ("Pet: Accuracy+30", "Avatar: All Attr.+10",
+    # "Automaton: HP+60") are not modelled on the player.
+    if raw.casefold().startswith(("pet:", "avatar:", "automaton:")):
         return []
     return [part.strip() for part in raw.split("/") if part.strip()]
 
@@ -224,13 +322,20 @@ def _parsed(line: str) -> tuple[tuple[int, int], ...]:
     out: dict[int, int] = {}
     position = 0
     for match in _VALUE.finditer(text):
-        sign, digits, _percent = match.groups()
+        sign, digits, percent = match.groups()
         value = int(digits) * (1 if sign == "+" else -1)
         for name in _names(text[position:match.start()]):
             key = _key(name)
             if key == "allattr":
                 for mod_id in _ATTRIBUTES:
                     out[mod_id] = out.get(mod_id, 0) + value
+            elif key == "swordenhancementspelldamage":
+                # "Sword enhancement spell damage+n" is the flat line a Limbus
+                # piece carries; the same words with a "%" are the weapon-only
+                # multiplier (Crocea Mors / Vitiation Sword / Duelist's Sword
+                # path C).  Only the marker tells them apart.
+                mod_id = mod.ENSPELL_DMG_PCT if percent else mod.ENSPELL_DMG_BONUS
+                out[mod_id] = out.get(mod_id, 0) + value
             elif key in _FLAT:
                 out[_FLAT[key]] = out.get(_FLAT[key], 0) + value
             elif key in _PERCENT:
@@ -238,6 +343,8 @@ def _parsed(line: str) -> tuple[tuple[int, int], ...]:
             elif key in _HUNDREDTHS:
                 scaled = value * 100
                 out[_HUNDREDTHS[key]] = out.get(_HUNDREDTHS[key], 0) + scaled
+            elif key in _REDUCTIONS:
+                out[_REDUCTIONS[key]] = out.get(_REDUCTIONS[key], 0) - value
         position = match.end()
     return tuple(sorted(out.items()))
 
@@ -286,6 +393,42 @@ def _bundle_mods(item_id: int, raw: bytes) -> dict[int, int]:
     return parse_rows(path.get("augments"))
 
 
+def describe_augments(item_id: int, extra: bytes | None) -> str:
+    """The tooltip lines for one item copy's augment block.
+
+    Standard capes are decoded by :mod:`capes`; the Odyssey/Limbus/Oboro/Unity
+    bundle rows come from the same registry the stat sheet uses, so the picker and
+    the mods cannot disagree.
+    """
+    raw = bytes(extra or b"")
+    if len(raw) < 2:
+        return ""
+    if raw[0] == mezzotint.KIND and (raw[1] & mezzotint.SUBKIND):
+        return mezzotint.describe(raw)
+    if raw[0] == magian.KIND and (raw[1] & magian.TRIAL):
+        return magian.describe(raw)
+    if raw[0] == capes.AUGMENT_KIND and raw[1] == capes.AUGMENT_SUBKIND:
+        return capes.describe(raw)
+    if raw[0] != 0x03 or raw[1] != 0x83:
+        return ""
+    decoded = augments.decode(raw)
+    if decoded is None:
+        return ""
+    entry = _registry().get(int(item_id)) or {}
+    paths = entry.get("paths", ())
+    path = next((candidate for candidate in paths
+                 if candidate.get("bundle") is not None
+                 and int(candidate["bundle"]) == int(decoded["index"])), None)
+    if path is None:
+        path = next((candidate for candidate in paths
+                     if str(candidate.get("key", "")).upper() == decoded["path"]), None)
+    if path is not None and int(decoded["rank"]) >= int(path.get("rank", 0)):
+        rows = [str(row) for row in (path.get("augments") or ())]
+        if rows:
+            return " | ".join(rows)
+    return augments.describe(raw)
+
+
 def _standard_mods(raw: bytes) -> dict[int, int]:
     out: dict[int, int] = {}
     for slot in capes.decode(raw) or ():
@@ -305,8 +448,13 @@ def item_mods(item_id: int, extra: bytes | None) -> dict[int, int]:
     raw = bytes(extra or b"")
     if len(raw) < 12:
         return {}
+    if raw[0] == magian.KIND and (raw[1] & magian.TRIAL):
+        return magian.item_mods(raw)
     if raw[0] == 0x03 and raw[1] == 0x83:
         return _bundle_mods(int(item_id), raw)
+    if raw[0] == mezzotint.KIND and (raw[1] & mezzotint.SUBKIND):
+        decoded = mezzotint.decode(raw)
+        return parse_rows([row["text"] for row in decoded["rows"]]) if decoded else {}
     if raw[0] == capes.AUGMENT_KIND and raw[1] == capes.AUGMENT_SUBKIND:
         return _standard_mods(raw)
     return {}

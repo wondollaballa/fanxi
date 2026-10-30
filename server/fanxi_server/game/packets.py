@@ -18,14 +18,19 @@ ACTION_ATTACK_OFF = 0x04
 ACTION_CHANGE_TARGET = 0x0F
 ACTION_WEAPONSKILL = 0x07
 ACTION_JOBABILITY = 0x09
+ACTION_SHOOT = 0x10
+ACTION_DISMOUNT = 0x12   # /dismount, or the Mount menu's "dismount" entry
+ACTION_MOUNT = 0x1A      # /mount <name> and the Mount menu; ActionBuf[0] is the mount id
 
 # 0x028 action categories and result messages.
 ACTION_CATEGORY_BASIC_ATTACK = 1
+ACTION_CATEGORY_SKILL_START = 7     # "<entity> readies <skill>": the client's WS context
 ACTION_CATEGORY_SKILL_FINISH = 3    # weapon skill result
 ACTION_CATEGORY_MAGIC_FINISH = 4   # result of a spell
 ACTION_CATEGORY_ITEM_FINISH = 5     # item use result; its animation is the eat/drink motion
 ACTION_CATEGORY_ABILITY_FINISH = 6  # job ability result
 ACTION_CATEGORY_MAGIC_START = 8    # cast bar + casting animation
+ACTION_CATEGORY_MOB_SKILL_FINISH = 11  # monster TP move result (skill ids 256+)
 # result.resolution: the client reads 0 as a hit and 1 as a miss (LSB's ActionResolution).
 RESOLUTION_HIT = 0
 RESOLUTION_MISS = 1
@@ -33,6 +38,7 @@ BASIC_ATTACK_ID = 0x306B7461  # "atk0"
 
 MESSAGE_ATTACK_HITS = 1
 MESSAGE_MAGIC_DMG = 2
+MESSAGE_MAGIC_BURST = 252              # "Magic Burst!" on a bursted spell
 MESSAGE_DEFEATS_TARGET = 6
 MESSAGE_MAGIC_RECOVERS_HP = 7
 MESSAGE_ATTACK_MISSES = 15
@@ -41,11 +47,15 @@ MESSAGE_ATTACK_CRIT = 67
 MESSAGE_MAGIC_NO_EFFECT = 75
 MESSAGE_MAGIC_TELEPORT = 93
 MESSAGE_USES_JOB_ABILITY = 100
+MESSAGE_NO_ELIGIBLE_ROLL = 428
+MESSAGE_READIES_WEAPONSKILL = 43  # "<entity> readies <skill>." on the WS start
 MESSAGE_SKILL_RECOVERS_HP = 103  # "<user> uses <skill>. <target> recovers N HP."
 MESSAGE_DAMAGE = 185        # "<user> uses <skill>. <target> takes N points of damage."
 MESSAGE_SKILL_DRAIN_HP = 187  # "<user> uses <skill>. <amount> HP drained from <target>."
+MESSAGE_SKILL_MISSES = 188    # "<user> uses <skill>, but misses <target>."
 MESSAGE_SKILL_RECOVERS_MP = 224  # "<user> uses <skill>. <target> recovers N MP."
 MESSAGE_SKILL_DRAIN_MP = 225  # "<user> uses <skill>. <amount> MP drained from <target>."
+MESSAGE_ADD_EFFECT_ADDITIONAL_DAMAGE = 229  # "Additional effect: <target> takes N more damage."
 MESSAGE_TARGET_TAKES_DAMAGE = 264  # "<target> takes N points of damage." -- DoT ticks
 MESSAGE_STATUS_IS = 203
 MESSAGE_STATUS_WEARS_OFF = 206
@@ -53,7 +63,11 @@ MESSAGE_MAGIC_GAIN_EFFECT = 230
 MESSAGE_MAGIC_ENFEEB = 237
 MESSAGE_MAGIC_DRAIN_HP = 227
 MESSAGE_MAGIC_DRAIN_MP = 228
-MESSAGE_MAGIC_STARTS_CASTING = 327
+MESSAGE_MAGIC_STARTS_CASTING = 327      # player: "<caster> starts casting <spell> on <target>."
+MESSAGE_MAGIC_STARTS_CASTING_SELF = 3   # mobs and Trusts: "<caster> starts casting <spell>."
+MESSAGE_EXEMPLAR_POINTS_GAINED = 809  # "<player> gains # exemplar points."
+MESSAGE_MASTER_CHAIN = 810            # "Master chain #! <player> gains # exemplar points."
+MESSAGE_MASTER_LEVEL_UP = 811         # "<player> attains master level #!"
 
 # The four-character code in cmd_arg for a Magic Start, by spell skill.  The client uses
 # it to pick the casting animation and the interrupt code; a spell id there makes the
@@ -64,6 +78,8 @@ MAGIC_CAST_NINJUTSU = 0x6A6E6163  # "canj"
 MAGIC_CAST_SONG = 0x6F736163    # "caso"
 MAGIC_CAST_SUMMON = 0x6D736163  # "casm"
 MAGIC_CAST_BLUE = 0x6C626163    # "cabl"
+# The action id on a weapon skill's start packet (LandSandBoat's FourCC::SkillUse).
+ACTION_SKILL_USE = 0x65746163    # "cate"
 MAGIC_CAST_GEOMANCY = 0x65676163  # "cage"
 MAGIC_CAST_TRUST = 0x61666163    # "cafa", the Trust magic cast 4CC
 
@@ -203,8 +219,10 @@ def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
         body[6] = (SEND_NAME | 0x02) & 0xFF
         if is_trust or is_pet:
             # Spawnables (targid 0x700-0x8FF) have no literal-name marker: the client
-            # reads the name at 0x38, not 0x35.
-            body[52:68] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
+            # reads the name at packet 0x34, which is body 0x30.  The four zero bytes
+            # fanxi used to put there made the client read an empty name, so an alter
+            # ego had no nameplate and its action lines had no caster.
+            body[48:64] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
         else:
             body[48] = 0x01
             body[49:65] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
@@ -252,11 +270,11 @@ def entity_update(entity, mask: int = SEND_SPAWN, despawn: bool = False,
             look_model = int.from_bytes(look[2:4], "little") if len(look) >= 4 else model
             struct.pack_into("<I", body, 44, look_model << 16)
         if is_trust or is_pet:
-            # A Trust/pet is a spawnable (targid >= 0x700), so its name lives at 0x38
-            # and 0x34 stays part of the model block.  0x067 also carries the name
-            # and tells the client this entity belongs to its master.
-            body[48:52] = bytes(4)
-            body[52:68] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
+            # A Trust/pet is a spawnable (targid >= 0x700), so its name lives at packet
+            # 0x34 (body 0x30); the four bytes at packet 0x34 are the name's first four
+            # characters, not a model/padding block.  LandSandBoat writes this name with
+            # the same memcpy at buffer offset 0x34, which includes the 4-byte sub-header.
+            body[48:64] = entity.name.encode("ascii", "replace")[:16].ljust(16, b"\0")
         else:
             # Static NPCs/mobs carry a literal name.  The client's NPC path reads a one-byte
             # name-type marker at 0x34 before the string; without it the client falls back to
@@ -290,18 +308,24 @@ def entity_set_name(entity, master_targid: int) -> bytes:
     return bytes(body)
 
 
-def battle_action(actor_id: int, target_id: int, damage: int = 0, *, miss: bool = False,
+def battle_action(actor_id: int, target_id: int = 0, damage: int = 0, *, miss: bool = False,
                   critical: bool = False, defeated: bool = False, animation: int = 0,
                   message: int | None = None, kind: int = 1,
                   category: int = ACTION_CATEGORY_BASIC_ATTACK,
                   action_id: int = BASIC_ATTACK_ID, hit_distortion: int = 0,
-                  info: int | None = None, results: list[dict] | None = None) -> bytes:
-    """Body of a 0x028 action packet (one target, one or more results).
+                  info: int | None = None, results: list[dict] | None = None,
+                  targets: list[dict] | None = None) -> bytes:
+    """Body of a 0x028 action packet (one or more targets, one or more results).
 
     ``results`` is the target's result list; a melee round passes one entry per hand,
     main hand first.  The client plays the swings in that order from this count
     (Windower's ``action_count``), which is what makes a dual-wield round look right.
     Without ``results`` the single-result keywords describe the one hit.
+
+    ``targets`` carries a whole AoE action instead: one dict per target with
+    ``target_id`` and either its own ``results`` list or the same single-result
+    keywords.  The client reads the target count first and then each target's result
+    count, so a mob TP move that hits three players is one packet and one animation.
 
     Per result, ``animation`` is the result's sub_kind: the swing hand (0 main, 1 off),
     a weapon skill's animation, or -- for a finished spell -- the spell id the client
@@ -309,53 +333,79 @@ def battle_action(actor_id: int, target_id: int, damage: int = 0, *, miss: bool 
     status effect id a spell lands.  ``info`` is the 5-bit result info; attacks use the
     defeated/critical flags, while a finished spell carries its recast there.
     """
-    results = results or []
-    if not results:
-        results = [dict(damage=damage, miss=miss, critical=critical, defeated=defeated,
-                        animation=animation, message=message, info=info,
-                        hit_distortion=hit_distortion, kind=kind)]
+    if targets is None:
+        results = results or []
+        if not results:
+            results = [dict(damage=damage, miss=miss, critical=critical, defeated=defeated,
+                            animation=animation, message=message, info=info,
+                            hit_distortion=hit_distortion, kind=kind)]
+        targets = [{"target_id": target_id, "results": results}]
+    else:
+        normalized = []
+        for target in targets:
+            target_results = target.get("results")
+            if not target_results:
+                target_results = [dict(
+                    damage=target.get("damage", 0), miss=target.get("miss", False),
+                    critical=target.get("critical", False),
+                    defeated=target.get("defeated", False),
+                    animation=target.get("animation", animation),
+                    message=target.get("message", message), info=target.get("info", info),
+                    hit_distortion=target.get("hit_distortion", hit_distortion),
+                    kind=target.get("kind", kind))]
+            normalized.append({
+                "target_id": target.get("target_id", target.get("id", 0)),
+                "results": target_results,
+            })
+        targets = normalized
     writer = BitWriter()
     writer.write(actor_id, 32)
-    writer.write(1, 6)                 # target count
+    writer.write(min(len(targets), 15), 6)   # target count (the client caps at 15)
     writer.write(0, 4)                 # res_sum is always 0
     writer.write(category, 4)
     writer.write(action_id, 32)
     writer.write(0, 32)                # recast
-    writer.write(target_id, 32)
-    writer.write(len(results), 4)      # results for this target (a round has one per hand)
-    for entry in results:
-        hit_miss = bool(entry.get("miss", False))
-        hit_critical = bool(entry.get("critical", False))
-        hit_defeated = bool(entry.get("defeated", False))
-        hit_message = entry.get("message", message)
-        if hit_message is None:
-            hit_message = (MESSAGE_ATTACK_MISSES if hit_miss
-                           else MESSAGE_ATTACK_CRIT if hit_critical else MESSAGE_ATTACK_HITS)
-        hit_info = entry.get("info", info)
-        if hit_info is None:
-            hit_info = (1 if hit_defeated else 0) | (2 if hit_critical else 0)
-        writer.write(RESOLUTION_MISS if hit_miss else RESOLUTION_HIT, 3)
-        writer.write(entry.get("kind", kind), 2)
-        writer.write(entry.get("animation", animation), 12)
-        writer.write(hit_info & 0x1F, 5)
-        writer.write(entry.get("hit_distortion", hit_distortion), 2)
-        writer.write(0, 3)             # knockback
-        writer.write(max(0, int(entry.get("damage", damage))) & 0x1FFFF, 17)
-        writer.write(hit_message, 10)
-        writer.write(0, 31)            # modifier
-        # Optional additional-effect block.  A skillchain uses this on the closing
-        # weapon-skill result: proc_kind is ActionProcSkillChain, value is the
-        # resonance damage, and the message is 287 + proc (384 + proc when absorbed).
-        add_kind = max(0, min(63, int(entry.get("add_effect", 0) or 0)))
-        if add_kind:
-            writer.write(1, 1)
-            writer.write(add_kind, 6)
-            writer.write(max(0, int(entry.get("add_info", 0) or 0)) & 0xF, 4)
-            writer.write(max(0, int(entry.get("add_value", 0) or 0)) & 0x1FFFF, 17)
-            writer.write(max(0, int(entry.get("add_message", 0) or 0)) & 0x3FF, 10)
-        else:
-            writer.write(0, 1)         # no additional effect
-        writer.write(0, 1)             # no reaction effect
+    for target in targets[:15]:
+        target_results = target.get("results") or []
+        writer.write(int(target.get("target_id", 0)) & 0xFFFFFFFF, 32)
+        # results for this target (a round has one per hand; the client caps at 8)
+        writer.write(min(len(target_results), 8), 4)
+        for entry in target_results[:8]:
+            hit_miss = bool(entry.get("miss", False))
+            hit_critical = bool(entry.get("critical", False))
+            hit_defeated = bool(entry.get("defeated", False))
+            hit_message = entry.get("message", message)
+            if hit_message is None:
+                hit_message = (MESSAGE_ATTACK_MISSES if hit_miss
+                               else MESSAGE_ATTACK_CRIT if hit_critical else MESSAGE_ATTACK_HITS)
+            hit_info = entry.get("info", info)
+            if hit_info is None:
+                hit_info = (1 if hit_defeated else 0) | (2 if hit_critical else 0)
+            writer.write(RESOLUTION_MISS if hit_miss else RESOLUTION_HIT, 3)
+            writer.write(entry.get("kind", kind), 2)
+            writer.write(entry.get("animation", animation), 12)
+            writer.write(hit_info & 0x1F, 5)
+            writer.write(entry.get("hit_distortion", hit_distortion), 2)
+            writer.write(max(0, int(entry.get("knockback", 0)) or 0) & 0x7, 3)
+            writer.write(max(0, int(entry.get("damage", damage))) & 0x1FFFF, 17)
+            writer.write(hit_message, 10)
+            writer.write(0, 31)            # modifier
+            # Optional additional-effect block.  An en-spell uses it on every melee result:
+            # proc_kind is the element (ActionProcAddEffect FireDamage=1 .. DarkDamage=8),
+            # value is the extra damage, and the message is
+            # MESSAGE_ADD_EFFECT_ADDITIONAL_DAMAGE.  A skillchain uses the same block on the
+            # closing weapon-skill result: proc_kind is ActionProcSkillChain, value is the
+            # resonance damage, and the message is 287 + proc (384 + proc when absorbed).
+            add_kind = max(0, min(63, int(entry.get("add_effect", 0) or 0)))
+            if add_kind:
+                writer.write(1, 1)
+                writer.write(add_kind, 6)
+                writer.write(max(0, int(entry.get("add_info", 0) or 0)) & 0xF, 4)
+                writer.write(max(0, int(entry.get("add_value", 0) or 0)) & 0x1FFFF, 17)
+                writer.write(max(0, int(entry.get("add_message", 0) or 0)) & 0x3FF, 10)
+            else:
+                writer.write(0, 1)         # no additional effect
+            writer.write(0, 1)             # no reaction effect
     bits = writer.bytes()
     # Byte 0x04 of the packet is the packed byte count (LSB's workSize); the packet's own
     # length is one more than it.  Writing count+1 here made the client drop the action.
@@ -416,14 +466,19 @@ def lockstyle_error(item_ids) -> bytes:
 
 
 def system_message(message_id: int, unique_no: int = 0, act_index: int = 0,
-                   attr: int = 0) -> bytes:
+                   attr: int = 0, name: str = "") -> bytes:
     """Body of a 0x009 message: draw a line from the client's own system-message DAT.
 
     Style lock replies use this (Message IDs 267..270), so the player sees the same
     "Style lock mode enabled." line retail shows without Fanxi shipping the text.
+    ``name`` fills the client's ``string2`` argument, which message 89 ("<name> examines
+    you.") reads; the client's other messages leave Data empty.
     """
-    return struct.pack("<IHHB", int(unique_no) & 0xFFFFFFFF, int(act_index) & 0xFFFF,
+    body = struct.pack("<IHHB", int(unique_no) & 0xFFFFFFFF, int(act_index) & 0xFFFF,
                        int(message_id) & 0xFFFF, int(attr) & 0xFF)
+    if name:
+        body += ("string2 " + str(name)).encode("ascii", "replace")[:120] + b"\0"
+    return body
 
 
 def shop_open(count: int) -> bytes:
@@ -518,12 +573,20 @@ def talk_num_work(entity, text_id: int, params=(), show_name: bool = False) -> b
     return bytes(body)
 
 
-def item_max() -> bytes:
-    """Body of a 0x01C container-size packet: 18 containers plus their usable sizes."""
+def item_max(disabled=()) -> bytes:
+    """Body of a 0x01C container-size packet: 18 containers plus their usable sizes.
+
+    ``disabled`` names containers the client must not offer as storage.  ItemNum stays
+    at the physical size; ItemNum2 (the usable size) goes to zero, which is the client's
+    "this bag is not available" value.  An empty bag advertised as usable is what let the
+    equipment window remember it and draw a blank item list.
+    """
     body = bytearray(96)
+    unavailable = {int(container) for container in disabled}
     for index in range(18):
         body[index] = 81
-        struct.pack_into("<H", body, 32 + 2 * index, 81)
+        struct.pack_into("<H", body, 32 + 2 * index,
+                         0 if index in unavailable else 81)
     return bytes(body)
 
 

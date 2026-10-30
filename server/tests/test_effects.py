@@ -17,6 +17,7 @@ from support import make_huffman_dir, make_service
 
 from fanxi_server.game import effects, modifiers as mod, packets
 from fanxi_server.game.cipher import Huffman
+from fanxi_server.game.entities import ZoneEntity
 from fanxi_server.game.world import World
 from fanxi_server.game.spell_effects import STATUS_SPELLS
 from fanxi_server.game.zone import VANA_EPOCH, ZoneSession, sub
@@ -122,6 +123,37 @@ class EffectTest(unittest.TestCase):
         self.session.zone_loaded = True
         self.session.char["main_job"] = 13
 
+    def claim_mob(self):
+        """A live monster to put hate on; the effects fixture's zone may have none."""
+        return ZoneEntity(kind="mob", id=0x01000100, targid=0x210, zone=self.session.zone,
+                          name="Test Mob", level=99, hp=50000, hp_max=50000)
+
+    def test_another_party_cannot_take_a_claimed_monster(self):
+        """A cross-party hit must not move the claim.
+
+        The client draws a monster claimed by another party pink and refuses to attack
+        it, but the server used to give the claim to whoever had the most hate: a box's
+        Trust could flip a live fight pink and leave the first player unable to swing or
+        disengage while the server kept swinging for them.
+        """
+        mob = self.claim_mob()
+        mine = int(self.session.char["char_id"])
+        mob.claim_char_id = mine
+        mob.engaged_char_id = mine
+        self.world.add_damage_hate(mob, 0x0100FFEE, 1_000_000, time.time())
+        self.assertEqual(int(mob.claim_char_id), mine)
+        self.assertEqual(int(mob.engaged_char_id), mine)
+
+    def test_a_party_member_may_take_the_claim(self):
+        other = self.party_with()
+        mob = self.claim_mob()
+        mine = int(self.session.char["char_id"])
+        mob.claim_char_id = mine
+        mob.engaged_char_id = mine
+        theirs = int(other.char["char_id"])
+        self.world.add_damage_hate(mob, theirs, 1_000_000, time.time())
+        self.assertEqual(int(mob.claim_char_id), theirs)
+
     def slot_of(self, item_id: int, container: int = 0) -> tuple[int, int]:
         """(container, slot) where a granted item actually landed."""
         row = self.db.one(
@@ -132,7 +164,15 @@ class EffectTest(unittest.TestCase):
         self.assertIsNotNone(row, "item %d is not in container %d" % (item_id, container))
         return int(row["container"]), int(row["slot"])
 
+    def as_caster(self, spell_id: int) -> None:
+        """Borrow a job that learns the spell; the job gate has its own tests."""
+        if not self.session.can_cast_spell(spell_id):
+            job, level = self.service.spell_levels(spell_id)[0]
+            self.session.char["main_job"] = int(job)
+            self.session.char["main_level"] = max(99, int(level))
+
     def cast(self, spell_id: int, targid: int = 0, wait: float = 10.0) -> None:
+        self.as_caster(spell_id)
         packet = bytearray(16)
         struct.pack_into("<IHHI", packet, 4, 0, targid, packets.ACTION_CAST_MAGIC, spell_id)
         self.session.cast_magic(bytes(packet), targid)
@@ -219,6 +259,7 @@ class EffectTest(unittest.TestCase):
     def test_fast_cast_shortens_the_cast_bar(self):
         """Gear Fast Cast feeds the same cast timer the spell handler uses."""
         self.session.char["mp_current"] = 100
+        self.as_caster(43)
         packet = bytearray(16)
         struct.pack_into("<IHHI", packet, 4, 0, 0, packets.ACTION_CAST_MAGIC, 43)
         before = time.time()
@@ -365,6 +406,48 @@ class EffectTest(unittest.TestCase):
         self.assertFalse(any(message["message"] == packets.MESSAGE_TARGET_TAKES_DAMAGE
                              for message in battle_messages(self.session)))
 
+    def test_frazzle_lowers_magic_evasion_and_shows_in_the_target_report(self):
+        """Frazzle used to land effect 404 with potency 0, so it did nothing."""
+        self.enter(100)
+        mob = self.at_mob()
+        row = self.db.one("SELECT id FROM spells WHERE name = 'Frazzle'")
+        self.cast(int(row["id"]), mob.targid)
+        state = mob.effect_state[effects.MAGIC_EVASION_DOWN]
+        self.assertEqual(str(state["name"]), "Frazzle")
+        self.assertEqual(int(state["potency"]), 35)
+        self.assertGreater(float(state["until"]) - time.time(), 100.0)
+        base = int(self.world.monster_sheet(mob).fighter.mods.get(mod.MEVA, 0))
+        debuffed = self.world.monster_debuff_mods(mob)
+        self.assertEqual(int(debuffed.get(mod.MEVA, 0)), base - 35)
+        report = self.session.target_effect_report(entity_id=int(mob.id))
+        self.assertEqual(report["target"]["name"], mob.name)
+        effect = next(row for row in report["effects"] if row["id"] == effects.MAGIC_EVASION_DOWN)
+        self.assertEqual(effect["name"], "Frazzle")
+        self.assertEqual(effect["potency"], 35)
+
+    def test_target_report_lists_dia_and_the_evasion_debuff(self):
+        self.enter(100)
+        mob = self.at_mob()
+        now = time.time()
+        self.world.apply_mob_effect(
+            mob, effects.for_spell("Dia V"), self.session, now,
+            duration=180, potency=30, tick=5, name="Dia V")
+        self.world.apply_mob_effect(
+            mob, effects.for_spell("Distract II"), self.session, now,
+            duration=300, potency=50, name="Distract II")
+        report = self.session.target_effect_report(entity_id=int(mob.id))
+        by_name = {row["name"]: row for row in report["effects"]}
+        self.assertIn("Dia V", by_name)
+        self.assertEqual(by_name["Dia V"]["potency"], 30)
+        self.assertEqual(by_name["Dia V"]["tick"], 5)
+        self.assertIn("Distract II", by_name)
+        self.assertEqual(by_name["Distract II"]["potency"], 50)
+        base_defense = int(self.world.monster_sheet(mob).fighter.defense)
+        self.assertEqual(int(self.world.debuffed_monster(mob).defense),
+                         int(base_defense * 70 / 100))
+        self.assertLess(int(self.world.debuffed_monster(mob).evasion),
+                        int(self.world.monster_sheet(mob).fighter.evasion))
+
     def test_a_spell_pull_claims_an_idle_monster(self):
         """Casting on a monster gives it enmity and makes it fight the caster."""
         self.enter(100)
@@ -377,19 +460,31 @@ class EffectTest(unittest.TestCase):
         self.assertIn(char_id, mob.enmity)
         self.assertGreaterEqual(float(mob.next_attack_at), time.time())
 
-    def test_cast_start_does_not_print_the_third_person_line(self):
-        """The server's chat line is the self message; the action must not repeat it."""
+    def test_cast_start_is_the_retail_start_line_and_animation(self):
+        """The client prints the start line from message 327 and plays the spell's motion."""
         self.enter(100)
         mob = self.at_mob()
         packet = bytearray(16)
         struct.pack_into("<IHHI", packet, 4, 0, mob.targid,
                          packets.ACTION_CAST_MAGIC, 23)
         self.session.queue.clear()
+        self.as_caster(23)
         self.session.cast_magic(bytes(packet), mob.targid)
         start = next(message for message in messages(self.session)
                      if message["category"] == packets.ACTION_CATEGORY_MAGIC_START)
-        self.assertEqual(start["message"], 0)
-        self.assertIn("You start casting Dia.", chats(self.session))
+        self.assertEqual(start["message"], packets.MESSAGE_MAGIC_STARTS_CASTING)
+        # Dia's client animation is its spell id (23), so the cast starts with Dia's own
+        # pose rather than the client's default (Cure's) one.
+        self.assertEqual(start["sub"], 23)
+        self.assertNotIn("You start casting Dia.", chats(self.session))
+
+    def test_cast_finish_keeps_the_spell_animation(self):
+        """The stopping motion is still the spell's client animation."""
+        self.enter(100)
+        mob = self.at_mob()
+        self.cast(23, mob.targid)
+        result = self.last_magic()
+        self.assertEqual(result["sub"], 23)
 
     def test_petrified_monster_stops_walking_and_swinging(self):
         self.enter(100)
@@ -687,6 +782,58 @@ class EffectTest(unittest.TestCase):
         self.assertAlmostEqual(effect_seconds(state), 336.0, delta=1.0)
         self.assertNotIn(effects.PERPETUANCE, self.session.status_effects)
 
+    def test_stpc_refresh_lands_on_the_selected_party_member(self):
+        """The client's party sub-target must reach the server's cast, not fall back to self."""
+        self.session.char.update(main_job=5, main_level=99, mp_current=600)
+        other = self.party_with(offset=4.0)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Refresh III'")
+        self.cast(int(row["id"]), other.targid)
+        self.assertIn(effects.REFRESH, other.effect_state)
+        self.assertNotIn(effects.REFRESH, self.session.effect_state)
+        result = next(message for message in messages(other)
+                      if message["category"] == packets.ACTION_CATEGORY_MAGIC_FINISH)
+        self.assertEqual(result["target"], int(other.char["char_id"]))
+        self.assertEqual(result["message"], packets.MESSAGE_MAGIC_GAIN_EFFECT)
+        self.assertEqual(result["value"], effects.REFRESH)
+        self.assertLess(int(self.session.char["mp_current"]), 600)
+
+    def test_stpc_cure_heals_the_selected_party_member(self):
+        """Cure selected on a teammate heals them and leaves the caster's HP alone."""
+        self.session.char.update(main_job=5, main_level=99, mp_current=600)
+        self.session.char["hp_current"] = 300
+        other = self.party_with(offset=4.0)
+        other.char["hp"] = 500
+        other.char["hp_current"] = 50
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Cure IV'")
+        self.cast(int(row["id"]), other.targid)
+        self.assertGreater(int(other.char["hp_current"]), 50)
+        self.assertEqual(int(self.session.char["hp_current"]), 300)
+        result = next(message for message in messages(other)
+                      if message["category"] == packets.ACTION_CATEGORY_MAGIC_FINISH)
+        self.assertEqual(result["target"], int(other.char["char_id"]))
+        self.assertEqual(result["message"], packets.MESSAGE_MAGIC_RECOVERS_HP)
+
+    def test_hastega_reaches_nearby_party_members(self):
+        """Hastega is self-centered in the client data but must spread to the party."""
+        self.session.char.update(main_job=5, main_level=99, mp_current=600)
+        other = self.party_with(offset=4.0)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Hastega'")
+        self.cast(int(row["id"]))
+        for session in (self.session, other):
+            self.assertIn(effects.HASTE, session.effect_state)
+        targets = [message["target"] for message in messages(self.session)
+                   if message["message"] == packets.MESSAGE_MAGIC_GAIN_EFFECT]
+        self.assertIn(int(other.char["char_id"]), targets)
+        self.assertIn(mod.HASTE_MAGIC, effects.for_spell("Hastega").mods)
+
+    def test_hastega_skips_a_party_member_out_of_range(self):
+        self.session.char.update(main_job=5, main_level=99, mp_current=600)
+        other = self.party_with(offset=20.0)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Hastega'")
+        self.cast(int(row["id"]))
+        self.assertIn(effects.HASTE, self.session.effect_state)
+        self.assertNotIn(effects.HASTE, other.effect_state)
+
     def test_accession_spreads_regen_v_across_the_party(self):
         """Accession turns the next white enhancing spell into a party-wide buff."""
         self.session.char.update(main_job=20, main_level=99, mp_current=600)
@@ -954,6 +1101,23 @@ class EffectTest(unittest.TestCase):
         self.assertEqual(int(state["tier"]), 2)
 
 
+class DarkKnightAbilityTest(unittest.TestCase):
+    """The two DRK abilities that were icons only but carry real combat mods."""
+
+    def test_last_resort_is_attack_up_defense_down(self):
+        entry = effects.ABILITY_EFFECTS[51]
+        self.assertEqual(entry.effect, effects.LAST_RESORT)
+        self.assertEqual(entry.duration, 180.0)
+        self.assertEqual(entry.mods[mod.ATT_PERCENT], 25)
+        self.assertEqual(entry.mods[mod.DEF_PERCENT], -25)
+
+    def test_souleater_adds_accuracy_while_the_hit_bonus_is_in_player_attack(self):
+        entry = effects.ABILITY_EFFECTS[49]
+        self.assertEqual(entry.effect, effects.SOULEATER)
+        self.assertEqual(entry.duration, 60.0)
+        self.assertEqual(entry.mods[mod.ACC], 25)
+
+
 class EnhancingDurationTest(unittest.TestCase):
     """The duration formula itself, away from the session and the database."""
 
@@ -1158,6 +1322,35 @@ class EnhancingDurationTest(unittest.TestCase):
                                   mods={mod.SONG_DURATION_BONUS: 50},
                                   skill=40),
             float(song.duration) * 1.5)
+
+    def test_song_plus_gear_adds_ten_percent_duration_a_point(self):
+        """All Songs and the family row are duration, not just potency.
+
+        BG-wiki's Song page: "Song+ potency gear increases duration by 10% per 1
+        Song+".  Loughnashade (All songs +4) is therefore +40% and Mnbw. Whistle +1
+        (+3) +30%, which is what carries a retail bard past eleven minutes.
+        """
+        paeon = self.spec("Armys Paeon")
+        base = float(paeon.duration)
+        self.assertEqual(
+            effects.song_duration(paeon, name="Armys Paeon",
+                                  mods={mod.ALL_SONGS_EFFECT: 4,
+                                        mod.PAEON_EFFECT: 2}),
+            base * 1.6)
+        # Only the song's own family row counts: Minuet+1 does nothing for a March.
+        march = self.spec("Victory March")
+        self.assertEqual(
+            effects.song_duration(march, name="Victory March",
+                                  mods={mod.ALL_SONGS_EFFECT: 4,
+                                        mod.MINUET_EFFECT: 1}),
+            float(march.duration) * 1.4)
+        # The 454 lines and the Song+ points are additive, and Troubadour doubles
+        # the lot after they are added.
+        self.assertEqual(
+            effects.song_duration(march, name="Victory March", troubadour=True,
+                                  mods={mod.SONG_DURATION_BONUS: 50,
+                                        mod.ALL_SONGS_EFFECT: 4}),
+            float(march.duration) * 1.9 * 2.0)
 
     def test_drain_and_aspir_potency_gear(self):
         self.assertEqual(effects.drain_amount(100, {mod.DRAIN_ASPIR: 20}), 120)

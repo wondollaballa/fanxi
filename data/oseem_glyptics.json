@@ -1,0 +1,8607 @@
+{
+ "note": "Oseem, Norg (I-7): Arcane Glyptics on Reisenjima armor (Chironic, Herculean, Merlinic, Odyssean, Valorous) and the Reisenjima weapons, with Pellucid/Fern/Taupe stones. Each path column is one augment table; max is the highest value the BG Wiki table lists, including the Fern (F) and Taupe (T) bonus.",
+ "source": "https://www.bg-wiki.com/ffxi/Category:Escha_Rewards/Arcane_Glyptics_Inscription",
+ "items": [
+  {
+   "item_id": 25644,
+   "name": "Chironic Hat",
+   "kind": "armor",
+   "slot": "head",
+   "set": "Chironic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 32,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "block",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 17,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "healing": {
+     "label": "Healing",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "resist_silence",
+       "max": 11,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25720,
+   "name": "Chironic Doublet",
+   "kind": "armor",
+   "slot": "body",
+   "set": "Chironic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 32,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "block",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 17,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "healing": {
+     "label": "Healing",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "resist_silence",
+       "max": 11,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25844,
+   "name": "Chironic Hose",
+   "kind": "armor",
+   "slot": "legs",
+   "set": "Chironic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 32,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "block",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 17,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "healing": {
+     "label": "Healing",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "resist_silence",
+       "max": 11,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27142,
+   "name": "Chironic Gloves",
+   "kind": "armor",
+   "slot": "hands",
+   "set": "Chironic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 32,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "block",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 17,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "healing": {
+     "label": "Healing",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "resist_silence",
+       "max": 11,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27498,
+   "name": "Chironic Slippers",
+   "kind": "armor",
+   "slot": "feet",
+   "set": "Chironic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 32,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "block",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 17,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "healing": {
+     "label": "Healing",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "resist_silence",
+       "max": 11,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25642,
+   "name": "Herculean Helm",
+   "kind": "armor",
+   "slot": "head",
+   "set": "Herculean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "ta",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "counter",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "waltz",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "ranged": {
+     "label": "Ranged",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "snapshot",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "rapid_shot",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "repair",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "regen",
+       "max": 4,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25718,
+   "name": "Herculean Vest",
+   "kind": "armor",
+   "slot": "body",
+   "set": "Herculean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "ta",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "counter",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "waltz",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "ranged": {
+     "label": "Ranged",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "snapshot",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "rapid_shot",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "repair",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "regen",
+       "max": 4,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25842,
+   "name": "Herculean Trousers",
+   "kind": "armor",
+   "slot": "legs",
+   "set": "Herculean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "ta",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "counter",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "waltz",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "ranged": {
+     "label": "Ranged",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "snapshot",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "rapid_shot",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "repair",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "regen",
+       "max": 4,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27140,
+   "name": "Herculean Gloves",
+   "kind": "armor",
+   "slot": "hands",
+   "set": "Herculean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "ta",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "counter",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "waltz",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "ranged": {
+     "label": "Ranged",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "snapshot",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "rapid_shot",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "repair",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "regen",
+       "max": 4,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27496,
+   "name": "Herculean Boots",
+   "kind": "armor",
+   "slot": "feet",
+   "set": "Herculean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "ta",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "counter",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "waltz",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "dw",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "ranged": {
+     "label": "Ranged",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "snapshot",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "rapid_shot",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 35,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "repair",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "regen",
+       "max": 4,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25643,
+   "name": "Merlinic Hood",
+   "kind": "armor",
+   "slot": "head",
+   "set": "Merlinic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "magic_damage",
+       "max": 16,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "magic_crit_damage",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "occult",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "blood_boon",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "avatar_perp",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "bp_delay",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "bp_damage",
+       "max": 10,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25719,
+   "name": "Merlinic Jubbah",
+   "kind": "armor",
+   "slot": "body",
+   "set": "Merlinic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "magic_damage",
+       "max": 16,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "magic_crit_damage",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "occult",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "blood_boon",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "avatar_perp",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "bp_delay",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "bp_damage",
+       "max": 10,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25843,
+   "name": "Merlinic Shalwar",
+   "kind": "armor",
+   "slot": "legs",
+   "set": "Merlinic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "magic_damage",
+       "max": 16,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "magic_crit_damage",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "occult",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "blood_boon",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "avatar_perp",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "bp_delay",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "bp_damage",
+       "max": 10,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27141,
+   "name": "Merlinic Dastanas",
+   "kind": "armor",
+   "slot": "hands",
+   "set": "Merlinic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "magic_damage",
+       "max": 16,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "magic_crit_damage",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "occult",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "blood_boon",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "avatar_perp",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "bp_delay",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "bp_damage",
+       "max": 10,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27497,
+   "name": "Merlinic Crackows",
+   "kind": "armor",
+   "slot": "feet",
+   "set": "Merlinic Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "magic_damage",
+       "max": 16,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "magic_crit_damage",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "drain",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "occult",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "blood_boon",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "avatar_perp",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "bp_delay",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "bp_damage",
+       "max": 10,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25640,
+   "name": "Odyssean Helm",
+   "kind": "armor",
+   "slot": "head",
+   "set": "Odyssean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 31,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25716,
+   "name": "Odyssean Chestplate",
+   "kind": "armor",
+   "slot": "body",
+   "set": "Odyssean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 31,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25840,
+   "name": "Odyssean Cuisses",
+   "kind": "armor",
+   "slot": "legs",
+   "set": "Odyssean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 31,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27138,
+   "name": "Odyssean Gauntlets",
+   "kind": "armor",
+   "slot": "hands",
+   "set": "Odyssean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 31,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27494,
+   "name": "Odyssean Greaves",
+   "kind": "armor",
+   "slot": "feet",
+   "set": "Odyssean Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 31,
+       "primary": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25641,
+   "name": "Valorous Mask",
+   "kind": "armor",
+   "slot": "head",
+   "set": "Valorous Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_sb",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25717,
+   "name": "Valorous Mail",
+   "kind": "armor",
+   "slot": "body",
+   "set": "Valorous Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_sb",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 25841,
+   "name": "Valorous Hose",
+   "kind": "armor",
+   "slot": "legs",
+   "set": "Valorous Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_sb",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27139,
+   "name": "Valorous Mitts",
+   "kind": "armor",
+   "slot": "hands",
+   "set": "Valorous Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_sb",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 27495,
+   "name": "Valorous Greaves",
+   "kind": "armor",
+   "slot": "feet",
+   "set": "Valorous Armor Set",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 40,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -4,
+       "primary": true
+      }
+     ]
+    },
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_sb",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 5,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 20505,
+   "name": "Condemners",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "martial_arts",
+       "max": 9,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 20,
+       "primary": true
+      }
+     ]
+    },
+    "ranged": {
+     "label": "Ranged",
+     "stats": []
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": []
+    },
+    "pet": {
+     "label": "Pet",
+     "stats": [
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -5,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 20579,
+   "name": "Skinflayer",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "ta",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "waltz",
+       "max": 9,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 18,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 3,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": []
+    }
+   }
+  },
+  {
+   "item_id": 20677,
+   "name": "Colada",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 18,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 3,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "magic_damage",
+       "max": 8,
+       "primary": true
+      },
+      {
+       "key": "enhancing_duration",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "refresh",
+       "max": 2,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 9,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 21021,
+   "name": "Umaru",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": []
+    },
+    "ranged": {
+     "label": "Ranged",
+     "stats": []
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": []
+    },
+    "pet": {
+     "label": "Pet",
+     "stats": []
+    }
+   }
+  },
+  {
+   "item_id": 21072,
+   "name": "Gada",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 2,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -2,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 2,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "enhancing_duration",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "indi_duration",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 9,
+       "primary": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -9,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 21686,
+   "name": "Zulfiqar",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 29,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 21746,
+   "name": "Digirbalag",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 19,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "pet_str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "pet_acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "pet_attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 9,
+       "primary": true
+      }
+     ]
+    },
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 18,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -3,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "regen",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "haste",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 7,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 21754,
+   "name": "Aganoshe",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 30,
+       "primary": true
+      }
+     ]
+    },
+    "ranged": {
+     "label": "Ranged",
+     "stats": []
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": []
+    },
+    "pet": {
+     "label": "Pet",
+     "stats": []
+    }
+   }
+  },
+  {
+   "item_id": 21804,
+   "name": "Obschine",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 27,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "zanshin",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -6,
+       "primary": true
+      },
+      {
+       "key": "resist_paralyze",
+       "max": 15,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 21854,
+   "name": "Reienkyo",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 18,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 21904,
+   "name": "Kanaria",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "acc",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "stun",
+       "max": 9,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 15,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 3,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -4,
+       "primary": true
+      },
+      {
+       "key": "ta",
+       "max": 4,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 22054,
+   "name": "Grioavolr",
+   "kind": "weapon",
+   "slot": "main",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "familiar": {
+     "label": "Familiar",
+     "stats": [
+      {
+       "key": "bp_damage",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "pet_da",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "primary": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 25,
+       "primary": true
+      }
+     ]
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": [
+      {
+       "key": "str",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "macc",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "magic_damage",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "enhancing_duration",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "fast_cast",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "occult",
+       "max": 9,
+       "primary": true
+      },
+      {
+       "key": "magic_crit_damage",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "enfeebling_skill",
+       "max": 16,
+       "primary": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -11,
+       "primary": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 11,
+       "primary": true
+      }
+     ]
+    }
+   }
+  },
+  {
+   "item_id": 22113,
+   "name": "Teller",
+   "kind": "weapon",
+   "slot": "range",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "melee": {
+     "label": "Melee",
+     "stats": []
+    },
+    "ranged": {
+     "label": "Ranged",
+     "stats": []
+    },
+    "magic": {
+     "label": "Magic",
+     "stats": []
+    },
+    "pet": {
+     "label": "Pet",
+     "stats": []
+    }
+   }
+  },
+  {
+   "item_id": 22134,
+   "name": "Holliday",
+   "kind": "weapon",
+   "slot": "range",
+   "set": "Reisenjima weapon",
+   "zone": "Reisenjima",
+   "paths": {
+    "ranged": {
+     "label": "Ranged",
+     "stats": [
+      {
+       "key": "dmg",
+       "max": 30,
+       "primary": true
+      },
+      {
+       "key": "str",
+       "max": 19,
+       "primary": true
+      },
+      {
+       "key": "dex",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "vit",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "agi",
+       "max": 19,
+       "primary": true
+      },
+      {
+       "key": "int",
+       "max": 19,
+       "primary": true
+      },
+      {
+       "key": "mnd",
+       "max": 20,
+       "primary": true
+      },
+      {
+       "key": "chr",
+       "max": 13,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "primary": true
+      },
+      {
+       "key": "pdt",
+       "max": -2,
+       "primary": true
+      },
+      {
+       "key": "racc",
+       "max": 24,
+       "primary": true
+      },
+      {
+       "key": "ratt",
+       "max": 25,
+       "primary": true
+      },
+      {
+       "key": "rapid_shot",
+       "max": 7,
+       "primary": true
+      },
+      {
+       "key": "snapshot",
+       "max": 10,
+       "primary": true
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "primary": true
+      },
+      {
+       "key": "stp",
+       "max": 6,
+       "primary": true
+      },
+      {
+       "key": "wsa",
+       "max": 11,
+       "primary": true
+      },
+      {
+       "key": "wsd",
+       "max": 4,
+       "primary": true
+      },
+      {
+       "key": "mab",
+       "max": 19,
+       "primary": true
+      },
+      {
+       "key": "enmity",
+       "max": -1,
+       "primary": true
+      }
+     ]
+    }
+   }
+  }
+ ]
+}

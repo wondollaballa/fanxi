@@ -26,6 +26,9 @@ void input_release_all(void);
 /* A key press or release that did not come from the keyboard (the control port, host/addons):
  * the same state and event a real one makes, focus or not. */
 void input_inject_key(uint8_t dik, int down);
+/* A mouse-wheel notch that did not come from the mouse (same units as DirectInput: 120 a
+ * notch).  Positive is up/away from the user, which the camera reads as zoom out. */
+void input_inject_wheel(int32_t dz);
 
 /* Keyboard: 256 bytes indexed by DIK code (set-1 scan code, 0x80 for the E0 keys), 0x80 = down. */
 void input_keyboard(uint8_t state[256]);

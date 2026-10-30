@@ -11,7 +11,8 @@ sys.path.insert(0, str(ROOT / "server"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 from fanxi_server.db import Database  # noqa: E402
-from fanxi_server.game import base_stats, modifiers as mod, stats  # noqa: E402
+from fanxi_server.game import (  # noqa: E402
+    base_stats, modifiers as mod, prime_weapons, stats)
 import import_reforged_item_data as reforged  # noqa: E402
 
 
@@ -67,6 +68,23 @@ class ReforgedItemDataTest(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(int(row["amount"]), 269)
 
+    def test_foenaria_carries_its_skill_stats_and_triple_attack(self):
+        """Migration 161: without these, Origin runs at 424 scythe skill and low WSC."""
+        weapon = self.db.one(
+            "SELECT ilvl_skill FROM item_weapon WHERE item_id = ?", (21837,))
+        self.assertEqual(int(weapon["ilvl_skill"]), 277)
+        mods = self.mods(21837)
+        self.assertEqual(mods[mod.STR], 35)
+        self.assertEqual(mods[mod.INT], 35)
+        self.assertEqual(mods[mod.ACC], 35)
+        self.assertEqual(mods[mod.MACC], 35)
+        self.assertEqual(mods[mod.TRIPLE_ATTACK], 6)
+        parry = self.db.one(
+            "SELECT amount FROM item_skill_bonus WHERE item_id = ? AND skill_id = ?",
+            (21837, 31))
+        self.assertIsNotNone(parry)
+        self.assertEqual(int(parry["amount"]), 277)
+
     def test_percent_hp_modifier_is_kept(self):
         self.assertEqual(self.mods(26366)[mod.HPP], 10)  # Plat. Mog. Belt: HP+10%
 
@@ -97,6 +115,81 @@ class ReforgedItemDataTest(unittest.TestCase):
             row = self.db.one("SELECT model FROM items WHERE item_id = ?", (item_id,))
             self.assertIsNotNone(row, item_id)
             self.assertEqual(int(row["model"]), model, item_id)
+
+
+class PrimeAfterglowItemDataTest(unittest.TestCase):
+    """Migration 165 gives every 119 III Prime its afterglow stat block."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.db = Database(Path(cls.tmp.name) / "fanxi.db", ROOT)
+        cls.db.initialize()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def mods(self, item_id: int) -> dict[int, int]:
+        return {int(row["mod_id"]): int(row["value"])
+                for row in self.db.all(
+                    "SELECT mod_id, value FROM item_mods WHERE item_id = ?", (item_id,))}
+
+    def skill(self, item_id: int, skill_id: int) -> int:
+        row = self.db.one(
+            "SELECT amount FROM item_skill_bonus WHERE item_id = ? AND skill_id = ?",
+            (item_id, skill_id))
+        return int(row["amount"]) if row is not None else 0
+
+    def test_every_final_weapon_has_its_own_skill_at_277(self):
+        for family, stages in prime_weapons.PRIME_FAMILIES:
+            if family in ("Loughnashade", "Duban"):   # horn and shield, not a weapon
+                continue
+            final_id = stages[-1][1]
+            weapon = self.db.one(
+                "SELECT skill, ilvl_skill FROM item_weapon WHERE item_id = ?", (final_id,))
+            self.assertIsNotNone(weapon, family)
+            skill = int(weapon["skill"])
+            total = int(weapon["ilvl_skill"]) + self.skill(final_id, skill)
+            self.assertEqual(total, 277, (family, final_id, skill))
+
+    def test_helheim_and_lorg_mor_use_the_119iii_damage_rating(self):
+        helheim = self.db.one(
+            "SELECT dmg, ilvl_skill FROM item_weapon WHERE item_id = 21653")
+        self.assertEqual(int(helheim["dmg"]), 336)      # was 318, the 119 II value
+        self.assertEqual(int(helheim["ilvl_skill"]), 277)
+        lorg = self.db.one("SELECT dmg, ilvl_skill FROM item_weapon WHERE item_id = 22002")
+        self.assertEqual(int(lorg["dmg"]), 240)         # was 227, the 119 II value
+        self.assertEqual(int(lorg["ilvl_skill"]), 277)
+
+    def test_mpu_gandring_skill_is_the_119iii_value(self):
+        row = self.db.one("SELECT ilvl_skill FROM item_weapon WHERE item_id = 21590")
+        self.assertEqual(int(row["ilvl_skill"]), 277)   # was 269, the 119 II value
+
+    def test_varga_and_earp_crit_rate_is_in_hundredths(self):
+        self.assertEqual(self.mods(21535)[mod.CRIT_HIT_RATE], 1500)  # +15%
+        self.assertEqual(self.mods(22164)[mod.CRIT_HIT_RATE], 1500)
+        self.assertEqual(self.skill(21535, 28), 277)    # Guarding skill
+
+    def test_secondary_weapon_traits_are_present(self):
+        self.assertEqual(self.mods(21653)[mod.STORETP], 10)          # Helheim
+        self.assertEqual(self.mods(21785)[mod.DOUBLE_ATTACK], 10)    # Laphria
+        self.assertEqual(self.mods(21891)[mod.DOUBLE_ATTACK], 10)    # Gae Buide
+        self.assertEqual(self.mods(21986)[mod.DOUBLE_ATTACK], 10)    # Kusanagi
+        self.assertEqual(self.mods(22106)[mod.MATT], 80)             # Opashoro
+        self.assertEqual(self.mods(22106)[mod.MAGIC_DAMAGE], 325)
+        self.assertEqual(self.mods(22002)[mod.REGEN], 7)             # Lorg Mor
+        self.assertNotIn(mod.DMGMAGIC_II, self.mods(22002))          # that is Duban
+        self.assertEqual(self.mods(22002)[mod.DMG], -1000)           # Damage taken -10%
+
+    def test_duban_carries_its_shield_skill_and_mdt(self):
+        self.assertEqual(self.mods(26495)[mod.DEF], 155)
+        self.assertEqual(self.mods(26495)[mod.DMGMAGIC_II], -2500)   # -25%
+        self.assertEqual(self.skill(26495, 30), 134)                 # Shield skill
+
+    def test_loughnashade_has_an_item_level(self):
+        row = self.db.one("SELECT item_level FROM items WHERE item_id = 22307")
+        self.assertEqual(int(row["item_level"]), 119)
 
 
 class PercentMaximumTest(unittest.TestCase):

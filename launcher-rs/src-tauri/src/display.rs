@@ -9,9 +9,10 @@
 
 use std::fs;
 use std::path::{Path, PathBuf};
+use std::sync::OnceLock;
 
 use serde::{Deserialize, Serialize};
-use tauri::AppHandle;
+use tauri::{AppHandle, Manager, Monitor};
 
 use crate::config;
 use crate::error::{AppError, AppResult};
@@ -275,6 +276,10 @@ fn decode_reg_text(raw: &[u8]) -> String {
 #[derive(Clone, Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct DisplayMonitor {
+    /// What `launcher.json` remembers for this display: the OS's name, or its size and position
+    /// when the OS has no name for it. A choice that no longer matches falls back to the main
+    /// display.
+    pub id: String,
     pub name: Option<String>,
     pub width: u32,
     pub height: u32,
@@ -323,6 +328,7 @@ pub fn info(app: &AppHandle) -> DisplayInfo {
                 candidate.position() == monitor.position() && candidate.size() == monitor.size()
             });
             DisplayMonitor {
+                id: monitor_id(&monitor),
                 name: monitor.name().cloned(),
                 width,
                 height,
@@ -351,6 +357,141 @@ fn game_units(physical: u32, scale: f64) -> u32 {
 #[cfg(not(target_os = "macos"))]
 fn game_units(physical: u32, _scale: f64) -> u32 {
     physical
+}
+
+#[cfg(target_os = "macos")]
+fn game_units_i32(physical: i32, scale: f64) -> i32 {
+    ((physical as f64) / scale).round() as i32
+}
+
+#[cfg(not(target_os = "macos"))]
+fn game_units_i32(physical: i32, _scale: f64) -> i32 {
+    physical
+}
+
+/// The app handle, kept from startup so a launch can read the attached displays without
+/// threading it through the process table. `None` in unit tests, where there is no app.
+static APP: OnceLock<AppHandle> = OnceLock::new();
+
+pub fn remember_app(app: &AppHandle) {
+    let _ = APP.set(app.clone());
+}
+
+/// What `launcher.json` stores for a display. The OS name identifies a display across launches;
+/// on macOS that is the model number ("Monitor #29451"), so two displays of the same model share
+/// an id and the first one wins.
+pub fn monitor_id(monitor: &Monitor) -> String {
+    match monitor.name() {
+        Some(name) if !name.trim().is_empty() => name.trim().to_string(),
+        _ => format!(
+            "{}x{}@{},{}",
+            monitor.size().width,
+            monitor.size().height,
+            monitor.position().x,
+            monitor.position().y
+        ),
+    }
+}
+
+/// The display a saved choice names. An empty choice is the main display; a display that is no
+/// longer attached is `None` (the caller leaves the windows where they are rather than moving
+/// them somewhere the player did not ask for).
+pub fn choose_monitor(app: &AppHandle, id: &str) -> Option<Monitor> {
+    let id = id.trim();
+    if id.is_empty() {
+        return app.primary_monitor().ok().flatten();
+    }
+    app.available_monitors()
+        .ok()?
+        .into_iter()
+        .find(|monitor| monitor_id(monitor) == id)
+}
+
+/// A display's place and size in the units the game's window API uses: screen points on macOS,
+/// pixels elsewhere. `FANXI_DISPLAY` carries these to `host64`, which puts its windows here.
+pub fn game_rect(monitor: &Monitor) -> (i32, i32, u32, u32) {
+    let scale = if monitor.scale_factor() > 0.0 {
+        monitor.scale_factor()
+    } else {
+        1.0
+    };
+    let position = monitor.position();
+    (
+        game_units_i32(position.x, scale),
+        game_units_i32(position.y, scale),
+        game_units(monitor.size().width, scale),
+        game_units(monitor.size().height, scale),
+    )
+}
+
+/// `FANXI_DISPLAY=x,y,w,h` for the chosen display, or `None` for the main display (whose windows
+/// keep the placement they have always had) or a display that is not attached.
+pub fn game_window_spec(monitor: &str) -> Option<String> {
+    if monitor.trim().is_empty() {
+        return None;
+    }
+    let app = APP.get()?;
+    let target = choose_monitor(app, monitor)?;
+    Some(display_spec(game_rect(&target)))
+}
+
+fn display_spec((x, y, width, height): (i32, i32, u32, u32)) -> String {
+    format!("{x},{y},{width},{height}")
+}
+
+/// Puts the launcher's own window in the middle of the chosen display's usable area. An empty
+/// choice is the main display, where the window's configured center already is; moving there too
+/// makes "Main display" take effect after the choice changed.
+pub fn place_launcher_window(app: &AppHandle, monitor: &str) -> AppResult<()> {
+    let window = app
+        .get_webview_window("main")
+        .ok_or_else(|| AppError::Config("the launcher window is not open".to_string()))?;
+    let Some(target) = choose_monitor(app, monitor) else {
+        return Ok(());
+    };
+    let scale = if target.scale_factor() > 0.0 {
+        target.scale_factor()
+    } else {
+        1.0
+    };
+    let area = target.work_area();
+    // Tauri positions the window from its logical (point) coordinates; the monitor's work area is
+    // physical. The outer size is physical at the window's current scale factor.
+    let window_scale = window
+        .scale_factor()
+        .ok()
+        .filter(|scale| *scale > 0.0)
+        .unwrap_or(1.0);
+    let outer = window.outer_size().map_err(|error| {
+        AppError::Config(format!("cannot read the launcher window's size: {error}"))
+    })?;
+    let (x, y) = centered_in(
+        (
+            area.position.x as f64 / scale,
+            area.position.y as f64 / scale,
+            area.size.width as f64 / scale,
+            area.size.height as f64 / scale,
+        ),
+        (
+            outer.width as f64 / window_scale,
+            outer.height as f64 / window_scale,
+        ),
+    );
+    window
+        .set_position(tauri::LogicalPosition::new(x, y))
+        .map_err(|error| {
+            AppError::Config(format!("cannot move the launcher window: {error}"))
+        })?;
+    Ok(())
+}
+
+fn centered_in(area: (f64, f64, f64, f64), size: (f64, f64)) -> (f64, f64) {
+    let (area_x, area_y, area_width, area_height) = area;
+    let (width, height) = size;
+    (
+        area_x + (area_width - width) / 2.0,
+        area_y + (area_height - height) / 2.0,
+    )
 }
 
 #[cfg(test)]
@@ -531,5 +672,34 @@ mod tests {
             "only the final overlay is left behind"
         );
         let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_games_display_spec_is_its_window_units() {
+        assert_eq!(
+            display_spec((-3440, -458, 3440, 1440)),
+            "-3440,-458,3440,1440"
+        );
+        assert_eq!(display_spec((0, 0, 1512, 982)), "0,0,1512,982");
+    }
+
+    #[test]
+    fn the_launcher_window_is_centered_in_the_display() {
+        // The S34CG50's usable area, and a window that is 1180 x 788 points.
+        assert_eq!(
+            centered_in((-3440.0, -458.0, 3440.0, 1440.0), (1180.0, 788.0)),
+            (-2310.0, -132.0)
+        );
+        assert_eq!(
+            centered_in((0.0, 38.0, 1512.0, 944.0), (1180.0, 788.0)),
+            (166.0, 116.0)
+        );
+    }
+
+    #[test]
+    fn an_unattached_display_sends_no_placement() {
+        // `game_window_spec` has no app handle in tests, so a choice cannot be resolved; the game
+        // then keeps the placement it always had rather than being sent somewhere arbitrary.
+        assert_eq!(game_window_spec("Monitor #29451"), None);
     }
 }

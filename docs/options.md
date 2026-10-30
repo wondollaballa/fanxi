@@ -39,6 +39,12 @@ overlay is loaded after the game's saved registry, so the launcher's window mode
 interface scale (menu resolution) win for that launch. A running client keeps its window until it
 is restarted.
 
+The card's **Display** choice also travels to the client as `FANXI_DISPLAY=x,y,w,h` (the window
+API's units: screen points on macOS, pixels elsewhere). `host64` opens its sign-in and game
+windows in the middle of that display, or at its top left for the full-screen modes, and reports
+its mode and usable area as that display's. Unset, the windows open where the platform puts them
+on the main display. The launcher window follows the same choice.
+
 ## 2. Image quality and color
 
 | Setting | Menu | fx | Default / range |

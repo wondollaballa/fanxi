@@ -34,8 +34,9 @@ typedef struct PhasePlan
 } PhasePlan;
 
 /* An outgoing 0x01A: 1 when the engine has a plan for this action, and the plan is filled.
- * Holding the packet is the caller's job; this only decides and counts. 0 while locked. */
-int xi_phase_action(uint16_t category, uint16_t action, PhasePlan* plan);
+ * Holding the packet is the caller's job; this only decides and counts.  A full lock still
+ * lets the action wear its own armour; locked weapon slots are filtered out of that set. */
+int xi_phase_action(uint16_t category, uint16_t action, uint16_t seq, PhasePlan* plan);
 /* An incoming 0x028: 1 when it is the result of the action that is pending, and the restore
  * set is filled. Clears the pending action. */
 int xi_phase_result(const uint8_t* packet, size_t size, PhasePlan* plan);
@@ -44,6 +45,18 @@ void xi_phase_restore_if_stale(PhasePlan* plan, int* have);
 /* An incoming 0x00D: the server's animation for the player is what draws or sheathes the
  * weapon. 1 when it was the player's own update and the engaged flag changed. */
 int xi_phase_player_animation(const uint8_t* packet, size_t size);
+/* An incoming 0x050: an unequip (slot 0) - the server emptied the slot, because the player took
+ * the item off or a two-hander cleared the off hand.  Equip echoes are ignored: they are the
+ * engine's own sends coming back. */
+void xi_phase_equip_echo(int slot, int kind, int bag);
+/* A slot the engine no longer knows: the client's own 0x050 (a hand change) forgets one slot.
+ * The state sets only send the slots whose item differs, so a stale row would keep a piece off. */
+void xi_phase_forget_slot(int kind);
+void xi_phase_forget(void);
+/* A manual set from the addon (the launcher's Wear / Wear & lock): record the exact bag/slot it
+ * put in one equipment slot.  Without this a manual, pinned weaponset would be unknown to the
+ * engine, and a locked action's temporary KI/song/WS swap could not restore the weapon. */
+void xi_phase_remember(int kind, int bag, int slot);
 /* The player started or stopped moving (the addon samples the client's position). Returns 1 when
  * the idle state's set changed, with the equips to wear in plan->pre; nothing while engaged. */
 int xi_phase_moving(int moving, PhasePlan* plan);
@@ -72,8 +85,16 @@ int xi_phase_resting(int on, PhasePlan* plan);
 /* Idle focus: 0 auto, 1 dt, 2 pdt, 3 mdt, 4 eva, 5 meva. */
 int xi_phase_focus(int mode, PhasePlan* plan);
 /* Pin equipment slots (bit i = slot i) out of every set the engine sends. Unlocking returns the
- * current state's set so the slot comes back. */
+ * current state's set so the slot comes back.  A pinned weapon also remembers the exact copy
+ * (xi_phase_remember feeds the live bag/index) and is re-worn when the weapon is drawn. */
 int xi_phase_lock_slots(unsigned mask, PhasePlan* plan);
+/* Nightingale + Troubadour are both up: a Bard song may take its instrument off a pinned hand
+ * for the action's window, and the locked hand is restored when the song resolves. */
+void xi_phase_nitro(int on);
+/* One-shot gear worn in front of the next action, merged into its precast set.  The addon's
+ * jug picker uses it to re-assert the chosen jug in the held Call Beast/Bestial Loyalty packet;
+ * the buffer is cleared by that next action. */
+void xi_phase_precache(uint16_t action, const PhaseEquip* equips, int n);
 /* Forget a pending action (the launcher disabled the engine or replaced the rules). */
 void xi_phase_reset(void);
 

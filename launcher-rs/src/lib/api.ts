@@ -2,19 +2,25 @@ import { invoke } from "@tauri-apps/api/core";
 import type {
   ArmoryAddResult,
   ArmoryItem,
+  BattleState,
   Bootstrap,
   BuildResult,
   Character,
+  CharacterBags,
   CharacterData,
+  CharacterStatReport,
   ConfigView,
   ControlState,
   DisplayInfo,
   EquipIcons,
+  FixFollowerResult,
   FollowEvent,
   FollowStatus,
   GearDefaults,
+  GearItemStats,
   GearLibrary,
   GearLibrarySaveResult,
+  GearStatQuery,
   GearSaveResult,
   GearSetResult,
   GearVersion,
@@ -27,10 +33,12 @@ import type {
   JobInfo,
   JobSpell,
   LaunchAllResult,
+  MagicBagItem,
   PhaseStatus,
   PublicView,
   ResolvedItem,
   SessionView,
+  StoreItem,
   SubAccount,
   TeamMutation,
   TeamView,
@@ -86,6 +94,12 @@ export const backend = {
   bootstrap: () => call<Bootstrap>("bootstrap"),
   refreshPublic: () => call<PublicView>("refresh_public"),
   getConfig: () => call<ConfigView>("get_config"),
+  gearswapSettings: () =>
+    call<{ config: Record<string, unknown> | null }>("gearswap_settings"),
+  saveGearswapSettings: (config: Record<string, unknown>) =>
+    call<{ config: Record<string, unknown> | null }>("save_gearswap_settings", {
+      config,
+    }),
 
   login: (username: string, password: string, apiUrl?: string) =>
     call<SessionView>("login", { username, password, apiUrl: apiUrl || null }),
@@ -101,6 +115,13 @@ export const backend = {
     call<SessionView>("save_character_design", { characterId, data }),
   characterData: (characterId: number) =>
     call<CharacterData>("character_data", { characterId }),
+  characterBags: (characterId: number) =>
+    call<CharacterBags>("character_bags", { characterId }),
+  characterMagicBag: (characterId: number) =>
+    call<{ items: MagicBagItem[] }>("character_magic_bag", { characterId }),
+  /** The live server stat sheet with every gear/food/JA/JT/buff source. */
+  characterStats: (characterId: number) =>
+    call<CharacterStatReport>("character_stats", { characterId }),
   characterAction: (
     characterId: number,
     action: string,
@@ -112,7 +133,21 @@ export const backend = {
       payload,
     }),
   searchArmory: (characterId: number, query: string, kind: string | null) =>
-    call<{ items: ArmoryItem[] }>("search_armory", { characterId, query, kind }),
+    call<{ items: ArmoryItem[] }>("search_armory", {
+      characterId,
+      query,
+      kind,
+      scope: "armory",
+      category: null,
+    }),
+  searchItems: (characterId: number, query: string, category: string | null) =>
+    call<{ items: StoreItem[] }>("search_armory", {
+      characterId,
+      query,
+      kind: null,
+      scope: "items",
+      category,
+    }),
   characterWarps: (characterId: number) =>
     call<WarpList>("character_warps", { characterId }),
   markCharacterWarp: (characterId: number, payload: Record<string, unknown>) =>
@@ -142,6 +177,7 @@ export const backend = {
     gameWidth: number;
     gameHeight: number;
     gameUiScale: number;
+    monitor: string;
   }) => call<ConfigView>("save_settings", input),
   displayInfo: () => call<DisplayInfo>("display_info"),
 
@@ -179,12 +215,17 @@ export const backend = {
     call<{ sub: SubAccount }>("delete_sub", { subId, purge }),
   listInstances: () => call<InstanceView[]>("list_instances"),
   relaunchInstance: (port: number) => call<InstanceView>("relaunch_instance", { port }),
+  /** Kill, relaunch and zone one follower to its line leader (the Follow card's Fix button). */
+  fixFollower: (port: number, leaderPort: number) =>
+    call<FixFollowerResult>("fix_follower", { port, leaderPort }),
   stopInstance: (port: number) => call<void>("stop_instance", { port }),
   stopAll: () => call<number>("stop_all"),
 
   sendCommand: (port: number, line: string) =>
     call<unknown>("send_command", { port, line }),
   sendHud: (port: number, patch: HudPatch) => call<HudState>("send_hud", { port, patch }),
+  battle: (port: number, args: Record<string, unknown>) =>
+    call<BattleState>("battle", { port, args }),
   sendChat: (port: number, line: string) => call<unknown>("send_chat", { port, line }),
   controlState: (port: number) => call<ControlState>("control_state", { port }),
   controlMetrics: (port: number) => call<Record<string, unknown>>("control_metrics", { port }),
@@ -198,7 +239,11 @@ export const backend = {
     call<EquipIcons>("equip_icons", { port, ids }),
   gearItemIds: (port: number, names: string[]) =>
     call<ResolvedItem[]>("gear_item_ids", { port, names }),
+  /** Base item stats and augmented stats for one set, read from the running client. */
+  gearItemStats: (port: number, items: GearStatQuery[]) =>
+    call<GearItemStats[]>("gear_item_stats", { port, items }),
   clearIconCache: () => call<number>("clear_icon_cache"),
+  /** The live main/support job pair; `savedCharacter` fills both in before zone-in. */
   gearJob: (port: number, savedCharacter: Character | null) =>
     call<JobInfo | null>("gear_job", { port, savedCharacter }),
   gearLoadDefault: (port: number, job: string | null) =>

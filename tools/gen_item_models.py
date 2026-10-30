@@ -98,6 +98,59 @@ EXTRA_MODELS = {
     24182: 4613, 24185: 8709, 24188: 12805, 24191: 16901, 24194: 20997,
 }
 
+# A few weapons' item_equipment rows carry another weapon's MId.  The client's model
+# table (xi-tools' mv/lists/characters.json) has the real one, so pin it here: the
+# weapon branch below only fills 0 or LSB's own MId, and a regeneration would otherwise
+# bring the borrowed look back.  Migration 121 applies the Gleti value to a database;
+# migration 125 applies the Prime block.
+WEAPON_MID_FIXES = {
+    # Gleti's Knife: LSB says 513, Kannagi's katana ("weap"/weap010).  877 is the
+    # knife ("knif"/knif_bs0): ROM/366/48.DAT main, ROM/368/40.DAT sub on Hume female.
+    21567: 877,
+
+    # Prime weapons.  LSB stores the relic weapon's MId for every Prime form (Mpu
+    # Gandring 544 = Mandau, Caliburnus 545 = Excalibur, Kusanagi 514 = Masamune,
+    # Lorg Mor 553 = Mjollnir, Opashoro 554 = Claustrum, 0 on the bow/gun/horn/shield),
+    # so the client draws a relic or nothing.  characters.json has the real Prime models:
+    # the "Non AG" look for stages 2-4 (the black relic-style weapon with no particle
+    # effect) and "Stage 5" for the iLvl 119 III form.  A Stage 5 DAT is the Non AG
+    # weapon followed by the 12,688-byte `aura` block (fr00/gp00/.../flmy), the afterglow
+    # that the Relic/Mythic/Empyrean/Aeonic "119 AG" models carry too.  Pin every named
+    # form so the generator keeps the right stage's id.
+    # Varga Purnikawa: Non AG 475, Stage 5 474.
+    21532: 475, 21533: 475, 21534: 475, 21535: 474,
+    # Mpu Gandring: Non AG 907, Stage 5 918.
+    21587: 907, 21588: 907, 21589: 907, 21590: 918,
+    # Caliburnus: Non AG 908, Stage 5 919.
+    21643: 908, 21644: 908, 21645: 908, 21646: 919,
+    # Helheim: Non AG 909, Stage 5 920.
+    21649: 909, 21651: 909, 21652: 909, 21653: 920,
+    # Spalirisos: Non AG 910, Stage 5 921.
+    21727: 910, 21728: 910, 21729: 910, 21730: 921,
+    # Laphria: Non AG 911, Stage 5 922.
+    21782: 911, 21783: 911, 21784: 911, 21785: 922,
+    # Foenaria: Non AG 913, Stage 5 924.
+    21834: 913, 21835: 913, 21836: 913, 21837: 924,
+    # Gae Buide: Non AG 912, Stage 5 923.
+    21888: 912, 21889: 912, 21890: 912, 21891: 923,
+    # Dokoku: Non AG 914, Stage 5 925.
+    21929: 914, 21930: 914, 21931: 914, 21932: 925,
+    # Kusanagi: Non AG 915, Stage 5 926.
+    21983: 915, 21984: 915, 21985: 915, 21986: 926,
+    # Lorg Mor: Non AG 916, Stage 5 927.
+    21998: 916, 22000: 916, 22001: 916, 22002: 927,
+    # Opashoro: Non AG 917, Stage 5 928.
+    22103: 917, 22104: 917, 22105: 917, 22106: 928,
+    # Pinaka: Non AG 148, Stage 5 151.
+    22156: 148, 22157: 148, 22158: 148, 22163: 151,
+    # Earp: Non AG 149, Stage 5 152.
+    22160: 149, 22161: 149, 22162: 149, 22164: 152,
+    # Loughnashade: Non AG 150, Stage 5 153.
+    22304: 150, 22305: 150, 22306: 150, 22307: 153,
+    # Duban: Non AG 675, Stage 5 676.
+    26492: 675, 26493: 675, 26494: 675, 26495: 676,
+}
+
 
 def norm(text: str) -> str:
     return re.sub(r"[^a-z0-9]", "", text.lower())
@@ -165,9 +218,11 @@ def resolve(db: Path, lsb_path: Path, dressup_path: Path) -> tuple[dict[int, int
 
     connection = sqlite3.connect(str(db))
     connection.row_factory = sqlite3.Row
+    # The catalogue has both spellings: older imports use "ranged", the full item
+    # catalogue uses "range" (Pinaka, Earp and Loughnashade, for one).
     items = connection.execute(
         "SELECT item_id, name, equip_slot, model FROM items "
-        "WHERE equip_slot IN ('head','body','hands','legs','feet','main','sub','ranged')"
+        "WHERE equip_slot IN ('head','body','hands','legs','feet','main','sub','ranged','range')"
     ).fetchall()
     connection.close()
 
@@ -215,11 +270,12 @@ def resolve(db: Path, lsb_path: Path, dressup_path: Path) -> tuple[dict[int, int
         else:
             # A weapon's MId is the raw model.  Keep a special model a row already has
             # (the i119 REMA weapons carry a higher one) and fill only 0 or the MId.
-            mid = lsb.get(item_id, {}).get("mid", 0)
+            # A known-wrong MId is replaced even when the row already carries it.
+            mid = WEAPON_MID_FIXES.get(item_id, lsb.get(item_id, {}).get("mid", 0))
             current = int(item["model"])
             if not mid:
                 missing.append((item_id, name, slot))
-            elif current in (0, mid):
+            elif current in (0, mid) or item_id in WEAPON_MID_FIXES:
                 resolved[item_id] = mid
     return resolved, missing
 

@@ -32,6 +32,7 @@
 #include "host.h"
 #include "phase.h"
 #include "plat.h"
+#include "typeahead.h"
 
 #if defined(FFXI_WRAP_PARSE_INPUT)
 extern GuestFn rt_wrap_parse_input;
@@ -461,7 +462,16 @@ static void chat_redraw(uint32_t m)
     guest_thiscall(draw, m, 3, args);
 }
 
-void xi_chat_set_input(const char* text)
+int xi_chat_caret(void)
+{
+    uint32_t m = chat_manager();
+    if (!m)
+        return -1;
+    uint32_t c = rd32(m + 0x7E30 + 0xA58);
+    return c <= 0x100 ? (int)c : -1;
+}
+
+void xi_chat_set_input_caret(const char* text, int caret)
 {
     uint32_t m = chat_manager();
     if (!m)
@@ -469,6 +479,10 @@ void xi_chat_set_input(const char* text)
     size_t n = strlen(text);
     if (n > 0xFF)
         n = 0xFF;
+    if (caret < 0)
+        caret = 0;
+    if ((size_t)caret > n)
+        caret = (int)n;
     uint32_t base = m + 0x7E30;
     memcpy(GUEST_PTR(base + 0x6C4), text, n);
     wr8(base + 0x6C4 + (uint32_t)n, 0);
@@ -479,8 +493,129 @@ void xi_chat_set_input(const char* text)
      * A Tab completion makes the text longer, so leaving these at the old length would put
      * the next typed character in the middle of the command. */
     wr32(base + 0xA50, (uint32_t)n);
-    wr32(base + 0xA58, (uint32_t)n);
+    wr32(base + 0xA58, (uint32_t)caret);
     chat_redraw(m);
+}
+
+void xi_chat_set_input(const char* text)
+{
+    xi_chat_set_input_caret(text, (int)strlen(text));
+}
+
+/* --- typeahead (//hint) ---------------------------------------------------------------------- */
+
+/* The suggestion lives in the input line's own text, after the caret, in a second colour: the
+ * line reads the chat log's colour pairs (//hint probe showed two colours), so nothing has to be
+ * anchored over it and it is drawn with the game's own font.  typeahead.c decides what the line
+ * should hold and what the caret does; this side is only the text buffer. */
+static int g_hint = 1; /* //hint off stops the suggestion; on is the default */
+static Typeahead g_typeahead;
+
+void xi_chat_ghost_frame(void)
+{
+    if (xi_headless || !g_hint || !xi_chat_input_open())
+    {
+        typeahead_init(&g_typeahead);
+        return;
+    }
+    char raw[512];
+    xi_chat_input(raw, sizeof raw);
+    TypeaheadEdit edit;
+    typeahead_step(&g_typeahead, raw, xi_chat_caret(), &edit);
+    if (edit.write)
+        xi_chat_set_input_caret(edit.text, edit.caret);
+}
+
+int xi_chat_ghost_accept(void)
+{
+    if (!g_hint || !g_typeahead.ghost[0] || !xi_chat_input_open())
+        return 0;
+    char raw[512];
+    xi_chat_input(raw, sizeof raw);
+    TypeaheadEdit edit;
+    int took = typeahead_accept(&g_typeahead, raw, &edit);
+    if (!took)
+        typeahead_sanitize(raw, &edit); /* a suggestion that drifted: drop its codes */
+    if (edit.write)
+        xi_chat_set_input_caret(edit.text, edit.caret);
+    return took;
+}
+
+/* Backspace and Delete edit at the caret, which is the suggestion's colour pair when the caret
+ * sits on it: take the suggestion out first, so the key edits the typed text. */
+void xi_chat_ghost_drop(void)
+{
+    if (!g_typeahead.ghost[0] || !xi_chat_input_open())
+        return;
+    char raw[512];
+    xi_chat_input(raw, sizeof raw);
+    TypeaheadEdit edit;
+    if (typeahead_drop(&g_typeahead, raw, &edit) && edit.write)
+        xi_chat_set_input_caret(edit.text, edit.caret);
+}
+
+void xi_chat_ghost_enter(void)
+{
+    if (!xi_chat_input_open())
+        return;
+    char raw[512];
+    xi_chat_input(raw, sizeof raw);
+    TypeaheadEdit edit;
+    if (typeahead_accept(&g_typeahead, raw, &edit) || typeahead_sanitize(raw, &edit))
+    {
+        if (edit.write)
+            xi_chat_set_input_caret(edit.text, edit.caret);
+    }
+}
+
+void xi_chat_hint(int on)
+{
+    if (!on)
+        xi_chat_ghost_drop(); /* a suggestion already in the line goes with it */
+    g_hint = on ? 1 : 0;
+}
+
+int xi_chat_hint_on(void) { return g_hint; }
+
+/* --- the input line's probe (//hint probe) ----------------------------------------------------- */
+
+/* The chat line is the game's own: it draws the text in one colour, but it may share the chat
+ * log's renderer and read 0x1E/0x1F colour codes, like the auto-translate phrases it shows
+ * inline.  //hint probe puts a sample in the next line the player opens so this can be seen
+ * without a rebuild; a hint drawn by the host (a text object over the line) needs no such test. */
+static char g_probe[512];
+static int g_probe_pending;
+static int g_probe_caret = -1;
+
+void xi_chat_probe(const char* text)
+{
+    xi_chat_probe_at(text, -1);
+}
+
+/* `caret` -1 puts it at the end; any other value leaves text after it, the way the typeahead
+ * does, so the probe also shows whether the line draws past the caret at all. */
+void xi_chat_probe_at(const char* text, int caret)
+{
+    g_probe_pending = 0;
+    typeahead_init(&g_typeahead);
+    g_probe_caret = caret;
+    if (!text)
+        return;
+    snprintf(g_probe, sizeof g_probe, "%s", text);
+    g_probe_pending = 1;
+}
+
+/* The sample goes in once the player has opened the line and typed nothing yet.  A line that is
+ * already being typed into has missed its moment: the probe is dropped rather than appearing
+ * under the typist's cursor later. */
+static void chat_probe_frame(void)
+{
+    char open[4];
+    if (xi_headless || !g_probe_pending || !xi_chat_input_open())
+        return;
+    if (xi_chat_input(open, sizeof open) == 0)
+        xi_chat_set_input_caret(g_probe, g_probe_caret < 0 ? (int)strlen(g_probe) : g_probe_caret);
+    g_probe_pending = 0;
 }
 
 /* --- packets --------------------------------------------------------------------------------- */
@@ -548,9 +683,41 @@ static void queue_list(Inject** head, int outgoing, const uint8_t* p, size_t n, 
     *tail = in;
 }
 
+/* An outgoing 0x050: the client applies it and the server answers with a whole equipment
+ * follow-up.  If the same slot is already waiting in this queue, replace it.  A set queued while
+ * the previous one was still pending used to leave both changes in one buffer: the client
+ * re-ran its equipment update twice for the same slot, which is the collision a fast state or
+ * action transition could produce.  Keeping the newest piece is also what the final state
+ * should wear, so the queue stays a set of slots rather than a history. */
+static int equip_change(const uint8_t* p, size_t n)
+{
+    return n >= 8 && ((p[0] | p[1] << 8) & 0x1FF) == 0x050;
+}
+
+static void queue_equip(Inject** head, int outgoing, const uint8_t* p, size_t n, int handled)
+{
+    for (Inject* q = *head; q; q = q->next)
+    {
+        if (q->handled != handled || !equip_change(q->data, q->size) || q->data[5] != p[5])
+            continue;
+        size_t padded = (n + 3) & ~(size_t)3;
+        if (padded > q->size)
+            break; /* cannot grow the allocation: a separate packet has to wait */
+        memset(q->data, 0, q->size);
+        memcpy(q->data, p, n);
+        set_size(q->data, padded);
+        q->size = padded;
+        return;
+    }
+    queue_list(head, outgoing, p, n, handled);
+}
+
 static void queue_packet(int outgoing, const uint8_t* p, size_t n, int handled)
 {
-    queue_list(&g_inject[outgoing], outgoing, p, n, handled);
+    if (equip_change(p, n))
+        queue_equip(&g_inject[outgoing], outgoing, p, n, handled);
+    else
+        queue_list(&g_inject[outgoing], outgoing, p, n, handled);
 }
 
 void xi_packet_inject(int outgoing, const uint8_t* p, size_t n)
@@ -677,6 +844,11 @@ static size_t process(int outgoing, const uint8_t* buf, size_t size, uint8_t* ou
         seq = (uint16_t)(p[2] | p[3] << 8);
         if (outgoing)
         {
+            /* The client's own equipment change (the player equipping by hand) - the engine's
+             * own 0x050s are injected, not part of this buffer - leaves that slot unknown, so
+             * the next state set sends it again. */
+            if (id == 0x050 && n >= 8)
+                xi_phase_forget_slot(p[5]);
             /* The phase engine holds the player's action out of its buffer: the precast equips
              * go now, the action and the midcast equips with the next buffer (phase.c). */
             if (id == 0x01A && n >= 14)
@@ -684,7 +856,7 @@ static size_t process(int outgoing, const uint8_t* buf, size_t size, uint8_t* ou
                 PhasePlan plan;
                 uint16_t category = (uint16_t)(p[10] | p[11] << 8);
                 uint16_t action = (uint16_t)(p[12] | p[13] << 8);
-                if (xi_phase_action(category, action, &plan))
+                if (xi_phase_action(category, action, seq, &plan))
                 {
                     for (int i = 0; i < plan.pre_n; ++i)
                     {
@@ -699,7 +871,7 @@ static size_t process(int outgoing, const uint8_t* buf, size_t size, uint8_t* ou
                         for (int i = 0; i < plan.mid_n; ++i)
                         {
                             uint8_t eq[8] = { 0x50, 4, 0, 0, plan.mid[i].slot, plan.mid[i].kind, plan.mid[i].bag, 0 };
-                            queue_list(&g_next[outgoing], outgoing, eq, sizeof eq, 0);
+                            queue_equip(&g_next[outgoing], outgoing, eq, sizeof eq, 0);
                         }
                         off += n;
                         continue;
@@ -715,6 +887,10 @@ static size_t process(int outgoing, const uint8_t* buf, size_t size, uint8_t* ou
              * drawn). It is the engagement signal that does not wait for /attack off. */
             if (id == 0x00D)
                 xi_phase_player_animation(p, n);
+            /* The server's equip echo is what the engine's diff table follows: the item it
+             * says is on (or slot 0, "nothing") is what the next set is compared against. */
+            if (id == 0x050 && n >= 8)
+                xi_phase_equip_echo(p[4], p[5], p[6]);
             if (id == 0x028 && xi_phase_result(p, n, &plan))
                 restore = plan.restore_n;
             else
@@ -1131,4 +1307,6 @@ void xi_hooks_frame(void)
             g_q_tail = keep_tail;
         g_q_head = keep;
     }
+    xi_chat_ghost_frame();
+    chat_probe_frame();
 }

@@ -6,6 +6,7 @@ import {
   NATIONS,
   RACES,
   characterJob,
+  characterJobLabel,
   jobAbbr,
   jobName,
   nationName,
@@ -147,10 +148,12 @@ export function CharactersPage({
                 <div className="character-stats">
                   <div>
                     <span>Job</span>
-                    <strong>{characterJob(character)}</strong>
+                    <strong title={characterJobLabel(character)}>
+                      {characterJob(character)}
+                    </strong>
                   </div>
                   <div>
-                    <span>Level</span>
+                    <span>Main level</span>
                     <strong>{character.main_level ?? "—"}</strong>
                   </div>
                   <div>

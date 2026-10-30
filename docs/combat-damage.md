@@ -32,6 +32,8 @@ Damage taken is a **fifth** stage, applied to the amount the defender receives:
 ATT = 8 + mod(ATT)                       -- gear "Attack+"
     + floor(STR * str_mult)              -- by weapon class
     + skill(weapon skill type)           -- the weapon in that hand
+ATTP = mod(ATTP)                         -- percent-integer buffs (Berserk 35, Last Resort 25)
+ATTP += floor(mod(SMITE) * 100 / 256)    -- two-handed or hand-to-hand only
 ATT = max(1, ATT + ATT * ATTP/100 + min(ATT * FOOD_ATTP/100, FOOD_ATT_CAP))
 ```
 
@@ -46,14 +48,58 @@ ATT = max(1, ATT + ATT * ATTP/100 + min(ATT * FOOD_ATTP/100, FOOD_ATT_CAP))
 | Ranged | 1.0 |
 
 `skill(...)` is the *capped, merited, gear-boosted* value Fanxi already computes in
-`ZoneSession.effective_skills()`, so the skill half of this is already available.
+`ZoneSession.effective_skills()` plus the weapon's `item_weapon.ilvl_skill`, so an iLvl
+weapon's own "Scythe skill +277" reaches both Attack and Accuracy.
 
-**Dual wield.** When both slots hold a one-handed weapon and the job has the Dual Wield
-trait, one attack round swings both hands.  Each swing uses its own weapon DMG, skill,
-weapon rank and Accuracy; the off hand takes the 0.5 STR multiplier above and the 95%
-hit-rate cap.  The round delay is `(main + sub) × (1 - Dual Wield%) / 2`, but TP is not
-taken from that average: each hand keeps its own weapon delay for TP (see "Tactical
-Points"), so the two hits do not pay the same amount.
+**Smite.** The trait is stored in 1/256 units (DRK 95 = 76 = +29.6%) and is applied as a
+percentage of Attack, *not* as flat Attack.  It only applies while the main hand holds a
+two-handed or hand-to-hand weapon; a one-handed or off-hand swing never gets it.  At DRK
+95 this is the difference between a 2H job hitting for its gear's Attack and hitting for
+roughly 30% more.
+
+**Last Resort** is `ATT_PERCENT +25` / `DEF_PERCENT -25` for 180 s.  **Desperate Blows**
+adds its trait value (15% at DRK 45, +2% per merit rank) to `HASTE_ABILITY` while Last
+Resort is up and a two-handed weapon is out; it is job-ability haste, so it stacks with
+gear and spell haste under the separate 25% ability cap.
+
+**Souleater** is handled per landed hit, after pDIF and critical damage: the hit gains
+10% of the user's current HP as flat damage (half for a support-job DRK), and the user
+pays that HP back (less Stalwart Soul's percentage).  It also adds `Accuracy+25` while
+the icon is up.  Because the flat amount is added before the target's damage-taken gear,
+PDT/DT still apply to it, but fTP and pDIF do not multiply it.
+
+**Two weapons.** When both slots hold a one-handed weapon, one attack round swings both
+hands: the equip rules accept the sub-slot weapon for every job, so a worn weapon has to
+swing.  The Dual Wield trait is not the gate; it supplies the delay reduction (gear
+"Dual Wield +N" does the same), and with no such value the round is the plain average of
+the two delays.  Each swing uses its own weapon DMG, skill, weapon rank and Accuracy; the
+off hand takes the 0.5 STR multiplier above and the 95% hit-rate cap.  With the value the
+round delay is `(main + sub) × (1 - Dual Wield%) / 2`, but TP is not taken from that
+average: each hand keeps its own weapon delay for TP (see "Tactical Points"), so the two
+hits do not pay the same amount.
+
+**Haste.** The round interval applies three separate pools: equipment (`HASTE_GEAR`,
+cap 25%), magic (`HASTE_MAGIC`, cap 43.75% -- Haste/Haste II, the marches and GEO
+Haste) and job abilities (`HASTE_ABILITY`, cap 25% -- Haste Samba, Hasso, Last
+Resort/Desperate Blows).  The three add, and the final delay cannot fall below 20% of
+the **base** delay (the 80% delay floor).  A 25%-gear set therefore still gains from a
+15% Haste or a 6% Victory March; folding them into one 25% pool made every buff past
+the gear cap do nothing.
+
+The floor is measured **before** Dual Wield or Martial Arts: those two reduce delay
+outside the haste pools, and retail still applies the 80% total cap to their result.
+A 35% Dual Wield pair with every haste pool capped would otherwise reach
+`0.65 × 0.20 = 13%` of the base delay, which is faster than retail and pays less TP
+per hit.  Retail's rule is `(1 - DW%) × (1 - haste%) >= 0.2`, and the sheet now stores
+the pre-reduction `base_delay` so the floor uses it.
+
+That also means gear + magic haste alone top out at **68.75%**.  A two-handed job
+cannot reach the 80% floor without the third pool: as a Dark Knight, Last Resort turns
+Desperate Blows' 15% into ability haste and takes the same 431-delay great sword from
+a 2.39 s round to 1.44 s.  `stat_report` now carries `haste_total` ("Haste (capped
+pools)"), `attack_interval` and `tp_per_hit` rows so the launcher shows the capped
+pools, the real swing interval and the TP one hit pays instead of leaving the player
+to guess from a raw buff total.
 
 **Multi-attack.** Each hand independently rolls Double, Triple and Quadruple Attack once
 per round, in descending order.  The first proc wins and replaces the lower checks for
@@ -72,8 +118,10 @@ job's bought rate merit adds 1% per rank while that job is the main (a Warrior's
 Attack Rate follows the Warrior main, not a Ninja main; the trait itself still comes from
 a support job).  Extra hits use that hand's own weapon, Accuracy, damage and animation
 (0 main, 1 off), and each hit lands, crits, pays TP and adds hate on its own.  The whole
-round -- both hands and every proc -- is capped at 8 results.  Weapon skills are a
-separate path and do not roll multi-attack here.
+round -- both hands and every proc -- is capped at 8 results.  Weapon skills roll the
+same Double/Triple/Quadruple checks on each of their native hits (up to two procs) and,
+while dual wielding, add one off-hand hit plus that hand's procs; see "Weapon skills"
+below.
 
 Virtue/Raetic follow-up swings, "Occasionally Attacks X Times" weapons, Mythic aftermath,
 Zanshin/Hasso, the Warrior job-point gifts and buff-side rates (Fighter's Roll, Temper,
@@ -87,29 +135,37 @@ Dual Wield halves the reduced delay for the hand that is swinging:
 ```
 delay = weapon base delay
 if dual wielding: delay = floor(delay * (100 - Dual Wield%) / 100 / 2)
-TP    = floor of the curve below (tenths)
+TP    = floor of the curve below (TP units; the client bar is 0-3000)
 TP    = floor(TP * (100 + Store TP) / 100)
 ```
 
 | Delay | TP at the breakpoint |
 |---:|---:|
-| 180 | 6.1 |
-| 540 | 14.9 |
-| 630 | 15.4 |
-| 720 | 16.1 |
-| 900 | 17.3 |
-| > 900 | `17.3 + (delay - 900) × 28/360` |
+| 180 | 61 |
+| 540 | 149 |
+| 630 | 154 |
+| 720 | 161 |
+| 900 | 173 |
+| > 900 | `173 + (delay - 900) × 28/360` |
 
 Within a band the curve is `start + (delay - bandStart) × slope/360`; the exact
-coefficients are in `combat.tp_return`.  A 227-delay katana pays 7.2 TP; dual wielded at
-35% its hand's delay is 73.8 → 73, worth 4.2 TP, while a 190-delay off hand at 35% is 61,
-worth 4.0 TP.  So the two halves of a dual-wield round are **not** equal, and a
+coefficients are in `combat.tp_return`.  A 227-delay katana pays 72 TP; dual wielded at
+35% its hand's delay is 73.8 → 73, worth 42 TP, while a 190-delay off hand at 35% is 61,
+worth 41 TP.  So the two halves of a dual-wield round are **not** equal, and a
 Double/Triple/Quadruple extra hit pays the same as a normal hit with that hand.
+
+Haste never changes TP per hit: it only changes how often the hit happens.  With the
+same Store TP, the bar fills faster because the round is shorter, not because each
+hit pays more.  That is why a reported 66.99% of magic haste becoming 43.75% of
+effective magic haste matters: the extra 23% past the cap buys no TP at all, while
+another 15% from the job-ability pool does.
 
 The old `(delay + 480) × 0.0085` formula is gone: it overpaid slow weapons and underpaid
 fast ones.  There is no "first hit full TP, later hits 10 TP" rule in retail; each hit is
-computed independently.  Monster TP gain from being hit (with Subtle Blow and the dAGI
-term) is not modelled because monsters have no TP moves here.
+computed independently.  Monster TP gain follows the separate mob curve
+(`combat.tp_return_mob`); a player's landed hit feeds the monster's bar with the +30
+monster bonus, dAGI and Subtle Blow terms, and the monster spends the bar on its
+family's TP moves (`World._mob_try_skill`).
 
 ## Defense (player)
 
@@ -261,6 +317,27 @@ damage = floor(max(weapon_DMG + fSTR, 0) * pDIF)
 The `max(..., 0)` is real: negative fSTR can zero out a hit. Damage is floored once,
 at the end.
 
+## The 99,999 ceiling
+
+Every damage event is then clipped to **99,999**, the most the client prints for one
+line: a hit, a weapon skill, a spell, a ranged attack and a skillchain all share it.
+
+```
+damage = combat.cap_damage(damage)       # 0 .. 99,999
+```
+
+The clamp runs where the number is **built**, not where it is printed, so the target's
+HP loss, the hate and the drains (Sanguine Blade, Spirit Taker) match the number the
+client is told.  A monster with more than 99,999 HP left therefore survives a 120K
+weapon skill, because only 99,999 is applied (the round's `defeated` flag compares the
+clipped total, not the raw roll).  A multi-hit weapon skill is one damage line, so its
+hits are summed first and the total is clipped: three 40,000 hits are a 99,999 weapon
+skill, not a 120,000 one.  Magic Burst and Sengikori multiply after the spell formula, so
+the cast's final amount is clipped again; a skillchain hit is clipped inside
+`skillchain.skillchain_damage` and again after Sengikori's +25%.  `queue_action` repeats
+the clip as a last line of defence and logs a warning if a path that missed its own
+clamp ever reaches it.
+
 ## Hit rate
 
 ```
@@ -335,10 +412,89 @@ damage/hit   = base * fTP * pDIF
 TP after     = TP - min(TP, 3000)                        -- the bar keeps any excess above 3000
 ```
 
-Each hit is rolled separately (hit, critical, pDIF) and packed into one action.  The
-first hit uses the full fTP; later hits use `1.0` unless the skill carries fTP across
-its hits (`multiHitfTP`: Blade: Shun, Resolution, Vorpal Blade, ...).  Multi-hit skills
-also stop rolling once the target's HP is spent, as retail does.
+`TP_BONUS` is a normal modifier: gear, weapons and augment blocks all merge through
+`combat_mods()`.  The Moonshade Earring's standard block (+250) and Centovente's
+Trial of the Magians block (+1000) therefore both raise `effective_tp`; nothing is
+slot-specific.
+
+The first listed hit uses the full fTP; later hits use `1.0` unless the skill carries
+fTP across its hits (`multiHitfTP`: Blade: Shun, Resolution, Vorpal Blade, ...).  A
+weapon skill is one attack round, not only its listed hits:
+
+```
+native hits      = the skill's hits (Ruthless Stroke 4, Rudra's Storm 1)
+main-hand procs  = DA/TA/QA, up to two procs, rolled after each native hit
+off-hand         = one swing while dual wielding, then its own DA/TA/QA procs
+round            = native + main procs + off-hand + off-hand procs, capped at 8
+first main hit   = +100 Accuracy, and the 841 first-hit line
+```
+
+The off-hand swing uses the sub weapon's DMG, Accuracy and 95% hit cap, with the same
+WSC and fTP rule.  Every hit rolls hit/miss and pDIF separately.  The hits are **summed
+and sent as one action result**: the client prints one damage line (the weapon-skill
+animation itself draws the individual hits) and the server logs one `action out` total.
+Damage is capped at 99,999 and at the target's remaining HP, so a killing blow prints
+the HP left, not the overkill, and a 120K multi-hit skill prints 99,999.
+
+Only a skill whose description says its critical-hit rate varies with TP may critical
+hit.  A normal weapon skill takes no base/dDEX/gear critical roll; the skill's TP crit
+table (`critVaries`) and Fencer's rate feed the roll for the skills that can crit.
+
+Archery and marksmanship skills do not use the main-hand fighter.  Their `base` is
+`ranged weapon DMG + ammo DMG + fSTR + WSC`, their Attack and Accuracy are the ranged
+numbers (R.Attack/R.Accuracy and the ranged weapon's skill), their TP return uses the
+ranged weapon's delay, and they get no off-hand swing or DA/TA/QA procs.
+
+A **hybrid** skill adds a magic half after the physical hits.  The physical total is
+multiplied by the same fTP, flat `Magic Damage` is added, Weapon Skill Damage applies,
+then Magic Attack Bonus is weighed against the target's Magic Defense Bonus and the
+Magic Accuracy resist:
+
+```
+hybrid magic = (physical damage * fTP + MAGIC_DAMAGE) * (1 + WSD/100)
+             * (100 + MATT) / (100 + MDEF) * resist
+total        = physical damage + hybrid magic
+```
+
+The magic half is skipped when the physical hit already killed the target.
+
+A **magical** skill (`magic: true`: Seraph Blade, Sanguine Blade, Seraph Strike,
+Wildfire, ...) does not swing and never rolls pDIF.  Its formula is the one BG-wiki
+publishes for magical weapon skills:
+
+```
+weapon_level = the equipped main weapon's item level (119 for an iLvl weapon)
+base = 152 + floor((weapon_level - 99) * 2.45) + WSC   -- 152 + WSC at level 99
+base = floor(base * fTP * (1 + Elemental WS Damage)) + dSTAT + MAGIC_DAMAGE
+damage = floor(base * (1 + WSD/100) * (1 + affinity/100)
+               * (100 + MATT) / max(50, 100 + MDEF) * resist * MDT)
+```
+
+The weapon-level term is why an iLvl 119 weapon's Seraph Blade starts from 201, not
+from the 101 that LSB's older `Level + 2` reading gives.  `dSTAT` is per skill:
+Seraph Blade and Seraph Strike are 0; Sanguine Blade is
+`(player INT - target INT) * 2`, uncapped.  `MAGIC_DAMAGE` is the flat "Magic
+Damage" statistic and is added after the fTP part, not multiplied by fTP.
+
+`Elemental WS Damage` is the Oboro path-C augment on Crocea Mors, Vitiation Sword and
+Duelist's Sword ("Elemental weapon skill damage +100%" at Rank 25).  It multiplies
+only the fTP part, before `dSTAT` and flat Magic Damage are added: that is why a
+Rank 25 Crocea Mors roughly doubles Seraph Blade and Sanguine Blade.  `affinity` is
+the matching element's `*_MAB` row (32-39); Daybreak's "Light elemental damage +50"
+is `LIGHT_MAB` 50 and therefore applies to Seraph Blade.  The MAB/MDB divisor floors
+the target's term at 0.5, and Magic Accuracy is the deterministic
+`combat.magic_resist` approximation.  Weather/day, staff affinity, resistance-rank
+reduction and magic critical hits are not modelled.  `element` and `dstat` are filled
+for the rows that publish them (Seraph Blade, Sanguine Blade, Seraph Strike and the
+other entries in `data/weapon_skills.json`); a magical row without them still uses the
+formula but adds no dSTAT and no elemental affinity.  Orpheus's Sash's distance-based
+affinity is not modelled either.
+
+Magical skills do not get fSTR, weapon DMG, the off-hand swing, DA/TA/QA, the
+physical hit roll or the critical roll.  **Black Halo is not magical**: it is a
+two-hit physical club skill (fTP 3.0/7.2/9.6, WSC 70% MND / 30% STR) and only its
+opening hit uses the full fTP, like every other non-FTP-replicating multi-hit skill.
+Maxentius's "+50% Black Halo damage" is its per-skill WSD row (mod 739).
 
 A skill may also carry:
 
@@ -355,12 +511,13 @@ damage +x%" on an item:
 |---|---|
 | 840 | `ALL_WSDMG_ALL_HITS` — the generic line on every hit |
 | 841 | `ALL_WSDMG_FIRST_HIT` — the first-hit-only line |
-| 570 + ws id | that weapon skill's own line (571 Combo, 580 Final Heaven, ...) |
+| 570 + ws id | that weapon skill's own line (571 Combo, 580 Final Heaven, 612 Savage Blade on Naegling/Kaja Sword, ...) |
 
 The per-skill line and 840 are folded into every hit's fTP; 841 only into the first
-hit.  "Weapon skill accuracy" (48) is added to the attacker's Accuracy for the hit, and
-Fencer (Warrior/Beastmaster/Bard, single-wielding a one-handed weapon) adds its TP Bonus
-(903) to `effective_tp` and its critical-hit rate (904) to the crit roll.
+main-hand hit.  "Weapon skill accuracy" (48) is added to every hit's Accuracy, and the
+first main-hand hit also gets retail's hidden +100 Accuracy.  Fencer
+(Warrior/Beastmaster/Bard, single-wielding a one-handed weapon) adds its TP Bonus (903)
+to `effective_tp` and its critical-hit rate (904) to a crit-varies skill's roll.
 
 The skill's extra effect (`weapon_skill_effects.py`) runs after the damage: drains
 restore MP/HP from the hit, and debuffs land only when `damage > 0`.  The self skills
@@ -369,6 +526,35 @@ instead.  The monster's own debuffs feed back into the next attack: Defense Down
 Dia lower its Defense, Evasion Down its Evasion, Accuracy Down its Accuracy, Attack Down
 its Attack, Magic Def./Magic Eva. Down the spell resist terms, and INT Down the `dINT`
 term.  See [world.md](world.md) for the full table.
+
+## Weapon-skill TP return
+
+A weapon skill spends its TP, then pays TP back from the hits that landed.  The return
+is **added to the bar after the spend**, which is why a weapon skill rarely leaves the
+player at 0 TP:
+
+```
+first main-hand hit       = TP(main weapon delay, after Dual Wield)
+one-hit WS off-hand hit   = TP(off-hand delay, after Dual Wield)
+every other landed hit    = 10 TP      -- later native hits, DA/TA/QA procs, off-hand multis
+each of the above         = floor(TP * (100 + Store TP) / 100)
+```
+
+So a one-hit dual-wield weapon skill returns both weapons' delay TP, while a four-hit
+skill returns the main hand's delay once plus 10 TP for each of the other three native
+hits and every multi-attack proc.  A miss on the first main hit gives up the delay TP
+but the later hits still pay 10 each.  A weapon skill with no lands returns 0 unless one
+of the saves below applies.
+
+- **Save TP** (mod 945) is compared with the normal return: the larger of the two is
+  kept, capped at 500.  Hagakure adds 400 Save TP and 1,000 TP Bonus to the next weapon
+  skill; the bonus raises `effective_tp`, the Save TP replaces a smaller return.
+- **Conserve TP** (mod 944) is a percent chance to add a random **10–200 TP** on top of
+  the return, including on a weapon skill that missed.
+- **Meikyo Shisui** spends exactly 1,000 TP while the damage still scales from the
+  player's current TP, and suppresses the hit TP return.  It grants 3,000 TP on use.
+- **Magical weapon skills** return the main-hand delay TP for their one hit, the same
+  as any other one-hit skill; the self skills (Myrkr, Dagan) return no TP.
 
 ## Base HP and MP
 
@@ -512,6 +698,56 @@ LandSandBoat's `BASE_TICK` column as damage is what made Noctohelix a 10-damage 
 a three-second tick. Dark Arts and Tabula Rasa add Helix damage and duration in retail;
 this engine only draws those abilities' icons, so the bonuses are not applied.
 
+### En-spells
+
+An en-spell is an additional effect on a physical swing, not a spell cast at the target.
+The 0x028 melee result carries it in the additional-effect block: the proc kind is the
+element (fire 1 .. dark 8), the value is the extra damage, and the message is 229
+("additional points of damage"), which is what draws the second number.  The base follows
+BG-wiki's [Enspell page](https://www.bg-wiki.com/ffxi/Category:Enspell):
+
+```
+skill < 180:   base = skill / 9 + 5
+skill >= 180:  base = (skill - 180) / 8 + 25
+
+damage = (base + merit + "Sword enhancement spell damage"+n)
+         x (1 + "Sword enhancement spell damage"+x% + Composure x 2)
+         x elemental resist x target MDT/DT
+```
+
+* **Tier I** (Enfire..Enwater) stores `base` when the spell lands and applies it to every
+  landed swing of the round, including off-hand and multi-attack swings.
+* **Tier II** (the level 50-60 IIs) applies only to the round's first swing.  Its base is
+  recalculated from the current Enhancing Magic skill each round plus a hidden counter:
+  the counter starts at 0 on the cast, rises by one per proc and the damage caps at
+  `2 x base`.  The counter keeps rising past the cap, so raising the skill later lifts the
+  damage immediately.  Recasting the en-spell resets it.
+* **Enlight/Endark** use Divine/Dark Magic skill instead.  Tier I is
+  `12 + 3 x (skill / 20) - skill / 40` and tier II the Job-Point Gift curve; the charge
+  applies to every swing and decays by one per landed hit.  The remaining charge is also
+  their Accuracy (Enlight) or Attack (Endark) bonus, which is why `combat_mods` reads it
+  from the effect rather than baking it in at cast time.
+
+Magic Attack Bonus, Magic Defense Bonus and the Magic Damage statistic do **not** apply;
+BG-wiki says so explicitly, which is why a Sworn set's `Magic Damage+32` rows do nothing
+for an en-spell while Enriching Sword's `Sword enhancement spell damage+30` does.  The
+flat and percent gear lines are per hand: gear outside the main/sub slots applies to both
+hands, a weapon's own line only to that weapon, so a dual-wielded pair is not
+double-counting the other hand's line.
+
+A worked number: a 500-skill RDM in the Sworn R30 suit (the five pieces carry +41 between
+them) with the four job-point "En"-spell gifts (+23) and five En-spell merit ranks hits for
+`(65 + 41 + 23 + 15) x 3 = 432` before resistance.  Crocea Mors's Path C adds its `+500%`
+*inside* that bracket (`1 + 500/100 + 2`), not as a separate multiplication, so the same
+hit becomes 1,152.
+
+RDM's Composure triples the six elemental en-spells (the multiplier is 3.0, i.e. the
+reference server's +200%), and the RDM group 2 "En-spell damage" merit adds 3 per rank,
+five ranks at most.  Not modelled: staff/affinity multipliers, day/weather and the Obi,
+the resistance-rank drop after a skillchain, and tier II's -10 elemental-resistance
+debuff.  The resist term is the expected value of retail's five-tier roll against the
+target's elemental Magic Evasion, with no Magic Accuracy roll of its own.
+
 **Enmity** is two meters per player on every monster: cumulative enmity (CE) in
 `ZoneEntity.enmity` minus `enmity_ve`, and volatile enmity (VE) in `enmity_ve`.  The
 monster's target is the highest CE + VE.  Damage adds `80 / (level × 31/50 + 6)` CE and
@@ -563,7 +799,12 @@ not move when Attack, weapon damage or STR change. That is the whole complaint.
 | Race/job/level grade tables | `server/fanxi_server/game/base_stats.py` (generated) |
 | Item modifier ids | `server/fanxi_server/game/modifiers.py` |
 | Weapon-skill extra effects, drain rates and status rows | `server/fanxi_server/game/weapon_skill_effects.py` |
+| Prime weapon stages, aftermath potency/tier and overwrite rule | `server/fanxi_server/game/prime_weapons.py` |
+| En-spell base curve, tier II ramp, Enlight/Endark charge and resist | `server/fanxi_server/game/combat.py` |
+| En-spell ids/tiers/elements and cast-time charge | `server/fanxi_server/game/effects.py`, `ZoneSession._buff_values` |
+| En-spell proc on the swing and its 0x028 additional-effect block | `ZoneSession._enspell_hit`, `ZoneSession._resolve_swing`, `packets.battle_action` |
 | Weapon and item data | `item_weapon` / `item_mods` tables (migrations `0080`, `0092`) |
+| Item stats that depend on character state (Hoxne Earring) | `server/fanxi_server/game/item_effects.py` |
 | The package of the above | `World.player_attack`, `World.mob_attack`, `ZoneSession.stat_sheet`, `ZoneSession.weaponskill` |
 
 Regenerate the data with:
@@ -611,31 +852,69 @@ they are easy to revisit:
   replaced by one multiplier in `combat.magic_resist`; there is no random full/half/quarter
   resist. Monsters do not cast yet, so a player's own MEVA/MDEF is only read when a
   monster-targeted spell is resolved against them.
-- **Elemental affinity and elemental resistances are not read.** `Fire MAB`, `Fire SDT`
-  and the bar-spell family have no rows for the reforged sets, so only the generic
-  `MATT`/`MDEF` are used.
+- **En-spells keep the deterministic resist too.** The elemental-resistance term is the
+  expected value of the five-tier roll (`combat.enspell_resist`), and the caster's Magic
+  Accuracy is not rolled into it.
+- **Elemental affinity and elemental resistances are not read by the nuke path.**
+  `Fire MAB`, `Fire SDT` and the bar-spell family have no rows for the reforged sets, so
+  only the generic `MATT`/`MDEF` are used.  The one exception is the en-spell resist term,
+  which does read `FIRE_MEVA`..`DARK_MEVA` per hit.  The character sheet's eight element
+  orbs are a different path: `0x061` `def_elem` reports the equipped
+  `FIRE_MEVA`..`DARK_MEVA` totals, so the menu matches the tooltips even though no other
+  damage formula has consumed them.
 - **Magic burst, skillchains and casting-time gear** are not modelled. `MAGIC_BURST` and
   `"Elemental magic casting time -x%"` are stored in `item_mods` but nothing reads them.
   The per-skill damage, drain and status rows *are* implemented.
-- **Weapon-skill magic and ranged paths lag the melee one.** The per-skill fTP, WSC,
-  hit count, attack and critical-hit tables are imported for every skill, but a
-  `doMagicWeaponskill` row (Aeolian Edge, Sanguine Blade, Wildfire, ...) still rides the
-  physical pDIF path instead of the magic resist path, and an archery/marksmanship row
-  still uses the main-hand weapon because the ranged attack path is not implemented.
-  **Spirits Within** (current-HP formula), **Atonement** (enmity formula), **Moonlight**
-  and **Starlight** (MP restore) do not use their special formulas either.  **Dagda**
-  has no published fTP or stat modifiers, so it keeps the generic fallback curve.
-- **Weapon-skill TP return and aftermath are not modelled.** The bar spends the TP and
-  keeps the excess, but the hits do not pay TP back; the Relic/Mythic/Empyrean/Prime
-  aftermath buffs need a weapon category and a second buff model.
+- **Weapon skills use physical, hybrid and magical paths.**  An archery/marksmanship
+  row resolves through the ranged slot: the ranged weapon's DMG plus the ammo's DMG,
+  Ranged Attack/Accuracy, the marksmanship/archery skill and the ranged weapon's delay
+  for TP return.  A hybrid skill (`Hot Shot`, `Searing Arrow`, the elemental blade
+  rows, ...) adds its magic half after the physical hits:
+  `physical x fTP + Magic Damage`, then Weapon Skill Damage, Magic Attack Bonus against
+  the target's Magic Defense Bonus, and the Magic Accuracy resist.  A
+  `doMagicWeaponskill` row (Seraph Blade, Sanguine Blade, Aeolian Edge, Wildfire, ...)
+  now uses the magical formula above: weapon-level base, WSC, fTP, dSTAT, Magic Damage,
+  Weapon Skill Damage, elemental affinity, MAB/MDB, Magic Accuracy resist and MDT.  The
+  Oboro path-C "Elemental weapon skill damage +100%" augment and the `*_MAB` affinity
+  rows feed it; weather/day, staff affinity, resistance-rank reduction and magic
+  critical hits are not modelled.  **Spirits Within** (current-HP formula),
+  **Atonement** (enmity formula), **Moonlight** and **Starlight** (MP restore) do not
+  use their special formulas either.  **Dagda** has no published fTP or stat modifiers,
+  so it keeps the generic fallback curve.
+- **Relic/Mythic/Empyrean aftermath are not modelled.**  Weapon-skill TP return, Save
+  TP, Conserve TP, Hagakure and Meikyo Shisui are modelled (see "Weapon-skill TP
+  return"); the Relic/Mythic/Empyrean aftermath buffs still need a weapon category and a
+  second buff model.
+  **Prime aftermath is modelled** for melee and ranged Prime weapons: the item's own
+  weapon skill raises the physical damage limit by 2-8% (stage 3), 4-10% (stage 4) or
+  6-12% (stage 5) from 1,000 to 3,000 TP, for 60/120/180 seconds by TP tier, and the
+  activating skill itself gets the buff.  The tiers lock exactly like Mythic/Empyrean
+  aftermath: level 1 refreshes itself, level 2 only yields to level 3, and level 3 never
+  refreshes.  See [prime-weapon-skills.md](prime-weapon-skills.md) and
+  `server/fanxi_server/game/prime_weapons.py`.  Staff (Oshala) and club (Dagda) have
+  different aftermaths whose full TP scaling is not published, so they are not in the
+  physical table yet.
 - **Job traits are only read where the engine consumes their modifier.** Attack/Accuracy/
   Evasion/Defense bonus, Max HP/MP Boost, Store TP, Fast Cast, Dual Wield, Critical damage
   and the weapon-skill lines (WS Damage 840, TP Bonus 345/903, Fencer 904, WS Accuracy 48)
   flow into the sheet.  Double/Triple/Quadruple Attack are read by the attack round (see
-  "Multi-attack").  Counter, Kick Attacks, Zanshin,
-  Conserve MP/TP, Subtle Blow, Occult Acumen, Shield Mastery/Tactical Parry/Guard and the
-  killer/resist families are still inert: the modifier is in the trait table and the
-  menu, but no combat path reads it.
+  "Multi-attack").  Counter, Kick Attacks, Zanshin, Conserve MP, Subtle Blow, Occult
+  Acumen, Shield Mastery/Tactical Parry/Guard and the killer/resist families are still
+  inert: the modifier is in the trait table and the menu, but no combat path reads it.
+  Store TP feeds auto-attack and weapon-skill TP; Conserve TP and Save TP are read by
+  the weapon-skill return.
+  **Killer Instinct** (BST merit, ability 162) is the exception, with one deliberate
+  custom change: it puts status icon 349 on the bar for 180 s plus 10 s per merit
+  rank past the first, and gives the **whole party in the zone** +15% physical
+  damage dealt (read by `World.player_attack`, so every weapon-skill swing gets it)
+  and a -15% `DMG` modifier for damage taken.  There is no 7.9-yalm check and the
+  party copy is not reduced.  The Ankusa/Mst. Helm augment adds 4 s per merit rank
+  (20 s at 5/5), and the **Diamond Aspis** adds 25%: with 5/5 merits the caster and
+  every party member get **300 s (5:00)** and the full +15%/-15% effect.  The retail
+  family check is not modelled yet because `monster_templates` has no family column,
+  so the two bonuses currently apply to every target.  The icon, merit/helm
+  duration, Diamond Aspis extension and recast are retail; the whole-party duration
+  and range are the custom BST change.
 - **Status-effect potency/duration gear** is read through `combat_mods()` for the lines
   the engine models: Enhancing Magic duration (listed and augment), Regen potency and
   duration, per-school duration (`ENF_MAG_DURATION`, `DARK_MAGIC_DURATION`, Ninjutsu,

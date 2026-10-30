@@ -141,27 +141,71 @@ On the clear `0x00A` login Fanxi:
 5. replies with equipment clear (`0x04F`), appearance (`0x051`), item capacities (`0x01C`) and the
    260-byte zone login (`0x00A`).
 
-Zone sessions have no TCP connection to watch, so a client that sends nothing for sixty seconds
+Zone sessions have no TCP connection to watch, so a client that sends nothing for three minutes
 is treated as disconnected: its character is despawned from the other clients, its player targid
 is freed and its last position is saved. A zone change gets a thirty-second window from the
 change itself (not the last packet); see [world](world.md#other-players). `0x00C` is accepted
 when it arrives with sync 0.
 
+The client keeps sending `0x015` while it stands still, and about ninety seconds without a
+server packet is enough for it to declare the link dead (`FFXI-4001`). A session in the world
+that has had nothing to send for five seconds therefore gets a General-only `0x00D` (HP, MP and
+TP; the model and name blocks are not re-sent, so the client does not reset the entity). It
+resets that timer and acknowledges the client's packet stream. The three-minute silence rule
+above still drops a client that has actually gone away; a live idle character never looks
+silent to the server.
+
+Other players are normally placed from the `0x00D` broadcast their movement causes, so a
+stationary player sends nothing. A session that is in the world, has its zone, and is not
+moving refreshes that `0x00D` position once a second to the clients that have it spawned. This
+is what lets a box that finished loading after the leader's last step converge on the leader's
+real position instead of keeping the warp-anchor copy until the leader moves again.
+
 On `0x00B` the client moves its zone key on by 2 (the last word), and the zone-in must be
 enciphered with that advanced key: the pre-change key decrypts to a packet the client ignores,
 which it answers by retrying `0x00A` every two seconds — the "Downloading" screen that never
-finishes. The server keeps both ciphers. A packet still in flight under the old key does **not**
-mean the client kept it; only `0x00C` proves which key the client uses, and the server switches
-to the old one when `0x00C` opens under it.
+finishes. The server keeps the whole sequence of keys a hand-off has used, not just the newest
+two, and sends the zone-in once under each of them; the client's MD5 check drops the copies it
+cannot open and it acknowledges the one it did. A packet still in flight under the old key does
+**not** mean the client kept it; only `0x00C` proves which key the client uses, and the server
+switches to the matching key when that packet opens.
 
 A repeated `0x00A` before `0x00C` rebuilds the zone-in instead of replaying the packet the client
-is already ignoring, alternating the two ciphers; after four tries the session is dropped and the
-next `0x00A` starts a fresh one.
+is already ignoring, again sending a copy under every key in the sequence. If four rebuilds fail,
+the session is dropped but its key sequence is parked for ten minutes: the next `0x00A` from the
+same game session resumes it, because the client still holds the key it advanced to. Parking
+merges with the sequence already on file instead of replacing it, so a shorter replacement login
+cannot forget the advanced key. A client that signed in again (a new game session) starts from the
+account's sign-in key as the primary cipher — but the parked sequence still travels as extra
+sealed copies, so a client the player did not restart opens the zone-in under the key it kept — a
+reset for a relogging client is what used to loop forever.
+
+Box clients on one host open the socket for the new zone from the same local port range, so one
+box's `0x00A` can arrive on an address another box has just released. A session at that address
+that is still mid-hand-off is not evicted (its `0x00B` already went out and its own `0x00A` is
+coming from a different port); treating the address as recycled dropped that box from the party
+and from the advanced cipher it was about to prove.
+
+A zone change requested while another is still in flight (a second `//warp call`, the launcher's
+auto-warp, a zone line) is deferred instead of sending a second `0x00B`; it runs after the client
+acknowledges the zone, and a duplicate call to the same spot is dropped.
 
 When the client sends `0x00C` (game OK), Fanxi sends the rest of the zone state: zone bitmap
 (`0x008`), jobs (`0x01B`), status/HP (`0x037`), stats/EXP (`0x061`), exact HP/MP (`0x0DF`), the
-self `0x00D`, empty key-item/mission/magic/mount/command blocks, character sync (`0x067`),
+self `0x00D`, empty key-item/mission/magic/command blocks, the mount table (`0x0AE`, see
+[mounts.md](mounts.md)), character sync (`0x067`),
 inventory (`0x01C`, `0x020`, `0x01D`), blacklist and the MOTD.
+
+A fresh login also reads the character's `char_live_state` row before that burst and puts the
+saved status effects back on the session, so the `0x037` list draws the icons and the `0x063`
+that always follows it carries their remaining time. `0x119` (the ability recast table, sent
+with the command data) carries the cooldowns the character still had.  Slot 0 is retail's
+two-hour ("Special") recast: the current main job's one-hour ability has recast id 0, so
+its timer is sent there (with the Master gift's 15 minutes already deducted).  The
+per-ability cooldowns are kept above the byte-sized ordinary recast ids, so changing jobs
+does not block the new job's one-hour.  Expired entries are dropped on the way in; a
+deliberate `/logout` saved the cooldowns without the buffs. See
+[world](world.md#recovering-a-dropped-client).
 
 **NPCs and monsters are not sent at `0x00A` or `0x00C`.** The client's first `0x015` (or
 `0x01A SendResRdy`) is the trigger: Fanxi sends one `0x00E` per placed NPC/monster, then updates
@@ -173,12 +217,14 @@ Implemented client messages:
 |---|---|---|
 | `0x00C` | zone fully loaded | sends the bulk zone/UI state |
 | `0x015` | position update | stores position (throttled) and spawns nearby entities on first use |
-| `0x01A` | target action | Talk, Attack, AttackOff, ChangeTarget, SendResRdy |
-| `0x037` | item use | consumes the container/slot the packet names; food applies its `food_effects` row and its `0x028` ItemFinish action plays the eat/drink animation |
+| `0x01A` | target action | Talk, Attack, AttackOff, ChangeTarget, SendResRdy, Mount (0x1A, the id in ActionBuf[0]) and Dismount (0x12) |
+| `0x00DD` | inspection (`/check`, `/checkname`, `/checkparam`) | Kind 0 answers a monster with `0x029` message 170–178 (its level and retail's difficulty/Defense/Evasion line); a checked player gets `0x009` 89 ("<name> examines you."). Kinds 1 and 2 are logged, not answered |
+| `0x037` | item use | consumes the container/slot the packet names; food applies its `food_effects` row and its `0x028` ItemFinish action plays the eat/drink animation.  A charged dispense pouch instead grants its mapped ammo, keeps the piece, and starts its reuse timer (the `0x020` charged extdata) |
+| `0x028` | item drop | removes `ItemNum` of the stack at the named `Category`/`ItemIndex`; replies `0x020` with the remaining quantity (item id `0` when the slot emptied) and one all-bag `0x01D`. Gil and a copy being worn are refused |
 | `0x083` | shop buy | charges gil, adds item, replies `0x03F` and inventory |
-| `0x016`, `0x017` | entity request | self `0x00D`/status, or re-sends an NPC/mob spawn |
-| `0x061` | status request | stats and exact HP/MP |
-| `0x05E` | zone line | changes zone if `zone_lines` has the rect; `zmrq` is the Mog House exit menu, modes 1–4 naming a city area |
+| `0x016`, `0x017` | entity request | self `0x00D`/status, or re-sends an NPC/mob spawn.  A self request after the zone-in gets the General-only `0x00D` plus `0x037`; the full self spawn is reserved for the loading zone-in, because its name/model blocks reset the running client's player entity |
+| `0x061` | status request | stats and exact HP/MP, including the eight elemental defences at body `0x30` that the equipment menu draws under Attack/Defense |
+| `0x05E` | zone line | changes zone if `zone_lines` has the rect; the main account's online family boxes standing in the old zone get the same `0x00B` through the warp queue; `zmrq` is the Mog House exit menu, modes 1–4 naming a city area |
 | `0x0B5` | chat | `//zone`, `//pos`, `//where`, `//entities`, `//heal`, `//hp`, `//warp`, `//invite`, `//makeparty`, `//time`, `//help` |
 | `0x04B` | server message request | sends the MOTD in chunks |
 | `0x05A` | conquest | zeroed standings |
@@ -192,16 +238,20 @@ Implemented client messages:
 | `0x071` | kick | leader-only; removes a member or an allied party |
 | `0x076` | roster reload | re-sends `0x0C8` and its `0x0DD` rows |
 | `0x077` | leader change | passes party leadership (Kind 0) or alliance leadership (Kind 5) |
-| `0x078` | group id | replies with `0x0E1` while grouped; silent while solo, because id 0 crashes the client |
+| `0x078` | group id | replies with `0x0E1` while grouped or while a solo player has Trusts; silent for a plain solo, because id 0 crashes the client |
 
 `0x00F` (CLSTAT) and `0x00D` (NETEND) are ignored; `0x00D` is also the server's player-entity
 packet, so direction matters.
 
 The group menu is server-owned: `0x0C8` (GROUP_TBL) carries up to twenty rows of
 `char id, targid, flags, zone` and `0x0DD` (GROUP_LIST) one member's HP/MP/TP, job levels, name,
-member number and flags. A member in another zone gets its zone number instead of vitals. HP/MP/TP
-changes are sent as the same `0x0DF` the local player receives, so the client's native party bars
-and the Party Info hub both follow the server's state.
+member number and flags. A member in another zone gets its zone number instead of vitals. Trusts
+are rows too: the table has no leader/party flags for them, and one `0x0DD` follows the owner's
+row with the Trust's id, targid, HP/MP/TP, job and level. HP/MP/TP changes are sent as the same
+`0x0DF` the local player receives, so the client's native party bars and the Party Info hub both
+follow the server's state.  A plain solo player still gets an empty `GROUP_TBL` plus its own
+`GROUP_LIST` row at zone-in (and after a disband): the HUD reads its own job pair from that row,
+so omitting it left `MainJob` 0 and emptied the spell and Trust windows.
 
 ### 4.1 Entities
 
@@ -220,8 +270,9 @@ Trust alter egos are `0x00E` spawns in the pet range with Flags3's TrustFlag (`0
 (`0x04`) and PetFlag (`0x40`) set and player allegiance. The owner also receives `0x067` with the
 Trust's id, targid and the owner's own targid; that is what makes the client offer the Trust
 sub-menu. (`0x067` is shared with the player level block, which starts `0x02/0x09`; the entity
-name variant starts `0x03/0x05`.) The spawnable name lives at packet offset `0x38` rather than the
-static-NPC `0x35`, and the Trust look block is the factual model from the `trusts` table.
+name variant starts `0x03/0x05`.) The spawnable name lives at packet offset `0x34` (body `0x30`),
+where a static NPC has its one-byte name marker; the static NPC's string then starts at `0x35`.
+The Trust look block is the factual model from the `trusts` table.
 
 ### 4.2 Combat
 
@@ -240,11 +291,16 @@ A dual-wielded or multi-attacking round is therefore still one action packet: th
 plays the results in order.  Two `0x028`s for the same actor and target in one update made
 it drop the first.  A round is capped at eight results.
 
-For a finished spell the sub-kind is the spell id and the value is the damage, the HP
+For a finished spell the sub-kind is the spell animation id and the value is the damage, the HP
 healed, or the status effect id the spell lands; the message chooses the line
 (`MAGIC_DMG` 2, `MAGIC_RECOVERS_HP` 7, `MAGIC_GAIN_EFFECT` 230, `MAGIC_ENFEEB` 237,
 `MAGIC_TELEPORT` 93).  A Magic Start uses the school's four-character code as its action
-id (`canj` for ninjutsu, `cawh`, `cabk`, ...) and the spell id as its value.
+id (`canj` for ninjutsu, `cawh`, `cabk`, ...) and the spell id as its value; its result
+animation is the same spell animation id, so the cast begins with the spell's own motion
+rather than the client's default (Cure's) one.  The result message is the client's start
+line: 327 for a player (`<caster> starts casting <spell> on <target>.`) and 3 for a
+monster or Trust (`<caster> starts casting <spell>.`).  Sending the message and a line of
+our own printed it twice, so the server no longer writes that chat line itself.
 
 `0x029` carries the defeat and gil lines; `0x02D` carries EXP and level-up. HP changes update
 `0x00E`, `0x037`, `0x061` and `0x0DF`. See [world.md](world.md) for the full combat loop.
@@ -267,11 +323,22 @@ id (`canj` for ninjutsu, `cawh`, `cabk`, ...) and the spell id as its value.
 - `C2S 0x03A` names a container after the client sorts it. The server merges partial stacks of
   the same item (and same 24-byte extdata) in that container, then sends `0x020` for every
   changed slot and one all-bag `0x01D`.
+- `C2S 0x028` is the item menu's Drop: `ItemNum` (0x04) is how many to throw away, `Category`
+  (0x08) and `ItemIndex` (0x09) the slot. A partial count leaves the rest of the stack; the reply
+  is a `0x020` with the remaining quantity (item id `0` when the slot emptied) and one all-bag
+  `0x01D`. Gil (`0`/`0`) and a slot the character is wearing are refused, because deleting a bag
+  row an equip entry points at would leave the character in gear the server no longer has.
 
-`//storage store|grab` and `//locker store|grab` never expose a destination bag. Store sends an
-`0x020` with item id `0` for each vacated bag slot and one all-bag `0x01D`; the item is then only
-in the server-side `char_storage` or `char_locker` table. Grab sends an `0x020` for each returned
-item and one all-bag `0x01D`.
+`//storage` and `//locker` never expose a destination bag. Store sends an `0x020` with item id
+`0` for each vacated bag slot and one all-bag `0x01D`; the item is then only in the server-side
+`char_storage` or `char_locker` table. Grab sends an `0x020` for each returned item and one
+all-bag `0x01D`. `//storage organize` and `//job` combine both: they queue every clear first
+(vacated bag slots and tidy sources), then every write (wardrobe destinations and pulls), then a
+single all-bag `0x01D`, so a slot that one move frees and another fills never draws the new item
+before the old one leaves. Each affected Mog Wardrobe is reopened with a state-0 `0x01D` first
+and sent its full current contents: the client only files `0x020` rows into a storage's item list
+while that container's load window is open, and a bare `0x020` left the equipment window showing
+the previous wardrobe's list.
 
 The Moogle shop uses `0x03E` (open, item count), `0x03C` (price/item/index rows, final flag
 `0x89`), `C2S 0x083` (buy) and `0x03F` (result), followed by an inventory refresh.
@@ -300,9 +367,11 @@ Chat commands:
 //entities                  list live NPCs/monsters and targids
 //heal                      restore HP/MP
 //time <hour>               set Vana'diel hour (0-23, fractions allowed)
-//storage store <job>       move that job's storable gear onto its slips
-//storage grab <job|all>    take it back off the slips
-//locker store|grab <sel>   hidden 9999-item locker (all, ammo, back, materials, name)
+//storage organize          store every other job's gear and pull this job's set
+//storage store <job|all>   store a job's gear, or everything this job cannot equip
+//storage grab <job|all>    pull a job's gear, or everything, back into the bags
+//storage list [job|all]    what is stored, by job
+//locker store|grab <sel>   hidden 9,999-slot locker (all, ammo, back, materials, name)
 //locker list               list the locker's contents
 //help                      list commands
 ```
@@ -325,17 +394,31 @@ index in the parameter; `/bell` is motion-only with `param - 6`; `/salute` carri
 `/hurray` the main-hand item id.
 
 Style lock is `C2S 0x053` (0x88 bytes): count, mode, flags, then 16 eight-byte entries
-(item index, equip kind, category, item id). Modes are 0 off, 1 keepalive (sent while zoning
-with the lock on), 2 query, 3 set, 4 enable. Fanxi persists the locked models in the
-`characters.style_*` columns (migration 0085) and replies:
+(item index, equip kind, category, item id). Modes are 0 off, 1 continue (the client asserts
+that its own lock is on; sent on login and zoning, and by `/lockstyle on` when the client
+already believes the lock is on), 2 query, 3 set, 4 enable. Fanxi persists the locked
+models in the `characters.style_*` columns (migration 0085) and replies:
 
-- `0x051` (grap list) and `0x067` (char sync) after off, set or enable, so the client repaints;
+- `0x051` (grap list) and `0x067` (char sync) after off, set, enable or a continue that
+  switched the lock on, so the client repaints;
 - `0x009` with message 267/268 when the state changes, and 269/270 for a query;
 - `0x11C` with the item ids a set could not lock.
 
 Every later `0x051`, login `0x3C` look block and `0x00D` character update reads the locked
 models while the lock is on, so an equipment change cannot repaint the character (the "blink").
-A job change clears the lock, as in retail.
+Main and sub are the exception: they always follow the equipped weapon, so a two-hander
+becoming a one-hander plus a shield (or any other weapon swap) draws the new graphics even
+with the lock on; the armour keeps the locked look.
+A job change clears the lock and forgets its models, as in retail, and sends message 268 when
+the lock was on. The server-side `//job` command then locks the outfit it just dressed: it
+snapshots the new models, sends message 267 with a fresh `0x051`, and replaces the character's
+`0x00D` spawn for nearby clients, because an observer only re-reads another player's models when
+it spawns the entity. `/lockstyle off` clears them too. The client keeps its own copy of the
+flag, so mode 1 has to switch the lock on when the server has it off: the client sends that
+packet instead of mode 4 once it believes the lock is on, and a server that ignored it left
+`/lockstyle on` doing nothing forever. It cannot resurrect an old look, because turning the
+lock off (or changing job) has already zeroed the stored models, so the continue locks the
+appearance the character is wearing at that moment.
 
 ## 5. Search (TCP)
 

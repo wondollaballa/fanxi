@@ -1,0 +1,7471 @@
+{
+ "note": "Divainy-Gamainy, Western Adoulin (J-10): Arcane Glyptics on the Alluvion Skirmish weapons and armor (Snow/Leaf/Dusk stones) and on the Cirdas Caverns, Rala Waterways, Yorcia Weald and Outer Ra'Kaznar Skirmish sets. The values are the highest the BG Wiki tables list for each row.",
+ "sources": [
+  "https://www.bg-wiki.com/ffxi/Divainy-Gamainy",
+  "https://www.bg-wiki.com/ffxi/Category:Alluvion_Skirmish_Weapons",
+  "https://www.bg-wiki.com/ffxi/Category:Alluvion_Skirmish_Armor",
+  "https://www.bg-wiki.com/ffxi/Category:Skirmish_Weapon",
+  "https://www.bg-wiki.com/ffxi/Category:Skirmish_Armor"
+ ],
+ "tables": {
+  "alluvion-weapon:one_handed": {
+   "kind": "stones",
+   "slots": [
+    {
+     "key": "snow",
+     "label": "Snow stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "acc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "acc_attack",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc_ratt",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc_mab",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "def",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "evasion",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "meva",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_mab",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_def",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_evasion",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_meva",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "leaf",
+     "label": "Leaf stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "stp",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "wsd",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "waltz",
+       "max": 8,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "snapshot",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "rapid_shot",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "refresh",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "cure_potency",
+       "max": 15,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -8,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_burst",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "repair",
+       "max": 7,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "bdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_haste",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_da_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "avatar_perp",
+       "max": -4,
+       "min": -1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "dusk",
+     "label": "Dusk stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "qa",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "hp",
+       "max": 40,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 60,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str",
+       "max": 17,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 17,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 17,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 17,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int",
+       "max": 17,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 17,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 17,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dmg",
+       "max": 1,
+       "min": 1,
+       "percent": false,
+       "from_item": "dmg_max"
+      },
+      {
+       "key": "delay",
+       "max": -10,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "str_vit",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "save_tp",
+       "max": 100,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "str_dex",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_agi",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "hp_mp",
+       "max": 40,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int_mnd",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_damage",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mp_heal",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_chr",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "charm",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_str_dex_vit",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_tp_bonus",
+       "max": 200,
+       "min": 10,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "alluvion-weapon:two_handed": {
+   "kind": "stones",
+   "slots": [
+    {
+     "key": "snow",
+     "label": "Snow stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "acc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "acc_attack",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc_ratt",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc_mab",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "def",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "evasion",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "meva",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_mab",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_def",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_evasion",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_meva",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "leaf",
+     "label": "Leaf stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "stp",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "wsd",
+       "max": 7,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "haste",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "waltz",
+       "max": 8,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "snapshot",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "rapid_shot",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "refresh",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "cure_potency",
+       "max": 20,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -10,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 9,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_burst",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "bdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "mdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "elemental_siphon",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_da_crit",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_stp",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "bp_delay",
+       "max": -6,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "avatar_perp",
+       "max": -6,
+       "min": -1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "dusk",
+     "label": "Dusk stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "qa",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "hp",
+       "max": 70,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 70,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str",
+       "max": 23,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 23,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 23,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 23,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int",
+       "max": 23,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 23,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 23,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dmg",
+       "max": 1,
+       "min": 1,
+       "percent": false,
+       "from_item": "dmg_max"
+      },
+      {
+       "key": "delay",
+       "max": -10,
+       "min": -1,
+       "percent": false,
+       "alt": "snapshot",
+       "alt_max": 10,
+       "alt_min": 1
+      },
+      {
+       "key": "str_vit",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "save_tp",
+       "max": 150,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "str_dex",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_agi",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "hp_mp",
+       "max": 60,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int_mnd",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_damage",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mp_heal",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_chr",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "charm",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_str_dex_vit",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "bp_damage",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "alluvion-weapon:instrument": {
+   "kind": "stones",
+   "slots": [
+    {
+     "key": "snow",
+     "label": "Snow stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "acc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "acc_attack",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc_mab",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "def",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "evasion",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "meva",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "all_songs",
+       "max": 2,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "leaf",
+     "label": "Leaf stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "stp",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "wsd",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "waltz",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "regen",
+       "max": 2,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "cure_potency",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -6,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_cast_time",
+       "max": -6,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_recast",
+       "max": -4,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "conserve_mp",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "skillchain",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "quick_magic",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "bdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_haste",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_da_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "bp_delay",
+       "max": -4,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "avatar_perp",
+       "max": -4,
+       "min": -1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "dusk",
+     "label": "Dusk stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "qa",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "hp",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_vit",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "save_tp",
+       "max": 30,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "str_dex",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_agi",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int_mnd",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "singing_skill",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_chr",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "bp_damage",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "alluvion-weapon:shield": {
+   "kind": "stones",
+   "slots": [
+    {
+     "key": "snow",
+     "label": "Snow stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "acc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "acc_attack",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc_ratt",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc_mab",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "def",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "evasion",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "meva",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "block",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "leaf",
+     "label": "Leaf stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "stp",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "wsd",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "waltz",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "refresh",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "regen",
+       "max": 2,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "cure_potency",
+       "max": 10,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_received",
+       "max": 8,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -8,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "skillchain",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "quick_magic",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "dt",
+       "max": -9,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pdt",
+       "max": -10,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "shield_mastery",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "bdt",
+       "max": -10,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "mdt",
+       "max": -10,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_pdt",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_haste",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_da_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "bp_delay",
+       "max": -4,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "avatar_perp",
+       "max": -4,
+       "min": -1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "dusk",
+     "label": "Dusk stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "hp",
+       "max": 80,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 80,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_vit",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "save_tp",
+       "max": 30,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "shield_skill",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int_mnd",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_damage",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_chr",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "bp_damage",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "alluvion-armor:yorium": {
+   "kind": "stones",
+   "slots": [
+    {
+     "key": "snow",
+     "label": "Snow stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "acc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "acc_attack",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc_ratt",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc_mab",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "def",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "evasion",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "meva",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_mab",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_def",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_evasion",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_meva",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "leaf",
+     "label": "Leaf stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "stp",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "waltz",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "regen",
+       "max": 2,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "cure_potency",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_received",
+       "max": 7,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "drain_aspir",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "occult",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enmity",
+       "max": 10,
+       "min": -5,
+       "percent": false
+      },
+      {
+       "key": "enemy_crit",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -10,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_subtle",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_enmity",
+       "max": -1,
+       "min": -8,
+       "percent": false
+      },
+      {
+       "key": "pet_stp",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "dusk",
+     "label": "Dusk stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "wsd",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "str",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_vit",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "dt",
+       "max": -3,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "str_dex",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "bdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "int_mnd",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_int",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "phalanx",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd_chr",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_chr",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "alluvion-armor:acro": {
+   "kind": "stones",
+   "slots": [
+    {
+     "key": "snow",
+     "label": "Snow stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "acc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "acc_attack",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc_ratt",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc_mab",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "def",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "evasion",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "meva",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_mab",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_def",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_evasion",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_meva",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "leaf",
+     "label": "Leaf stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "stp",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "waltz",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "rapid_shot",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_received",
+       "max": 7,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "drain_aspir",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enmity",
+       "max": 10,
+       "min": -5,
+       "percent": false
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enemy_crit",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "recycle",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -10,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_stp",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_breath",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "call_beast",
+       "max": -5,
+       "min": -1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "dusk",
+     "label": "Dusk stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "wsd",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "snapshot",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "hp",
+       "max": 50,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 50,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_vit",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_dex",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_agi",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int_mnd",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_int",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_crit_damage",
+       "max": 10,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mnd_chr",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_chr",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "alluvion-armor:taeon": {
+   "kind": "stones",
+   "slots": [
+    {
+     "key": "snow",
+     "label": "Snow stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "acc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "acc_attack",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc_ratt",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc_mab",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "def",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "evasion",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "meva",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_mab",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_def",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_evasion",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_meva",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "leaf",
+     "label": "Leaf stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "ta",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "waltz",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "snapshot",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_potency",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_received",
+       "max": 7,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "repair",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "counter",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "dw",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enemy_crit",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "recycle",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -10,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "enmity",
+       "max": -1,
+       "min": -5,
+       "percent": false
+      },
+      {
+       "key": "pet_regen",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_subtle",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_breath",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "dusk",
+     "label": "Dusk stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "wsd",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_damage",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "snapshot",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "hp",
+       "max": 50,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_vit",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_dex",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_agi",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int_mnd",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_crit_damage",
+       "max": 10,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "phalanx",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "regen_potency",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd_chr",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_chr",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "alluvion-armor:telchine": {
+   "kind": "stones",
+   "slots": [
+    {
+     "key": "snow",
+     "label": "Snow stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "acc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "acc_attack",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc_ratt",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc_mab",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "def",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "evasion",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "meva",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_mab",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_def",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_evasion",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_meva",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "leaf",
+     "label": "Leaf stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "stp",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "haste",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "waltz",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "regen",
+       "max": 2,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "cure_potency",
+       "max": 8,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_received",
+       "max": 7,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -7,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_cast_time",
+       "max": -7,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "wsa",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enemy_crit",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "enmity",
+       "max": -1,
+       "min": -5,
+       "percent": false
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -10,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_subtle",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_breath",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_da",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "avatar_perp",
+       "max": -4,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "elemental_siphon",
+       "max": 35,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "dusk",
+     "label": "Dusk stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "wsd",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "snapshot",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "hp",
+       "max": 50,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 50,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_vit",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_mnd",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_dex",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_agi",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int_mnd",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "regen_potency",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enhancing_duration",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd_chr",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_chr",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_haste",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_dt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "alluvion-armor:helios": {
+   "kind": "stones",
+   "slots": [
+    {
+     "key": "snow",
+     "label": "Snow stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "acc_attack",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc_ratt",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "macc_mab",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "def",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "evasion",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "meva",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_mab",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_def",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_evasion",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_meva",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "leaf",
+     "label": "Leaf stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "stp",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "haste",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "waltz",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "subtle_blow",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "regen",
+       "max": 2,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "cure_received",
+       "max": 7,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "drain_aspir",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "occult",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "wsa",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enemy_crit",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "enmity",
+       "max": -1,
+       "min": -5,
+       "percent": false
+      },
+      {
+       "key": "magic_crit_rate",
+       "max": 8,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -10,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "pet_regen",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_crit",
+       "max": 4,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "pet_da",
+       "max": 8,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "avatar_perp",
+       "max": -4,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "bp_delay",
+       "max": -5,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "blood_boon",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "dusk",
+     "label": "Dusk stone",
+     "required": false,
+     "default_on": true,
+     "options": [
+      {
+       "key": "wsd",
+       "max": 3,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "snapshot",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_burst",
+       "max": 10,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "skillchain",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "hp",
+       "max": 50,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 50,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_vit",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_mnd",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_dex",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "str_agi",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "int_mnd",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_crit_damage",
+       "max": 10,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mnd_chr",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "bp_damage",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "summoning_skill",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_haste",
+       "max": 6,
+       "min": 1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:ninzas": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 10,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 9,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 8,
+       "min": 2,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 9,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:leisilonu": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 8,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 9,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 9,
+       "min": 5,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:iztaasu": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 12,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 10,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 9,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 2,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 2,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:crobaci": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 27,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 10,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 9,
+       "min": 3,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 9,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:faizzeer": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 16,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 10,
+       "min": 5,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 6,
+       "min": 6,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 8,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 9,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:iclamar": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 24,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 6,
+       "min": 6,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 5,
+       "min": 5,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 7,
+       "min": 7,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 8,
+       "min": 5,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 5,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:iizamal": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 24,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "agi",
+       "max": 3,
+       "min": 3,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:qatsunoci": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 26,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 8,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 4,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 9,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 9,
+       "min": 2,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 9,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 7,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 2,
+       "min": 2,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:kannakiri": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 12,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 8,
+       "min": 5,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 5,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 6,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 6,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 7,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:shichishito": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 24,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 9,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 7,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 7,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 6,
+       "min": 3,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 7,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 5,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:lehbrailg": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 22,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "int",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "macc",
+       "max": 28,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 5,
+       "min": 2,
+       "percent": true
+      },
+      {
+       "key": "conserve_mp",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "magic_burst",
+       "max": 9,
+       "min": 7,
+       "percent": true
+      },
+      {
+       "key": "enmity",
+       "max": -6,
+       "min": -3,
+       "percent": false
+      },
+      {
+       "key": "wsa",
+       "max": 7,
+       "min": 7,
+       "percent": false
+      },
+      {
+       "key": "elemental_skill",
+       "max": 9,
+       "min": 9,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:uffrat": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 20,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "int",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mnd",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "chr",
+       "max": 6,
+       "min": 3,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "pet_attack_ratt",
+       "max": 24,
+       "min": 13,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 24,
+       "min": 12,
+       "percent": false
+      },
+      {
+       "key": "pet_mab",
+       "max": 23,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 14,
+       "min": 3,
+       "percent": false
+      },
+      {
+       "key": "avatar_perp",
+       "max": -5,
+       "min": -1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:aedold": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 15,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 7,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 5,
+       "min": 5,
+       "percent": false
+      },
+      {
+       "key": "agi",
+       "max": 2,
+       "min": 2,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 7,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 5,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:bocluamni": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 11,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 2,
+       "min": 2,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "racc",
+       "max": 2,
+       "min": 2,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-weapon:hgafircian": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "dmg",
+     "label": "DMG",
+     "required": true,
+     "options": [
+      {
+       "key": "dmg",
+       "max": 13,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "str",
+       "max": 4,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "dex",
+       "max": 5,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "vit",
+       "max": 8,
+       "min": 4,
+       "percent": false
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "racc",
+       "max": 9,
+       "min": 2,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 8,
+       "min": 5,
+       "percent": false
+      },
+      {
+       "key": "snapshot",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "recycle",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enmity",
+       "max": -5,
+       "min": -5,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:cizin-armor-set": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:cizin-armor-set-1": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -3,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -3,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:gendewitha-armor-set": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus",
+     "required": false,
+     "options": [
+      {
+       "key": "cure_potency",
+       "max": 8,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_recast",
+       "max": -3,
+       "min": -1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:gendewitha-armor-set-1": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "cure_potency",
+       "max": 8,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_recast",
+       "max": -3,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "cure_potency",
+       "max": 8,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "cure_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_cast_time",
+       "max": -5,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "song_recast",
+       "max": -3,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:hagondes-armor-set": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus",
+     "required": false,
+     "options": [
+      {
+       "key": "macc",
+       "max": 26,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 10,
+       "min": 3,
+       "percent": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 25,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 24,
+       "min": 12,
+       "percent": false
+      },
+      {
+       "key": "avatar_perp",
+       "max": -5,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "enmity",
+       "max": -6,
+       "min": -1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:hagondes-armor-set-1": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "macc",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 10,
+       "min": 3,
+       "percent": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 25,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 24,
+       "min": 12,
+       "percent": false
+      },
+      {
+       "key": "avatar_perp",
+       "max": -5,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "enmity",
+       "max": -6,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "macc",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mab",
+       "max": 30,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "fast_cast",
+       "max": 5,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "magic_burst",
+       "max": 10,
+       "min": 3,
+       "percent": true
+      },
+      {
+       "key": "pet_mab",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_macc",
+       "max": 25,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pet_attack_ratt",
+       "max": 25,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "pet_acc_racc",
+       "max": 24,
+       "min": 12,
+       "percent": false
+      },
+      {
+       "key": "avatar_perp",
+       "max": -5,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "enmity",
+       "max": -6,
+       "min": -1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:iuitl-armor-set": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 8,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 9,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 10,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "snapshot",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "recycle",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enmity",
+       "max": -6,
+       "min": -4,
+       "percent": false
+      },
+      {
+       "key": "mdef",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:iuitl-armor-set-1": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 9,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 10,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "snapshot",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "recycle",
+       "max": 2,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "min": -4,
+       "percent": false
+      },
+      {
+       "key": "mdef",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "racc",
+       "max": 9,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "ratt",
+       "max": 10,
+       "min": 4,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 1,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "snapshot",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "recycle",
+       "max": 2,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "enmity",
+       "max": -7,
+       "min": -4,
+       "percent": false
+      },
+      {
+       "key": "mdef",
+       "max": 1,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:otronif-armor-set": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:otronif-armor-set-1": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -3,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "acc",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "attack",
+       "max": 10,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "da",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "crit_rate",
+       "max": 2,
+       "min": 1,
+       "percent": true
+      },
+      {
+       "key": "mdef",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "mdt",
+       "max": -3,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:beatific-shield": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus",
+     "required": false,
+     "options": [
+      {
+       "key": "hp",
+       "max": 30,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 30,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -10,
+       "min": -5,
+       "percent": true
+      },
+      {
+       "key": "shield_mastery",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      }
+     ]
+    }
+   ]
+  },
+  "skirmish-armor:beatific-shield-1": {
+   "kind": "pools",
+   "slots": [
+    {
+     "key": "main",
+     "label": "Physical Damage Taken",
+     "required": true,
+     "options": [
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool0",
+     "label": "Bonus 1",
+     "required": false,
+     "options": [
+      {
+       "key": "hp",
+       "max": 30,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 30,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -10,
+       "min": -5,
+       "percent": true
+      },
+      {
+       "key": "shield_mastery",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    },
+    {
+     "key": "pool1",
+     "label": "Bonus 2",
+     "required": false,
+     "options": [
+      {
+       "key": "hp",
+       "max": 30,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "mp",
+       "max": 30,
+       "min": 10,
+       "percent": false
+      },
+      {
+       "key": "spell_interrupt",
+       "max": -10,
+       "min": -5,
+       "percent": true
+      },
+      {
+       "key": "shield_mastery",
+       "max": 3,
+       "min": 1,
+       "percent": false
+      },
+      {
+       "key": "pdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      },
+      {
+       "key": "mdt",
+       "max": -4,
+       "min": -1,
+       "percent": true
+      }
+     ]
+    }
+   ]
+  }
+ },
+ "items": [
+  {
+   "item_id": 20530,
+   "name": "Ohrmazd",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:one_handed",
+   "ranged": false,
+   "dmg_max": 29
+  },
+  {
+   "item_id": 20616,
+   "name": "Ipetam",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:one_handed",
+   "ranged": false,
+   "dmg_max": 16
+  },
+  {
+   "item_id": 20759,
+   "name": "Macbain",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:two_handed",
+   "ranged": false,
+   "dmg_max": 36
+  },
+  {
+   "item_id": 20901,
+   "name": "Inanna",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:two_handed",
+   "ranged": false,
+   "dmg_max": 39
+  },
+  {
+   "item_id": 20809,
+   "name": "Kumbhakarna",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:one_handed",
+   "ranged": false,
+   "dmg_max": 22
+  },
+  {
+   "item_id": 20857,
+   "name": "Svarga",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:two_handed",
+   "ranged": false,
+   "dmg_max": 39
+  },
+  {
+   "item_id": 20718,
+   "name": "Claidheamh Soluis",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:one_handed",
+   "ranged": false,
+   "dmg_max": 19
+  },
+  {
+   "item_id": 21169,
+   "name": "Keraunos",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:two_handed",
+   "ranged": false,
+   "dmg_max": 31
+  },
+  {
+   "item_id": 21105,
+   "name": "Nehushtan",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:one_handed",
+   "ranged": false,
+   "dmg_max": 25
+  },
+  {
+   "item_id": 20946,
+   "name": "Olyndicus",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:two_handed",
+   "ranged": false,
+   "dmg_max": 38
+  },
+  {
+   "item_id": 21224,
+   "name": "Phaosphaelia",
+   "kind": "weapon",
+   "slot": "range",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:two_handed",
+   "ranged": true,
+   "dmg_max": 32
+  },
+  {
+   "item_id": 21476,
+   "name": "Doomsday",
+   "kind": "weapon",
+   "slot": "range",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:two_handed",
+   "ranged": true,
+   "dmg_max": 21
+  },
+  {
+   "item_id": 21037,
+   "name": "Nenekirimaru",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:two_handed",
+   "ranged": false,
+   "dmg_max": 34
+  },
+  {
+   "item_id": 20989,
+   "name": "Izuna",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:one_handed",
+   "ranged": false,
+   "dmg_max": 17
+  },
+  {
+   "item_id": 27627,
+   "name": "Svalinn",
+   "kind": "weapon",
+   "slot": "sub",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:shield",
+   "ranged": false
+  },
+  {
+   "item_id": 21404,
+   "name": "Linos",
+   "kind": "weapon",
+   "slot": "range",
+   "family": "alluvion",
+   "group": "Alluvion Skirmish Weapons",
+   "quality": "",
+   "table": "alluvion-weapon:instrument",
+   "ranged": false
+  },
+  {
+   "item_id": 26733,
+   "name": "Yorium Barbuta",
+   "kind": "armor",
+   "slot": "head",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Yorium",
+   "quality": "",
+   "table": "alluvion-armor:yorium"
+  },
+  {
+   "item_id": 26891,
+   "name": "Yorium Cuirass",
+   "kind": "armor",
+   "slot": "body",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Yorium",
+   "quality": "",
+   "table": "alluvion-armor:yorium"
+  },
+  {
+   "item_id": 27045,
+   "name": "Yorium Gauntlets",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Yorium",
+   "quality": "",
+   "table": "alluvion-armor:yorium"
+  },
+  {
+   "item_id": 27232,
+   "name": "Yorium Cuisses",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Yorium",
+   "quality": "",
+   "table": "alluvion-armor:yorium"
+  },
+  {
+   "item_id": 27402,
+   "name": "Yorium Sabatons",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Yorium",
+   "quality": "",
+   "table": "alluvion-armor:yorium"
+  },
+  {
+   "item_id": 26734,
+   "name": "Acro Helm",
+   "kind": "armor",
+   "slot": "head",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Acro",
+   "quality": "",
+   "table": "alluvion-armor:acro"
+  },
+  {
+   "item_id": 26892,
+   "name": "Acro Surcoat",
+   "kind": "armor",
+   "slot": "body",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Acro",
+   "quality": "",
+   "table": "alluvion-armor:acro"
+  },
+  {
+   "item_id": 27046,
+   "name": "Acro Gauntlets",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Acro",
+   "quality": "",
+   "table": "alluvion-armor:acro"
+  },
+  {
+   "item_id": 27233,
+   "name": "Acro Breeches",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Acro",
+   "quality": "",
+   "table": "alluvion-armor:acro"
+  },
+  {
+   "item_id": 27403,
+   "name": "Acro Leggings",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Acro",
+   "quality": "",
+   "table": "alluvion-armor:acro"
+  },
+  {
+   "item_id": 26735,
+   "name": "Taeon Chapeau",
+   "kind": "armor",
+   "slot": "head",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Taeon",
+   "quality": "",
+   "table": "alluvion-armor:taeon"
+  },
+  {
+   "item_id": 26893,
+   "name": "Taeon Tabard",
+   "kind": "armor",
+   "slot": "body",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Taeon",
+   "quality": "",
+   "table": "alluvion-armor:taeon"
+  },
+  {
+   "item_id": 27047,
+   "name": "Taeon Gloves",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Taeon",
+   "quality": "",
+   "table": "alluvion-armor:taeon"
+  },
+  {
+   "item_id": 27234,
+   "name": "Taeon Tights",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Taeon",
+   "quality": "",
+   "table": "alluvion-armor:taeon"
+  },
+  {
+   "item_id": 27404,
+   "name": "Taeon Boots",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Taeon",
+   "quality": "",
+   "table": "alluvion-armor:taeon"
+  },
+  {
+   "item_id": 26736,
+   "name": "Telchine Cap",
+   "kind": "armor",
+   "slot": "head",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Telchine",
+   "quality": "",
+   "table": "alluvion-armor:telchine"
+  },
+  {
+   "item_id": 26894,
+   "name": "Telchine Chasuble",
+   "kind": "armor",
+   "slot": "body",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Telchine",
+   "quality": "",
+   "table": "alluvion-armor:telchine"
+  },
+  {
+   "item_id": 27048,
+   "name": "Telchine Gloves",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Telchine",
+   "quality": "",
+   "table": "alluvion-armor:telchine"
+  },
+  {
+   "item_id": 27235,
+   "name": "Telchine Braconi",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Telchine",
+   "quality": "",
+   "table": "alluvion-armor:telchine"
+  },
+  {
+   "item_id": 27405,
+   "name": "Telchine Pigaches",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Telchine",
+   "quality": "",
+   "table": "alluvion-armor:telchine"
+  },
+  {
+   "item_id": 26737,
+   "name": "Helios Band",
+   "kind": "armor",
+   "slot": "head",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Helios",
+   "quality": "",
+   "table": "alluvion-armor:helios"
+  },
+  {
+   "item_id": 26895,
+   "name": "Helios Jacket",
+   "kind": "armor",
+   "slot": "body",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Helios",
+   "quality": "",
+   "table": "alluvion-armor:helios"
+  },
+  {
+   "item_id": 27049,
+   "name": "Helios Gloves",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Helios",
+   "quality": "",
+   "table": "alluvion-armor:helios"
+  },
+  {
+   "item_id": 27236,
+   "name": "Helios Spats",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Helios",
+   "quality": "",
+   "table": "alluvion-armor:helios"
+  },
+  {
+   "item_id": 27406,
+   "name": "Helios Boots",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "alluvion",
+   "group": "Alluvion Armor \u00b7 Helios",
+   "quality": "",
+   "table": "alluvion-armor:helios"
+  },
+  {
+   "item_id": 20553,
+   "name": "Ninzas",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:ninzas",
+   "ranged": false
+  },
+  {
+   "item_id": 20546,
+   "name": "Ninzas +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:ninzas",
+   "ranged": false
+  },
+  {
+   "item_id": 20539,
+   "name": "Ninzas +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:ninzas",
+   "ranged": false
+  },
+  {
+   "item_id": 20641,
+   "name": "Leisilonu",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:leisilonu",
+   "ranged": false
+  },
+  {
+   "item_id": 20634,
+   "name": "Leisilonu +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:leisilonu",
+   "ranged": false
+  },
+  {
+   "item_id": 20623,
+   "name": "Leisilonu +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:leisilonu",
+   "ranged": false
+  },
+  {
+   "item_id": 20742,
+   "name": "Iztaasu",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:iztaasu",
+   "ranged": false
+  },
+  {
+   "item_id": 20736,
+   "name": "Iztaasu +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:iztaasu",
+   "ranged": false
+  },
+  {
+   "item_id": 20725,
+   "name": "Iztaasu +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:iztaasu",
+   "ranged": false
+  },
+  {
+   "item_id": 20787,
+   "name": "Crobaci",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:crobaci",
+   "ranged": false
+  },
+  {
+   "item_id": 20775,
+   "name": "Crobaci +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:crobaci",
+   "ranged": false
+  },
+  {
+   "item_id": 20764,
+   "name": "Crobaci +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:crobaci",
+   "ranged": false
+  },
+  {
+   "item_id": 20833,
+   "name": "Faizzeer",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:faizzeer",
+   "ranged": false
+  },
+  {
+   "item_id": 20824,
+   "name": "Faizzeer +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:faizzeer",
+   "ranged": false
+  },
+  {
+   "item_id": 20816,
+   "name": "Faizzeer +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:faizzeer",
+   "ranged": false
+  },
+  {
+   "item_id": 20877,
+   "name": "Iclamar",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:iclamar",
+   "ranged": false
+  },
+  {
+   "item_id": 20870,
+   "name": "Iclamar +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:iclamar",
+   "ranged": false
+  },
+  {
+   "item_id": 20863,
+   "name": "Iclamar +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:iclamar",
+   "ranged": false
+  },
+  {
+   "item_id": 20924,
+   "name": "Iizamal",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:iizamal",
+   "ranged": false
+  },
+  {
+   "item_id": 20915,
+   "name": "Iizamal +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:iizamal",
+   "ranged": false
+  },
+  {
+   "item_id": 20907,
+   "name": "Iizamal +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:iizamal",
+   "ranged": false
+  },
+  {
+   "item_id": 20967,
+   "name": "Qatsunoci",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:qatsunoci",
+   "ranged": false
+  },
+  {
+   "item_id": 20961,
+   "name": "Qatsunoci +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:qatsunoci",
+   "ranged": false
+  },
+  {
+   "item_id": 20952,
+   "name": "Qatsunoci +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:qatsunoci",
+   "ranged": false
+  },
+  {
+   "item_id": 21013,
+   "name": "Kannakiri",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:kannakiri",
+   "ranged": false
+  },
+  {
+   "item_id": 21004,
+   "name": "Kannakiri +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:kannakiri",
+   "ranged": false
+  },
+  {
+   "item_id": 20996,
+   "name": "Kannakiri +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:kannakiri",
+   "ranged": false
+  },
+  {
+   "item_id": 21058,
+   "name": "Shichishito",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:shichishito",
+   "ranged": false
+  },
+  {
+   "item_id": 21051,
+   "name": "Shichishito +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:shichishito",
+   "ranged": false
+  },
+  {
+   "item_id": 21043,
+   "name": "Shichishito +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:shichishito",
+   "ranged": false
+  },
+  {
+   "item_id": 21208,
+   "name": "Lehbrailg",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:lehbrailg",
+   "ranged": false
+  },
+  {
+   "item_id": 21194,
+   "name": "Lehbrailg +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:lehbrailg",
+   "ranged": false
+  },
+  {
+   "item_id": 21179,
+   "name": "Lehbrailg +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:lehbrailg",
+   "ranged": false
+  },
+  {
+   "item_id": 21209,
+   "name": "Uffrat",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:uffrat",
+   "ranged": false
+  },
+  {
+   "item_id": 21195,
+   "name": "Uffrat +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:uffrat",
+   "ranged": false
+  },
+  {
+   "item_id": 21180,
+   "name": "Uffrat +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:uffrat",
+   "ranged": false
+  },
+  {
+   "item_id": 21132,
+   "name": "Aedold",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:aedold",
+   "ranged": false
+  },
+  {
+   "item_id": 21126,
+   "name": "Aedold +1",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:aedold",
+   "ranged": false
+  },
+  {
+   "item_id": 21115,
+   "name": "Aedold +2",
+   "kind": "weapon",
+   "slot": "main",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:aedold",
+   "ranged": false
+  },
+  {
+   "item_id": 21242,
+   "name": "Bocluamni",
+   "kind": "weapon",
+   "slot": "range",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:bocluamni",
+   "ranged": true
+  },
+  {
+   "item_id": 21236,
+   "name": "Bocluamni +1",
+   "kind": "weapon",
+   "slot": "range",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:bocluamni",
+   "ranged": true
+  },
+  {
+   "item_id": 21230,
+   "name": "Bocluamni +2",
+   "kind": "weapon",
+   "slot": "range",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:bocluamni",
+   "ranged": true
+  },
+  {
+   "item_id": 21294,
+   "name": "Hgafircian",
+   "kind": "weapon",
+   "slot": "range",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "NQ",
+   "table": "skirmish-weapon:hgafircian",
+   "ranged": true
+  },
+  {
+   "item_id": 21286,
+   "name": "Hgafircian +1",
+   "kind": "weapon",
+   "slot": "range",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+1",
+   "table": "skirmish-weapon:hgafircian",
+   "ranged": true
+  },
+  {
+   "item_id": 21279,
+   "name": "Hgafircian +2",
+   "kind": "weapon",
+   "slot": "range",
+   "family": "skirmish",
+   "group": "Skirmish Weapons",
+   "quality": "+2",
+   "table": "skirmish-weapon:hgafircian",
+   "ranged": true
+  },
+  {
+   "item_id": 27768,
+   "name": "Cizin Helm",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin",
+   "quality": "NQ",
+   "table": "skirmish-armor:cizin-armor-set"
+  },
+  {
+   "item_id": 27912,
+   "name": "Cizin Mail",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin",
+   "quality": "NQ",
+   "table": "skirmish-armor:cizin-armor-set"
+  },
+  {
+   "item_id": 28051,
+   "name": "Cizin Mufflers",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin",
+   "quality": "NQ",
+   "table": "skirmish-armor:cizin-armor-set"
+  },
+  {
+   "item_id": 28192,
+   "name": "Cizin Breeches",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin",
+   "quality": "NQ",
+   "table": "skirmish-armor:cizin-armor-set"
+  },
+  {
+   "item_id": 28332,
+   "name": "Cizin Greaves",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin",
+   "quality": "NQ",
+   "table": "skirmish-armor:cizin-armor-set"
+  },
+  {
+   "item_id": 27728,
+   "name": "Cizin Helm +1",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin +1",
+   "quality": "+1",
+   "table": "skirmish-armor:cizin-armor-set-1"
+  },
+  {
+   "item_id": 27874,
+   "name": "Cizin Mail +1",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin +1",
+   "quality": "+1",
+   "table": "skirmish-armor:cizin-armor-set-1"
+  },
+  {
+   "item_id": 28018,
+   "name": "Cizin Mufflers +1",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin +1",
+   "quality": "+1",
+   "table": "skirmish-armor:cizin-armor-set-1"
+  },
+  {
+   "item_id": 28160,
+   "name": "Cizin Breeches +1",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin +1",
+   "quality": "+1",
+   "table": "skirmish-armor:cizin-armor-set-1"
+  },
+  {
+   "item_id": 28297,
+   "name": "Cizin Greaves +1",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Cizin +1",
+   "quality": "+1",
+   "table": "skirmish-armor:cizin-armor-set-1"
+  },
+  {
+   "item_id": 27771,
+   "name": "Gendewitha Caubeen",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha",
+   "quality": "NQ",
+   "table": "skirmish-armor:gendewitha-armor-set"
+  },
+  {
+   "item_id": 27915,
+   "name": "Gendewitha Bliaut",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha",
+   "quality": "NQ",
+   "table": "skirmish-armor:gendewitha-armor-set"
+  },
+  {
+   "item_id": 28054,
+   "name": "Gendewitha Gages",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha",
+   "quality": "NQ",
+   "table": "skirmish-armor:gendewitha-armor-set"
+  },
+  {
+   "item_id": 28195,
+   "name": "Gendewitha Spats",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha",
+   "quality": "NQ",
+   "table": "skirmish-armor:gendewitha-armor-set"
+  },
+  {
+   "item_id": 28335,
+   "name": "Gendewitha Galoshes",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha",
+   "quality": "NQ",
+   "table": "skirmish-armor:gendewitha-armor-set"
+  },
+  {
+   "item_id": 27731,
+   "name": "Gendewitha Caubeen +1",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha +1",
+   "quality": "+1",
+   "table": "skirmish-armor:gendewitha-armor-set-1"
+  },
+  {
+   "item_id": 27877,
+   "name": "Gendewitha Bliaut +1",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha +1",
+   "quality": "+1",
+   "table": "skirmish-armor:gendewitha-armor-set-1"
+  },
+  {
+   "item_id": 28021,
+   "name": "Gendewitha Gages +1",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha +1",
+   "quality": "+1",
+   "table": "skirmish-armor:gendewitha-armor-set-1"
+  },
+  {
+   "item_id": 28163,
+   "name": "Gendewitha Spats +1",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha +1",
+   "quality": "+1",
+   "table": "skirmish-armor:gendewitha-armor-set-1"
+  },
+  {
+   "item_id": 28300,
+   "name": "Gendewitha Galoshes +1",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Gendewitha +1",
+   "quality": "+1",
+   "table": "skirmish-armor:gendewitha-armor-set-1"
+  },
+  {
+   "item_id": 27772,
+   "name": "Hagondes Hat",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes",
+   "quality": "NQ",
+   "table": "skirmish-armor:hagondes-armor-set"
+  },
+  {
+   "item_id": 27916,
+   "name": "Hagondes Coat",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes",
+   "quality": "NQ",
+   "table": "skirmish-armor:hagondes-armor-set"
+  },
+  {
+   "item_id": 28055,
+   "name": "Hagondes Cuffs",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes",
+   "quality": "NQ",
+   "table": "skirmish-armor:hagondes-armor-set"
+  },
+  {
+   "item_id": 28196,
+   "name": "Hagondes Pants",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes",
+   "quality": "NQ",
+   "table": "skirmish-armor:hagondes-armor-set"
+  },
+  {
+   "item_id": 28336,
+   "name": "Hagondes Sabots",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes",
+   "quality": "NQ",
+   "table": "skirmish-armor:hagondes-armor-set"
+  },
+  {
+   "item_id": 27732,
+   "name": "Hagondes Hat +1",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes +1",
+   "quality": "+1",
+   "table": "skirmish-armor:hagondes-armor-set-1"
+  },
+  {
+   "item_id": 27878,
+   "name": "Hagondes Coat +1",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes +1",
+   "quality": "+1",
+   "table": "skirmish-armor:hagondes-armor-set-1"
+  },
+  {
+   "item_id": 28022,
+   "name": "Hagondes Cuffs +1",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes +1",
+   "quality": "+1",
+   "table": "skirmish-armor:hagondes-armor-set-1"
+  },
+  {
+   "item_id": 28164,
+   "name": "Hagondes Pants +1",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes +1",
+   "quality": "+1",
+   "table": "skirmish-armor:hagondes-armor-set-1"
+  },
+  {
+   "item_id": 28301,
+   "name": "Hag. Sabots +1",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Hagondes +1",
+   "quality": "+1",
+   "table": "skirmish-armor:hagondes-armor-set-1"
+  },
+  {
+   "item_id": 27770,
+   "name": "Iuitl Headgear",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl",
+   "quality": "NQ",
+   "table": "skirmish-armor:iuitl-armor-set"
+  },
+  {
+   "item_id": 27914,
+   "name": "Iuitl Vest",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl",
+   "quality": "NQ",
+   "table": "skirmish-armor:iuitl-armor-set"
+  },
+  {
+   "item_id": 28053,
+   "name": "Iuitl Wristbands",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl",
+   "quality": "NQ",
+   "table": "skirmish-armor:iuitl-armor-set"
+  },
+  {
+   "item_id": 28194,
+   "name": "Iuitl Tights",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl",
+   "quality": "NQ",
+   "table": "skirmish-armor:iuitl-armor-set"
+  },
+  {
+   "item_id": 28334,
+   "name": "Iuitl Gaiters",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl",
+   "quality": "NQ",
+   "table": "skirmish-armor:iuitl-armor-set"
+  },
+  {
+   "item_id": 27730,
+   "name": "Iuitl Headgear +1",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl +1",
+   "quality": "+1",
+   "table": "skirmish-armor:iuitl-armor-set-1"
+  },
+  {
+   "item_id": 27876,
+   "name": "Iuitl Vest +1",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl +1",
+   "quality": "+1",
+   "table": "skirmish-armor:iuitl-armor-set-1"
+  },
+  {
+   "item_id": 28020,
+   "name": "Iuitl Wristbands +1",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl +1",
+   "quality": "+1",
+   "table": "skirmish-armor:iuitl-armor-set-1"
+  },
+  {
+   "item_id": 28162,
+   "name": "Iuitl Tights +1",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl +1",
+   "quality": "+1",
+   "table": "skirmish-armor:iuitl-armor-set-1"
+  },
+  {
+   "item_id": 28299,
+   "name": "Iuitl Gaiters +1",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Iuitl +1",
+   "quality": "+1",
+   "table": "skirmish-armor:iuitl-armor-set-1"
+  },
+  {
+   "item_id": 27769,
+   "name": "Otronif Mask",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif",
+   "quality": "NQ",
+   "table": "skirmish-armor:otronif-armor-set"
+  },
+  {
+   "item_id": 27913,
+   "name": "Otronif Harness",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif",
+   "quality": "NQ",
+   "table": "skirmish-armor:otronif-armor-set"
+  },
+  {
+   "item_id": 28052,
+   "name": "Otronif Gloves",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif",
+   "quality": "NQ",
+   "table": "skirmish-armor:otronif-armor-set"
+  },
+  {
+   "item_id": 28193,
+   "name": "Otronif Brais",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif",
+   "quality": "NQ",
+   "table": "skirmish-armor:otronif-armor-set"
+  },
+  {
+   "item_id": 28333,
+   "name": "Otronif Boots",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif",
+   "quality": "NQ",
+   "table": "skirmish-armor:otronif-armor-set"
+  },
+  {
+   "item_id": 27729,
+   "name": "Otronif Mask +1",
+   "kind": "armor",
+   "slot": "head",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif +1",
+   "quality": "+1",
+   "table": "skirmish-armor:otronif-armor-set-1"
+  },
+  {
+   "item_id": 27875,
+   "name": "Otronif Harness +1",
+   "kind": "armor",
+   "slot": "body",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif +1",
+   "quality": "+1",
+   "table": "skirmish-armor:otronif-armor-set-1"
+  },
+  {
+   "item_id": 28019,
+   "name": "Otronif Gloves +1",
+   "kind": "armor",
+   "slot": "hands",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif +1",
+   "quality": "+1",
+   "table": "skirmish-armor:otronif-armor-set-1"
+  },
+  {
+   "item_id": 28161,
+   "name": "Otronif Brais +1",
+   "kind": "armor",
+   "slot": "legs",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif +1",
+   "quality": "+1",
+   "table": "skirmish-armor:otronif-armor-set-1"
+  },
+  {
+   "item_id": 28298,
+   "name": "Otronif Boots +1",
+   "kind": "armor",
+   "slot": "feet",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Otronif +1",
+   "quality": "+1",
+   "table": "skirmish-armor:otronif-armor-set-1"
+  },
+  {
+   "item_id": 28662,
+   "name": "Beatific Shield",
+   "kind": "armor",
+   "slot": "sub",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Beatific Shield",
+   "quality": "NQ",
+   "table": "skirmish-armor:beatific-shield"
+  },
+  {
+   "item_id": 28654,
+   "name": "Beatific Shield +1",
+   "kind": "armor",
+   "slot": "sub",
+   "family": "skirmish",
+   "group": "Skirmish Armor \u00b7 Beatific Shield +1",
+   "quality": "+1",
+   "table": "skirmish-armor:beatific-shield-1"
+  }
+ ]
+}

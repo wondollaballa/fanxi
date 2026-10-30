@@ -1,7 +1,8 @@
 # A state transition that lands on the set already worn must not re-equip it (host/addons/phase.c).
 # Run by tests/phase_state_test.sh.  While engaged, a movement step used to send the whole engaged
 # set again: every piece made the client drop its battle stance for the server to re-assert, which
-# is the sheathe/draw loop seen while fighting.  Only a state whose set changes may send gear.
+# is the sheathe/draw loop seen while fighting.  Only a state whose set changes may send gear, and
+# a set only sends the slots whose item differs from what the server last echoed.
 frames 2
 lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=8, sets={{{1,0,0},{2,0,0}},{{3,0,0}},{{4,0,0},{5,0,0}}}, names={'engaged','idle.town','move'}, engage=1, idle=2, town=1, move=3, rules={}} return xi.phase.status().sets
 echo --- the first apply wears the idle set
@@ -14,9 +15,41 @@ echo --- a movement step while engaged keeps the engaged set on
 lua control local e = xi.phase.moving(false) return e and #e or 0
 lua control local e = xi.phase.moving(true) return e and #e or 0
 lua control local e = xi.phase.moving(false) return e and #e or 0
-echo --- a pushed plan still re-wears the set even when it is the one on
+echo --- a forced apply returns the set that is on (this test's set names one slot twice)
 lua control local e = xi.phase.apply() return e and #e or 0
 echo --- disengaging returns to the idle set, and moving swaps again
 lua control local e = xi.phase.engaged(false) return e and #e or 0
 lua control local e = xi.phase.moving(true) return e and #e or 0
 lua control local e = xi.phase.moving(false) return e and #e or 0
+echo --- a set only sends the pieces that differ from what is on
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=8, sets={{{1,0,0},{2,1,0},{3,2,0},{6,3,0}},{{1,0,0},{4,1,0},{3,2,0},{7,3,0}}}, names={'idle.town','move'}, idle=1, town=1, move=2, rules={}} return xi.phase.status().sets
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- moving sends only the two pieces that differ
+lua control local e = xi.phase.moving(true) return e and #e or 0
+echo --- stopping sends the two idle pieces back
+lua control local e = xi.phase.moving(false) return e and #e or 0
+echo --- the same set on again sends nothing
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- pushing the same plan again does not re-send the worn set
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=8, sets={{{1,0,0},{2,1,0},{3,2,0},{6,3,0}},{{1,0,0},{4,1,0},{3,2,0},{7,3,0}}}, names={'idle.town','move'}, idle=1, town=1, move=2, rules={}} return xi.phase.status().sets
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- an equip echo is the engine's own send and leaves the table alone
+packet_in 5000000009030000
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- the client's own equip forgets the slot, so the next set sends it
+packet_out 5008000009030000
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- an equipment slot the server emptied is re-sent too
+packet_in 5000000000030000
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- a plan wider than the old 96-set table keeps its field set (the states are added last)
+lua control local t, n = {}, {} for i = 1, 120 do t[i] = {{1,0,0}} n[i] = 's'..i end return xi.phase.set{enabled=true, player=16909060, zone=230, town=0, job=10, sets=t, names=n, engage=117, idle=118, idle_town=118, idle_field=120, rules={}}
+lua control return xi.phase.status().sets, xi.phase.status().state, xi.phase.status().set
+echo --- a plan wider than the table is clamped, and the table reports the count it kept
+lua control local t = {} for i = 1, 300 do t[i] = {{1,0,0}} end return xi.phase.set{enabled=true, player=16909060, zone=230, town=0, job=10, sets=t, names={}, rules={}}
+lua control return xi.phase.status().sets
+echo --- a plan pushed during a zone settle keeps the settle for the watch loop
+lua control xi.phase.zone(230, true) return xi.phase.status().settling
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=10, sets={{{42,8,3}}}, names={'idle.town'}, idle=1, town=1, rules={}} return xi.phase.status().settling
+run 2
+lua control local e = xi.phase.pending() return e and #e or 0

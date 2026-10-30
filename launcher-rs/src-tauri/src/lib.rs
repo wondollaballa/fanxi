@@ -7,9 +7,12 @@ mod display;
 mod error;
 mod game;
 mod gear;
+mod gear_stats;
 mod icons;
 
 use commands::AppState;
+use config::LauncherConfig;
+use tauri::Manager;
 use tracing_subscriber::EnvFilter;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -24,6 +27,21 @@ pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
         .manage(AppState::new())
+        .setup(|app| {
+            let handle = app.handle().clone();
+            display::remember_app(&handle);
+            // The window is created hidden so it opens on the chosen display instead of first
+            // appearing on the main one. If the display is gone it stays centered on the main.
+            let monitor = LauncherConfig::load().monitor;
+            if let Err(error) = display::place_launcher_window(&handle, &monitor) {
+                tracing::warn!(%error, "cannot place the launcher window on the chosen display");
+            }
+            if let Some(window) = app.get_webview_window("main") {
+                let _ = window.show();
+                let _ = window.set_focus();
+            }
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![
             commands::bootstrap,
             commands::refresh_public,
@@ -36,6 +54,9 @@ pub fn run() {
             commands::create_character,
             commands::save_character_design,
             commands::character_data,
+            commands::character_bags,
+            commands::character_magic_bag,
+            commands::character_stats,
             commands::character_data_action,
             commands::character_warps,
             commands::character_warp_mark,
@@ -46,6 +67,8 @@ pub fn run() {
             commands::set_last_page,
             commands::select_tenant,
             commands::save_settings,
+            commands::gearswap_settings,
+            commands::save_gearswap_settings,
             commands::display_info,
             commands::detect_game_dir,
             commands::find_host64,
@@ -69,10 +92,12 @@ pub fn run() {
             commands::delete_sub,
             commands::list_instances,
             commands::relaunch_instance,
+            commands::fix_follower,
             commands::stop_instance,
             commands::stop_all,
             commands::send_command,
             commands::send_hud,
+            commands::battle,
             commands::send_chat,
             commands::control_state,
             commands::control_metrics,
@@ -82,6 +107,7 @@ pub fn run() {
             commands::gear_slots,
             commands::equip_icons,
             commands::gear_item_ids,
+            commands::gear_item_stats,
             commands::clear_icon_cache,
             commands::gear_job,
             commands::gear_load_default,

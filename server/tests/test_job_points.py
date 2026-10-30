@@ -29,6 +29,8 @@ class JobPointGiftTest(unittest.TestCase):
             mod.MEVA: 42,
             mod.MACC: 42,
             mod.MAGIC_BURST_BONUS_CAPPED: 13,
+            # Every job's ★Master! gift cuts the one-hour recast by 15 minutes.
+            mod.ONE_HOUR_RECAST: 15,
         })
         self.assertEqual(totals["skills"], {
             33: 36,  # Healing Magic
@@ -56,6 +58,31 @@ class JobPointGiftTest(unittest.TestCase):
         self.assertEqual(totals["mods"][mod.REGEN_POTENCY], 5)
         self.assertEqual(totals["mods"][mod.CURE_POTENCY], 23)
         self.assertEqual(totals["mods"][mod.FASTCAST], 8)
+
+    def test_bard_song_cast_gift_is_song_only(self):
+        totals = job_points.gift_totals(10)["mods"]
+        self.assertEqual(totals[mod.SONG_SPELLCASTING_TIME], 5)
+        self.assertNotIn(mod.FASTCAST, totals)
+
+    def test_red_mage_enspell_and_master_gifts(self):
+        """RDM's En-spell gifts are flat damage per hit, not a stat row to ignore."""
+        totals = job_points.gift_totals(5)
+        # 5 + 5 + 6 + 7 from the four "En"-spell gifts.
+        self.assertEqual(totals["mods"][mod.ENSPELL_DMG_BONUS], 23)
+        self.assertEqual(totals["mods"][mod.ONE_HOUR_RECAST], 15)
+        # Every RDM gift row is now either a modifier, a skill or a known flag.
+        self.assertEqual(totals["unclassified"], [])
+        self.assertEqual(totals["flags"] & {"new_spells", "master"},
+                         {"new_spells", "master"})
+        self.assertEqual(totals["skills"], {34: 36, 35: 36})
+        # Fanxi has no per-character spell table: the gift table itself is the
+        # authority for which job learns the spell.
+        grants = job_points.spell_grants(5)
+        self.assertEqual(grants["Fire V"], 100)
+        self.assertEqual(grants["Addle II"], 550)
+        self.assertEqual(grants["Refresh III"], 1200)
+        self.assertTrue(job_points.is_job_point_spell("Temper II"))
+        self.assertFalse(job_points.is_job_point_spell("Cure"))
 
     def test_combat_mods_merge_gifts_and_passive_categories(self):
         self.assertEqual(job_points.combat_mods(20), job_points.gift_totals(20)["mods"])
@@ -206,13 +233,18 @@ class JobPointDurationTest(unittest.TestCase):
                          {mod.FASTCAST: 40})
         self.assertEqual(job_points.conditional_mods(10, {effects.PIANISSIMO}),
                          {mod.FASTCAST: 40})
-        self.assertEqual(job_points.category_mods(10), {mod.MACC: 20})
+        # Song Accuracy Bonus is song-only (zone._cast_numbers adds it to the singing
+        # skill), so the generic category modifier stays empty.
+        self.assertEqual(job_points.category_mods(10), {})
         self.assertEqual(job_points.ability_effect(25)["status"], effects.SOUL_VOICE)
 
     def test_dancer_samba_duration(self):
         effect = effects.ABILITY_EFFECTS[189]
         self.assertEqual(effect.effect, effects.HASTE_SAMBA)
-        self.assertEqual(effect.duration, 100.0)
+        # 90 s base + the Samba Duration row's +2 s x 20 ranks.  Drain/Aspir are 120 s
+        # base and therefore 160 s at rank 20.
+        self.assertEqual(effect.duration, 130.0)
+        self.assertEqual(effects.ABILITY_EFFECTS[184].duration, 160.0)
 
     def test_special_category_totals(self):
         self.assertEqual(job_points.category_total(5, "Convert Effect"), 20)

@@ -93,6 +93,23 @@ impl ApiClient {
             .await
     }
 
+    /// The account's saved GearSwap/phase config, or `{config: null}` before the first save.
+    pub async fn gearswap_settings(&self, token: &str) -> AppResult<Value> {
+        self.request(Method::GET, "/gearswap", None, Some(token), None)
+            .await
+    }
+
+    pub async fn save_gearswap_settings(&self, token: &str, config: Value) -> AppResult<Value> {
+        self.request(
+            Method::POST,
+            "/gearswap",
+            Some(json!({"config": config})),
+            Some(token),
+            None,
+        )
+        .await
+    }
+
     pub async fn characters(&self, token: &str) -> AppResult<Vec<Value>> {
         let value = self
             .request(Method::GET, "/characters", None, Some(token), None)
@@ -135,6 +152,43 @@ impl ApiClient {
         self.request(
             Method::GET,
             &format!("/characters/{character_id}/data"),
+            None,
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    /// Every bag copy with its item metadata and decoded augment text.  The set editor's
+    /// picker filters these by slot/job instead of making the player type item names.
+    pub async fn character_bags(&self, token: &str, character_id: i64) -> AppResult<Value> {
+        self.request(
+            Method::GET,
+            &format!("/characters/{character_id}/bags"),
+            None,
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    /// Every visible bag plus the hidden slips/locker, for the Magic Bag HUD.
+    pub async fn character_magic_bag(&self, token: &str, character_id: i64) -> AppResult<Value> {
+        self.request(
+            Method::GET,
+            &format!("/characters/{character_id}/magicbag"),
+            None,
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    /// The live checkparam-style stat sheet with every gear/food/JA/JT/buff source.
+    pub async fn character_stats(&self, token: &str, character_id: i64) -> AppResult<Value> {
+        self.request(
+            Method::GET,
+            &format!("/characters/{character_id}/stats"),
             None,
             Some(token),
             None,
@@ -229,13 +283,21 @@ impl ApiClient {
         character_id: i64,
         query: &str,
         kind: Option<&str>,
+        scope: Option<&str>,
+        category: Option<&str>,
     ) -> AppResult<Value> {
         let mut params = vec![
             ("q".to_string(), query.to_string()),
-            ("limit".to_string(), "40".to_string()),
+            ("limit".to_string(), "80".to_string()),
         ];
         if let Some(kind) = kind.filter(|value| !value.is_empty()) {
             params.push(("kind".to_string(), kind.to_string()));
+        }
+        if let Some(scope) = scope.filter(|value| !value.is_empty()) {
+            params.push(("scope".to_string(), scope.to_string()));
+        }
+        if let Some(category) = category.filter(|value| !value.is_empty()) {
+            params.push(("category".to_string(), category.to_string()));
         }
         self.request(
             Method::GET,

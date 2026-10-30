@@ -153,6 +153,8 @@ MODS = (
     ("Subtle Blow", 289, 1),
     ("Store TP", 73, 1),
     ("Fast Cast", 170, 1),
+    # The Sworn suit's en-spell line; a whole-percent stat like the others above.
+    ("Sword enhancement spell damage", 432, 1),
     ("Magic Damage", 311, 1),
     ("Damage taken", 160, 100),
     ("Enmity", 27, 1),

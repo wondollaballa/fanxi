@@ -157,6 +157,7 @@ export function PhasePanel({
   onLockWeaponSet,
 }: PhasePanelProps) {
   const [addSpell, setAddSpell] = useState("");
+  const [addSong, setAddSong] = useState("");
   const weaponSets = useMemo(
     () => sets.filter((path) => path.startsWith("weaponset.")),
     [sets],
@@ -179,6 +180,14 @@ export function PhasePanel({
     [spells],
   );
   const overrides = Object.entries(config.spellOverrides);
+  const songSpells = useMemo(
+    () => spells.filter((spell) => spell.categories?.includes("songs")),
+    [spells],
+  );
+  const songOverrideEntries = Object.entries(config.songOverrides);
+  const songChoices = songSpells.filter(
+    (spell) => !(String(spell.id) in config.songOverrides),
+  );
   const categoryOverrideCount = spellGroups.reduce(
     (count, group) =>
       count + group.modes.filter((mode) => config.spellCategoryOverrides[mode.category]).length,
@@ -236,7 +245,7 @@ export function PhasePanel({
       <Group
         title="Engaged"
         badge={<Badge tone={status?.engaged ? "accent" : "neutral"}>TP · WS</Badge>}
-        hint="Build TP in the first set; the default WS set is worn before a weaponskill unless its own Weaponskills card picks another set."
+        hint="Build TP in the first set; the WS gear comes from the Weaponskills card below (the card's set, else the library's sets.WS.<name>, else this default)."
       >
         <div className="phase-row">
           <SetSelect
@@ -292,7 +301,7 @@ export function PhasePanel({
         title="Weaponset"
         wide
         badge={<Badge tone="neutral">session locks</Badge>}
-        hint="Wear a weaponset and pin its slots so no precast, midcast, idle or GearSwap swap can replace them. A main or support job change releases the lock and the pins, wherever the change happens; //gs lock main, sub also works in game."
+        hint="Wear a weaponset and pin its slots so no precast, midcast, idle, GearSwap or weapon-skill set can replace them. The pinned hand is put back when the weapon is drawn; a cast while disengaged and a Bard's Nitro song may take it for that action only, then restore it. A main or support job change releases the lock and the pins; //gs lock main, sub also works in game."
       >
         <div className="phase-row">
           <SetSelect
@@ -369,7 +378,7 @@ export function PhasePanel({
         title="Weaponskills"
         wide
         badge={<Badge tone="neutral">{wsNames.length} WS</Badge>}
-        hint="Every WS gets a card. Empty picks the default WS set above (or the library's precast.WS); the TP set returns the moment the WS result lands or misses."
+        hint="Every WS gets a card. A card wins; an empty card uses the library's sets.WS.&lt;name&gt; first, then the default set (or the library's precast.WS) for a WS the library has no set for. The TP set returns the moment the WS result lands or misses."
       >
         <div className="phase-row">
           <SetSelect
@@ -498,16 +507,24 @@ export function PhasePanel({
             {categoryOverrideCount ? ` · ${categoryOverrideCount} modes` : ""}
           </Badge>
         }
-        hint="Precast is worn before the cast is timed; the midcast default is worn for every spell. A group card can hold a set for every mode; the Mode dropdown chooses which one is worn for that group's spells. A per-spell card wins over its group. Switching modes is also available in the in-game spell HUD and with //modes."
+        hint="Spell precast is worn before any spell; song precast is worn only for Bard songs. The midcast default is worn for every spell. A group card can hold a set for every mode; the Mode dropdown chooses which one is worn for that group's spells. A per-spell card wins over its group. Switching modes is also available in the in-game spell HUD and with //modes."
       >
         <div className="phase-row">
           <SetSelect
-            label="Precast set"
+            label="Spell precast"
             value={config.precast}
             sets={sets}
             prefixes={["precast."]}
-            empty="— library precast.FC —"
+            empty="— library precast.Spell / FC —"
             onChange={(precast) => onConfig({ precast })}
+          />
+          <SetSelect
+            label="Song precast"
+            value={config.precastSong}
+            sets={sets}
+            prefixes={["precast."]}
+            empty="— library precast.Song / FCBardSong —"
+            onChange={(precastSong) => onConfig({ precastSong })}
           />
           <SetSelect
             label="Midcast default"
@@ -652,6 +669,86 @@ export function PhasePanel({
             }}
           >
             Add override
+          </Button>
+        </div>
+      </Group>
+
+      <Group
+        title="Song overrides"
+        wide
+        badge={<Badge tone="neutral">{songOverrideEntries.length} songs</Badge>}
+        hint="Only Bard songs are listed here. Each card can pick its own precast and midcast set; an empty pick falls back to the Song precast / armed song mode."
+      >
+        {songOverrideEntries.map(([id, entry]) => {
+          const spell = spellById.get(Number(id));
+          return (
+            <div key={id} className="phase-card-row">
+              <span className="phase-card-name">
+                {spell?.name ?? `Song ${id}`}
+                <em>Bard song</em>
+              </span>
+              <InlineSetSelect
+                value={entry.pre}
+                sets={sets}
+                prefixes={["precast."]}
+                empty="— Song precast —"
+                onChange={(pre) => {
+                  const next = { ...config.songOverrides, [id]: { ...entry, pre: pre ?? "" } };
+                  onConfig({ songOverrides: next });
+                }}
+              />
+              <InlineSetSelect
+                value={entry.mid}
+                sets={sets}
+                prefixes={["midcast."]}
+                empty="— Song mode set —"
+                onChange={(mid) => {
+                  const next = { ...config.songOverrides, [id]: { ...entry, mid: mid ?? "" } };
+                  onConfig({ songOverrides: next });
+                }}
+              />
+              <Button
+                size="sm"
+                variant="ghost"
+                icon={<Trash2 size={13} />}
+                title="Remove song override"
+                onClick={() => {
+                  const next = { ...config.songOverrides };
+                  delete next[id];
+                  onConfig({ songOverrides: next });
+                }}
+              />
+            </div>
+          );
+        })}
+        <div className="phase-row">
+          <Field label="Add a song override" className="phase-return">
+            <Select value={addSong} onChange={(event) => setAddSong(event.target.value)}>
+              <option value="">{songChoices.length ? "Choose a song…" : "No songs on this job"}
+              </option>
+              {songChoices.map((spell) => (
+                <option key={spell.id} value={spell.id}>
+                  {spell.name} · Lv {spell.level}
+                </option>
+              ))}
+            </Select>
+          </Field>
+          <Button
+            size="sm"
+            icon={<Plus size={14} />}
+            disabled={!addSong}
+            onClick={() => {
+              if (!addSong) return;
+              onConfig({
+                songOverrides: {
+                  ...config.songOverrides,
+                  [addSong]: { pre: config.precastSong || "", mid: config.midcast || "" },
+                },
+              });
+              setAddSong("");
+            }}
+          >
+            Add song
           </Button>
         </div>
       </Group>

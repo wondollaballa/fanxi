@@ -81,9 +81,13 @@ class EntityPacketTest(unittest.TestCase):
         self.assertEqual(body[36] & 0x45, 0x45)   # Trust + PetNew + Pet
         self.assertEqual(body[37], 1)              # player allegiance
         self.assertEqual(struct.unpack_from("<I", body, 44)[0], 3000 << 16)
-        # Spawnables (targid >= 0x700) carry their name at 0x38, not the static 0x35.
-        self.assertEqual(body[52:61], b"Shantotto")
-        self.assertEqual(body[48:52], bytes(4))
+        # Spawnables (targid >= 0x700) carry their name at packet 0x34, which is body
+        # 0x30.  Those bytes are the first four characters of the name, not padding:
+        # four zeros there made the client read an empty name (no nameplate, and action
+        # lines such as "casts Protect V." with no caster).
+        self.assertEqual(body[48:57], b"Shantotto")
+        self.assertEqual(body[48:52], b"Shan")
+        self.assertEqual(body[57:64], bytes(7))
 
         set_name = packets.entity_set_name(entity, 0x400)
         self.assertEqual(len(set_name), 0x14)

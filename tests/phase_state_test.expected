@@ -9,9 +9,39 @@
 [harness] = 0
 [harness] = 0
 [harness] = 0
---- a pushed plan still re-wears the set even when it is the one on
+--- a forced apply returns the set that is on (this test's set names one slot twice)
 [harness] = 2
 --- disengaging returns to the idle set, and moving swaps again
 [harness] = 1
 [harness] = 2
+[harness] = 1
+--- a set only sends the pieces that differ from what is on
+[harness] = 2
+[harness] = 4
+--- moving sends only the two pieces that differ
+[harness] = 2
+--- stopping sends the two idle pieces back
+[harness] = 2
+--- the same set on again sends nothing
+[harness] = 0
+--- pushing the same plan again does not re-send the worn set
+[harness] = 2
+[harness] = 0
+--- an equip echo is the engine's own send and leaves the table alone
+[harness] = 0
+--- the client's own equip forgets the slot, so the next set sends it
+[harness] = 1
+--- an equipment slot the server emptied is re-sent too
+[harness] = 1
+--- a plan wider than the old 96-set table keeps its field set (the states are added last)
+[harness] = 120
+[harness] = 120
+[harness] = idle.field
+[harness] = s120
+--- a plan wider than the table is clamped, and the table reports the count it kept
+[harness] = 256
+[harness] = 256
+--- a plan pushed during a zone settle keeps the settle for the watch loop
+[harness] = true
+[harness] = true
 [harness] = 1

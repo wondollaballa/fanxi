@@ -1,0 +1,58 @@
+# A locked weapon stays on (host/addons/phase.c).  The TP set does not always name a weapon,
+# so filtering a pinned slot out of a set is not enough: the exact copy is captured, a
+# weaponskill keeps it instead of swapping it for sets.WS.<name>, and it is re-armed when the
+# weapon is drawn.  A cast while disengaged may swap the hand for the cast and put it back; a
+# Bard's Nitro song is the only exception while engaged.  Run by
+# tests/phase_weapon_lock_test.sh.
+frames 2
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=5, sets={{{1,0,0},{2,1,0},{3,4,0},{4,2,0},{5,3,0}},{{10,0,0},{11,1,0},{12,4,0}},{{20,0,0},{21,1,0},{22,4,0}}}, names={'idle','ws','magic'}, engage=1, idle=1, town=1, rules={{category=7, action=78, pre=2},{category=3, action=5, pre=3, mid=3},{category=3, action=100, pre=3, mid=3}}} return xi.phase.status().sets
+echo --- wear the TP set and pin all four weapon slots
+lua control local e = xi.phase.apply() return e and #e or 0
+lua control local s = xi.phase.lock_slots(15) return xi.phase.status().lockedSlots[1] .. ':' .. xi.phase.status().lockedSlots[4]
+echo --- draw the weapon
+lua control local e = xi.phase.engaged(true) return xi.phase.status().engaged
+echo --- a weaponskill keeps the pinned main and sub, and wears only its armour
+packet_out 1a00000000000000000007004e00
+echo --- the result restores the WS armour
+packet_in 280000000004030201008c1300000000
+packet_out 1a00010000000000000004000000
+echo --- a spell while engaged keeps the pinned hands too
+packet_out 1a00020000000000000003000500
+echo --- the result restores the spell armour
+packet_in 28000000000403020100500100000000
+packet_out 1a00030000000000000004000000
+echo --- a spell id in the Phantom Roll range is still a spell, not a roll
+packet_out 1a00040000000000000003006400
+packet_in 28000000000403020100101900000000
+packet_out 1a00050000000000000004000000
+echo --- sheathed, the cast may take the casting hand for its window
+lua control return xi.phase.engaged(false)
+packet_out 1a00060000000000000003000500
+echo --- and the result puts the locked hand back
+packet_in 28000000000403020100500100000000
+packet_out 1a00070000000000000004000000
+echo --- drawing the weapon re-arms the lock even when the worn table forgot the hand
+lua control xi.phase.forget_slot(0) xi.phase.forget_slot(1)
+packet_out 1a00080000000000000002000000
+echo --- a Bard under Nitro may take the instrument through the lock
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=10, sets={{{1,0,0},{2,1,0},{3,4,0},{4,2,0},{5,3,0}},{{30,0,0},{31,1,0},{32,2,0},{33,3,0},{34,4,0}},{{34,4,0}}}, names={'idle','song','song_mid'}, engage=1, idle=1, town=1, rules={{category=3, action=6, pre=2, mid=3, song=true}}} return xi.phase.status().job
+lua control local e = xi.phase.apply() return e and #e or 0
+lua control local s = xi.phase.lock_slots(15) return xi.phase.status().lockedSlots[1] .. ':' .. xi.phase.status().lockedSlots[4]
+lua control xi.phase.engaged(false) xi.phase.engaged(true) return xi.phase.status().engaged
+lua control return xi.phase.nitro(true)
+packet_out 1a00090000000000000003000600
+echo --- the result puts the locked instruments back
+packet_in 28000000000403020100900100000000
+packet_out 1a000a0000000000000004000000
+echo --- without Nitro the same song keeps every pinned weapon
+lua control return xi.phase.nitro(false)
+packet_out 1a000b0000000000000003000600
+packet_in 28000000000403020100900100000000
+packet_out 1a000c0000000000000004000000
+echo --- a TP set with no weapon still re-arms the locked hand on /attack
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=5, sets={{{3,4,0}},{{3,4,0}},{{10,0,0},{11,1,0},{12,4,0}}}, names={'tp','engage','ws'}, engage=2, idle=1, town=1, rules={{category=7, action=78, pre=3}}} return xi.phase.status().job
+lua control xi.phase.remember(0, 0, 1) xi.phase.remember(1, 0, 2) return 1
+lua control local s = xi.phase.lock_slots(3) return xi.phase.status().lockedSlots[1] .. ':' .. xi.phase.status().lockedSlots[2]
+lua control xi.phase.engaged(false) return xi.phase.status().engaged
+lua control xi.phase.forget_slot(0) xi.phase.forget_slot(1) return 1
+packet_out 1a000d0000000000000002000000

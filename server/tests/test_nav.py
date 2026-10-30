@@ -300,9 +300,61 @@ class WorldMobNavigationTest(unittest.TestCase):
         for step in range(50):
             now += 0.2
             self.world.advance(now)
-        # No route exists: the monster must stay on the low side and keep its feet down.
+        # No route exists: the monster may walk to the cliff, but must not climb it.
         self.assertLess(mob.x, 20.0)
         self.assertLess(mob.y, 2.0)
+
+    def test_a_pulled_mob_walks_toward_a_player_when_no_route_exists(self):
+        """A red name must not mean a frozen monster.
+
+        The reported pull: the player stood on the far side of a slope, the grid could
+        not connect the monster's camp to that floor, and the monster stayed at spawn
+        while its name was red.  A pulled monster still has to close the gap as far as
+        the floor and barrier tests allow.
+        """
+        floors = quad(0, 0, 20, 40, 0) + quad(20, 0, 40, 40, 8)
+        walls = wall_face(20, 0, 40, 0, 8)
+        grid = NavGrid.from_floor_triangles(100, floors, walls=walls)
+        self.use_grid(grid)
+        mob = self.mob()
+        self.place_mob(mob, 5, 20)
+        self.engage(mob, (25, 8, 20))
+        now = time.time()
+        mob.last_move_at = now - 0.2
+        for step in range(40):
+            now += 0.2
+            self.world.advance(now)
+        # It walked from x=5 to the cliff at x=20 and stopped there.
+        self.assertGreater(mob.x, 15.0, "the pulled monster stood at its spawn")
+        self.assertLess(mob.x, 20.5, "the monster climbed the cliff")
+        self.assertLess(mob.y, 2.0)
+
+    def test_a_chase_follows_a_slope_more_than_four_yalms_below_spawn(self):
+        """The chase is not clamped to the spawn floor; a hillside pull is legal.
+
+        The old route check rejected every waypoint more than four yalms above or below
+        the spawn, which is why a player on a lower slope could hold hate with the
+        monster standing still at the top.
+        """
+        floors = [
+            (0, 0, 0, 40, -8, 0, 40, -8, 40),
+            (0, 0, 0, 40, -8, 40, 0, 0, 40),
+        ]
+        grid = NavGrid.from_floor_triangles(100, floors)
+        self.use_grid(grid)
+        mob = self.mob()
+        floor = grid.floor_near(5, 20, 0.0, limit=3.0)
+        self.assertIsNotNone(floor)
+        self.place_mob(mob, 5, 20, y=floor)
+        player_floor = grid.floor_near(33, 20, floor, limit=6.0)
+        self.engage(mob, (33, player_floor, 20))
+        now = time.time()
+        mob.last_move_at = now - 0.2
+        for step in range(80):
+            now += 0.2
+            self.world.advance(now)
+        self.assertGreater(mob.x, 24.0, "the monster did not follow the slope")
+        self.assertLess(mob.y, mob.spawn_y - 4.5)
 
     def test_a_roaming_mob_follows_the_slope_and_stays_on_the_mesh(self):
         floors = [

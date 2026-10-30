@@ -22,7 +22,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DB = ROOT / "data" / "fanxi.db"
 DEFAULT_JSON = ROOT / "tools" / "item_models.json"
-VISIBLE = ("head", "body", "hands", "legs", "feet", "main", "sub", "ranged")
+# The catalogue has both spellings: the older imports use "ranged", the full item
+# catalogue uses "range" (Pinaka, Earp and Loughnashade are "range").
+VISIBLE = ("head", "body", "hands", "legs", "feet", "main", "sub", "ranged", "range")
 
 
 def catalog(path: Path = DEFAULT_JSON) -> dict[int, int]:

@@ -26,6 +26,45 @@ INT = 12
 MND = 13
 CHR = 14
 
+# Elemental defence: what an item's "Fire+20" line is.  LandSandBoat calls these
+# ``*_MEVA`` rather than ``*_RES``; the ids sit right after CHR, in the client's own
+# element order.  The equipment menu's eight element orbs read the totals from the
+# ``0x061`` status packet, so these are the ids that make the orbs non-zero.
+FIRE_MEVA = 15
+ICE_MEVA = 16
+WIND_MEVA = 17
+EARTH_MEVA = 18
+THUNDER_MEVA = 19
+WATER_MEVA = 20
+LIGHT_MEVA = 21
+DARK_MEVA = 22
+# Fire, ice, wind, earth, thunder, water, light, dark: the packet's own order.
+ELEMENTAL_MEVA = (FIRE_MEVA, ICE_MEVA, WIND_MEVA, EARTH_MEVA,
+                  THUNDER_MEVA, WATER_MEVA, LIGHT_MEVA, DARK_MEVA)
+
+# Elemental "Magic Atk. Bonus" -- what the wiki calls elemental affinity.  It is a
+# separate multiplier from the generic MATT and only applies to the matching element
+# (Daybreak's "Light elemental damage +50" is LIGHT_MAB 50).
+FIRE_MAB = 32
+ICE_MAB = 33
+WIND_MAB = 34
+EARTH_MAB = 35
+THUNDER_MAB = 36
+WATER_MAB = 37
+LIGHT_MAB = 38
+DARK_MAB = 39
+ELEMENTAL_MAB = (FIRE_MAB, ICE_MAB, WIND_MAB, EARTH_MAB,
+                 THUNDER_MAB, WATER_MAB, LIGHT_MAB, DARK_MAB)
+ELEMENTAL_NAMES = ("fire", "ice", "wind", "earth", "thunder", "water", "light", "dark")
+
+
+def elemental_mod(element: str) -> int | None:
+    """The affinity modifier id for an element name, or None when it is not one."""
+    try:
+        return ELEMENTAL_MAB[ELEMENTAL_NAMES.index(str(element or "").strip().casefold())]
+    except ValueError:
+        return None
+
 # Flat combat stats.
 ATT = 23
 RATT = 24
@@ -44,22 +83,48 @@ DRAIN_ASPIR = 315        # "Drain" and "Aspir" potency
 # Percent-integer combat stats: 25 means +25%.
 ATT_PERCENT = 62
 DEF_PERCENT = 63
+RATT_PERCENT = 66        # ranged attack percentage, LandSandBoat's ``rattp``
+
+# Corsair rolls.  These ids are LandSandBoat's own so a roll and the same line on
+# equipment/effects read the stat through one id.
+MOVE_SPEED_BOLTERS_ROLL = 1086  # additive movement-speed percentage (Bolter's Roll)
+PHANTOM_ROLL = 1076             # seconds taken off Phantom Roll's recast
+PHANTOM_DURATION = 882          # seconds added to a roll's duration (Gants, Mantle, ...)
+SNAPSHOT = 365                  # ranged-attack delay reduction percentage
+REGAIN = 368                    # TP regained per tick
+CONSERVE_MP = 296               # percent chance to spend less MP
+SPELL_INTERRUPT = 168           # spell-interruption rate percentage (negative is better)
+EXP_BONUS = 382                 # experience points earned percentage
+CAPACITY_BONUS = 915            # capacity points earned percentage
 
 # Job-trait modifiers.  They use the same ids as gear, which is why trait bonuses can
 # be merged into the equipment dict without a second stat path.
+# Smite: "physical attacks" with a two-handed or hand-to-hand weapon, in 1/256 of
+# Attack (76 is +29.6%).  Desperate Blows: job-ability haste (in 1/100 percent, the
+# same unit as HASTE_ABILITY) while Last Resort is up.  Stalwart Soul: percent less
+# HP consumed by Souleater.
+SMITE = 898
+DESPERATE_BLOWS = 906
+STALWART_SOUL = 907
 FASTCAST = 170             # percent, from the Fast Cast trait
 STORETP = 73               # percent TP gained per landed hit
+CONSERVE_TP = 944          # percent chance a weapon skill saves 10-200 TP
+SAVETP = 945               # TP kept after a weapon skill; the larger of it and the return
 ENMITY = 27                # flat enmity added on a swing (gear's "Enmity+x")
 SUBTLE_BLOW = 289          # percent less enmity generated per hit
 SUBTLE_BLOW_II = 290
 COUNTER = 291              # percent chance to counter an incoming hit
+SHIELD_MASTERY = 485       # shield block rate +N percent (PLD/WAR/RDM trait)
 SKILLCHAIN_BONUS = 174     # percent added to a skillchain's damage
+ZANSHIN = 306              # percent chance of an extra swing after a miss (Samurai)
+SKILLCHAIN_DAMAGE = 175    # percent added to a skillchain's damage (gear line)
 DUAL_WIELD = 259           # percent delay reduction while dual wielding
 DOUBLE_ATTACK = 288        # percent chance per hand, checked after Triple and Quad
 TRIPLE_ATTACK = 302        # percent chance per hand
 QUADRUPLE_ATTACK = 430     # percent chance per hand
 MARTIAL_ARTS = 173         # flat delay reduction for hand-to-hand
-CLEAR_MIND = 295           # resting MP recovery bonus
+CLEAR_MIND = 295           # Clear Mind rank from the trait
+MP_WHILE_HEALING = 71      # flat resting MP recovery the Clear Mind trait raises
 REFRESH = 369              # MP restored per 3-second tick
 REGEN = 370                # HP restored per 3-second tick
 REFRESH_DOWN = 405         # plague and similar
@@ -92,12 +157,42 @@ ENF_MAG_POTENCY = 290      # Enfeebling magic potency +x%
 ENF_MAG_DURATION = 1151    # Enfeebling magic duration +x%
 DARK_MAGIC_DURATION = 1072  # Dark Magic spell duration +x%
 NINJUTSU_DURATION = 1000   # Ninjutsu duration +x seconds
+# Bard songs.  The family ids add +N potency to that song line; 452 is every song,
+# 453 adds active-song slots, 454 is duration, 455 is cast time and 833 is recast seconds.
+MINNE_EFFECT = 433
+MINUET_EFFECT = 434
+PAEON_EFFECT = 435
+REQUIEM_EFFECT = 436
+THRENODY_EFFECT = 437
+MADRIGAL_EFFECT = 438
+MAMBO_EFFECT = 439
+LULLABY_EFFECT = 440
+ETUDE_EFFECT = 441
+BALLAD_EFFECT = 442
+MARCH_EFFECT = 443
+FINALE_EFFECT = 444
+CAROL_EFFECT = 445
+MAZURKA_EFFECT = 446
+ELEGY_EFFECT = 447
+PRELUDE_EFFECT = 448
+HYMNUS_EFFECT = 449
+VIRELAI_EFFECT = 450
+SCHERZO_EFFECT = 451
+ALL_SONGS_EFFECT = 452    # "All songs"+N potency
+MAXIMUM_SONGS_BONUS = 453  # additional active song slots
 SONG_DURATION_BONUS = 454  # song duration +x%
+SONG_SPELLCASTING_TIME = 455  # song cast time -x%
+SONG_RECAST_DELAY = 833   # song recast -N seconds
+ONE_HOUR_RECAST = 996      # one-hour ability recast -N minutes (the Master job-point gift)
 ENSPELL_DURATION = 938     # En-spell duration +x seconds
+ENSPELL_DMG_BONUS = 432    # "Sword enhancement spell damage"+n, flat per hit
+ENSPELL_DMG_PCT = 1195     # "Sword enhancement spell damage"+x%, the weapon-only line
 SNEAK_DURATION = 946       # Sneak duration +x seconds
 INVISIBLE_DURATION = 947   # Invisible duration +x seconds
 STONESKIN_BONUS_HP = 539   # extra Stoneskin HP
 ENHANCES_REFRESH = 529     # "Enhances Refresh": +N MP per tick
+# Dancer.  ``WALTZ_COST`` is LandSandBoat's 5-TP unit: value 5 is -50 TP.
+WALTZ_COST = 139
 
 # Food percentages, capped by their matching *_CAP.
 FOOD_HP = 176
@@ -153,6 +248,9 @@ WSD_ALL_HITS = 840
 WSD_FIRST_HIT = 841
 WS_ACCURACY = 48
 TP_BONUS = 345
+# "Adds weapon skill": the item grants the weapon-skill id in the value (355 for the
+# Prime, relic, mythic and empyrean weapons' own skills).
+ADDS_WEAPONSKILL = 355
 # "fTP +x" gear (Fotia Gorget/Belt).  LandSandBoat stores this in 1/256 fTP units:
 # 25 is +0.0977, 256 is +1.0.
 ANY_FTP_BONUS = 1144
@@ -161,8 +259,21 @@ ANY_FTP_BONUS = 1144
 FENCER_TP_BONUS = 903
 FENCER_CRIT_RATE = 904
 
-# Equipment haste, hundredths of a percent: 1500 is 15%.
+# "Elemental weapon skill damage"+x% -- the Crocea Mors / Vitiation Sword / Duelist's
+# Sword path-C augment.  It is a multiplier on the magical weapon-skill base before
+# dSTAT/Magic Damage is added, which is why a Rank 25 +100% nearly doubles Seraph
+# Blade and Sanguine Blade.  LSB has no id for it; this is a spare id.
+ELEMENTAL_WS_DAMAGE = 1240
+
+# Haste pools, hundredths of a percent: 1500 is 15%.  Retail keeps the three
+# sources separate -- equipment caps at 25%, magic at 43.75% and job abilities at
+# 25% -- and adds them before the 80% overall delay floor, so a capped gear set
+# still benefits from Haste or a March.  LSB has no magic/ability haste modifier
+# (its spell effects carry the power), so these use spare ids.
 HASTE_GEAR = 384
+HASTE_MAGIC = 1230
+HASTE_ABILITY = 1231
+TAME = 304
 
 
 def percent(value: int) -> float:

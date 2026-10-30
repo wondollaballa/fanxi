@@ -8,6 +8,7 @@ import {
   Palette,
   Settings,
   Shirt,
+  Swords,
   UserRound,
   Users,
   UsersRound,
@@ -26,6 +27,7 @@ const NAV: { page: Page; label: string; icon: LucideIcon }[] = [
   { page: "warps", label: "Warps", icon: MapPin },
   { page: "data", label: "Data", icon: Database },
   { page: "gear", label: "Gear / GearSwap", icon: Shirt },
+  { page: "battle", label: "Battle", icon: Swords },
   { page: "news", label: "News", icon: Newspaper },
   { page: "settings", label: "Settings", icon: Settings },
 ];

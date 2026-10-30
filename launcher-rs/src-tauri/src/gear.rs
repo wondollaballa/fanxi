@@ -69,6 +69,11 @@ pub struct JobInfo {
     pub name: String,
     pub abbr: String,
     pub level: i64,
+    /// The support job paired with the main job; 0/empty when the character has none.
+    pub sub_job_id: i64,
+    pub sub_name: String,
+    pub sub_abbr: String,
+    pub sub_level: i64,
     pub character: String,
 }
 
@@ -79,12 +84,14 @@ pub fn job_from_state(state: Option<&Value>) -> Option<JobInfo> {
         return None;
     }
     let level = player.get("level").and_then(value_i64).unwrap_or(0);
+    let sub_job = player.get("sub_job").and_then(value_i64).unwrap_or(0);
+    let sub_level = player.get("sub_level").and_then(value_i64).unwrap_or(0);
     let character = player
         .get("name")
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    Some(job_info(job_id, level, character))
+    Some(job_info(job_id, level, sub_job, sub_level, character))
 }
 
 pub fn job_from_character(character: Option<&Value>) -> Option<JobInfo> {
@@ -94,12 +101,14 @@ pub fn job_from_character(character: Option<&Value>) -> Option<JobInfo> {
         return None;
     }
     let level = character.get("main_level").and_then(value_i64).unwrap_or(0);
+    let sub_job = character.get("sub_job").and_then(value_i64).unwrap_or(0);
+    let sub_level = character.get("sub_level").and_then(value_i64).unwrap_or(0);
     let name = character
         .get("name")
         .and_then(Value::as_str)
         .unwrap_or_default()
         .to_string();
-    Some(job_info(job_id, level, name))
+    Some(job_info(job_id, level, sub_job, sub_level, name))
 }
 
 pub fn job_abbr(value: &Value) -> String {
@@ -127,12 +136,35 @@ pub fn job_name(value: i64) -> String {
     }
 }
 
-fn job_info(job_id: i64, level: i64, character: String) -> JobInfo {
+fn job_info(
+    job_id: i64,
+    level: i64,
+    sub_job_id: i64,
+    sub_level: i64,
+    character: String,
+) -> JobInfo {
+    let sub_job_id = if (0..=22).contains(&sub_job_id) {
+        sub_job_id
+    } else {
+        0
+    };
     JobInfo {
         job_id,
         name: job_name(job_id),
         abbr: JOB_ABBRS[(job_id - 1) as usize].to_string(),
         level,
+        sub_job_id,
+        sub_name: if sub_job_id > 0 {
+            job_name(sub_job_id)
+        } else {
+            String::new()
+        },
+        sub_abbr: if sub_job_id > 0 {
+            JOB_ABBRS[(sub_job_id - 1) as usize].to_string()
+        } else {
+            String::new()
+        },
+        sub_level: if sub_job_id > 0 { sub_level } else { 0 },
         character,
     }
 }
@@ -811,9 +843,26 @@ mod tests {
 
     #[test]
     fn jobs_and_slots() {
-        let state = serde_json::json!({"player": {"job": 13, "level": 99, "name": "Onedough"}});
+        let state = serde_json::json!({"player": {
+            "job": 13, "level": 99, "name": "Onedough", "sub_job": 1, "sub_level": 49
+        }});
         let job = job_from_state(Some(&state)).unwrap();
         assert_eq!((job.abbr.as_str(), job.level), ("NIN", 99));
+        assert_eq!((job.sub_abbr.as_str(), job.sub_level), ("WAR", 49));
+
+        let saved = serde_json::json!({
+            "main_job": 3, "main_level": 99, "sub_job": 20, "sub_level": 49, "name": "Aria"
+        });
+        let job = job_from_character(Some(&saved)).unwrap();
+        assert_eq!(job.abbr, "WHM");
+        assert_eq!((job.sub_abbr.as_str(), job.sub_level), ("SCH", 49));
+
+        // A character with no support job keeps empty support fields instead of a bogus pair.
+        let bare =
+            serde_json::json!({"main_job": 1, "main_level": 10, "sub_job": 0, "name": "Solo"});
+        let job = job_from_character(Some(&bare)).unwrap();
+        assert_eq!((job.sub_job_id, job.sub_level), (0, 0));
+        assert!(job.sub_abbr.is_empty() && job.sub_name.is_empty());
         assert_eq!(normalize_slot("left_ear"), "ear1");
     }
 

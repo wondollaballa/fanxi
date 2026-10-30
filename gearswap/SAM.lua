@@ -1,21 +1,12 @@
 --[[
     Fanxi GearSwap library — Onedough SAM
-    Updated 2026-10-23 23:31:29
+    Updated 2026-10-29 10:39:56
     The launcher writes sets back to this file; the first copy is kept as a .bak.
     Source: /Users/wondochoung/Documents/GitHub/fanxi/gearswap/SAM.lua
 
     Each set holds only slot = "Item" pairs so Fanxi lists every one;
     to add a variant, copy an existing set and give it a new path.
 ]]
-
-local capes = {
-    pdt = { name = "Smertrios's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
-    mdt = { name = "Smertrios's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
-    maxhp = { name = "Smertrios's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
-    dt = { name = "Smertrios's Mantle", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
-    tp = { name = "Smertrios's Mantle", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
-    ws_str = { name = "Smertrios's Mantle", augments = {"STR+20", "Accuracy+20 Attack+20", "STR+10", "Weapon skill damage +10%", "Damage taken-5%"} },
-}
 
 function get_sets()
     sets = {}
@@ -37,7 +28,7 @@ function get_sets()
         legs = "Wakido Haidate +4",
         feet = "Wakido Sune-Ate +4",
         neck = "Samurai's Nodowa +2",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.JA.Hasso = {
         main = "Kogarasumaru",
@@ -48,7 +39,7 @@ function get_sets()
         legs = "Wakido Haidate +4",
         feet = "Wakido Sune-Ate +4",
         neck = "Samurai's Nodowa +2",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.JA["Konzen-ittai"] = {
         main = "Kogarasumaru",
@@ -59,7 +50,7 @@ function get_sets()
         legs = "Wakido Haidate +4",
         feet = "Kasuga Sune-Ate +3",
         neck = "Samurai's Nodowa +2",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.JA.Meditate = {
         main = "Kogarasumaru",
@@ -70,7 +61,7 @@ function get_sets()
         legs = "Wakido Haidate +4",
         feet = "Wakido Sune-Ate +4",
         neck = "Samurai's Nodowa +2",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.JA["Meikyo Shisui"] = {
         main = "Kogarasumaru",
@@ -81,7 +72,7 @@ function get_sets()
         legs = "Wakido Haidate +4",
         feet = "Wakido Sune-Ate +4",
         neck = "Samurai's Nodowa +2",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.JA.Seigan = {
         main = "Kogarasumaru",
@@ -92,7 +83,7 @@ function get_sets()
         legs = "Wakido Haidate +4",
         feet = "Wakido Sune-Ate +4",
         neck = "Samurai's Nodowa +2",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.JA.Sengikori = {
         main = "Kogarasumaru",
@@ -103,7 +94,7 @@ function get_sets()
         legs = "Wakido Haidate +4",
         feet = "Wakido Sune-Ate +4",
         neck = "Samurai's Nodowa +2",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.JA["Third Eye"] = {
         main = "Kogarasumaru",
@@ -114,7 +105,7 @@ function get_sets()
         legs = "Wakido Haidate +4",
         feet = "Wakido Sune-Ate +4",
         neck = "Samurai's Nodowa +2",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.JA["Warding Circle"] = {
         main = "Kogarasumaru",
@@ -125,7 +116,7 @@ function get_sets()
         legs = "Wakido Haidate +4",
         feet = "Wakido Sune-Ate +4",
         neck = "Samurai's Nodowa +2",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
 
     -- ===== Limbus =====
@@ -176,72 +167,123 @@ function get_sets()
 
     -- ===== WS =====
     sets.WS["Tachi: Fudo"] = {
-        main = "Kogarasumaru",
+        main = "Dojikiri Yasutsuna",
         sub = "Utu Grip",
-        ammo = "Aurgelmir Orb +1",
+        ammo = "Knobkierrie",
+        head = "Mpaca's Cap",
+        body = "Clemen. Hara.",
+        hands = "Kasuga Kote +3",
+        legs = "Nyame Flanchard",
+        feet = "Kasuga Sune-Ate +3",
+        neck = "Samurai's Nodowa +2",
+        waist = "Fotia Belt",
+        ear1 = "Moonshade Earring",
+        ear2 = "Thrud Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Sroda Ring",
+        back = "Smertrios's Mantle",
+    }
+    sets.WS["Tachi: Jinpu"] = {
+        main = "Dojikiri Yasutsuna",
+        sub = "Utu Grip",
+        ammo = "Knobkierrie",
         head = "Nyame Helm",
         body = "Nyame Mail",
         hands = "Nyame Gauntlets",
         legs = "Nyame Flanchard",
         feet = "Nyame Sollerets",
-        neck = "Fotia Gorget",
-        waist = "Fotia Belt",
+        neck = "Samurai's Nodowa +2",
+        waist = "Orpheus's Sash",
         ear1 = "Moonshade Earring",
-        ear2 = "Cessance Earring",
-        ring1 = "Epaminondas's Ring",
-        ring2 = "Begrudging Ring",
-        back = capes.tp,
+        ear2 = "Schere Earring",
+        ring1 = "Niqmaddu Ring",
+        ring2 = "Sroda Ring",
+        back = "Smertrios's Mantle",
     }
     sets.WS["Tachi: Kaiten"] = {
-        main = "Kogarasumaru",
+        main = "Amanomurakumo",
         sub = "Utu Grip",
-        ammo = "Aurgelmir Orb +1",
+        ammo = "Knobkierrie",
+        head = "Clemen. Somen",
+        body = "Clemen. Hara.",
+        hands = "Kasuga Kote +3",
+        legs = "Nyame Flanchard",
+        feet = "Kasuga Sune-Ate +3",
+        neck = "Samurai's Nodowa +2",
+        waist = "Sailfi Belt +1",
+        ear1 = "Thrud Earring",
+        ear2 = "Hoxne Earring",
+        ring1 = "Sroda Ring",
+        ring2 = "Niqmaddu Ring",
+        back = "Smertrios's Mantle",
+    }
+    sets.WS["Tachi: Koki"] = {
+        main = "Dojikiri Yasutsuna",
+        sub = "Utu Grip",
+        ammo = "Knobkierrie",
         head = "Nyame Helm",
         body = "Nyame Mail",
         hands = "Nyame Gauntlets",
         legs = "Nyame Flanchard",
         feet = "Nyame Sollerets",
-        neck = "Fotia Gorget",
+        neck = "Samurai's Nodowa +2",
         waist = "Fotia Belt",
         ear1 = "Moonshade Earring",
-        ear2 = "Cessance Earring",
+        ear2 = "Thrud Earring",
+        ring1 = "Weather. Ring +1",
+        ring2 = "Niqmaddu Ring",
+        back = "Smertrios's Mantle",
+    }
+    sets.WS["Tachi: Mumei"] = {
+        main = "Kusanagi",
+        sub = "Utu Grip",
+        ammo = "Knobkierrie",
+        head = "Mpaca's Cap",
+        body = "Clemen. Hara.",
+        hands = "Kasuga Kote +3",
+        legs = "Nyame Flanchard",
+        feet = "Kasuga Sune-Ate +3",
+        neck = "Samurai's Nodowa +2",
+        waist = "Sailfi Belt +1",
+        ear1 = "Moonshade Earring",
+        ear2 = "Thrud Earring",
         ring1 = "Epaminondas's Ring",
-        ring2 = "Begrudging Ring",
-        back = capes.tp,
+        ring2 = "Sroda Ring",
+        back = "Smertrios's Mantle",
     }
     sets.WS["Tachi: Rana"] = {
         main = "Kogarasumaru",
         sub = "Utu Grip",
-        ammo = "Aurgelmir Orb +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Fotia Gorget",
+        ammo = "Crepuscular Pebble",
+        head = "Clemen. Somen",
+        body = "Clemen. Hara.",
+        hands = "Clemency Kote",
+        legs = "Clem. Haidate",
+        feet = "Clem. Sune-Ate",
+        neck = "Samurai's Nodowa +2",
         waist = "Fotia Belt",
-        ear1 = "Moonshade Earring",
-        ear2 = "Cessance Earring",
-        ring1 = "Epaminondas's Ring",
-        ring2 = "Begrudging Ring",
-        back = capes.tp,
+        ear1 = "Thrud Earring",
+        ear2 = "Hoxne Earring",
+        ring1 = "Sroda Ring",
+        ring2 = "Niqmaddu Ring",
+        back = "Smertrios's Mantle",
     }
     sets.WS["Tachi: Shoha"] = {
-        main = "Kogarasumaru",
+        main = "Dojikiri Yasutsuna",
         sub = "Utu Grip",
-        ammo = "Aurgelmir Orb +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Fotia Gorget",
-        waist = "Fotia Belt",
+        ammo = "Crepuscular Pebble",
+        head = "Clemen. Somen",
+        body = "Clemen. Hara.",
+        hands = "Clemency Kote",
+        legs = "Clem. Haidate",
+        feet = "Clem. Sune-Ate",
+        neck = "Samurai's Nodowa +2",
+        waist = "Sailfi Belt +1",
         ear1 = "Moonshade Earring",
-        ear2 = "Cessance Earring",
-        ring1 = "Epaminondas's Ring",
-        ring2 = "Begrudging Ring",
-        back = capes.tp,
+        ear2 = "Thrud Earring",
+        ring1 = "Sroda Ring",
+        ring2 = "Niqmaddu Ring",
+        back = "Smertrios's Mantle",
     }
     sets.WS["Tachi: Yukikaze"] = {
         main = "Kogarasumaru",
@@ -258,7 +300,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
 
     -- ===== engaged =====
@@ -277,7 +319,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.engaged.hybrid = {
         main = "Kogarasumaru",
@@ -294,24 +336,24 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.tp,
+        back = "Smertrios's Mantle",
     }
     sets.engaged.tp = {
-        main = "Kogarasumaru",
+        main = "Kusanagi",
         sub = "Utu Grip",
         ammo = "Aurgelmir Orb +1",
-        head = "Clemen. Somen",
+        head = "Kasuga Kabuto +3",
         body = "Kasuga Domaru +3",
-        hands = "Sakonji Kote +4",
-        legs = "Sakonji Haidate +4",
-        feet = "Clem. Sune-Ate",
+        hands = "Clemency Kote",
+        legs = "Kasuga Haidate +3",
+        feet = "Ryuo Sune-Ate +1",
         neck = "Samurai's Nodowa +2",
-        waist = "Windbuffet Belt +1",
-        ear1 = "Cessance Earring",
+        waist = "Sweordfaetels +1",
+        ear1 = "Kasuga Earring +2",
         ear2 = "Dedition Earring",
-        ring1 = "Rajas Ring",
-        ring2 = "Petrov Ring",
-        back = capes.tp,
+        ring1 = "Chirich Ring +1",
+        ring2 = "Niqmaddu Ring",
+        back = "Takaha Mantle",
     }
 
     -- ===== idle =====
@@ -330,7 +372,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.dt,
+        back = "Smertrios's Mantle",
     }
     sets.idle.maxhp = {
         main = "Kogarasumaru",
@@ -347,7 +389,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.maxhp,
+        back = "Smertrios's Mantle",
     }
     sets.idle.mdt = {
         main = "Kogarasumaru",
@@ -364,7 +406,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.mdt,
+        back = "Smertrios's Mantle",
     }
     sets.idle.movement = {
         main = "Kogarasumaru",
@@ -398,7 +440,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.pdt,
+        back = "Smertrios's Mantle",
     }
     sets.idle.town = {
         main = "Kogarasumaru",

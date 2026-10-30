@@ -1257,6 +1257,108 @@ static int icon_decode_dxt(const uint8_t* src, size_t n, int kind, uint32_t w, u
     return 1;
 }
 
+/* ---- zone maps: the map DAT the map screen draws ---------------------------------------------- */
+
+/* A map DAT's image chunk.  The payload starts with a format byte and a 16-byte resource name
+ * ("menumap m_100_00", or "ex2_datam_001_00" for the newer zones), then the image header at
+ * +0x11: u32 header size 40, u32 width, u32 height, u16 planes, u16 bpp.  At +0x39 the image
+ * itself: the value 10 marks an 8bpp paletted image (1024-byte palette at +0x40, indices at
+ * +0x440, rows bottom-up, PS2 alpha where 0x80 is opaque), while "1TXD"/"3TXD"/"5TXD" is a DXT1/
+ * DXT3/DXT5 block (its own 8-byte header follows the fourcc, then rows top-down).  Both the map
+ * screen and the Minimap plugin read these same files. */
+static int map_decode_payload(const uint8_t* p, size_t n, uint8_t** out, int* ow, int* oh)
+{
+    if (n < 0x45)
+        return 0;
+    /* The image header: a 16-byte resource name ("menumap ...", "ex3_datam ...", "dl_data ..."),
+     * u32 40, width, height, planes 1, bpp 8.  The menu icon DATs use the same header but their
+     * images are at most 128 texels; every zone map is 512x512 (1024 in an HD map pack), so the
+     * size check is what tells the two apart. */
+    for (int i = 1; i <= 16; ++i)
+        if (p[i] < 0x20 || p[i] > 0x7e)
+            return 0;
+    if (rd32(p + 0x11) != 40 || rd16(p + 0x1d) != 1)
+        return 0;
+    uint32_t w = rd32(p + 0x15), h = rd32(p + 0x19);
+    if (w < 256 || h < 256 || w > 2048 || h > 2048)
+        return 0;
+    size_t px = (size_t)w * h;
+    uint8_t* rgba = malloc(px * 4);
+    if (!rgba)
+        return 0;
+    int ok = 0;
+    if (!memcmp(p + 0x39, "1TXD", 4) || !memcmp(p + 0x39, "3TXD", 4) || !memcmp(p + 0x39, "5TXD", 4))
+    {
+        int kind = p[0x3C] - '0';
+        ok = icon_decode_dxt(p + 0x39 + 12, n - (0x39 + 12), kind, w, h, rgba);
+        /* The map's DXT alpha channel is not transparency: the game draws these textures with its
+         * own fade, and the stored blocks hold arbitrary values (a mostly-zero channel would make
+         * the map invisible).  Zones with real cut-outs use the paletted format, whose palette
+         * alpha is kept. */
+        if (ok)
+            for (size_t i = 0; i < px; ++i)
+                rgba[i * 4 + 3] = 255;
+    }
+    else if (n >= 0x440 + px && rd32(p + 0x39) == 0x0A)
+    {
+        const uint8_t* pal = p + 0x40;
+        const uint8_t* idx = p + 0x440;
+        for (uint32_t y = 0; y < h; ++y)
+        {
+            const uint8_t* row = idx + (size_t)(h - 1 - y) * w;
+            uint8_t* d = rgba + (size_t)y * w * 4;
+            for (uint32_t x = 0; x < w; ++x, d += 4)
+            {
+                /* The map palette is A, B, G, R (FFXI's A8B8G8R8 order), unlike the icon
+                 * palette's B, G, R, A - reading it as A, R, G, B swaps red and blue and turns
+                 * the parchment maps blue. */
+                const uint8_t* c = pal + (size_t)row[x] * 4;
+                unsigned a = c[0] * 2u;
+                d[0] = c[3];
+                d[1] = c[2];
+                d[2] = c[1];
+                d[3] = (uint8_t)(a > 255 ? 255 : a);
+            }
+        }
+        ok = 1;
+    }
+    if (!ok)
+    {
+        free(rgba);
+        return 0;
+    }
+    *out = rgba;
+    *ow = (int)w;
+    *oh = (int)h;
+    return 1;
+}
+
+/* A zone's map image, top-down RGBA8, or 0 when the file has no map chunk.  `file_id` is the
+ * map DAT id (the Minimap plugin's tables carry the same ids; res_file_relpath resolves them). */
+int res_map_rgba(uint32_t file_id, uint8_t** rgba, int* width, int* height)
+{
+    size_t n = 0;
+    uint8_t* data = res_file_read(file_id, &n);
+    if (!data)
+        return 0;
+    int ok = 0;
+    for (size_t o = 0; o + 16 <= n;)
+    {
+        uint32_t info = rd32(data + o + 4);
+        size_t len = (size_t)(info >> 7) * 16;
+        if (len < 16 || o + len > n)
+            break;
+        if (map_decode_payload(data + o + 16, len - 16, rgba, width, height))
+        {
+            ok = 1;
+            break;
+        }
+        o += len;
+    }
+    free(data);
+    return ok;
+}
+
 static int decode_menu_image(const uint8_t* p, size_t n, uint8_t** out, int* ow, int* oh)
 {
     /* 17-byte image header (flag, category, name), a BITMAPINFOHEADER, then the pixels. */

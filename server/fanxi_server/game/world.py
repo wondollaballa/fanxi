@@ -20,7 +20,8 @@ from ..service import FanxiService
 from dataclasses import replace
 
 from . import (
-    combat, dancer, effects, job_points, modifiers as mod, packets, pets, stats, trust_ai,
+    chain, combat, dancer, effects, geomancy, job_points, modifiers as mod, mobskills,
+    packets, pets, rolls, stats, trust_ai, trust_gear, trust_stats,
 )
 from .nav import NavCache
 from .cipher import M32, VIEW_KEY, Huffman, md5, zone_cipher
@@ -101,6 +102,19 @@ TRUST_WARP_DISTANCE = 25.0
 TRUST_REACH = 3.5
 TRUST_CHASE_SPEED = 6.2
 TRUST_LEASH = 40.0
+# The client collides the player with its own pets and alter egos, and one standing on the
+# character blocks every step: the player cannot walk out because the blocker is inside the
+# collision radius.  A Trust or pet this close to a player steps out of the bubble instead
+# of standing in it (slower than the chase step: this is a nudge, not a sprint).  The client
+# has no "walk through party" switch this server can set, so the way to get the same feel is
+# to keep the team out of the player's feet.
+TRUST_PERSONAL_SPACE = 1.2
+TRUST_SIDE_STEP_SPEED = 3.0
+# How often a live Trust re-reads its owner's gear rating, so a mid-fight set
+# change moves its bars without a query every beat.
+TRUST_GEAR_SYNC_SECONDS = 20.0
+# Below this HP percentage the Trust heals first and puts the aura up afterwards.
+TRUST_CURE_DANGER_PERCENT = 40
 # Player characters use the client's PC targid range (0x400-0x6FF). 0x400 is the local
 # player in its own view; every other character gets one of these from World.
 PLAYER_TARGID_FIRST = 0x401
@@ -139,13 +153,20 @@ MOB_VERTICAL_REACH = 4.0
 # A target more than this far above or below the monster is not in melee reach even if
 # the three-dimensional distance is small (standing under a low bridge, on a rock).
 MOB_MELEE_VERTICAL = 2.0
-# A monster stays on the level it spawned on.  The nav grid knows the walkable
+# A roaming monster stays on the level it spawned on.  The nav grid knows the walkable
 # surfaces, but a tomb or a cliff can have a ramp that leads from a spawn point down a
 # shaft: the mob can walk it without ever crossing a wall triangle, yet the player
 # cannot follow and only sees a skeleton standing on a ledge.  Four yalms is the same
 # vertical reach used for aggro, so this does not stop a mob following a player up a
 # gentle hill; it stops a walk into a different storey.
 MOB_VERTICAL_LEASH = 4.0
+# A chase is not tied to the spawn floor the way a roam leg is.  A player can pull a
+# monster up a slope or down a ramp, and the monster has to follow: the old
+# per-waypoint four-yalm check refused the whole route as soon as the player stood on a
+# hill above or below the camp, so the pull left a red name standing still.  The chase
+# is leashed to a generous sphere around the spawn instead.  Walls, cliffs and floor
+# edges are still refused by the nav grid's own step and barrier tests.
+MOB_CHASE_LEASH = 60.0
 # The base MZB collision does not cover every cliff top in the tomb zones.  Roaming is
 # capped close to the spawn so a monster cannot cross one of those visual cliffs while
 # the server still thinks the floor is flat.
@@ -168,10 +189,19 @@ CLAIM_VE = 900
 # A zone session has no TCP connection to watch: silence is the disconnect.  The client
 # sends position packets continuously, so a force-quit or a dead network is visible as a
 # long gap.  Without this the character stayed in every other client's world forever.
-SESSION_IDLE_TIMEOUT = 60.0
+SESSION_IDLE_TIMEOUT = 180.0
 # The one legitimate silence is a zone change: the client loads the next zone and comes
 # back with its zone key.  A hand-off older than this is a dead zone change.
 ZONE_CHANGE_TIMEOUT = 30.0
+# How long a dropped hand-off's cipher sequence is remembered.  The client keeps the key
+# it advanced to until its process exits, so a relog seconds (or minutes) later must still
+# be answered under that key, not the account's sign-in key.
+HANDOFF_KEY_TTL = 600.0
+# How many keys of that sequence to keep; matches zone.KEY_HISTORY.
+HANDOFF_KEYS_KEPT = 8
+# A box that was still logging in when the team was called joins the anchor when its
+# zone-in completes, but only for this long: a later zone change of its own must stand.
+TEAM_ANCHOR_TTL = 60.0
 # `incoming` calls advance() on every client packet.  Six clients at 30 fps is ~180 calls
 # a second, and each one used to run every mob/trust/party timer.  Thirty full ticks a
 # second is above the client's frame rate and leaves the per-packet path to movement.
@@ -192,6 +222,12 @@ class Zones:
                         int(row["music_solo"]), int(row["music_party"]))
             for zone, row in rows.items()
         }
+        # Zones where the optional automatic-door mode may open a door (city and
+        # outdoors).  A zone without the column or with 0 keeps retail's manual doors.
+        self.auto_open_doors = {
+            int(zone): bool(row.get("auto_open_doors"))
+            for zone, row in rows.items()
+        }
 
     def position(self, zone: int):
         row = self.rows.get(int(zone))
@@ -210,6 +246,10 @@ class Zones:
     def music_for(self, zone: int) -> tuple:
         return self.music.get(int(zone), (0, 0, 0, 0))
 
+    def allows_auto_doors(self, zone: int) -> bool:
+        """Whether the optional automatic-door mode may run in this zone."""
+        return self.auto_open_doors.get(int(zone), False)
+
 
 class World:
     def __init__(self, config: Config, service: FanxiService, huffman: Huffman | None,
@@ -219,6 +259,12 @@ class World:
         self.huff = huffman
         # Monster combat stats depend only on level, so one sheet serves every spawn.
         self._monster_sheets: dict[int, stats.Sheet] = {}
+        # character id -> (when, shared gear mods): one owner's set is read once
+        # per sync beat even when several Trusts of theirs are out.
+        self._trust_share_cache: dict[int, tuple[float, dict[int, int]]] = {}
+        # Family TP moves, keyed by LandSandBoat's skill_list_id.  Loaded on first use:
+        # most sessions never fight a monster whose list is large.
+        self._mob_skill_lists: dict[int, tuple[mobskills.MobSkill, ...]] = {}
         self.bind = bind or config.bind
         self.public_name = config.public_host
         try:
@@ -236,6 +282,10 @@ class World:
         # for the next 0x00A.  Keyed by the database id, which every client build knows.
         self.by_char: dict[int, object] = {}
         self.keys: dict[int, bytes] = {}          # account id -> the 20-byte zone key the client sent
+        # Character id -> the cipher sequence a dropped hand-off was still using.  A client
+        # keeps the key it advanced to, so the next 0x00A from the same game session has to
+        # resume there (see parked_keys() and ZoneSession.zone_in_copies()).
+        self.handoff_keys: dict[int, dict] = {}
         # character id -> the targid the other clients see it as (0x400 is "self" in each client)
         self.player_targids: dict[int, int] = {}
         self.content: dict[int, list[ZoneEntity]] = {}
@@ -256,6 +306,16 @@ class World:
         self.party_by_char: dict[int, Party] = {}    # char id -> Party
         self.alliances: dict[int, Alliance] = {}
         self.pending_invites: dict[int, PendingInvite] = {}
+        # Family warps are handed out on the next tick, one 0x00B per client, so the team
+        # loads the destination together.  The hand-off fixes in zone.py keep a batch of
+        # simultaneous reconnects from losing a box; a positive spacing still forces the
+        # old one-at-a-time pace for a caller that asks for it.
+        self.pending_warps: list[dict] = []
+        self.next_warp_at = 0.0
+        # The last //warp all me, kept for a minute: a box whose client was still logging
+        # in when the command was given joins the anchor as soon as its zone-in finishes,
+        # instead of landing at its saved spot and waiting for a second command.
+        self.team_anchor: dict | None = None
         self.next_alliance_id = 1
         self.next_party_sync = 0.0
         # The service calls this after a design save.  It is set here (not in
@@ -300,11 +360,92 @@ class World:
         session.zone = int(character["zone"])
         session.pos = list(character["pos"]) if character.get("pos") else list(self.zones.position(session.zone))
         session.set_key(key)
+        session.session_hash = bytes(session_hash)
         with self.lock:
             # Key the hand-off by the database id: that is the id every lookup can name,
             # while the wire id differs between client builds (content id vs database id).
             self.by_char[int(character["id"])] = session
         return session
+
+    def park_keys(self, session) -> None:
+        """Remember the cipher sequence a session was using when it went away.
+
+        A client keeps the key it advanced to across a relog or a re-connect, so the next
+        0x00A from the same game session has to be answered under that sequence; resetting
+        to the sign-in key strands it.  This applies to a live session that is replaced by
+        a login, not only to a hand-off that never finished: the client was in the world
+        with an advanced key when its session was dropped, and the replacement login is
+        what used to loop on "Downloading".  A genuinely new sign-in gets a new game session
+        hash and does not resume this entry.
+        """
+        history = [bytes(key) for key in (getattr(session, "key_history", None) or [])]
+        if not history:
+            return
+        char_id = int(getattr(session, "char", {}).get("id", 0) or 0)
+        if not char_id:
+            return
+        now = time.time()
+        previous = self.handoff_keys.get(char_id)
+        if previous and now - float(previous.get("saved", 0.0)) <= HANDOFF_KEY_TTL:
+            # A replacement session can know fewer keys than the hand-off it replaced (a
+            # fresh login starts from one key).  Overwriting the entry with the shorter
+            # sequence would forget the advanced key the client is still holding, which is
+            # what kept a real box retrying the same zone-in forever after one dropped
+            # hand-off.  Keep the union, newest last.
+            merged = [bytes(key) for key in previous.get("history") or []]
+            for key in history:
+                if key not in merged:
+                    merged.append(key)
+            history = merged
+        self.handoff_keys[char_id] = {
+            "saved": now,
+            "session": bytes(getattr(session, "session_hash", b"") or b""),
+            "history": history[-HANDOFF_KEYS_KEPT:],
+        }
+
+    def parked_history(self, character: dict) -> list[bytes]:
+        """Every recently parked key for this character, even across game sessions.
+
+        A dropped hand-off leaves the client holding an advanced key, and the game session
+        that parked it may be gone by the time the client reconnects (a relaunch, or a
+        hand-off whose session row was replaced).  These keys do not become the primary --
+        a client that signed in again holds the sign-in key -- but the zone-in is sealed
+        under each of them too, so whichever key the client actually holds opens a copy.
+        """
+        char_id = int(character.get("id") or 0)
+        if not char_id:
+            return []
+        parked = self.handoff_keys.get(char_id)
+        if not parked:
+            return []
+        if time.time() - float(parked.get("saved", 0.0)) > HANDOFF_KEY_TTL:
+            self.handoff_keys.pop(char_id, None)
+            return []
+        return [bytes(key) for key in parked.get("history") or []]
+
+    def parked_keys(self, character: dict, session_hash: bytes) -> list[bytes] | None:
+        """The cipher sequence to resume for this client, or None for a fresh one.
+
+        Only the same game session resumes: a restarted client starts its cipher over from
+        the account's sign-in key, and handing it an advanced one would break the launch.
+        """
+        char_id = int(character.get("id") or 0)
+        if not char_id:
+            return None
+        now = time.time()
+        for key, parked in list(self.handoff_keys.items()):
+            if now - float(parked.get("saved", 0.0)) > HANDOFF_KEY_TTL:
+                self.handoff_keys.pop(key, None)
+        parked = self.handoff_keys.get(char_id)
+        if not parked:
+            return None
+        if parked.get("session") != bytes(session_hash or b""):
+            return None
+        history = list(parked.get("history") or [])
+        return history or None
+
+    def clear_parked_keys(self, character_id: int) -> None:
+        self.handoff_keys.pop(int(character_id), None)
 
     def save_position(self, character: dict, zone: int, pos) -> None:
         try:
@@ -380,7 +521,19 @@ class World:
         level = max(1, int(session.char.get("main_level", 1)))
         entity = trust_from_row(row, targid, zone, int(session.char["char_id"]), level)
         entity.spells = self.service.trust_spells(int(row["spell_id"]), level)
-        entity.kit = trust_ai.build_kit(entity.spells, level, entity.job)
+        entity.kit = trust_ai.build_kit(entity.spells, level, entity.job, entity.name)
+        entity.gear = trust_gear.loadout(self.service, int(row["spell_id"]))
+        entity.gear_mods = dict(entity.gear.mods)
+        entity.geomancy_plus = int(entity.gear.geomancy_plus)
+        # Qultada and Luzaf are support: they roll for the party and never swing, so the
+        # AI takes the roll branch before it ever looks for a target to attack.
+        entity.roll_support = trust_ai.plans_rolls(entity.name)
+        entity.roll_status = 0
+        entity.roll_key = ""
+        entity.roll_mob = -1
+        entity.next_roll_at = now + 1.0
+        self._apply_trust_gear_share(entity, session, full=True)
+        entity.next_gear_sync = now + TRUST_GEAR_SYNC_SECONDS
         entity.next_cast_at = now + 0.8
         entity.next_mp_tick = now + 3.0
         angle = math.pi * (0.5 + index * 0.35)
@@ -411,6 +564,7 @@ class World:
             session.trust_entities = []
         session.trust_entities.append(entity)
         session.say("%s joins you." % entity.name)
+        self.refresh_trust_roster(session)
         self._apply_trust_aura(entity, session)
         log.info("%s called trust %s (%#x) in zone %d", session.addr, entity.name,
                  int(entity.id), zone)
@@ -455,6 +609,11 @@ class World:
         )
         entity.pet_type = spec.key
         entity.pet_state = "follow"
+        if spec.key == "luopan":
+            entity.geo_drain = 24
+            entity.geo_potency = 100
+            entity.geo_mp_cost = 0
+            entity.next_geo_tick = now + 3.0
         entity.pet_accuracy_bonus = max(0, int(stats["accuracy"]) - (level * 2 + 20))
         entity.pet_hp_bonus = max(0, int(stats["hp"]) - (level * 30 + 200))
         entity.breath_bonus = int(stats.get("breath_bonus") or 0)
@@ -474,6 +633,9 @@ class World:
             if observer is session:
                 observer.queue.append(sub(0x067, packets.entity_set_name(entity, TARGID)))
         session.pet_entity = entity
+        # A pet called after the roll still gets the owner's active Beast/Drachen/Puppet
+        # or Companion's Roll.
+        rolls._refresh_pet(session)
         session.say("%s joins you." % entity.name)
         log.info("%s called pet %s (%#x) in zone %d", session.addr, entity.name,
                  int(entity.id), zone)
@@ -487,6 +649,7 @@ class World:
         owner = self.session_by_char(entity.owner_char_id)
         if owner is not None and getattr(owner, "pet_entity", None) is entity:
             owner.pet_entity = None
+            owner.pet_jug_item = 0
         zone = int(entity.zone)
         entities = self.entities_for_zone(zone)
         try:
@@ -594,8 +757,45 @@ class World:
             if int(entity.targid) in getattr(observer, "sent_targids", set()):
                 observer.sent_targids.discard(int(entity.targid))
                 observer.queue.append(sub(0x00E, body))
+        owner = self.session_by_char(entity.owner_char_id)
+        if owner is not None:
+            self.refresh_trust_roster(owner)
         log.info("trust %s (%#x) left zone %d%s", entity.name, int(entity.id), zone,
                  (" (%s)" % reason) if reason else "")
+
+    def _apply_trust_gear_share(self, entity: ZoneEntity, owner, *,
+                                full: bool = False) -> None:
+        """Give a Trust its share of the owner's gear modifiers.
+
+        The share is re-read on a slow beat; ``full`` is the first pass (or a level
+        change), which also fills the bars.  A later pass only moves the maximum, so a
+        Trust that has already taken damage is not healed by its owner changing gear.
+        """
+        key = int(owner.char["id"])
+        now = time.time()
+        cached = self._trust_share_cache.get(key)
+        if cached is not None and now - cached[0] < TRUST_GEAR_SYNC_SECONDS:
+            shared = cached[1]
+        else:
+            try:
+                shared = trust_gear.share(self.service, key)
+            except Exception as exc:
+                log.debug("trust gear share failed: %s", exc)
+                shared = {}
+            self._trust_share_cache[key] = (now, shared)
+        entity.shared_mods = shared
+        hp_max, mp_max = trust_stats.vitals(
+            entity.race, entity.job, entity.sub_job, int(entity.level))
+        hp_max = max(1, int(hp_max) + int(shared.get(mod.HP, 0)))
+        mp_max = max(0, int(mp_max) + int(shared.get(mod.MP, 0)))
+        if full:
+            entity.hp_max, entity.mp_max = hp_max, mp_max
+            entity.hp, entity.mp = hp_max, mp_max
+            return
+        entity.hp_max = hp_max
+        entity.mp_max = mp_max
+        entity.hp = min(int(entity.hp), hp_max)
+        entity.mp = min(int(entity.mp), mp_max)
 
     def trust_attack(self, entity: ZoneEntity, mob: ZoneEntity, owner, now: float) -> None:
         """One alter-ego swing at the monster its owner is fighting."""
@@ -604,13 +804,24 @@ class World:
 
         sheet = stats.build_monster(int(entity.level))
         multiplier = max(0, min(300, int(entity.damage_mult))) / 100.0
+        # Beast Roll and Puppet Roll put their percentages on the pet, not on its owner.
+        multiplier *= (100 + max(0, int(getattr(entity, "roll_attack_pct", 0)))
+                       + max(0, int(getattr(entity, "roll_matt", 0)))) / 100.0
+        if (getattr(entity, "pet_type", "") == "automaton"
+                and float(getattr(entity, "overdrive_until", 0.0)) > time.time()):
+            multiplier *= 1.5
         weapon_dmg = max(1, int(int(entity.level) * 0.80 * multiplier))
+        # What the owner's gear lends the Trust: the same share of Attack and Accuracy a
+        # player would get from those pieces, so the swing tracks the Master's set.
+        shared = getattr(entity, "shared_mods", None) or {}
         attacker = replace(
             sheet.fighter, weapon_dmg=weapon_dmg,
-            attack=max(1, int(sheet.fighter.attack * 0.95)),
-            accuracy=int(sheet.fighter.accuracy + 10
+            attack=max(1, int(sheet.fighter.attack * 0.95) + int(shared.get(mod.ATT, 0))),
+            accuracy=int(sheet.fighter.accuracy + 10 + int(shared.get(mod.ACC, 0))
                          + (int(getattr(entity, "pet_accuracy_bonus", 0))
-                            if entity.is_pet() else 0)))
+                            if entity.is_pet() else 0)
+                         + int(getattr(entity, "roll_accuracy", 0))
+                         + int(getattr(entity, "roll_macc", 0))))
         hit = combat.melee(attacker, self.debuffed_monster(mob),
                            zone=int(mob.zone), rng=self.rng)
         defeated = (not hit.missed) and int(mob.hp) - int(hit.damage) <= 0
@@ -640,6 +851,23 @@ class World:
                 self.kill_mob(owner, mob, now)
         entity.next_attack_at = now + max(1.5, int(entity.attack_delay_ms) / 1000.0)
 
+    def _trust_target(self, owner):
+        """The monster the owner is fighting, while it is still inside the Trust's leash."""
+        target = None
+        if owner.engaged_id:
+            candidate = self.entity_by_id(int(owner.zone), int(owner.engaged_id))
+            if candidate is not None and candidate.is_mob() and candidate.alive:
+                target = candidate
+        if target is None:
+            for candidate in self.entities_for_zone(int(owner.zone)):
+                if (candidate.is_mob() and candidate.alive
+                        and candidate.engaged_char_id == int(owner.char["char_id"])):
+                    target = candidate
+                    break
+        if target is not None and target.distance_to(*owner.pos[:3]) > TRUST_LEASH:
+            return None
+        return target
+
     def _tick_trust(self, entity: ZoneEntity, sessions: list, now: float) -> None:
         """Follow the owner, keep its aura up, then cast or fight what the owner fights."""
         if not entity.alive:
@@ -652,13 +880,14 @@ class World:
         level = max(1, int(owner.char.get("main_level", 1)))
         if int(entity.level) != level:
             entity.level = level
-            entity.hp_max = max(1, level * 30 + 200)
-            entity.hp = entity.hp_max
-            entity.mp_max = max(0, level * 4)
-            entity.mp = entity.mp_max
             entity.spells = self.service.trust_spells(int(entity.trust_spell), level)
-            entity.kit = trust_ai.build_kit(entity.spells, level, entity.job)
+            entity.kit = trust_ai.build_kit(entity.spells, level, entity.job, entity.name)
+            self._apply_trust_gear_share(entity, owner, full=True)
             entity.next_cast_at = now + 0.5
+        elif now >= float(getattr(entity, "next_gear_sync", 0.0) or 0.0):
+            # The owner's set can change mid-fight; the bars follow it on a slow beat.
+            self._apply_trust_gear_share(entity, owner)
+            entity.next_gear_sync = now + TRUST_GEAR_SYNC_SECONDS
 
         self._apply_trust_aura(entity, owner)
         self._trust_recover_mp(entity, now)
@@ -673,20 +902,13 @@ class World:
             self._move_trust(entity, owner, sessions, now)
             return
 
-        target = None
-        if owner.engaged_id:
-            candidate = self.entity_by_id(entity.zone, int(owner.engaged_id))
-            if candidate is not None and candidate.is_mob() and candidate.alive:
-                target = candidate
-        if target is None:
-            for candidate in self.entities_for_zone(entity.zone):
-                if (candidate.is_mob() and candidate.alive
-                        and candidate.engaged_char_id == int(owner.char["char_id"])):
-                    target = candidate
-                    break
-        if target is not None and target.distance_to(*owner.pos[:3]) > TRUST_LEASH:
-            target = None
-
+        if getattr(entity, "roll_support", False):
+            # A Corsair support Trust rolls and never swings: no auto-attack and no
+            # weapon skill, so it stays beside the owner instead of joining the fight.
+            self._try_trust_roll(entity, owner, self._trust_target(owner), now)
+            self._move_trust(entity, owner, sessions, now)
+            return
+        target = self._trust_target(owner)
         if target is None:
             self._move_trust(entity, owner, sessions, now)
             self._try_trust_cast(entity, owner, sessions, None, now)
@@ -735,7 +957,7 @@ class World:
 
     def _try_trust_cast(self, entity: ZoneEntity, owner, sessions: list, target,
                         now: float) -> bool:
-        """Start the best spell this beat: cure, missing buff, debuff, then nuke.
+        """Start the best spell this beat: aura, cure, missing buff, debuff, then nuke.
 
         Returns True when a cast started, so the caller does not also swing.  The spell
         is picked from the Trust's own mob_spell_list kit; a job with no kit (a pure
@@ -744,15 +966,40 @@ class World:
         if entity.casting or now < float(entity.next_cast_at or 0.0):
             return False
         kit = entity.kit or {}
+        selected = self._trust_action_set(owner, entity.trust_spell)
+        if selected and int(entity.trust_spell) in trust_ai.SPELL_ACTION_TRUSTS:
+            # An explicit spell pool replaces the whole cast rotation: the Trust still
+            # decides when each chosen spell is useful, but cannot cast anything else.
+            kit = trust_ai.restrict_kit(kit, selected)
         if not kit.get("caster"):
             return False
         spell = None
         kind = ""
-        missing_hp = max(0, int(owner.char.get("hp", 0))
-                         - int(owner.char.get("hp_current", 0)))
-        if missing_hp >= max(1, int(owner.char.get("hp", 1)) * 15 // 100):
+        hp_max = max(1, int(owner.char.get("hp", 1)))
+        hp_now = max(0, int(owner.char.get("hp_current", 0)))
+        missing_hp = max(0, hp_max - hp_now)
+        # A Geomancer's bubble is one cast every three minutes, so it goes up before the
+        # cure it would otherwise spend every beat on -- unless the owner is in real
+        # danger, in which case the heal wins.  Without this the 85% heal rule kept a
+        # hurt owner in cure-forever and the aura never got a turn in a real fight.
+        in_danger = hp_now * 100 < hp_max * TRUST_CURE_DANGER_PERCENT
+        if not in_danger:
+            spell = self._trust_aura_choice(entity, owner, target, now, kit)
+            if spell is not None:
+                aura_spec = trust_ai.effect_of(spell)
+                if (aura_spec is not None and aura_spec.kind == "debuff"
+                        and target is None):
+                    spell = None                 # a hex needs a monster to land on
+            if spell is not None and int(spell.get("mp") or 0) > int(entity.mp):
+                spell = None                     # cannot pay for it: fall through to a cure
+            spec = trust_ai.effect_of(spell) if spell is not None else None
+            kind = (spec.kind if spec is not None else "buff") if spell else ""
+        if spell is None and missing_hp >= max(1, hp_max * 15 // 100):
             spell = trust_ai.cure_for(kit, int(entity.level), int(entity.mp), missing_hp)
             kind = "cure" if spell is not None else ""
+        if spell is None:
+            spell = self._trust_song_choice(entity, owner, target, now)
+            kind = "buff" if spell is not None else ""
         if spell is None:
             spell = trust_ai.buff_for(kit, owner.effect_state, now)
             kind = "buff" if spell is not None else ""
@@ -774,18 +1021,374 @@ class World:
         entity.mp = max(0, int(entity.mp) - cost)
         entity.casting = {
             "spell": spell, "kind": kind, "target_id": target_id,
-            "finish": finish, "effect": trust_ai.effect_of(spell),
+            "finish": finish,
+            "effect": trust_ai.effect_of(
+                spell, int(getattr(entity, "geomancy_plus", 0) or 0)),
         }
         entity.trust_has_acted = True
         entity.next_cast_at = finish + 1.0
         entity.rot = heading_to_rot(target.x - entity.x, target.z - entity.z) \
             if target is not None else entity.rot
         self.set_animation(entity, 1, sessions)
+        # A Trust is not the local player, so its Magic Start carries the spell's own
+        # animation and the "starts casting" form without a target (message 3).
         self._queue_trust_action(
-            entity, target_id, value=int(spell["id"]), animation=0, message=0,
+            entity, target_id, value=int(spell["id"]),
+            animation=trust_ai.spell_animation(spell),
+            message=packets.MESSAGE_MAGIC_STARTS_CASTING_SELF,
             category=packets.ACTION_CATEGORY_MAGIC_START,
             action_id=trust_ai.cast_arg(spell))
         return True
+
+    def _trust_action_set(self, owner, trust_id) -> list[int]:
+        """The owner's explicit actions for one support Trust, or [] for its default logic."""
+        trust_id = int(trust_id or 0)
+        if trust_id == 911:
+            return list(getattr(owner, "joachim_songs", ()) or ())
+        return list((getattr(owner, "trust_actions", {}) or {}).get(trust_id, ()) or ())
+
+    # --- trust songs ---------------------------------------------------------------------------
+    def _trust_song_choice(self, entity: ZoneEntity, owner, target, now: float):
+        """The next song this owner's role needs, or None when the set is up.
+
+        A per-character set from ``//trust joachim set songs`` replaces the role plan
+        entirely.  Songs are stored under ``effects.song_key`` (one state per song, not
+        per icon), so Minuet IV and V can both be up; an older icon-keyed state still
+        counts as the same song here.
+        """
+        kit = entity.kit or {}
+        if not kit.get("song"):
+            return None
+        selected = list(getattr(owner, "joachim_songs", ()) or ())
+        planned = trust_ai.choose_songs(
+            kit, self._trust_song_need(owner, target), selected)
+        for spell in planned:
+            spec = trust_ai.effect_of(spell)
+            if spec is None:
+                continue
+            state = owner.effect_state.get(effects.song_key(int(spell["id"])))
+            if state is None:
+                state = owner.effect_state.get(int(spec.effect))
+            if (state is not None
+                    and float(state.get("until") or 0.0) - now
+                    > trust_ai.SONG_REFRESH_SECONDS):
+                continue                       # this song is already running
+            return spell
+        return None
+
+    def _trust_song_need(self, owner, target):
+        """Measure the owner's role for ``trust_ai.choose_songs``."""
+        char = owner.char
+        job = int(char.get("main_job", 0) or 0)
+        sheet = owner.stat_sheet()
+        fighter = sheet.fighter
+        ratio = 0.0
+        hit_rate = 1.0
+        if target is not None and target.is_mob():
+            mob = self.debuffed_monster(target)
+            ratio = float(fighter.attack) / max(1, int(mob.defense))
+            hit_rate = self._fighter_hit_rate(owner, fighter, mob)
+        weapon = int(getattr(fighter, "weapon_skill", 0) or 0)
+        cap = combat.PDIF_WEAPON_CAP.get(weapon, combat.DEFAULT_PDIF_CAP)
+        haste = float(getattr(sheet, "haste_magic", 0.0) or 0.0)
+        # Measure the owner without the March line: the plan picks Victory or Honor from
+        # the haste the *owner* brings, or the two would trade the slot forever (Victory
+        # pushes the total over the cap, which would then ask for Honor).  Songs live
+        # under ``effects.song_key``; the icon key is the legacy/plain-effect path.
+        march_haste = 0.0
+        for key, state in owner.effect_state.items():
+            if int(key) != effects.MARCH and not state.get("song"):
+                continue
+            if (int(key) != effects.MARCH
+                    and int(state.get("song_effect") or 0) != effects.MARCH):
+                continue
+            march_haste = max(
+                march_haste,
+                int((state.get("mods") or {}).get(mod.HASTE_MAGIC, 0)) / 10000.0)
+        haste -= march_haste
+        return trust_ai.SongNeed(
+            caster=job in trust_ai.MAGE_JOBS,
+            ranged=job in trust_ai.RANGED_SONG_JOBS,
+            haste_percent=max(0.0, haste),
+            attack_capped=bool(target is not None and ratio >= cap - 0.375),
+            hit_rate=hit_rate)
+
+    # --- trust corsair rolls --------------------------------------------------------------------
+    def _try_trust_roll(self, entity: ZoneEntity, owner, target, now: float) -> bool:
+        """Roll for the party, or keep the roll already up.  Returns True when it rolled.
+
+        A roll lands on every party member in the zone, so the plan is a party decision
+        (``trust_ai.choose_roll``): the melee's Attack, the casters' MP, the ranged line.
+        The Trust re-rolls it when the party's copy is about to fall off, so a roll is
+        always live without re-singing it every beat.
+        """
+        if now < float(getattr(entity, "next_roll_at", 0.0) or 0.0):
+            return False
+        # Keep the roll for the whole fight.  Re-deciding every refresh made Chaos and
+        # Samurai trade the slot whenever the Attack/Defense ratio crossed the cap --
+        # and Chaos itself moves that ratio, so it never settled.
+        target_id = int(target.id) if target is not None else 0
+        selected = self._trust_action_set(owner, entity.trust_spell)
+        signature = tuple(int(ability) for ability in selected)
+        if getattr(entity, "roll_set_signature", None) != signature:
+            # The owner changed the priority list (or this is the first beat): drop the
+            # roll held for the old list so the new order can take effect now.
+            entity.roll_set_signature = signature
+            entity.roll_key = ""
+            entity.roll_mob = -1
+        allowed = {trust_ai.ROLL_KEYS.get(int(ability), "")
+                   for ability in selected}
+        if entity.roll_key and allowed and entity.roll_key not in allowed:
+            entity.roll_key = ""             # the owner changed the priority list
+        if (getattr(entity, "roll_key", "")
+                and int(getattr(entity, "roll_mob", -1)) == target_id):
+            ability = trust_ai.ROLL_IDS.get(entity.roll_key)
+        else:
+            ability = trust_ai.choose_roll(
+                self._trust_roll_need(owner, target, entity), selected)
+            entity.roll_key = trust_ai.ROLL_KEYS.get(int(ability or 0), "")
+            entity.roll_mob = target_id
+        if ability is None:
+            return False
+        spec = rolls.spec(ability)
+        if spec is None:
+            return False
+        entity.next_roll_at = now + trust_ai.ROLL_REFRESH_SECONDS
+        members = [owner] + self._trust_party_sessions(owner)
+        if all(self._roll_remaining(member, spec, now) > trust_ai.ROLL_REFRESH_SECONDS
+               for member in members):
+            return False                       # the party already has this roll
+        value = rolls.value(self.rng)
+        mods = spec.mods(value)
+        # An alter ego is a maxed-out Corsair: the roll runs the COR job-point maximum
+        # (Phantom Roll Duration, 2 seconds per rank over the 60-second base) instead of
+        # the bare 60 seconds a fresh level-99 would get.
+        duration = rolls.duration(int(entity.job))
+        for member in members:
+            member.remove_effect(int(spec.status), quiet=True)
+            member.add_effect(int(spec.status), duration=duration,
+                              power=value, mods=mods)
+            state = member.effect(int(spec.status))
+            if state is not None:
+                state["rolled_at"] = float(now)
+                state["roll_owner"] = int(entity.id)
+            member.queue += [member.char_status(), member.char_stats(),
+                             member.party_member()]
+        entity.roll_status = int(spec.status)
+        self._queue_trust_action(
+            entity, int(owner.char["char_id"]), value=value, animation=int(ability),
+            message=packets.MESSAGE_USES_JOB_ABILITY,
+            category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=int(ability))
+        log.info("%s rolls %s: %d", entity.name, spec.name, value)
+        return True
+
+    def _trust_roll_need(self, owner, target, entity=None):
+        """What the party is short of, for ``trust_ai.choose_roll``."""
+        melee = mages = ranged = 0
+        lowest_mp = 100.0
+        members = [owner] + self._trust_party_sessions(owner)
+        for member in members:
+            job = int(member.char.get("main_job", 0) or 0)
+            max_mp = max(0, int(member.char.get("mp", 0)))
+            if max_mp >= 200:
+                lowest_mp = min(lowest_mp, 100.0 * max(
+                    0, int(member.char.get("mp_current", 0))) / max_mp)
+            if job in trust_ai.MAGE_JOBS:
+                mages += 1
+            elif job in trust_ai.RANGED_JOBS:
+                ranged += 1
+            else:
+                melee += 1
+        attack_capped = False
+        if target is not None and target.is_mob():
+            fighter = owner.stat_sheet().fighter
+            mob = self.debuffed_monster(target)
+            ratio = float(fighter.attack) / max(1, int(mob.defense))
+            cap = combat.PDIF_WEAPON_CAP.get(
+                int(getattr(fighter, "weapon_skill", 0) or 0), combat.DEFAULT_PDIF_CAP)
+            attack_capped = ratio >= cap - 0.375
+        # What the other Corsair already keeps up: this Trust takes a different roll.
+        active = set()
+        for member in members:
+            for spec in rolls.active(member):
+                active.add(int(spec.status))
+        active.discard(int(getattr(entity, "roll_status", 0) or 0))
+        return trust_ai.RollNeed(melee=melee, mages=mages, ranged=ranged,
+                                 mp_percent=lowest_mp, attack_capped=attack_capped,
+                                 active=frozenset(active))
+
+    @staticmethod
+    def _roll_remaining(member, spec, now: float) -> float:
+        """Seconds left on this member's copy of the roll."""
+        state = member.effect_state.get(int(spec.status)) or {}
+        return float(state.get("until") or 0.0) - now
+
+    # --- trust geomancy ------------------------------------------------------------------------
+    def _trust_aura_choice(self, entity: ZoneEntity, owner, target, now: float,
+                           kit: dict | None = None):
+        """The one Indi-/Geo- aura to put up now, or None to keep the current one.
+
+        A Geomancer keeps a single aura -- the next cast replaces the last -- so the
+        geomancy family is not part of the buff rotation.  The zone tick measures the
+        owner and the monster (``trust_ai.AuraNeed``) and lets ``choose_aura`` choose
+        between refresh, precision, fury, acumen and the Frailty hex.  ``kit`` is the
+        owner's restricted spell pool when one is configured.
+        """
+        kit = kit or entity.kit or {}
+        if not kit.get("aura"):
+            return None
+        if int(owner.char.get("main_job", 0) or 0) == 21:
+            return None                          # a Geomancer keeps their own aura
+        selected = self._trust_action_set(owner, entity.trust_spell)
+        custom_pool = bool(selected) and int(entity.trust_spell) in trust_ai.SPELL_ACTION_TRUSTS
+        chosen = None
+        if custom_pool:
+            # An explicit aura list is the owner's order, not the role heuristic.  A hex
+            # still needs a monster; skip it between fights and try the next selected aura.
+            for spell in kit.get("aura", []):
+                spec = trust_ai.effect_of(spell)
+                if spec is not None and spec.kind == "debuff" and target is None:
+                    continue
+                chosen = spell
+                break
+        else:
+            chosen = trust_ai.choose_aura(kit, self._trust_aura_need(owner, target))
+        if chosen is None:
+            return None
+        spec = trust_ai.effect_of(chosen)
+        if spec is None:
+            return None
+        up = self._trust_aura_up(kit, owner, target)
+        if up == int(spec.effect):
+            state = owner.effect_state.get(up)
+            if state is None and target is not None:
+                state = target.effect_state.get(up)
+            if (state is not None
+                    and float(state.get("until") or 0.0) - now
+                    > trust_ai.AURA_REFRESH_SECONDS):
+                return None                      # already the right aura; keep it up
+        elif up and now < float(getattr(entity, "next_aura_swap", 0.0) or 0.0):
+            return None                          # do not flap between two needs
+        entity.next_aura_swap = now + trust_ai.AURA_SWAP_SECONDS
+        log.info("%s puts up %s", entity.name, chosen.get("name") or chosen.get("id"))
+        return chosen
+
+    def _trust_aura_up(self, kit: dict, owner, target) -> int:
+        """The geomancy status this Trust already has up, or 0."""
+        for spell in kit.get("aura", []):
+            spec = trust_ai.effect_of(spell)
+            if spec is None:
+                continue
+            status = int(spec.effect)
+            if owner.effect_state.get(status) is not None:
+                return status
+            if target is not None and target.effect_state.get(status) is not None:
+                return status
+        return 0
+
+    def _trust_aura_need(self, owner, target):
+        """Measure the owner and the monster for ``trust_ai.choose_aura``."""
+        char = owner.char
+        max_mp = max(0, int(char.get("mp", 0)))
+        mp_percent = 100.0
+        if max_mp:
+            mp_percent = 100.0 * max(0, int(char.get("mp_current", 0))) / max_mp
+        party_mp, party_melee = self._trust_party_need(owner)
+        hit_rate, attack_ratio = 1.0, 2.0
+        if target is not None and target.is_mob():
+            fighter = owner.stat_sheet().fighter
+            mob = self.debuffed_monster(target)
+            hit_rate = self._fighter_hit_rate(owner, fighter, mob)
+            attack_ratio = float(fighter.attack) / max(1, int(mob.defense))
+        return trust_ai.AuraNeed(
+            mp_percent=mp_percent, party_mp_percent=party_mp,
+            caster=int(char.get("main_job", 0) or 0) in trust_ai.MAGE_JOBS,
+            target=target is not None, hit_rate=hit_rate,
+            attack_ratio=attack_ratio, party_melee=party_melee,
+            tp_ready=int(char.get("tp", 0) or 0) >= 1000)
+
+    def _fighter_hit_rate(self, owner, fighter, mob) -> float:
+        """How often this fighter's swings land on the monster, 0..1.
+
+        One place for the measurement both the Geomancer (drop the bubble on Precision
+        when it is short) and the Bard (sing Madrigal for it) read, so the two Trusts
+        never disagree about whether the owner can hit.
+        """
+        return combat.hit_rate(
+            accuracy=int(fighter.accuracy), evasion=int(mob.evasion),
+            attacker_level=int(fighter.level), target_level=int(mob.level),
+            is_pc=True, two_handed=bool(getattr(fighter, "two_handed", False)),
+            corrected=combat.level_corrected(int(owner.zone)))
+
+    def _trust_party_need(self, owner) -> tuple[float, int]:
+        """The lowest MP percentage on the team and how many members fight physically."""
+        lowest = 100.0
+        melee = 0
+        for other in self._trust_party_sessions(owner):
+            max_mp = max(0, int(other.char.get("mp", 0)))
+            if max_mp >= 200:
+                lowest = min(lowest, 100.0
+                             * max(0, int(other.char.get("mp_current", 0))) / max_mp)
+            if int(other.char.get("main_job", 0) or 0) not in trust_ai.MAGE_JOBS:
+                melee += 1
+        if int(owner.char.get("main_job", 0) or 0) not in trust_ai.MAGE_JOBS:
+            melee += 1
+        return lowest, melee
+
+    def _trust_party_sessions(self, owner) -> list:
+        """The owner's party members in this zone; the owner itself is excluded."""
+        party = self.party_of(int(owner.char["char_id"]))
+        if party is None:
+            return []
+        members = []
+        for member in party.members:
+            if int(member.char_id) == int(owner.char["char_id"]):
+                continue
+            other = self.session_by_char(int(member.char_id))
+            if (other is None or int(other.zone) != int(owner.zone)
+                    or float(getattr(other, "dead_until", 0.0) or 0.0) > time.time()):
+                continue
+            members.append(other)
+        return members
+
+    def _clear_trust_aura(self, entity: ZoneEntity, owner, keep: int,
+                          mob_id: int = 0) -> None:
+        """Take the last aura down: one Indi-/Geo- at a time, on the owner and the monster.
+
+        A Geomancer's next aura replaces the last one, so a swap has to remove the status
+        the previous cast put up -- on the owner's bar, and on the monster when the last
+        one was a hex.  ``entity.geo_mob_id`` remembers the monster the last hex landed on.
+        """
+        previous = int(getattr(entity, "geo_mob_id", 0) or 0)
+        hexed = self.entity_by_id(entity.zone, previous) if previous else None
+        for spell in (entity.kit or {}).get("aura", []):
+            spec = trust_ai.effect_of(spell)
+            if spec is None or int(spec.effect) == int(keep):
+                continue
+            status = int(spec.effect)
+            if owner.effect_state.get(status) is not None:
+                owner.remove_effect(status, quiet=True)
+                owner.queue.append(owner.char_status())
+            if hexed is not None and hexed.effect_state.get(status) is not None:
+                self._drop_mob_effect(int(entity.id), hexed, status)
+        entity.geo_mob_id = int(mob_id)
+
+    def _drop_mob_effect(self, actor_id: int, mob, status: int) -> None:
+        """Remove one status from a monster and tell the clients the icon wore off."""
+        from .zone import sub
+
+        mob.effect_state.pop(int(status), None)
+        try:
+            mob.status_effects.remove(int(status))
+        except ValueError:
+            pass
+        body = packets.battle_action(
+            int(actor_id), int(mob.id), int(status),
+            message=packets.MESSAGE_STATUS_WEARS_OFF, kind=0,
+            category=packets.ACTION_CATEGORY_MAGIC_FINISH, action_id=0)
+        for observer in self.sessions_in_zone(int(mob.zone)):
+            if int(mob.targid) in getattr(observer, "sent_targids", set()):
+                observer.queue.append(sub(0x028, body))
 
     def _finish_trust_cast(self, entity: ZoneEntity, owner, now: float) -> None:
         """Resolve a Trust's finished cast and put its result on the wire."""
@@ -824,16 +1427,34 @@ class World:
         """Put one of the Trust's enhancing spells on its owner and send the icon."""
         name = str(spell.get("name") or "")
         skill = int(spell.get("skill") or 0)
-        duration = effects.buff_duration(
-            spec, main_job=int(entity.job), main_level=int(entity.level), mods={},
-            skill=skill, enhancing=(skill == trust_ai.SKILL_ENHANCING),
-            white_enhancing=effects.is_white_enhancing(name))
-        tick = effects.buff_tick(spec, main_job=int(entity.job),
-                                 main_level=int(entity.level), mods={})
-        power = effects.buff_power(spec, {})
-        owner.add_effect(spec.effect, duration=duration, power=power,
-                         potency=spec.potency, tick=tick, icon=spec.icon,
-                         mods=spec.mods)
+        if geomancy.indi_effect(name) is not None:
+            self._clear_trust_aura(entity, owner, int(spec.effect), 0)
+        # A Trust's weapons are part of its kit: Joachim's Loughnashade is Song+4, so the
+        # song line reads the loadout's modifiers the way a player's gear would.
+        gear = getattr(entity, "gear_mods", None) or {}
+        if skill in effects.SONG_SKILLS:
+            mods, tick = effects.song_potency_values(name, spec, gear)
+            duration = effects.song_duration(spec, name=name, mods=gear)
+            power = int(spec.power)
+            # One state per song, not per icon: Minuet V and IV share icon 434 and both
+            # fit on the Loughnashade bar.  The song metadata is what `//songs`, the
+            # reconnect snapshot and the next plan check read.
+            owner.add_effect(
+                effects.song_key(int(spell["id"])), duration=duration, power=power,
+                potency=spec.potency, tick=tick, icon=int(spec.effect), mods=mods,
+                song_base=float(spec.duration), song_name=name,
+                song_cast_at=time.time(), song_effect=int(spec.effect))
+        else:
+            mods = dict(spec.mods)
+            duration = effects.buff_duration(
+                spec, main_job=int(entity.job), main_level=int(entity.level), mods={},
+                skill=skill, enhancing=(skill == trust_ai.SKILL_ENHANCING),
+                white_enhancing=effects.is_white_enhancing(name), name=name)
+            tick = effects.buff_tick(spec, main_job=int(entity.job),
+                                     main_level=int(entity.level), mods={})
+            power = effects.buff_power(spec, {})
+            owner.add_effect(spec.effect, duration=duration, power=power,
+                             potency=spec.potency, tick=tick, icon=spec.icon, mods=mods)
         self._queue_trust_action(
             entity, int(owner.char["char_id"]), value=int(spec.effect),
             animation=trust_ai.spell_animation(spell),
@@ -871,7 +1492,8 @@ class World:
         int_down = target.effect_state.get(effects.INT_DOWN)
         if int_down is not None:
             target_int = max(0, target_int - int(int_down.get("power", 0)))
-        return (int(sheet.attributes.get("int", 0)),
+        shared = getattr(entity, "shared_mods", None) or {}
+        return (int(sheet.attributes.get("int", 0)) + int(shared.get(mod.INT, 0)),
                 min(424, max(1, int(entity.level) * 4)),
                 target_int, self.monster_debuff_mods(target))
 
@@ -886,6 +1508,8 @@ class World:
     def _land_trust_debuff(self, entity: ZoneEntity, owner, spell: dict, spec,
                            target, now: float) -> None:
         """Land a Trust enfeeble, including Dia's small opening hit."""
+        if geomancy.indi_effect(str(spell.get("name") or "")) is not None:
+            self._clear_trust_aura(entity, owner, int(spec.effect), int(target.id))
         target_sheet = self.monster_sheet(target)
         target_mnd = int(target_sheet.attributes.get("mnd", 0))
         caster_mnd = int(stats.build_monster(int(entity.level)).attributes.get("mnd", 0))
@@ -896,7 +1520,8 @@ class World:
                 target_mnd=target_mnd)
         resist = self._trust_resist(entity, spell, target)
         duration = effects.debuff_duration(
-            spec, skill=int(spell.get("skill") or 0), mods={})
+            spec, skill=int(spell.get("skill") or 0), mods={},
+            name=str(spell.get("name") or ""))
         potency = effects.debuff_potency(
             spec, skill=int(spell.get("skill") or 0), mods={})
         applied = self.apply_mob_effect(
@@ -906,7 +1531,8 @@ class World:
             tick_interval=(effects.HELIX_TICK_SECONDS if spec.helix else 3.0),
             first_tick_delay=(self.rng.uniform(*effects.HELIX_FIRST_TICK)
                               if spec.helix else None),
-            tier=(effects.tier_of(spell.get("name") or "") if spec.helix else 0))
+            tier=(effects.tier_of(spell.get("name") or "") if spec.helix else 0),
+            name=str(spell.get("name") or ""))
         defeated = False
         if damage > 0:
             defeated = int(target.hp) - damage <= 0
@@ -996,6 +1622,14 @@ class World:
                     observer.queue_entity(entity, packets.SEND_POSITION)
             return
         if span <= TRUST_FOLLOW_DISTANCE:
+            # The client collides the player with its own team, and a Trust standing on the
+            # character blocks every step.  Step out of the nearest player's bubble first:
+            # being inside the follow distance is exactly when the old code stood still.
+            away = self._personal_space_step(entity, sessions)
+            if away is not None:
+                self._move_trust_step(entity, away[0], away[1], TRUST_SIDE_STEP_SPEED,
+                                      sessions, now)
+                return
             if entity.moving:
                 entity.moving = False
                 for observer in sessions:
@@ -1004,6 +1638,33 @@ class World:
             self.set_animation(entity, 0, sessions)
             return
         self._move_trust_step(entity, dx, dz, TRUST_CHASE_SPEED, sessions, now)
+
+    def _personal_space_step(self, entity: ZoneEntity, sessions: list):
+        """A direction out of the nearest player's bubble, or None when clear.
+
+        The client collides a player with its own pets/Trusts, so a follower that stops on
+        top of the player leaves them unable to move (the blocker is inside their collision
+        radius).  There is no client flag to walk through party members, so the follower
+        yields instead: it steps away and the player's next step is free.
+        """
+        nearest = None
+        nearest_span = TRUST_PERSONAL_SPACE
+        for session in sessions:
+            if getattr(session, "gone", False) or session.zone != entity.zone:
+                continue
+            dx = entity.x - float(session.pos[0])
+            dz = entity.z - float(session.pos[2])
+            span = math.hypot(dx, dz)
+            if span < nearest_span:
+                nearest, nearest_span = (dx, dz, span), span
+        if nearest is None:
+            return None
+        dx, dz, span = nearest
+        if span > 0.05:
+            return dx, dz
+        # Exactly on top of the player: there is no direction in the position, so pick one
+        # that cannot flip every tick.
+        return (1.0, 0.0) if int(entity.targid) & 1 else (0.0, 1.0)
 
     def _move_trust_step(self, entity: ZoneEntity, dx: float, dz: float,
                          speed: float, sessions: list, now: float) -> None:
@@ -1036,6 +1697,16 @@ class World:
                 or owner.dead_until or int(owner.char.get("hp_current", 0)) <= 0):
             self.despawn_pet(entity, now, "owner gone")
             return
+        if getattr(entity, "pet_type", "") == "luopan":
+            if now >= float(getattr(entity, "next_geo_tick", 0.0) or 0.0):
+                drain = max(0, int(getattr(entity, "geo_drain", 0) or 0))
+                if drain:
+                    entity.hp = max(0, int(entity.hp) - drain)
+                    self._queue_mob_hp(entity)
+                entity.next_geo_tick = now + 3.0
+                if int(entity.hp) <= 0:
+                    self.despawn_pet(entity, now, "luopan expired")
+                    return
         if getattr(entity, "pet_state", "follow") == "stay":
             return
         target = None
@@ -1099,6 +1770,28 @@ class World:
                     or getattr(session, "gone", False)):
                 continue
             if int(session.char["char_id"]) == int(char_id):
+                return session
+        return None
+
+    def session_by_character_ids(self, character_id: int, char_id: int | None = None):
+        """A live session by either id the database row carries.
+
+        A client controls the wire id it sends in 0x00A, and ``world.py`` writes that id
+        into ``session.char["char_id"]``.  Some client builds use the database id there
+        while the ``characters`` row stores a content id, so a lookup by only the stored
+        ``char_id`` misses a perfectly live character.  The DB id is unchanged and always
+        present in the session's ``id``.
+        """
+        wanted = {int(character_id)}
+        if char_id is not None:
+            wanted.add(int(char_id))
+        for session in self.sessions.values():
+            if (not session.logged_in or session.zoning
+                    or getattr(session, "sleeping", False)
+                    or getattr(session, "gone", False)):
+                continue
+            if (int(session.char.get("id") or 0) in wanted
+                    or int(session.char.get("char_id") or 0) in wanted):
                 return session
         return None
 
@@ -1178,16 +1871,31 @@ class World:
             prepared.char = character
             prepared.zoning = False
 
-        # Every other session claiming this character is a force-quit ghost.  Every session
-        # at this address is the previous occupant of a recycled UDP port.  Both must be
-        # despawned from the clients that still draw them before the new login appears.
+        # Every other session claiming this character is a force-quit ghost.  A session at
+        # this address is usually the previous occupant of a recycled UDP port, but on a
+        # multibox host it can also be another box still loading its zone (the sockets for
+        # the new zone take each other's old ports), so that case is kept below.
         for other_addr, other in list(self.sessions.items()):
             if other is prepared:
                 continue
             same_character = int(getattr(other, "char", {}).get("id", -1)) == db_id
-            if same_character or other_addr == addr:
+            if same_character:
                 # Save the last position the dead client reported: the new login already
                 # read its own row, and the next one should start where it stopped.
+                self.evict_session(other, save=True, reason="replaced by a login")
+            elif other_addr == addr:
+                if getattr(other, "zoning", False):
+                    # Box clients share one host, and the sockets they open for the new zone
+                    # can take each other's old ports.  The session parked here belongs to
+                    # another character still loading its zone: its 0x00B already went out
+                    # and its client is about to reconnect somewhere.  Keep the hand-off
+                    # (the address mapping below replaces it, so nothing is misdelivered);
+                    # evicting it dropped that box from the party and from the advanced
+                    # cipher it was about to prove.
+                    self.park_keys(other)
+                    log.info("%s keeps %s's hand-off; another login took the address",
+                             addr, other.char.get("name", "?"))
+                    continue
                 self.evict_session(other, save=True, reason="replaced by a login")
 
         if prepared is None:
@@ -1207,6 +1915,9 @@ class World:
         """Remove a dead session: despawn it, free its targid and forget its hand-off."""
         if session is None:
             return
+        # A session dropped mid-hand-off leaves a live client holding an advanced cipher.
+        # Park the sequence before forgetting it, so its next 0x00A can still be read.
+        self.park_keys(session)
         # Do this before gone is set: the other members get a fresh roster without it.
         try:
             self.leave_party(session)
@@ -1230,6 +1941,17 @@ class World:
                 session.save_position(force=True)
             except Exception as exc:
                 log.debug("%s last position not saved: %s", getattr(session, "addr", "?"), exc)
+        # The buffs, food and ability cooldowns this character should find again on its next
+        # login are written before the session goes (game/live_state.py).  This is the
+        # dropped-link path: the reaper, a login that replaced a ghost, or a hand-off that
+        # was never acknowledged.  A deliberate logout already wrote its recasts-only row.
+        save_state = getattr(session, "save_live_state", None)
+        if save_state is not None:
+            try:
+                save_state()
+            except Exception as exc:
+                log.debug("%s reconnect snapshot not saved: %s",
+                          getattr(session, "addr", "?"), exc)
         log.info("%s released %s (%s, char %#x)", getattr(session, "addr", "?"),
                  getattr(session, "char", {}).get("name", "?"),
                  reason or "session ended", char_id)
@@ -1287,7 +2009,16 @@ class World:
 
     def group_id(self, char_id: int) -> int:
         group = self.party_of(char_id)
-        return group.id if group is not None else 0
+        if group is not None:
+            return group.id
+        # A solo player with Trusts has the synthetic party page from party_packets;
+        # its id is the character id, matching LandSandBoat's CParty(PMaster).  A plain
+        # solo still has no group, because 0x0E1 id 0 is what the retail client cannot
+        # read.
+        session = self.session_by_char(char_id)
+        if session is not None and self.active_trusts(session):
+            return int(char_id)
+        return 0
 
     def _party_groups(self, party: Party) -> list[Party]:
         if party is None:
@@ -1315,21 +2046,70 @@ class World:
         if session is not None:
             member.update_from_session(session)
 
+    def active_trusts(self, session) -> list:
+        """The live alter egos a session owns, in call order."""
+        if session is None:
+            return []
+        return [entity for entity in getattr(session, "trust_entities", [])
+                if getattr(entity, "alive", False)]
+
+    def trust_party_member(self, entity) -> PartyMember:
+        """A Trust's 0x0DD/0x0DF row.  It is not a PartyMember in the database sense."""
+        return PartyMember(
+            char_id=int(entity.id),
+            name=str(entity.name or ""),
+            zone=int(entity.zone),
+            targid=int(entity.targid),
+            hp=int(entity.hp),
+            mp=int(entity.mp),
+            tp=0,
+            hp_max=max(1, int(entity.hp_max)),
+            mp_max=max(0, int(entity.mp_max)),
+            main_job=int(getattr(entity, "job", 0) or 0),
+            main_level=int(getattr(entity, "level", 0) or 0),
+        )
+
+    def _trust_party_recipients(self, session) -> list:
+        """The clients that draw ``session``'s Trusts: its party, or the owner alone."""
+        party = self.party_of(int(session.char["char_id"]))
+        if party is not None:
+            return self._group_sessions(party)
+        return [session]
+
+    def _trust_rows(self, session) -> list[tuple[PartyMember, int]]:
+        """(row, targid) for every Trust the session has out."""
+        return [(self.trust_party_member(entity), int(entity.targid))
+                for entity in self.active_trusts(session)]
+
     def party_packets(self, session) -> list:
         """The GROUP_TBL + one GROUP_LIST per row this client needs to draw its roster.
 
         The client does not keep a local roster: the whole group page comes from these
         packets.  A member in another zone is sent their zone number instead of vitals.
+        Trusts are injected into the same roster as their owner (LandSandBoat appends
+        them to the table and sends one GROUP_LIST after the owner's row); this is what
+        makes an alter ego appear in the party menu instead of only in the world.
         """
         from .zone import sub
 
         party = self.party_of(session.char["char_id"])
-        if party is None:
-            return []
-        groups = self._party_groups(party)
-        kind = PARTY_KIND_ALLIANCE if party.alliance is not None else PARTY_KIND_PARTY
         owner = int(session.char["char_id"])
-        entries = []
+        own_trusts = self.active_trusts(session)
+        if party is None:
+            if not own_trusts:
+                return []
+            # A solo player with Trusts still has a party page: one player row plus the
+            # Trust rows.  Keep this synthetic party out of self.parties so invites and
+            # "already in a party" checks still treat the character as solo.
+            member = PartyMember.from_session(session)
+            groups = [Party(id=member.char_id, leader_id=member.char_id,
+                            members=[member])]
+        else:
+            groups = self._party_groups(party)
+        kind = (PARTY_KIND_ALLIANCE if party is not None and party.alliance is not None
+                else PARTY_KIND_PARTY)
+        player_entries = []
+        trust_entries = []
         rows = []
         number = 0
         for group in groups:
@@ -1338,14 +2118,120 @@ class World:
                 flags = group.flags(member)
                 # The receiver sees itself as 0x400, never as the targid other clients use.
                 targid = SELF_TARGID if member.char_id == owner else member.targid
-                entries.append((member.char_id, targid, flags, member.zone))
+                player_entries.append((member.char_id, targid, flags, member.zone))
                 rows.append((member, flags, number, targid))
                 number += 1
-        out = [sub(0x0C8, packets.group_table(entries, kind))]
+                member_session = self.session_by_char(member.char_id)
+                for trust, trust_targid in self._trust_rows(member_session):
+                    trust_entries.append((trust.char_id, trust_targid, 0, trust.zone))
+                    rows.append((trust, 0, number, trust_targid))
+                    number += 1
+        out = [sub(0x0C8, packets.group_table(
+            player_entries + trust_entries, kind))]
         for member, flags, number, targid in rows:
             out.append(sub(0x0DD, packets.group_list(member, number, flags, session.zone,
                                                     targid=targid)))
         return out
+
+    def solo_roster_packets(self, session) -> list:
+        """The empty GROUP_TBL plus the client's own GROUP_LIST row.
+
+        A plain solo player gets no group page from ``party_packets``.  The client reads
+        its own job pair from row 0 of the party table, so without this a fresh login
+        reports MainJob 0 and the HUD's spell and Trust windows go empty (the "No trusts
+        for this job pair yet" panel) even though the server has the job.  This is the
+        same representation ``_queue_party_reset`` uses when a party is disbanded: an
+        empty roster table with the player's own row, not a one-person party.
+        """
+        from .zone import sub
+
+        member = PartyMember.from_session(session)
+        return [
+            sub(0x0C8, packets.group_table([], PARTY_KIND_PARTY)),
+            sub(0x0DD, packets.group_list(member, 0, 0, session.zone,
+                                         targid=SELF_TARGID)),
+        ]
+
+    def party_buff_packets(self, session) -> list:
+        """S2C 0x076: the status icons of the *other* party members.
+
+        The client keeps those icons in ``partystatusicons_t`` and the Party Info HUD
+        reads them from there.  The packet has five 48-byte member rows (UniqueNo,
+        ActIndex, padding, two bits per slot in ``Bits``, then the 32 low bytes).
+        Sending it after a roll is what makes Twodough and Threedough show the same
+        icon Onedough has instead of "status effects are not sent for this party".
+        """
+        from .zone import sub
+
+        party = self.party_of(int(session.char["char_id"]))
+        if party is None:
+            return []
+        viewer = int(session.char["char_id"])
+        others = [other for other in self._group_sessions(party)
+                  if int(other.char["char_id"]) != viewer
+                  and int(other.zone) == int(session.zone)][:5]
+        body = bytearray(0xF0)
+        for index, other in enumerate(others):
+            offset = index * 48
+            struct.pack_into("<IHH", body, offset,
+                             int(other.char["char_id"]),
+                             int(getattr(other, "targid", 0) or 0), 0)
+            bits = 0
+            for slot, effect_id in enumerate(list(other.status_effects)[:32]):
+                state = other.effect_state.get(int(effect_id)) or {}
+                icon = effects.icon_for(
+                    int(effect_id), int(state.get("icon", 0) or 0),
+                    int(state.get("power", 0) or 0)) & 0x3FF
+                body[offset + 16 + slot] = icon & 0xFF
+                bits |= (icon >> 8 & 3) << (2 * slot)
+            struct.pack_into("<Q", body, offset + 8, bits)
+        return [sub(0x076, bytes(body))]
+
+    def queue_party_buffs(self, session) -> None:
+        """Refresh every party member's 0x076 view after a shared buff changes."""
+        party = self.party_of(int(session.char["char_id"]))
+        sessions = self._group_sessions(party) if party is not None else [session]
+        for viewer in sessions:
+            viewer.queue += self.party_buff_packets(viewer)
+
+    def refresh_trust_roster(self, session) -> None:
+        """Re-send the party page after a Trust is called or released."""
+        if session is None or getattr(session, "gone", False) or getattr(session, "zoning", False):
+            return
+        for recipient in self._trust_party_recipients(session):
+            if getattr(recipient, "zone_loaded", False):
+                recipient.queue += self.party_packets(recipient)
+
+    def _sync_trust_vitals(self) -> None:
+        """Billboard a Trust's HP/MP/TP on 0x0DF when it changes.
+
+        The client's party page reads Trust vitals from GROUP_ATTR exactly like a
+        player's; without this the bars stay at the values from the spawn row forever.
+        """
+        from .zone import sub
+
+        for session in list(self.sessions.values()):
+            if (not session.logged_in or session.zoning
+                    or getattr(session, "sleeping", False)
+                    or getattr(session, "gone", False)):
+                continue
+            trusts = self.active_trusts(session)
+            if not trusts:
+                continue
+            recipients = self._trust_party_recipients(session)
+            for entity in trusts:
+                member = self.trust_party_member(entity)
+                vitals = (member.hp, member.mp, member.hp_max, member.mp_max,
+                          member.targid, member.zone)
+                if getattr(entity, "party_vitals", None) == vitals:
+                    continue
+                entity.party_vitals = vitals
+                # LandSandBoat's Trust overload leaves ZoneNo zero; the same-zone
+                # GROUP_LIST row does the same, so the client treats it as present.
+                body = packets.group_attr(replace(member, zone=0))
+                for recipient in recipients:
+                    if getattr(recipient, "zone_loaded", False):
+                        recipient.queue.append(sub(0x0DF, body))
 
     def _reload_groups(self, groups, *, exclude=None) -> None:
         for session in self._group_sessions_list(groups):
@@ -1441,14 +2327,11 @@ class World:
         """Tell a client it is solo again: empty GROUP_TBL and its own row."""
         if not getattr(session, "zone_loaded", False):
             return
-        from .zone import sub
-
-        member = PartyMember.from_session(session)
-        messages = [
-            sub(0x0C8, packets.group_table([], PARTY_KIND_PARTY)),
-            sub(0x0DD, packets.group_list(member, 0, 0, session.zone,
-                                         targid=SELF_TARGID)),
-        ]
+        # A character with Trusts still has a party page after leaving the group: the
+        # synthetic solo roster keeps the alter egos visible instead of clearing them.
+        messages = self.party_packets(session) if self.active_trusts(session) else []
+        if not messages:
+            messages = self.solo_roster_packets(session)
         # The vitals packets are a nicety; a stat-sheet failure must not stop a logout
         # or a disband from clearing the roster.
         try:
@@ -1880,6 +2763,9 @@ class World:
                             continue
                         if getattr(session, "zone_loaded", False):
                             session.queue.append(sub(0x0DF, body))
+        # Trust bars are not in a Party object; the owner's roster injects them and this
+        # keeps their HP/MP/TP in step with the live entity.
+        self._sync_trust_vitals()
 
     def broadcast_player(self, session, mask: int, moving: bool | None = None) -> None:
         """Send one player's entity update to every nearby client that has it spawned.
@@ -1903,6 +2789,14 @@ class World:
                     priority=math.dist(observer.pos[:3], session.pos[:3]))
             else:
                 observer.queue.append(sub(0x00D, body))
+
+    def is_family_leader(self, session) -> bool:
+        """True when this session's account is a main account (it leads its boxes)."""
+        try:
+            return self.service.account(
+                int(session.char.get("account_id") or 0)).get("kind") == "main"
+        except Exception:
+            return False
 
     def family_followers(self, leader) -> list:
         """Other main-family sessions in the leader's zone, for a shared zone line.
@@ -1990,11 +2884,141 @@ class World:
             observer.queue.append(sub(0x00D, session.player_body(SEND_CHAR_SPAWN)))
 
     # --- the tick ------------------------------------------------------------------------------
+    def set_team_anchor(self, source, zone: int, pos) -> None:
+        """Remember where the team was just called, for boxes that were not up yet.
+
+        ``//warp all me`` can only move sessions that exist.  A box whose client is still
+        logging in (a relaunch, a reconnect) is absent from ``sessions`` and lands at its
+        saved spot when it finishes; the anchor makes it join the team on that zone-in
+        instead of waiting for the user to press the command again.
+        """
+        family = set(int(x) for x in self.service.account_family_ids(
+            int(source.char.get("account_id") or 0)))
+        live = {int(session.char.get("account_id", 0)) for session in self.sessions.values()
+                if getattr(session, "logged_in", False)}
+        waiting = family - live
+        if not waiting:
+            self.team_anchor = None
+            return
+        self.team_anchor = {
+            "source_id": int(source.char.get("char_id") or 0),
+            "family": family,
+            "waiting": waiting,
+            "zone": int(zone),
+            "pos": list(pos),
+            "at": time.time(),
+        }
+        log.info("%s called the team; waiting for %d account(s) to finish logging in",
+                 source.addr, len(waiting))
+
+    def join_team_anchor(self, session) -> bool:
+        """Pull a box that was still logging in to the team's last warp anchor."""
+        anchor = self.team_anchor
+        if not anchor:
+            return False
+        if time.time() - float(anchor["at"]) > TEAM_ANCHOR_TTL:
+            self.team_anchor = None
+            return False
+        account = int(session.char.get("account_id") or 0)
+        if account not in anchor["waiting"]:
+            return False
+        if int(session.char.get("char_id") or 0) == anchor["source_id"]:
+            return False
+        if session.already_at(anchor["zone"], anchor["pos"]):
+            anchor["waiting"].discard(account)
+            if not anchor["waiting"]:
+                self.team_anchor = None
+            return False
+        log.info("%s joins the team anchor in %s", session.addr,
+                 self.zones.name(anchor["zone"]))
+        moved = session.change_zone(anchor["zone"], anchor["pos"])
+        if moved:
+            anchor["waiting"].discard(account)
+            if not anchor["waiting"]:
+                self.team_anchor = None
+        return moved
+
+    def queue_warps(self, source, targets, zone: int, pos, spacing: float = 0.0,
+                    announce: str = "", skip_if_present: bool = False) -> None:
+        """Queue family members to be zoned to ``source``.
+
+        The whole team is handed out on the next tick by default: box clients overlap their
+        zone loads, so a batch reaches the new zone faster than spacing the hand-offs, and
+        the hand-off fixes in zone.py keep simultaneous reconnects from losing a box.  A
+        positive ``spacing`` falls back to one move per interval.  ``skip_if_present``
+        drops a move whose target already stands at the destination (a box that walked
+        through a zone line itself), and ``announce`` overrides the warp chat line.
+        """
+        source_id = int(source.char.get("char_id") or 0)
+        self.pending_warps = [move for move in self.pending_warps
+                              if move["source_id"] != source_id]
+        for target in targets:
+            self.pending_warps.append({
+                "source_id": source_id,
+                "source_name": str(source.char.get("name") or "A party member"),
+                "char_id": int(target.char.get("char_id") or 0),
+                "zone": int(zone),
+                "pos": list(pos),
+                "spacing": float(spacing),
+                "announce": str(announce or ""),
+                "skip_if_present": bool(skip_if_present),
+                "queued": time.time(),
+            })
+
+    def _run_pending_warps(self, now: float) -> None:
+        if not self.pending_warps or now < self.next_warp_at:
+            return
+
+        def drop(move) -> None:
+            # By identity: a skipped move earlier in the list must not shift the entry a
+            # later pop removes.
+            self.pending_warps = [item for item in self.pending_warps if item is not move]
+
+        def take(move):
+            """The target if this move can go out now; drops a dead or no-op move."""
+            target = next((session for session in self.sessions.values()
+                           if int(getattr(session, "char", {}).get("char_id", 0))
+                           == move["char_id"]), None)
+            if target is None or getattr(target, "gone", False):
+                drop(move)
+                return None
+            if (not target.logged_in or target.zoning
+                    or getattr(target, "sleeping", False)
+                    or not getattr(target, "zone_loaded", False)):
+                return None
+            if move.get("skip_if_present") and target.already_at(move["zone"], move["pos"]):
+                # The box walked through the line on its own; no second reload.
+                drop(move)
+                return None
+            return target
+
+        def send(move, target) -> None:
+            target.say(move.get("announce") or "%s warps you to their side in %s." % (
+                move["source_name"], self.zones.name(move["zone"])))
+            target.change_zone(move["zone"], move["pos"], follow_family=False)
+            drop(move)
+            log.info("queued warp: %s char %#x", target.char.get("name", "?"),
+                     move["char_id"])
+
+        for move in list(self.pending_warps):
+            target = take(move)
+            if target is None:
+                continue
+            send(move, target)
+            self.next_warp_at = now + move["spacing"]
+            if move["spacing"] > 0.0:
+                return
+        # Nothing was ready (all targets still loading): try again on the next tick.
+        if any(now - move["queued"] > 60.0 for move in self.pending_warps):
+            self.pending_warps = [move for move in self.pending_warps
+                                  if now - move["queued"] <= 60.0]
+
     def advance(self, now: float | None = None) -> None:
         """Run timers, AI and combat without sending; the caller decides when to flush."""
         now = time.time() if now is None else now
         self.last_tick = now
         self.reap_sessions(now)
+        self._run_pending_warps(now)
         for session in list(self.sessions.values()):
             if (session.logged_in and not session.zoning
                     and not getattr(session, "sleeping", False)
@@ -2134,16 +3158,38 @@ class World:
         entity.last_sync_at = 0.0
         self._mob_sync(entity, sessions, now, force=True)
 
+    def _mob_point_allowed(self, entity: ZoneEntity, x: float, y: float, z: float,
+                           leash: float | None) -> bool:
+        """Whether a point is still inside this mob's allowed ground.
+
+        A roam leg stays on the spawn floor (``leash is None``) because a roamer that
+        wanders down a ramp can end up on a ledge it cannot leave.  A chase passes
+        ``MOB_CHASE_LEASH`` instead: a sphere around the spawn that lets the mob follow a
+        player up or down a slope while still refusing to be dragged across the zone.
+        """
+        if leash is None:
+            return abs(float(y) - float(entity.spawn_y)) <= MOB_VERTICAL_LEASH
+        return math.dist(
+            (float(x), float(y), float(z)),
+            (float(entity.spawn_x), float(entity.spawn_y), float(entity.spawn_z)),
+        ) <= float(leash)
+
     def _mob_follow(self, entity: ZoneEntity, nav, goal,
                     step: float, now: float,
                     *, max_nodes: int = MOB_NAV_NODES,
-                    stop_distance: float = 0.0) -> tuple[bool, bool]:
+                    stop_distance: float = 0.0,
+                    leash: float | None = None) -> tuple[bool, bool]:
         """Walk ``step`` yalms along a route to ``goal``.
 
         Returns ``(moved, arrived)``.  The route is planned from the mob's actual
         position, kept on the entity between ticks, replanned when the target moves, and
         validated again at every sample of every step so a packet cannot tunnel through
-        a wall.  When no route exists the mob does not move at all.
+        a wall.  When no route exists the mob does not move at all; a chase falls back
+        to :meth:`_mob_walk_direct` so a pulled monster still closes on the player.
+
+        ``leash`` is ``None`` for a roam leg (stay on the spawn floor) or the chase
+        sphere for a fight.  The nav grid's step and barrier tests still decide whether
+        the ground itself is walkable.
         """
         if step <= 0.0 or nav is None:
             return False, False
@@ -2171,10 +3217,14 @@ class World:
                 self._mob_clear_nav(entity)
                 entity.nav_blocked_until = now + MOB_NAV_COOLDOWN
                 return False, False
-            if any(abs(float(waypoint[1]) - float(entity.spawn_y)) > MOB_VERTICAL_LEASH
+            if any(not self._mob_point_allowed(entity, float(waypoint[0]),
+                                               float(waypoint[1]), float(waypoint[2]),
+                                               leash)
                    for waypoint in path):
-                # The only route leaves this floor: a ramp down a ledge, a stair into
-                # another storey, or a cliff the player cannot follow.  Do not take it.
+                # The route leaves the ground this monster is allowed on: a ramp down a
+                # ledge, a stair into another storey, or a chase that has run past its
+                # leash.  Do not take it; the caller's direct-step fallback can still
+                # close some of the gap.
                 self._mob_clear_nav(entity)
                 entity.nav_blocked_until = now + MOB_NAV_COOLDOWN
                 return False, False
@@ -2204,10 +3254,10 @@ class World:
             nx = entity.x + dx / distance * travel
             nz = entity.z + dz / distance * travel
             floor = nav.step_floor(entity.x, entity.z, entity.y, nx, nz)
-            if floor is None or abs(float(floor) - float(entity.spawn_y)) > MOB_VERTICAL_LEASH:
+            if floor is None or not self._mob_point_allowed(entity, nx, floor, nz, leash):
                 # Never slide the last good point into an invalid one: stop here and
-                # let the next plan look for a way around.  The second test keeps the
-                # mob on its spawn floor even when a floor layer exists further up or
+                # let the next plan look for a way around.  The ground test keeps the
+                # mob on its allowed floor even when a floor layer exists further up or
                 # down but the player cannot reach it.
                 entity.nav_path.clear()
                 entity.nav_goal = None
@@ -2237,6 +3287,58 @@ class World:
                    and math.hypot(gx - entity.x, gz - entity.z)
                    <= max(0.35, nav.cell * 0.35))
         return moved, arrived
+
+    def _mob_walk_direct(self, entity: ZoneEntity, nav, goal,
+                         step: float, now: float, *,
+                         stop_distance: float = 0.0,
+                         leash: float = MOB_CHASE_LEASH) -> tuple[bool, bool]:
+        """Walk straight at ``goal`` when the nav grid cannot plan a route.
+
+        A pulled monster has to visibly chase even when the player stands on a floor the
+        grid does not connect to the camp (a hill above it, a cave lip below it).  The
+        direct step uses the same per-sample floor and barrier test as a planned route,
+        so it still stops at a wall, a cliff edge or the chase leash instead of clipping
+        through the geometry.  It never replaces a real route: the caller only invokes it
+        after :meth:`_mob_follow` failed to move.
+        """
+        if nav is None or step <= 0.0:
+            return False, False
+        gx, gz = float(goal[0]), float(goal[2])
+        dx, dz = gx - entity.x, gz - entity.z
+        distance = math.hypot(dx, dz)
+        if distance <= 1e-6:
+            return False, False
+        travel = min(float(step), distance)
+        if stop_distance:
+            travel = min(travel, max(0.0, distance - float(stop_distance)))
+        if travel <= 1e-6:
+            return False, False
+        start_x, start_z = entity.x, entity.z
+        start_rot = int(entity.rot)
+        moved = False
+        # A full step may cross a threshold the sample misses; halve it until either a
+        # legal piece is found or the mob is close enough that it would only jitter.
+        while travel > 0.02:
+            nx = entity.x + dx / distance * travel
+            nz = entity.z + dz / distance * travel
+            floor = nav.step_floor(entity.x, entity.z, entity.y, nx, nz)
+            if floor is not None and self._mob_point_allowed(entity, nx, floor, nz, leash):
+                entity.x, entity.z, entity.y = nx, nz, floor
+                moved = True
+                break
+            travel *= 0.5
+        if not moved:
+            return False, False
+        entity.rot = heading_to_rot(entity.x - start_x, entity.z - start_z)
+        entity.moving = True
+        turn = ((int(entity.rot) - start_rot + 128) & 0xFF) - 128
+        corner = 16 if int(entity.speed) >= MOB_RUN_SPEED_BYTE else 32
+        if abs(turn) >= corner and now - float(entity.last_sync_at or 0.0) >= 0.1:
+            entity.last_sync_at = 0.0
+            entity.pending_turn = True
+        arrived = math.hypot(gx - entity.x, gz - entity.z) <= max(
+            0.35, nav.cell * 0.35)
+        return True, arrived
 
     def _tick_mob(self, entity: ZoneEntity, sessions: list, now: float) -> None:
         if not entity.alive:
@@ -2282,7 +3384,10 @@ class World:
             if top is not None and int(top.char["char_id"]) != int(entity.engaged_char_id):
                 entity.engaged_char_id = int(top.char["char_id"])
                 entity.claim_char_id = int(top.char["char_id"])
+                entity.pending_skill = None
                 entity.next_attack_at = now + 1.0
+                self._mob_clear_nav(entity)
+                entity.nav_blocked_until = 0.0
 
         target = self.session_by_char(entity.engaged_char_id) if entity.engaged_char_id else None
         if entity.engaged_char_id and (target is None or target.zone != entity.zone
@@ -2295,6 +3400,7 @@ class World:
             target = self.mob_hate_target(entity)
             if target is None:
                 entity.claim_char_id = None
+                entity.pending_skill = None
                 if entity.nav_path or entity.moving:
                     self._mob_clear_nav(entity)
                     entity.moving = False
@@ -2305,6 +3411,8 @@ class World:
                 entity.engaged_char_id = int(target.char["char_id"])
                 entity.claim_char_id = int(target.char["char_id"])
                 entity.next_attack_at = now + 1.0
+                self._mob_clear_nav(entity)
+                entity.nav_blocked_until = 0.0
                 self.set_animation(entity, 1, sessions)
 
         if target is not None:
@@ -2312,8 +3420,21 @@ class World:
             if effects.SLEEP in entity.effect_state or effects.STUN in entity.effect_state:
                 entity.next_attack_at = now + 1.0
                 return
+            # A readied TP move fires on its own timer; while it is preparing the mob
+            # does not also auto-attack.
+            pending = entity.pending_skill
+            if pending is not None:
+                if now >= float(pending.get("at", 0.0)):
+                    self._mob_fire_skill(entity, target, sessions, now)
+                return
             # The mob is fighting: draw its weapon and put it in the attack stance.
             self.set_animation(entity, 1, sessions)
+            # TP moves can reach farther than a swing, so this check happens before the
+            # chase/melee-range branch.  A skill whose distance is too short is filtered
+            # out and the mob keeps closing.
+            if now >= entity.next_attack_at and self._mob_try_skill(
+                    entity, target, sessions, now):
+                return
             reach = entity.distance_to(*target.pos[:3])
             nav = self.nav_grid(entity.zone)
             # A target on the far side of a wall is not in melee range even when the
@@ -2337,7 +3458,16 @@ class World:
                 if nav is not None:
                     moved, _arrived = self._mob_follow(
                         entity, nav, target.pos[:3], step, now,
-                        stop_distance=MOB_REACH * 0.8)
+                        stop_distance=MOB_REACH * 0.8, leash=MOB_CHASE_LEASH)
+                    if not moved:
+                        # The grid found no route (a slope it cannot connect, a floor
+                        # seam, a search budget) but the monster still has hate.  Walk
+                        # at the player along the direct line as far as the floor and
+                        # barrier tests allow; standing at the pull spot was the bug.
+                        self._mob_clear_nav(entity)
+                        moved, _arrived = self._mob_walk_direct(
+                            entity, nav, target.pos[:3], step, now,
+                            stop_distance=MOB_REACH * 0.8, leash=MOB_CHASE_LEASH)
                 elif step > 0:
                     # No collision mesh.  Keep the old straight chase, but never let a
                     # monster walk up or down a cliff to a target on another level: that
@@ -2605,6 +3735,52 @@ class World:
             self._monster_sheets[int(entity.level)] = sheet
         return sheet
 
+    def mob_skill_list(self, skill_list_id: int) -> tuple["mobskills.MobSkill", ...]:
+        """A family's TP moves, loaded once from ``mob_skills`` / ``mob_skill_lists``."""
+        skill_list_id = int(skill_list_id or 0)
+        if skill_list_id <= 0:
+            return ()
+        cached = self._mob_skill_lists.get(skill_list_id)
+        if cached is not None:
+            return cached
+        try:
+            rows = self.service.mob_skills(skill_list_id)
+        except Exception as exc:  # an un-migrated database has no skill tables
+            log.warning("mob skill list %d unavailable: %s", skill_list_id, exc)
+            rows = []
+        skills = tuple(mobskills.from_row(row) for row in rows)
+        self._mob_skill_lists[skill_list_id] = skills
+        return skills
+
+    def _mob_gain_tp(self, entity: ZoneEntity, amount: int) -> None:
+        if not entity.is_mob() or not entity.alive:
+            return
+        entity.tp = max(0, min(mobskills.TP_MAX, int(entity.tp) + max(0, int(amount))))
+
+    def _mob_gain_tp_from_player_hit(self, entity: ZoneEntity, session, damage: int,
+                                     sheet, off_hand: bool = False,
+                                     ranged: bool = False) -> None:
+        """TP a monster gets when a player's physical hit lands.
+
+        LandSandBoat's ``calculateTPGainOnPhysicalDamage``: the player's TP curve for
+        this hand, +30 because the target is a monster, then dAGI (50% floor), Subtle
+        Blow (75% cap) and the monster's own Store TP.  Magic TP gain is not wired into
+        the spell path yet, so a pure nuker still feeds the bar more slowly than retail.
+        """
+        if int(damage) <= 0 or not entity.alive:
+            return
+        base = int(sheet.tp_per_hit(off_hand, ranged=ranged)) + 30
+        attacker_agi = int(sheet.attributes.get("agi", 0))
+        target_agi = int(self.monster_sheet(entity).attributes.get("agi", 0))
+        dagi = max(-100, min(100, attacker_agi - target_agi))
+        dagi_multiplier = max(0.5, min(1.0, (200 - (dagi + 30)) / 200.0))
+        fighter = sheet.fighter
+        subtle = (int(fighter.mods.get(mod.SUBTLE_BLOW, 0))
+                  + int(fighter.mods.get(mod.SUBTLE_BLOW_II, 0)))
+        subtle_multiplier = 1.0 - min(max(0, subtle) / 100.0, 0.75)
+        gain = int(base * dagi_multiplier * subtle_multiplier)
+        self._mob_gain_tp(entity, gain)
+
     def debuffed_monster(self, entity: ZoneEntity) -> combat.Fighter:
         """The cached monster fighter with the player's debuffs applied.
 
@@ -2623,7 +3799,13 @@ class World:
         if state is not None:
             cut = max(0, min(90, int(state.get("potency", 0))))
             evasion = max(1, int(evasion * (100 - cut) / 100.0))
-        for effect_id in (effects.DIA, effects.DEFENSE_DOWN):
+        torpor = entity.effect_state.get(geomancy.GEO_EVASION_DOWN)
+        if torpor is not None:
+            cut = max(0, min(90, int(torpor.get("potency", 0))))
+            evasion = max(1, int(evasion * (100 - cut) / 100.0))
+        # Dia, Defense Down and GEO Frailty are separate effects in retail, so each one
+        # takes its own bite out of the same Defense.
+        for effect_id in (effects.DIA, effects.DEFENSE_DOWN, geomancy.GEO_DEFENSE_DOWN):
             state = entity.effect_state.get(effect_id)
             if state is None:
                 continue
@@ -2666,14 +3848,16 @@ class World:
         the spell path subtracts from the target's INT itself.
         """
         mods = dict(self.monster_sheet(entity).fighter.mods)
-        defense_down = entity.effect_state.get(effects.MAGIC_DEF_DOWN)
-        if defense_down is not None:
-            amount = int(defense_down.get("power") or defense_down.get("potency") or 0)
-            mods[mod.MDEF] = int(mods.get(mod.MDEF, 0)) - amount
-        evasion_down = entity.effect_state.get(effects.MAGIC_EVASION_DOWN)
-        if evasion_down is not None:
-            amount = int(evasion_down.get("power") or evasion_down.get("potency") or 0)
-            mods[mod.MEVA] = int(mods.get(mod.MEVA, 0)) - amount
+        for effect_id in (effects.MAGIC_DEF_DOWN, geomancy.GEO_MAGIC_DEF_DOWN):
+            defense_down = entity.effect_state.get(effect_id)
+            if defense_down is not None:
+                amount = int(defense_down.get("power") or defense_down.get("potency") or 0)
+                mods[mod.MDEF] = int(mods.get(mod.MDEF, 0)) - amount
+        for effect_id in (effects.MAGIC_EVASION_DOWN, geomancy.GEO_MAGIC_EVASION_DOWN):
+            evasion_down = entity.effect_state.get(effect_id)
+            if evasion_down is not None:
+                amount = int(evasion_down.get("power") or evasion_down.get("potency") or 0)
+                mods[mod.MEVA] = int(mods.get(mod.MEVA, 0)) - amount
         # Stutter Step's Weakened Daze is -3 Magic Evasion per level.
         stutter = dancer.STEPS[203]
         level, _status = dancer.active_daze(entity.effect_state, stutter)
@@ -2684,30 +3868,106 @@ class World:
     def player_attack(self, session, entity: ZoneEntity, *, ftp: float = 1.0,
                       attack_multiplier: float = 1.0, off_hand: bool = False,
                       accuracy_bonus: int = 0, crit_bonus: float = 0.0,
-                      wsc: int = 0, ignored_defense: float = 0.0):
+                      wsc: int = 0, ignored_defense: float = 0.0,
+                      allow_critical: bool = True, ranged: bool = False):
         """One player swing at a monster: (missed, damage, critical).
 
         ``off_hand`` picks the sheet's second Fighter (the dual-wielded sub weapon).
         It has its own damage rating, skill and Accuracy, and retail caps its hit rate
-        at 95% instead of 99%.  ``accuracy_bonus`` and ``crit_bonus`` are the weapon
-        skill's own gear/trait terms ("Weapon skill accuracy" and Fencer).  ``wsc`` and
-        ``ignored_defense`` are the weapon skill's secondary-attribute bonus and the
-        fraction of the target's Defense it ignores.
+        at 95% instead of 99%.  ``ranged`` picks the ranged Fighter (ranged weapon +
+        ammo) instead of the main hand; an archery/marksmanship weapon skill must not
+        swing the sword the player happens to hold.  ``accuracy_bonus`` and
+        ``crit_bonus`` are the weapon skill's own gear/trait terms ("Weapon skill
+        accuracy" and Fencer).  ``wsc`` and ``ignored_defense`` are the weapon skill's
+        secondary-attribute bonus and the fraction of the target's Defense it ignores.
+        ``allow_critical`` is False for weapon skills that cannot crit (only "critical
+        hit rate varies with TP" skills can).
         """
         target = self.debuffed_monster(entity)
         sheet = session.stat_sheet()
-        attacker = sheet.sub_fighter if off_hand else sheet.fighter
+        if ranged:
+            attacker = sheet.ranged_fighter
+        else:
+            attacker = sheet.sub_fighter if off_hand else sheet.fighter
         if attacker is None:
-            # Only callers that saw a dual-wield sheet ask for the off hand; a missing
-            # fighter would otherwise silently swing the main hand twice.
+            # Only callers that saw a dual-wield/ranged sheet ask for that fighter; a
+            # missing one would otherwise silently swing the main hand instead.
             return True, 0, False
         if accuracy_bonus:
             attacker = replace(attacker, accuracy=int(attacker.accuracy) + int(accuracy_bonus))
+        mighty = session.has_effect(effects.MIGHTY_STRIKES)
+        assassin = bool(getattr(session, "_assassin_charge", False))
+        forced_crit = mighty or assassin
+        formless = (not off_hand
+                    and float(getattr(session, "_formless_until", 0.0)) > time.time())
+        if formless:
+            ignored_defense = 1.0
+            session._formless_until = 0.0
+        # Souleater converts 10% of current HP into flat damage on each landed hit.
+        # Retail gives a Dark Knight main the full amount and a support-job Dark Knight
+        # half; the HP is still spent at 10% (less Stalwart Soul).  It is added after
+        # pDIF/fTP, which is why it goes through ``flat_damage`` rather than the base.
+        souleater_hp = 0
+        souleater_bonus = 0
+        if session.has_effect(effects.SOULEATER):
+            souleater_hp = max(0, int(session.char.get("hp_current", 0)))
+            souleater_bonus = int(souleater_hp * 0.10)
+            if int(session.char.get("main_job", 0)) != 8:   # 8 = Dark Knight
+                souleater_bonus //= 2
         hit = combat.melee(
             attacker, target, zone=int(entity.zone), rng=self.rng, ftp=ftp,
-            attack_multiplier=attack_multiplier, crit_bonus=crit_bonus,
-            wsc=wsc, ignored_defense=ignored_defense)
-        return hit.missed, hit.damage, hit.critical
+            attack_multiplier=attack_multiplier,
+            crit_bonus=max(float(crit_bonus), 1.0) if forced_crit else crit_bonus,
+            wsc=wsc, ignored_defense=ignored_defense,
+            allow_critical=allow_critical or forced_crit,
+            flat_damage=souleater_bonus, ranged=ranged)
+        if souleater_bonus and not hit.missed:
+            stalwart = max(0, min(100, int(attacker.mods.get(mod.STALWART_SOUL, 0))))
+            cost = int(souleater_hp * 0.10) * (100 - stalwart) // 100
+            # Keep at least 1 HP: the session has no self-damage death path here, and a
+            # 0-HP character that is still standing would be a worse bug than retail's
+            # ability to kill the user.
+            session.char["hp_current"] = max(1, souleater_hp - cost)
+            session.queue.append(session.char_status())
+        if assassin:
+            session._assassin_charge = False
+        if (not hit.missed and float(getattr(session, "_feint_until", 0.0)) > time.time()):
+            self.apply_mob_effect(
+                entity, effects.SpellEffect(effects.EVASION_DOWN, "debuff", 60.0,
+                                            potency=20),
+                session, time.time(), duration=60.0)
+            session._feint_until = 0.0
+        if not hit.missed and hit.damage > 0:
+            # The monster's TP bar is fed by the hit, not by the damage number: the
+            # player's Subtle Blow and the AGI difference decide how much of it lands.
+            self._mob_gain_tp_from_player_hit(
+                entity, session, hit.damage, sheet, off_hand=off_hand,
+                ranged=ranged)
+            # Killer Instinct stores its damage bonus in the effect's power
+            # (1500 = +15%).  It is applied to every hit of a weapon skill because
+            # the weapon-skill round calls this method once per swing.
+            power = session.effect_power(effects.KILLER_INSTINCT)
+            if power > 0:
+                hit = replace(hit, damage=hit.damage * (10000 + power) // 10000)
+            # Dark Knight Consume Mana: the MP spent is added to the next hit.
+            mana_bonus = int(getattr(session, "_consume_mana_bonus", 0) or 0)
+            if mana_bonus > 0 and not off_hand:
+                hit = replace(hit, damage=hit.damage + mana_bonus)
+                session._consume_mana_bonus = 0
+            # Monk Boost: the next main-hand hit deals 25% more damage.
+            boost = float(getattr(session, "_boost_until", 0.0)) > time.time()
+            if boost and not off_hand:
+                hit = replace(hit, damage=hit.damage * 125 // 100)
+                session._boost_until = 0.0
+            # Restraint: one whole percentage of WS damage per landed main-hand round.
+            if not off_hand and session.has_effect(effects.RESTRAINT):
+                delay = max(1, int(sheet.delay))
+                gain = max(1, delay // 385)
+                session._restraint_bonus = min(
+                    30, int(getattr(session, "_restraint_bonus", 0)) + gain)
+        # The per-hit bonuses above (Killer Instinct, Consume Mana, Boost) are applied
+        # after the engine's own roll, so the 99,999 ceiling is enforced again here.
+        return hit.missed, combat.cap_damage(hit.damage), hit.critical
 
     def mob_attack(self, entity: ZoneEntity, session):
         """One monster swing at a player: (missed, damage, critical).
@@ -2717,6 +3977,36 @@ class World:
         Blind, Accuracy Down and Attack Down are applied to the monster's fighter copy
         here; the monster sheet itself is cached per level and must stay clean.
         """
+        # Invincible and Perfect Dodge negate physical damage outright.
+        if session.has_effect(effects.INVINCIBLE) or session.has_effect(effects.PERFECT_DODGE):
+            return True, 0, False
+        # Third Eye anticipates the swing outright: the charge is spent and the
+        # monster's attack is negated, before any damage roll.
+        eye = getattr(session, "third_eye", None)
+        if eye is not None:
+            if time.time() > float(eye.get("until", 0.0)) or int(eye.get("charges", 0)) <= 0:
+                session.third_eye = None
+            else:
+                eye["charges"] = int(eye["charges"]) - 1
+                if int(eye["charges"]) <= 0:
+                    session.third_eye = None
+                session.say("You anticipate the attack.")
+                # Seigan turns an anticipation into a 25% counter-attack.
+                if session.has_effect(effects.SEIGAN) and self.rng.random() < 0.25:
+                    miss, damage, critical = self.player_attack(session, entity)
+                    if not miss and damage > 0:
+                        defeated = entity.hp - damage <= 0
+                        entity.hp = max(0, entity.hp - damage)
+                        session.queue_action(int(entity.id), damage=damage,
+                                             critical=critical, defeated=defeated,
+                                             actor_id=int(session.char["char_id"]))
+                        self.add_damage_hate(entity, int(session.char["char_id"]),
+                                             damage, time.time())
+                        session.say("You counter %s for %d points of damage."
+                                    % (entity.name, damage))
+                        if defeated:
+                            self.kill_mob(session, entity, time.time())
+                return True, 0, False
         attacker = self.monster_sheet(entity).fighter
         blind = entity.effect_state.get(effects.BLINDNESS)
         if blind is not None:
@@ -2731,10 +4021,256 @@ class World:
         if attack_down is not None:
             attacker = replace(attacker, attack=max(
                 1, int(attacker.attack * (1.0 - int(attack_down.get("potency", 0)) / 100.0))))
+        # GEO Slip and GEO Wilt: the hexes that make the monster miss and hit softer.
+        geo_accuracy = entity.effect_state.get(geomancy.GEO_ACCURACY_DOWN)
+        if geo_accuracy is not None:
+            attacker = replace(attacker, accuracy=max(
+                1, int(attacker.accuracy
+                        * (1.0 - int(geo_accuracy.get("potency", 0)) / 100.0))))
+        geo_attack = entity.effect_state.get(geomancy.GEO_ATTACK_DOWN)
+        if geo_attack is not None:
+            attacker = replace(attacker, attack=max(
+                1, int(attacker.attack
+                       * (1.0 - int(geo_attack.get("potency", 0)) / 100.0))))
         hit = combat.melee(
             attacker, session.stat_sheet().fighter,
             zone=int(entity.zone), rng=self.rng)
+        if not hit.missed and hit.damage > 0:
+            # A monster builds TP from its own swings on the mob curve, which is
+            # flatter than the player one below 450 delay.
+            delay = max(1, int(entity.attack_delay_ms * 60 / 1000))
+            self._mob_gain_tp(entity, combat.tp_return_mob(delay))
+        if not hit.missed and session.has_effect(effects.RETALIATION):
+            rate = 0.40 + job_points.category_total(1, "Retaliation Effect") / 100.0
+            if self.rng.random() < rate:
+                miss, damage, critical = self.player_attack(session, entity)
+                if not miss and damage > 0:
+                    defeated = entity.hp - damage <= 0
+                    entity.hp = max(0, entity.hp - damage)
+                    session.queue_action(int(entity.id), damage=damage,
+                                         critical=critical, defeated=defeated,
+                                         actor_id=int(session.char["char_id"]))
+                    session.say("You retaliate against %s for %d points of damage."
+                                % (entity.name, damage))
+                    if defeated:
+                        self.kill_mob(session, entity, time.time())
+        # Avenger's Roll is a flat counter chance.  It is checked after the swing lands,
+        # the same place as Retaliation, and the counter itself is an ordinary player
+        # attack so damage-taken gear and the damage cap all still apply.
+        counter = max(0, min(100, int(session.combat_mods().get(mod.COUNTER, 0))))
+        if not hit.missed and counter and self.rng.randint(1, 100) <= counter:
+            miss, damage, critical = self.player_attack(session, entity)
+            if not miss and damage > 0:
+                defeated = entity.hp - damage <= 0
+                entity.hp = max(0, entity.hp - damage)
+                session.queue_action(int(entity.id), damage=damage,
+                                     critical=critical, defeated=defeated,
+                                     actor_id=int(session.char["char_id"]))
+                session.say("You counter %s for %d points of damage."
+                            % (entity.name, damage))
+                if defeated:
+                    self.kill_mob(session, entity, time.time())
         return hit.missed, hit.damage, hit.critical
+
+    # --- monster TP moves ----------------------------------------------------------------
+
+    def _mob_skill_observers(self, entity: ZoneEntity, sessions: list) -> list:
+        """The sessions close enough to see (and already know) the monster."""
+        out = []
+        for session in sessions:
+            if int(entity.targid) not in getattr(session, "sent_targids", ()):
+                continue
+            if entity.distance_to(*session.pos[:3]) <= MOB_SYNC_RANGE:
+                out.append(session)
+        return out
+
+    def _mob_skill_attacker(self, entity: ZoneEntity):
+        """The monster's fighter with its own debuffs applied (mirrors mob_attack)."""
+        attacker = self.monster_sheet(entity).fighter
+        for effect_id, field in ((effects.BLINDNESS, "accuracy"),
+                                 (effects.ACCURACY_DOWN, "accuracy"),
+                                 (effects.ATTACK_DOWN, "attack")):
+            state = entity.effect_state.get(effect_id)
+            if state is None:
+                continue
+            percent = max(0, min(95, int(state.get("potency", 0))))
+            value = int(getattr(attacker, field))
+            attacker = replace(attacker, **{field: max(1, value * (100 - percent) // 100)})
+        return attacker
+
+    def _mob_try_skill(self, entity: ZoneEntity, target, sessions: list,
+                       now: float) -> bool:
+        """Readies one TP move if the bar is full enough; True when the swing is spent."""
+        if entity.pending_skill is not None or not entity.skill_list_id:
+            return False
+        skills = self.mob_skill_list(entity.skill_list_id)
+        if not skills:
+            return False
+        if not mobskills.should_use(entity.tp, entity.tp_threshold, entity.hpp()):
+            return False
+        distance = entity.distance_to(*target.pos[:3])
+        usable = mobskills.usable(list(skills), distance)
+        if not usable:
+            return False
+        # Enemy-target moves need the player in range; a self-only list still plays its
+        # buffs.  The shuffle is the retail choice: any usable move in the family list.
+        skill = self.rng.choice(usable)
+        prepare = max(0, int(skill.prepare_time)) / 1000.0
+        entity.pending_skill = {
+            "skill": skill, "at": now + prepare,
+            "target_char_id": int(target.char["char_id"]),
+        }
+        # Do not auto-attack while the move is being readied or animated.
+        entity.next_attack_at = now + prepare + max(0.8, skill.animation_time / 1000.0)
+        if prepare > 0.01:
+            self._queue_mob_skill_start(entity, skill, target, sessions)
+            return True
+        self._mob_fire_skill(entity, target, sessions, now)
+        return True
+
+    def _queue_mob_skill_start(self, entity: ZoneEntity, skill: "mobskills.MobSkill",
+                               target, sessions: list) -> None:
+        """The 0x028 SkillStart line: "<monster> readies <move>" and its pose."""
+        from .zone import sub
+        target_id = (int(target.char["char_id"]) if skill.is_enemy_target
+                     else int(entity.id))
+        body = packets.battle_action(
+            int(entity.id), target_id, damage=int(skill.id), animation=0,
+            kind=0, message=packets.MESSAGE_READIES_WEAPONSKILL,
+            category=packets.ACTION_CATEGORY_SKILL_START,
+            action_id=packets.ACTION_SKILL_USE)
+        for observer in self._mob_skill_observers(entity, sessions):
+            observer.queue.append(sub(0x028, body))
+
+    def _mob_skill_targets(self, entity: ZoneEntity, skill: "mobskills.MobSkill",
+                           primary, sessions: list) -> list:
+        """The player sessions one TP move hits (AoE and cone handled here)."""
+        if not skill.is_enemy_target:
+            return []
+        if skill.aoe == mobskills.AOE_ATTACKER:
+            return [session for session in sessions
+                    if not getattr(session, "dead_until", 0.0)
+                    and int(session.char.get("hp_current", 0)) > 0
+                    and entity.distance_to(*session.pos[:3]) <= max(1.0, skill.aoe_radius)]
+        if skill.aoe == mobskills.AOE_TARGET:
+            return [session for session in sessions
+                    if not getattr(session, "dead_until", 0.0)
+                    and int(session.char.get("hp_current", 0)) > 0
+                    and math.dist(primary.pos[:3], session.pos[:3])
+                    <= max(1.0, skill.aoe_radius)]
+        # Cones are approximated as a single target: the client's facing byte is not
+        # reliable enough to decide whether a player is inside a 45-degree wedge.
+        return [primary]
+
+    def _mob_fire_skill(self, entity: ZoneEntity, primary, sessions: list,
+                        now: float) -> None:
+        """Resolve the readied TP move and send its 0x028 result."""
+        from .zone import sub
+        pending = entity.pending_skill or {}
+        entity.pending_skill = None
+        skill = pending.get("skill")
+        if not isinstance(skill, mobskills.MobSkill) or not entity.alive:
+            return
+        # Every TP move empties the bar in this implementation, including the few
+        # LandSandBoat rows flagged TP-free: otherwise a no-cost move would fire every
+        # attack round because the bar never drops.
+        entity.tp = 0
+        entity.tp_threshold = mobskills.next_threshold(self.rng)
+        if (skill.is_enemy_target and not skill.is_aoe and primary is not None
+                and entity.distance_to(*primary.pos[:3]) > max(1.0, skill.distance) + 1.0):
+            # The player left the move's range while it was being readied; retail
+            # interrupts the finish, the TP is already spent.
+            return
+
+        targets = []
+        status = mobskills.status_effect(skill) if skill.is_enemy_target else None
+        players = self._mob_skill_targets(entity, skill, primary, sessions)
+        if skill.is_enemy_target and not players:
+            return
+        attacker = self._mob_skill_attacker(entity)
+        if skill.is_enemy_target:
+            attacker = replace(attacker, accuracy=int(attacker.accuracy) + 50)
+        ftp = mobskills.damage_ftp(skill)
+        self_target = None if players else entity
+        for session in players:
+            results = []
+            hit = combat.melee(
+                attacker, session.stat_sheet().fighter, zone=int(entity.zone),
+                rng=self.rng, ftp=max(0.1, ftp), allow_critical=False)
+            absorbed = False
+            if not hit.missed and session.has_effect(effects.COPY_IMAGE) \
+                    and session.effect_power(effects.COPY_IMAGE) > 0:
+                session.drop_shadow()
+                absorbed = True
+                results.append({
+                    "damage": 0, "miss": True, "kind": 0,
+                    "animation": int(skill.animation),
+                    "message": packets.MESSAGE_SHADOW_ABSORB,
+                })
+                session.queue.append(session.char_status())
+                targets.append({"target_id": int(session.char["char_id"]),
+                                "results": results})
+                continue
+            if hit.missed:
+                results.append({
+                    "damage": 0, "miss": True, "kind": 0,
+                    "animation": int(skill.animation),
+                    "message": packets.MESSAGE_SKILL_MISSES,
+                })
+            else:
+                damage = max(0, int(hit.damage))
+                defeated = int(session.char.get("hp_current", 0)) - damage <= 0
+                session.take_damage(damage, entity)
+                results.append({
+                    "damage": damage, "miss": False, "defeated": defeated, "kind": 0,
+                    "animation": int(skill.animation),
+                    "message": packets.MESSAGE_DAMAGE,
+                })
+                if status is not None and not defeated:
+                    effect_id, duration, potency = status
+                    session.add_effect(effect_id, duration=duration, potency=potency)
+                    session.queue.append(session.char_status())
+                    results.append({
+                        "damage": int(effect_id), "miss": False, "kind": 0,
+                        "animation": int(skill.animation),
+                        "message": packets.MESSAGE_MAGIC_ENFEEB,
+                    })
+            targets.append({"target_id": int(session.char["char_id"]),
+                            "results": results})
+        if self_target is not None:
+            # A self-only move still has to animate.  Healing moves use the client's
+            # "recovers HP" line; a buff shows its status icon and animation.
+            effect = mobskills.self_effect(skill)
+            if effect is not None and effect[0] == "heal":
+                before = int(entity.hp)
+                entity.hp = min(int(entity.hp_max), before + int(effect[2]))
+                self._queue_mob_hp(entity)
+                targets.append({"target_id": int(entity.id), "results": [{
+                    "damage": int(entity.hp) - before, "miss": False, "kind": 0,
+                    "animation": int(skill.animation),
+                    "message": packets.MESSAGE_SKILL_RECOVERS_HP,
+                }]})
+            elif effect is not None:
+                targets.append({"target_id": int(entity.id), "results": [{
+                    "damage": int(effect[1]), "miss": False, "kind": 0,
+                    "animation": int(skill.animation),
+                    "message": packets.MESSAGE_MAGIC_GAIN_EFFECT,
+                }]})
+            else:
+                targets.append({"target_id": int(entity.id), "results": [{
+                    "damage": 0, "miss": False, "kind": 0,
+                    "animation": int(skill.animation), "message": 0,
+                }]})
+        category = (packets.ACTION_CATEGORY_MOB_SKILL_FINISH if int(skill.id) >= 256
+                    else packets.ACTION_CATEGORY_SKILL_FINISH)
+        body = packets.battle_action(
+            int(entity.id), 0, category=category, action_id=int(skill.id),
+            targets=targets)
+        observers = self._mob_skill_observers(entity, sessions)
+        if not observers and primary is not None:
+            observers = [primary]
+        for observer in observers:
+            observer.queue.append(sub(0x028, body))
 
     # --- status effects on monsters -----------------------------------------------------
 
@@ -2774,11 +4310,27 @@ class World:
         if entity.enmity_decay_at <= 0.0:
             entity.enmity_decay_at = now
         top = max(hate, key=hate.get)
+        # A claimed monster stays the claiming party's fight.  The client blocks a
+        # cross-party attack (the target is pink and unattackable); letting the hate list
+        # move the claim to the other party was what flipped a live fight pink and left
+        # the first player unable to swing, but the server still swung for them.
+        claim = int(entity.claim_char_id or 0)
+        if claim and claim != top:
+            mine = self.group_id(claim)
+            if not mine or mine != self.group_id(top):
+                return
         if entity.engaged_char_id != top:
             entity.engaged_char_id = top
             entity.claim_char_id = top
             entity.next_attack_at = now + 1.5
             entity.aggro_announced = True
+            # A pull is a new chase.  Drop whatever route the idle/roaming monster had
+            # and any cooldown from a failed search, or the first seconds of the fight
+            # were spent walking an old roam leg (or standing still) with a red name.
+            self._mob_clear_nav(entity)
+            entity.nav_blocked_until = 0.0
+            entity.roam_target = None
+            entity.roam_pause_until = 0.0
             self.set_animation(entity, 1)
 
     def add_damage_hate(self, entity: ZoneEntity, char_id: int, damage: int,
@@ -2852,7 +4404,8 @@ class World:
                          tick: int | None = None,
                          tick_interval: float = 3.0,
                          first_tick_delay: float | None = None,
-                         tier: int = 0) -> bool:
+                         tier: int = 0,
+                         name: str = "") -> bool:
         """Land an enfeebling spell.  Returns False when there is no effect to apply.
 
         ``duration_scale`` comes from the caster's Magic Accuracy against the target's
@@ -2867,6 +4420,8 @@ class World:
         ticks (Helixes use ten, everything else three) and ``first_tick_delay`` shifts
         the first one.  ``tier`` is only meaningful for the Helix line: retail lets a
         tier-2 Helix replace any Helix but a tier-1 Helix only replaces tier 1.
+        ``name`` is the spell name kept for the Target Debuffs window; Frazzle and a
+        Threnody's secondary row share effect 404, so the id alone cannot label it.
         """
         if spec is None or int(spec.effect) <= 0:
             return False
@@ -2890,6 +4445,7 @@ class World:
             "icon": int(spec.icon or effect_id),
             "next_tick": now + first_tick,
             "source": int(session.char["char_id"]) if session is not None else 0,
+            "name": str(name or ""),
         }
         log.info("%s gains effect %d", entity.name, effect_id)
         return True
@@ -2930,6 +4486,8 @@ class World:
                     entity.status_effects.remove(effect_id)
                 except ValueError:
                     pass
+                if state.get("hidden"):
+                    continue
                 icon = int(state.get("icon", effect_id))
                 for session in sessions:
                     # A 0x029 battle message prints the wear-off line without an action,
@@ -2960,11 +4518,41 @@ class World:
                     self.kill_mob(source, entity, now)
                 break
 
+    def exemplar_points_for(self, session, entity: ZoneEntity) -> int:
+        """Retail Exemplar Points for one kill at level 99 (BG-wiki's table).
+
+        The effective level is ``119 + MasterLevel / 5``.  A mob at or above it pays
+        ``20 + 4*dLVL``; below it ``20 + 2*dLVL``.  The mob category multiplies that
+        (Locus x7, Apex x5).  Party size and Corsair's Roll are not modelled; the
+        Master chain multiplier is applied by :meth:`kill_mob` after this base.
+        """
+        jobs = session.char.get("jobs") or {}
+        entry = jobs.get(int(session.char.get("main_job", 0))) or (99, 0)
+        master = int(entry[1]) if len(entry) > 1 else 0
+        effective_level = 119 + max(0, master) // 5
+        delta = int(getattr(entity, "level", 0) or 0) - effective_level
+        base = 20 + (4 if delta >= 0 else 2) * delta
+        if base <= 0:
+            return 0
+        name = str(getattr(entity, "name", "") or "")
+        if name.startswith("High Apex"):
+            multiplier = 8
+        elif name.startswith("Apex"):
+            multiplier = 5
+        elif name.startswith("Locus"):
+            multiplier = 7
+        else:
+            multiplier = 1
+        return int(base * multiplier)
+
     def kill_mob(self, session, entity: ZoneEntity, now: float) -> None:
         from .zone import sub
 
         entity.alive = False
         entity.hp = 0
+        entity.tp = 0
+        entity.pending_skill = None
+        entity.skillchain = None
         entity.engaged_char_id = None
         entity.enmity.clear()
         entity.enmity_ve.clear()
@@ -2978,19 +4566,73 @@ class World:
             other.queue_entity(entity, SEND_HP)
         player_level = int(session.char.get("main_level", 1))
         too_weak = player_level - entity.level > EXP_LEVEL_SPREAD
-        exp = 0 if too_weak else max(1, entity.level * 8 + self.rng.randint(0, 4))
+        # Level 99 is the Master Level band: kills pay Exemplar Points instead of EXP.
+        # The client's own line (message 809, or 810 once the Master chain is running)
+        # is what the player should see, and the points are what the 0x061 Master Level
+        # block reads.  The first qualifying kill only arms the chain window; each kill
+        # inside it is chain #1, #2, ... and pays +2% per link (caps at #50).  The window
+        # starts at 60 s and shrinks to the 30 s floor at chain #25 (chain.py).
+        exemplar = player_level >= 99
+        master_chain = 0
+        if exemplar:
+            exp = 0
+            base_points = 0 if too_weak else self.exemplar_points_for(session, entity)
+            points = 0
+            if base_points:
+                state = getattr(session, "exemplar_chain", None)
+                if state is None:
+                    state = chain.ChainState()
+                    session.exemplar_chain = state
+                # The kill's own chain number picks the window it arms for the next one:
+                # a broken chain restarts at #0 (60 s), an inside kill uses its new link.
+                next_chain = state.number + 1 if state.active(now) else 0
+                master_chain = state.advance(
+                    now, window=chain.window_for(next_chain),
+                    cap=chain.EXEMPLAR_CHAIN_MAX)
+                points = int(base_points * state.bonus(
+                    chain.EXEMPLAR_CHAIN_BONUS_PER_LINK))
+                log.info("%s %s: %d exemplar points, Master chain #%d (base %d)",
+                         session.addr, entity.name, points, master_chain, base_points)
+
+        else:
+            points = 0
+            exp = 0 if too_weak else max(1, entity.level * 8 + self.rng.randint(0, 4))
+        # Corsair's Roll raises experience, capacity and exemplar points.  The reward is
+        # paid to the killer, which is the player whose roll is being read here.
+        try:
+            roll_bonus = max(0, int(session.combat_mods().get(mod.EXP_BONUS, 0)))
+        except Exception:
+            roll_bonus = 0
+        if roll_bonus:
+            if exemplar:
+                points = points * (100 + roll_bonus) // 100
+            else:
+                exp = exp * (100 + roll_bonus) // 100
         gil = 0 if too_weak else max(1, entity.level * 2 + self.rng.randint(0, 3))
         try:
-            updated = self.service.award_exp_gil(session.char["id"], exp, gil)
+            updated = self.service.award_exp_gil(
+                session.char["id"], points if exemplar else exp, gil, exemplar=exemplar)
             levels = int(updated.pop("levels_gained", 0))
-            for key in ("main_level", "exp", "exp_next", "hp", "mp", "hp_current", "mp_current", "gil"):
+            master_levels = int(updated.pop("master_levels_gained", 0))
+            for key in ("main_level", "exp", "exp_next", "hp", "mp", "hp_current",
+                        "mp_current", "gil", "exemplar_points"):
                 if key in updated:
                     session.char[key] = updated[key]
+            if exemplar and "master_level" in updated:
+                jobs = session.char.setdefault("jobs", {})
+                main_job = int(session.char.get("main_job", 0))
+                entry = jobs.get(main_job) or (int(session.char.get("main_level", 99)), 0)
+                jobs[main_job] = (entry[0], int(updated["master_level"]))
             cid = int(session.char["char_id"])
             targid = int(session.char.get("targid", 0x400))
             session.queue.append(sub(0x029, battle_message(
                 cid, int(entity.id), targid, int(entity.targid), 0, 0, 6)))
-            if exp:
+            if exemplar and points:
+                session.queue.append(sub(0x02D, battle_message2(
+                    cid, cid, targid, targid, points, master_chain,
+                    packets.MESSAGE_MASTER_CHAIN if master_chain
+                    else packets.MESSAGE_EXEMPLAR_POINTS_GAINED)))
+            elif exp:
                 session.queue.append(sub(0x02D, battle_message2(
                     cid, cid, targid, targid, exp, 0, 8)))
             if gil:
@@ -3002,6 +4644,10 @@ class World:
                 session.queue.append(sub(0x029, battle_message(
                     cid, cid, targid, targid, int(updated["main_level"]), 0, 9)))
                 session.queue += [session.job_info(), session.char_sync()]
+            if master_levels:
+                session.queue.append(sub(0x02D, battle_message2(
+                    cid, cid, targid, targid, int(updated["master_level"]), 0,
+                    packets.MESSAGE_MASTER_LEVEL_UP)))
             session.queue.extend([session.char_stats(), session.char_status(), session.party_member()])
             session.queue.append(sub(0x01E, item_num(int(updated.get("gil", session.char.get("gil", 0))), 0, 0)))
         except Exception as exc:

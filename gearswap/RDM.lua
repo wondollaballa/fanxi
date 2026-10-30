@@ -1,6 +1,6 @@
 --[[
-    Fanxi GearSwap library — Twodough RDM
-    Updated 2026-10-22 12:07:21
+    Fanxi GearSwap library — Onedough RDM
+    Updated 2026-10-30 13:03:09
     The launcher writes sets back to this file; the first copy is kept as a .bak.
     Source: /Users/wondochoung/Documents/GitHub/fanxi/gearswap/RDM.lua
 
@@ -8,133 +8,12 @@
     to add a variant, copy an existing set and give it a new path.
 ]]
 
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-local limbus = {
-    duty = {
-        tp = {
-            head = { name = "Duty Crown", augments = {'"Store TP"+7'} },
-            body = { name = "Duty Cyclas", augments = {'"Store TP"+8'} },
-            hands = { name = "Duty Gauntlets", augments = {'"Store TP"+6'} },
-            legs = { name = "Duty Flanchard", augments = {'"Store TP"+7'} },
-            feet = { name = "Duty Sollerets", augments = {'"Store TP"+6'} },
-        },
-        ws = {
-            head = { name = "Duty Crown", augments = {"Accuracy+30 Mag. Acc+30"} },
-            body = { name = "Duty Cyclas", augments = {"Accuracy+30 Mag. Acc+30"} },
-            hands = { name = "Duty Gauntlets", augments = {"Accuracy+30 Mag. Acc+30"} },
-            legs = { name = "Duty Flanchard", augments = {"Accuracy+30 Mag. Acc+30"} },
-            feet = { name = "Duty Sollerets", augments = {"Accuracy+30 Mag. Acc+30"} },
-        },
-    },
-    revelation = {
-        tp = {
-            head = { name = "Revelation Masque", augments = {'"Double Attack"+7%'} },
-            body = { name = "Revelation Plate.", augments = {'"Double Attack"+8%'} },
-            hands = { name = "Revelation Gaunt.", augments = {'"Double Attack"+6%'} },
-            legs = { name = "Revelation Brais", augments = {'"Double Attack"+7%'} },
-            feet = { name = "Revelation Sab.", augments = {'"Double Attack"+6%'} },
-        },
-        ws = {
-            head = { name = "Revelation Masque", augments = {"Physical Damage Limit+6%"} },
-            body = { name = "Revelation Plate.", augments = {"Physical Damage Limit+7%"} },
-            hands = { name = "Revelation Gaunt.", augments = {"Physical Damage Limit+5%"} },
-            legs = { name = "Revelation Brais", augments = {"Physical Damage Limit+6%"} },
-            feet = { name = "Revelation Sab.", augments = {"Physical Damage Limit+5%"} },
-        },
-    },
-    sworn = {
-        ta = {
-            head = { name = "Sworn Crown", augments = {'"Triple Attack"+6%'} },
-            body = { name = "Sworn Platemail", augments = {'"Triple Attack"+8%'} },
-            hands = { name = "Sworn Gauntlets", augments = {'"Triple Attack"+7%'} },
-            legs = { name = "Sworn Brais", augments = {'"Triple Attack"+6%'} },
-            feet = { name = "Sworn Sabatons", augments = {'"Triple Attack"+7%'} },
-        },
-        phalanx = {
-            head = { name = "Sworn Crown", augments = {'"Phalanx" received +4'} },
-            body = { name = "Sworn Platemail", augments = {'"Phalanx" received +6'} },
-            hands = { name = "Sworn Gauntlets", augments = {'"Phalanx" received +5'} },
-            legs = { name = "Sworn Brais", augments = {'"Phalanx" received +4'} },
-            feet = { name = "Sworn Sabatons", augments = {'"Phalanx" received +5'} },
-        },
-        acc = {
-            head = { name = "Sworn Crown", augments = {"Accuracy+30 Mag. Acc+30"} },
-            body = { name = "Sworn Platemail", augments = {"Accuracy+30 Mag. Acc+30"} },
-            hands = { name = "Sworn Gauntlets", augments = {"Accuracy+30 Mag. Acc+30"} },
-            legs = { name = "Sworn Brais", augments = {"Accuracy+30 Mag. Acc+30"} },
-            feet = { name = "Sworn Sabatons", augments = {"Accuracy+30 Mag. Acc+30"} },
-        },
-    },
-    indomitable = {
-        cast = {
-            head = { name = "Indom. Petasos", augments = {'"Magic Atk. Bonus"+28'} },
-            body = { name = "Indomitable Coat", augments = {'"Magic Atk. Bonus"+32'} },
-            hands = { name = "Indom. Gloves", augments = {'"Magic Atk. Bonus"+30'} },
-            legs = { name = "Indom. Tonban", augments = {'"Magic Atk. Bonus"+28'} },
-            feet = { name = "Indom. Sabots", augments = {'"Magic Atk. Bonus"+30'} },
-        },
-    },
-    clemency = {
-        tp = {
-            head = { name = "Clemen. Somen", augments = {'"Quadruple Attack"+4%'} },
-            body = { name = "Clemen. Hara.", augments = {'"Quadruple Attack"+6%'} },
-            hands = { name = "Clemency Kote", augments = {'"Quadruple Attack"+5%'} },
-            legs = { name = "Clem. Haidate", augments = {'"Quadruple Attack"+4%'} },
-            feet = { name = "Clem. Sune-Ate", augments = {'"Quadruple Attack"+5%'} },
-        },
-        ws = {
-            head = { name = "Clemen. Somen", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-            body = { name = "Clemen. Hara.", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-            hands = { name = "Clemency Kote", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-            legs = { name = "Clem. Haidate", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-            feet = { name = "Clem. Sune-Ate", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-        },
-    },
-}
-
-local capes = {
-    fc = { name = "Sucellos's Cape", augments = {"MP+60", "Mag. Acc+20 /Mag. Dmg.+20", "MP+20", '"Fast Cast"+10', "Phys. dmg. taken-10%"} },
-    pdt = { name = "Sucellos's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
-    mdt = { name = "Sucellos's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
-    maxhp = { name = "Sucellos's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
-    dt = { name = "Sucellos's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
-    tp = { name = "Sucellos's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
-    cure = { name = "Sucellos's Cape", augments = {"MND+20", "Mag. Acc+20 /Mag. Dmg.+20", "MND+10", '"Cure Potency"+10%', "Phys. dmg. taken-10%"} },
-    macc = { name = "Sucellos's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "Mag. Acc.+10", "Enmity-10", "Phys. dmg. taken-10%"} },
-    nuke = { name = "Sucellos's Cape", augments = {"INT+20", "Mag. Acc+20 /Mag. Dmg.+20", "INT+10", '"Mag.Atk.Bns."+10', "Phys. dmg. taken-10%"} },
-    ws_str = { name = "Sucellos's Cape", augments = {"STR+20", "Accuracy+20 Attack+20", "STR+10", "Weapon skill damage +10%", "Damage taken-5%"} },
-    ws_dex = { name = "Sucellos's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", "Weapon skill damage +10%", "Damage taken-5%"} },
-    ws_mnd = { name = "Sucellos's Cape", augments = {"MND+20", "Accuracy+20 Attack+20", "MND+10", "Weapon skill damage +10%", "Damage taken-5%"} },
-    mabws = { name = "Sucellos's Cape", augments = {"MND+20", "Mag. Acc+20 /Mag. Dmg.+20", "MND+10", "Weapon skill damage +10%", "Phys. dmg. taken-10%"} },
-}
-
 function get_sets()
     sets = {}
     sets.engaged = {}
     sets.idle = {}
     sets.JA = {}
+    sets.Limbus = {}
     sets.midcast = {}
     sets.Odyssey = {}
     sets.precast = {}
@@ -151,7 +30,7 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Atrophy Boots +4",
         neck = "Duelist's Torque +2",
-        back = capes.fc,
+        back = "Sucellos's Cape",
     }
     sets.JA.Composure = {
         main = "Murgleis",
@@ -162,7 +41,7 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Atrophy Boots +4",
         neck = "Duelist's Torque +2",
-        back = capes.fc,
+        back = "Sucellos's Cape",
     }
     sets.JA.Convert = {
         main = "Murgleis",
@@ -173,7 +52,7 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Atrophy Boots +4",
         neck = "Duelist's Torque +2",
-        back = capes.fc,
+        back = "Sucellos's Cape",
     }
     sets.JA.Saboteur = {
         main = "Murgleis",
@@ -184,7 +63,7 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Atrophy Boots +4",
         neck = "Duelist's Torque +2",
-        back = capes.fc,
+        back = "Sucellos's Cape",
     }
     sets.JA.Spontaneity = {
         main = "Murgleis",
@@ -195,7 +74,30 @@ function get_sets()
         legs = "Atrophy Tights +4",
         feet = "Vitiation Boots +4",
         neck = "Duelist's Torque +2",
-        back = capes.fc,
+        back = "Sucellos's Cape",
+    }
+
+    -- ===== Limbus =====
+    sets.Limbus.sworn_acc = {
+        head = "Sworn Crown",
+        body = "Sworn Platemail",
+        hands = "Sworn Gauntlets",
+        legs = "Sworn Brais",
+        feet = "Sworn Sabatons",
+    }
+    sets.Limbus.sworn_phalanx = {
+        head = "Sworn Crown",
+        body = "Sworn Platemail",
+        hands = "Sworn Gauntlets",
+        legs = "Sworn Brais",
+        feet = "Sworn Sabatons",
+    }
+    sets.Limbus.sworn_ta = {
+        head = "Sworn Crown",
+        body = "Sworn Platemail",
+        hands = "Sworn Gauntlets",
+        legs = "Sworn Brais",
+        feet = "Sworn Sabatons",
     }
 
     -- ===== Odyssey =====
@@ -232,6 +134,23 @@ function get_sets()
     }
 
     -- ===== WS =====
+    sets.WS["Black Halo"] = {
+        main = "Maxentius",
+        sub = "Thibron",
+        ammo = "Crepuscular Pebble",
+        head = "Vitiation Chapeau +4",
+        body = "Bunzi's Robe",
+        hands = "Atrophy Gloves +4",
+        legs = "Nyame Flanchard",
+        feet = "Lethargy Houseaux +3",
+        neck = "Duelist's Torque +2",
+        waist = "Sailfi Belt +1",
+        ear1 = "Moonshade Earring",
+        ear2 = "Hoxne Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Sroda Ring",
+        back = "Sucellos's Cape",
+    }
     sets.WS["Chant du Cygne"] = {
         main = "Naegling",
         sub = "Genbu's Shield",
@@ -247,12 +166,80 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = capes.tp,
+        back = "Sucellos's Cape",
     }
     sets.WS.Requiescat = {
+        main = "Sequence",
+        sub = "Daybreak",
+        ammo = "Crepuscular Pebble",
+        head = "Null Masque",
+        body = "Bunzi's Robe",
+        hands = "Malignance Gloves",
+        legs = "Nyame Flanchard",
+        feet = "Sworn Sabatons",
+        neck = "Fotia Gorget",
+        waist = "Fotia Belt",
+        ear1 = "Moonshade Earring",
+        ear2 = "Hoxne Earring",
+        ring1 = "Sroda Ring",
+        ring2 = "Metamorph Ring +1",
+        back = "Sucellos's Cape",
+    }
+    sets.WS["Ruthless Stroke"] = {
+        main = "Mpu Gandring",
+        sub = "Thibron",
+        ammo = "Crepuscular Pebble",
+        head = "Nyame Helm",
+        body = "Nyame Mail",
+        hands = "Malignance Gloves",
+        legs = "Nyame Flanchard",
+        feet = "Lethargy Houseaux +3",
+        neck = "Fotia Gorget",
+        waist = "Kentarch Belt +1",
+        ear1 = "Moonshade Earring",
+        ear2 = "Hoxne Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Sroda Ring",
+        back = "Alabaster Mantle",
+    }
+    sets.WS["Sanguine Blade"] = {
+        main = "Crocea Mors",
+        sub = "Bunzi's Rod",
+        ammo = "Sroda Tathlum",
+        head = "Pixie Hairpin +1",
+        body = "Nyame Mail",
+        hands = "Jhakri Cuffs +2",
+        legs = "Lethargy Fuseau +3",
+        feet = "Lethargy Houseaux +3",
+        neck = "Baetyl Pendant",
+        waist = "Orpheus's Sash",
+        ear1 = "Malignance Earring",
+        ear2 = "Regal Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Archon Ring",
+        back = "Sucellos's Cape",
+    }
+    sets.WS["Savage Blade"] = {
         main = "Naegling",
-        sub = "Genbu's Shield",
-        ammo = "Aurgelmir Orb +1",
+        sub = "Thibron",
+        ammo = "Crepuscular Pebble",
+        head = "Vitiation Chapeau +4",
+        body = "Nyame Mail",
+        hands = "Atrophy Gloves +4",
+        legs = "Nyame Flanchard",
+        feet = "Lethargy Houseaux +3",
+        neck = "Duelist's Torque +2",
+        waist = "Sailfi Belt +1",
+        ear1 = "Moonshade Earring",
+        ear2 = "Hoxne Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Sroda Ring",
+        back = "Sucellos's Cape",
+    }
+    sets.WS["Imperator"] = {
+        main = "Caliburnus",
+        sub = "Thibron",
+        ammo = "Crepuscular Pebble",
         head = "Nyame Helm",
         body = "Nyame Mail",
         hands = "Nyame Gauntlets",
@@ -261,47 +248,47 @@ function get_sets()
         neck = "Fotia Gorget",
         waist = "Fotia Belt",
         ear1 = "Moonshade Earring",
-        ear2 = "Cessance Earring",
-        ring1 = "Epaminondas's Ring",
-        ring2 = "Begrudging Ring",
-        back = capes.mabws,
-    }
-    sets.WS["Sanguine Blade"] = {
-        main = "Naegling",
-        sub = "Genbu's Shield",
-        ammo = "Ghastly Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Duelist's Torque +2",
-        waist = "Orpheus's Sash",
-        ear1 = "Friomisi Earring",
-        ear2 = "Moonshade Earring",
+        ear2 = "Hoxne Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Metamorph Ring +1",
-        back = capes.mabws,
+        back = "Sucellos's Cape",
     }
-    sets.WS["Savage Blade"] = {
-        main = "Naegling",
-        sub = "Genbu's Shield",
-        ammo = "Aurgelmir Orb +1",
-        head = "Nyame Helm",
+    sets.WS["Seraph Blade"] = {
+        main = "Crocea Mors",
+        sub = "Daybreak",
+        ammo = "Sroda Tathlum",
+        head = "Lethargy Chappel +3",
         body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
+        hands = "Lethargy Gantherots +3",
         legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Rep. Plat. Medal",
-        waist = "Fotia Belt",
+        feet = "Lethargy Houseaux +3",
+        neck = "Fotia Gorget",
+        waist = "Orpheus's Sash",
         ear1 = "Moonshade Earring",
-        ear2 = "Cessance Earring",
+        ear2 = "Malignance Earring",
         ring1 = "Epaminondas's Ring",
-        ring2 = "Begrudging Ring",
-        back = capes.mabws,
+        ring2 = "Sroda Ring",
+        back = "Sucellos's Cape",
     }
 
     -- ===== engaged =====
+    sets.engaged.Enspell = {
+        main = "Naegling",
+        sub = "Genbu's Shield",
+        ammo = "Aurgelmir Orb +1",
+        head = "Sworn Crown",
+        body = "Sworn Platemail",
+        hands = "Sworn Gauntlets",
+        legs = "Sworn Brais",
+        feet = "Sworn Sabatons",
+        neck = "Duelist's Torque +2",
+        waist = "Orpheus's Sash",
+        ear1 = "Telos Earring",
+        ear2 = "Cessance Earring",
+        ring1 = "Rajas Ring",
+        ring2 = "Petrov Ring",
+        back = "Sucellos's Cape",
+    }
     sets.engaged.acc = {
         main = "Naegling",
         sub = "Genbu's Shield",
@@ -317,7 +304,7 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = capes.tp,
+        back = "Sucellos's Cape",
     }
     sets.engaged.hybrid = {
         main = "Naegling",
@@ -334,31 +321,23 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.tp,
+        back = "Sucellos's Cape",
     }
     sets.engaged.tp = {
-        main = "Naegling",
-        sub = "Genbu's Shield",
         ammo = "Aurgelmir Orb +1",
-        head = "Atrophy Chapeau +4",
-        body = "Lethargy Sayon +3",
-        hands = "Vitiation Gloves +4",
-        legs = "Vitiation Tights +4",
-        feet = "Atrophy Boots +4",
-        neck = "Duelist's Torque +2",
-        waist = "Windbuffet Belt +1",
-        ear1 = "Cessance Earring",
-        ear2 = "Dedition Earring",
-        ring1 = "Rajas Ring",
-        ring2 = "Petrov Ring",
-        back = capes.tp,
+        head = "Bunzi's Hat",
+        body = "Sworn Platemail",
+        hands = "Sworn Gauntlets",
+        legs = "Sworn Brais",
+        feet = "Sworn Sabatons",
+        neck = "Anu Torque",
+        waist = "Reiki Yotai",
+        ear1 = "Eabani Earring",
+        ear2 = "Alabaster Earring",
+        ring1 = "Chirich Ring +1",
+        ring2 = "Chirich Ring +1",
+        back = "Sucellos's Cape",
     }
-
-    -- ===== Limbus Rank 30 sets =================================
-    sets.Limbus = {}  -- container: every top-tier Limbus build this job can wear
-    sets.Limbus.sworn_ta = { head = limbus.sworn.ta.head, body = limbus.sworn.ta.body, hands = limbus.sworn.ta.hands, legs = limbus.sworn.ta.legs, feet = limbus.sworn.ta.feet }
-    sets.Limbus.sworn_phalanx = { head = limbus.sworn.phalanx.head, body = limbus.sworn.phalanx.body, hands = limbus.sworn.phalanx.hands, legs = limbus.sworn.phalanx.legs, feet = limbus.sworn.phalanx.feet }
-    sets.Limbus.sworn_acc = { head = limbus.sworn.acc.head, body = limbus.sworn.acc.body, hands = limbus.sworn.acc.hands, legs = limbus.sworn.acc.legs, feet = limbus.sworn.acc.feet }
 
     -- ===== idle =====
     sets.idle.dt = {
@@ -376,7 +355,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.dt,
+        back = "Sucellos's Cape",
     }
     sets.idle.maxhp = {
         main = "Naegling",
@@ -393,7 +372,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.maxhp,
+        back = "Sucellos's Cape",
     }
     sets.idle.mdt = {
         main = "Naegling",
@@ -410,7 +389,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.mdt,
+        back = "Sucellos's Cape",
     }
     sets.idle.movement = {
         main = "Murgleis",
@@ -444,7 +423,7 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.pdt,
+        back = "Sucellos's Cape",
     }
     sets.idle.refresh = {
         main = "Murgleis",
@@ -461,7 +440,7 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Chirich Ring +1",
         ring2 = "Stikini Ring +1",
-        back = capes.fc,
+        back = "Sucellos's Cape",
     }
     sets.idle.town = {
         main = "Murgleis",
@@ -482,6 +461,40 @@ function get_sets()
     }
 
     -- ===== midcast =====
+    sets.midcast.Cure = {
+        main = "Daybreak",
+        sub = "Genbu's Shield",
+        ammo = "Staunch Tathlum +1",
+        head = "Atrophy Chapeau +4",
+        body = "Atrophy Tabard +4",
+        hands = "Telchine Gloves",
+        legs = "Atrophy Tights +4",
+        feet = "Atrophy Boots +4",
+        neck = "Incanter's Torque",
+        waist = "Witful Belt",
+        ear1 = "Malignance Earring",
+        ear2 = "Loquac. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Jann. Ring +1",
+        back = "Sucellos's Cape",
+    }
+    sets.midcast.CureHP = {
+        main = "Daybreak",
+        sub = "Genbu's Shield",
+        ammo = "Staunch Tathlum +1",
+        head = "Sworn Crown",
+        body = "Sworn Platemail",
+        hands = "Sworn Gauntlets",
+        legs = "Sworn Brais",
+        feet = "Sworn Sabatons",
+        neck = "Unmoving Collar +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Tuisto Earring",
+        ear2 = "Odnowa Earring +1",
+        ring1 = "Jann. Ring +1",
+        ring2 = "Gelatinous Ring +1",
+        back = "Sucellos's Cape",
+    }
     sets.midcast["Dark Magic"] = {
         main = "Murgleis",
         sub = "Genbu's Shield",
@@ -497,24 +510,24 @@ function get_sets()
         ear2 = "Enchntr. Earring +1",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = capes.macc,
+        back = "Sucellos's Cape",
     }
     sets.midcast["Elemental Magic"] = {
-        main = "Murgleis",
-        sub = "Genbu's Shield",
+        main = "Wizard's Rod (Reforged)",
+        sub = "Ammurapi Shield",
         ammo = "Ghastly Tathlum +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
+        head = "Ea Hat +1",
+        body = "Ea Houppe. +1",
+        hands = "Bunzi's Gloves",
+        legs = "Ea Slops +1",
+        feet = "Vitiation Boots +4",
         neck = "Duelist's Torque +2",
-        waist = "Eschan Stone",
-        ear1 = "Friomisi Earring",
-        ear2 = "Crematio Earring",
+        waist = "Skrymir Cord +1",
+        ear1 = "Regal Earring",
+        ear2 = "Malignance Earring",
         ring1 = "Metamorph Ring +1",
         ring2 = "Mujin Band",
-        back = capes.nuke,
+        back = "Sucellos's Cape",
     }
     sets.midcast["Elemental Magic Macc"] = {
         main = "Murgleis",
@@ -531,7 +544,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = capes.macc,
+        back = "Sucellos's Cape",
     }
     sets.midcast["Enfeebling Magic"] = {
         main = "Murgleis",
@@ -548,7 +561,7 @@ function get_sets()
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = capes.macc,
+        back = "Sucellos's Cape",
     }
     sets.midcast["Enhancing Magic"] = {
         main = "Murgleis",
@@ -565,7 +578,58 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = capes.macc,
+        back = "Sucellos's Cape",
+    }
+    sets.midcast.EnhancingDuration = {
+        main = "Daybreak",
+        sub = "Genbu's Shield",
+        ammo = "Staunch Tathlum +1",
+        head = "Telchine Cap",
+        body = "Vitiation Tabard +4",
+        hands = "Atrophy Gloves +4",
+        legs = "Telchine Braconi",
+        feet = "Lethargy Houseaux +3",
+        neck = "Incanter's Torque",
+        waist = "Embla Sash",
+        ear1 = "Mimir Earring",
+        ear2 = "Malignance Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Stikini Ring +1",
+        back = "Sucellos's Cape",
+    }
+    sets.midcast.EnhancingSkill = {
+        main = "Daybreak",
+        sub = "Genbu's Shield",
+        ammo = "Staunch Tathlum +1",
+        head = "Atrophy Chapeau +4",
+        body = "Vitiation Tabard +4",
+        hands = "Vitiation Gloves +4",
+        legs = "Atrophy Tights +4",
+        feet = "Lethargy Houseaux +3",
+        neck = "Incanter's Torque",
+        waist = "Embla Sash",
+        ear1 = "Mimir Earring",
+        ear2 = "Malignance Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Stikini Ring +1",
+        back = "Sucellos's Cape",
+    }
+    sets.midcast.Enspell = {
+        main = "Crocea Mors",
+        sub = "Genbu's Shield",
+        ammo = "Sroda Tathlum",
+        head = "Sworn Crown",
+        body = "Sworn Platemail",
+        hands = "Aya. Manopolas +2",
+        legs = "Sworn Brais",
+        feet = "Sworn Sabatons",
+        neck = "Incanter's Torque",
+        waist = "Embla Sash",
+        ear1 = "Mimir Earring",
+        ear2 = "Malignance Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Stikini Ring +1",
+        back = "Sucellos's Cape",
     }
     sets.midcast["Healing Magic"] = {
         main = "Murgleis",
@@ -582,29 +646,65 @@ function get_sets()
         ear2 = "Tuisto Earring",
         ring1 = "Gelatinous Ring +1",
         ring2 = "Stikini Ring +1",
-        back = capes.cure,
+        back = "Sucellos's Cape",
     }
 
     -- ===== precast =====
     sets.precast.FC = {
         ammo = "Staunch Tathlum +1",
-        head = limbus.sworn.ta.head,
-        body = limbus.sworn.ta.body,
-        hands = limbus.sworn.ta.hands,
-        legs = limbus.sworn.ta.legs,
-        feet = limbus.sworn.ta.feet,
+        head = "Sworn Crown",
+        body = "Sworn Platemail",
+        hands = "Sworn Gauntlets",
+        legs = "Sworn Brais",
+        feet = "Sworn Sabatons",
         neck = "Orunmila's Torque",
         waist = "Witful Belt",
         ear1 = "Enchntr. Earring +1",
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = capes.fc,
+        back = "Sucellos's Cape",
     }
 
     -- ===== weaponset =====
-    sets.weaponset.MpuGandring = {
+    sets.weaponset["Caliburnus-DiamondAspis"] = {
+        main = "Caliburnus",
+        sub = "Diamond Aspis",
+    }
+    sets.weaponset["Caliburnus-Thibron"] = {
+        main = "Caliburnus",
+        sub = "Thibron",
+    }
+    sets.weaponset.CroceaMors = {
+        main = "Crocea Mors",
+        sub = "Genbu's Shield",
+    }
+    sets.weaponset["CroceaMors-Daybreak"] = {
+        main = "Crocea Mors",
+        sub = "Daybreak",
+    }
+    sets.weaponset["Excalibur-DiamondAspis"] = {
+        main = "Excalibur",
+        sub = "Diamond Aspis",
+    }
+    sets.weaponset["Maxentius-Thibron"] = {
+        main = "Maxentius",
+        sub = "Thibron",
+    }
+    sets.weaponset["Mpu-Thibron"] = {
         main = "Mpu Gandring",
+        sub = "Thibron",
+    }
+    sets.weaponset["MpuGandring-DiamondAspis"] = {
+        main = "Mpu Gandring",
+        sub = "Diamond Aspis",
+    }
+    sets.weaponset["Naegling-Thibron"] = {
+        main = "Naegling",
+        sub = "Thibron",
+    }
+    sets.weaponset["WizardsRod-DiamondAspis"] = {
+        main = "Wizard's Rod",
         sub = "Diamond Aspis",
     }
 end

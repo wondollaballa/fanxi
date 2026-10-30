@@ -4818,6 +4818,89 @@ static void draw_overlay(id<MTLRenderCommandEncoder> e, double w, double h)
     [e drawPrimitives:MTLPrimitiveTypeTriangleStrip vertexStart:0 vertexCount:4];
 }
 
+/* --- presenting only while the window is on screen ---------------------------------------------
+ * A covered, minimised or hidden window hands the layer no drawable, and nextDrawable then waits
+ * about a second for one - every frame. A drawable the window server never finishes also keeps
+ * the three-frame semaphore from turning over, so the frame after it blocks for good. Either one
+ * freezes the game's own loop and the zone connection inside it: the server reads the silence as
+ * a disconnect and reaps the character after three minutes (FFXI-4001 on the main, the headless
+ * boxes untouched).
+ *
+ * So nothing is presented while the window cannot be seen: the frame still runs and commits its
+ * GPU work, only the copy to the screen is skipped, so the world keeps ticking at its frame limit
+ * and the first visible frame draws normally. A drawable that arrives too late anyway closes the
+ * gate for a cooldown - one slow frame, not one per frame - and the frame is dropped rather than
+ * waited on. Both transitions are logged once, with the reason and how long it lasted. */
+#define PRESENT_SLOW_NS (250ull * 1000000ull)       /* a drawable slower than this is a stuck one */
+#define PRESENT_STALL_FIRST_NS (1000000000ull)      /* after a stuck one, leave the screen alone this long */
+#define PRESENT_STALL_MAX_NS (10000000000ull)       /* ... doubling each time, up to this */
+
+static int g_present_off;                 /* 1: drawing, not showing */
+static char g_present_why[96] = "";       /* what closed the gate (kept for the log) */
+static uint64_t g_present_off_at;         /* when it closed */
+static uint64_t g_present_retry_at;       /* not before this (a stuck drawable's cooldown) */
+static uint64_t g_present_stall_ns = PRESENT_STALL_FIRST_NS; /* the cooldown the next stall gets */
+static unsigned g_present_skipped;        /* frames not shown since the gate closed */
+
+/* Whether the window can be seen at all. SDL tracks all three cases: a hidden window, one in the
+ * Dock, and one another window covers. */
+static int window_can_be_seen(void)
+{
+    if (!g_window)
+        return 1;
+    return (SDL_GetWindowFlags(g_window) & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED | SDL_WINDOW_OCCLUDED)) == 0;
+}
+
+static void present_off(const char* why, uint64_t now, uint64_t cooldown)
+{
+    if (!g_present_off)
+    {
+        snprintf(g_present_why, sizeof g_present_why, "%s", why);
+        g_present_off = 1;
+        g_present_skipped = 0;
+        g_present_off_at = now;
+        fprintf(stderr, "[gfx] present: %s; not presenting, the world keeps ticking\n", g_present_why);
+    }
+    g_present_retry_at = now + cooldown;
+}
+
+/* A drawable that was late or missing: skip presenting for a while, doubling the wait each time,
+ * so a compositor that keeps stalling costs one slow frame per backoff instead of one per frame. */
+static void present_stalled(const char* why, uint64_t now)
+{
+    present_off(why, now, g_present_stall_ns);
+    g_present_stall_ns *= 2;
+    if (g_present_stall_ns > PRESENT_STALL_MAX_NS)
+        g_present_stall_ns = PRESENT_STALL_MAX_NS;
+}
+
+static void present_on(uint64_t now)
+{
+    /* a window switch is a couple of frames; only a stop worth knowing about is logged */
+    if (now - g_present_off_at >= 200000000ull)
+        fprintf(stderr, "[gfx] present: %s; showing frames again after %.1f s (%u skipped)\n", g_present_why,
+            (double)(now - g_present_off_at) * 1e-9, g_present_skipped);
+    g_present_off = 0;
+    g_present_retry_at = 0;
+    g_present_stall_ns = PRESENT_STALL_FIRST_NS;
+}
+
+/* May this frame go to the screen? */
+static int present_wanted(uint64_t now)
+{
+    if (!window_can_be_seen())
+    {
+        present_off("the window cannot be seen", now, 0); /* until it can be seen again */
+        return 0;
+    }
+    if (!g_present_off)
+        return 1;
+    if (now < g_present_retry_at)
+        return 0;
+    present_on(now);
+    return 1;
+}
+
 void gfx_present(GfxTex* bb)
 {
     if (!g_dev)
@@ -4827,17 +4910,27 @@ void gfx_present(GfxTex* bb)
     @autoreleasepool
     {
         flush_pass();
-        if (g_layer && bb)
+        uint64_t now = gfx_now_ns();
+        if (g_layer && bb && present_wanted(now))
         {
             int pw = 0, ph = 0;
             if (g_window)
                 SDL_GetWindowSizeInPixels(g_window, &pw, &ph);
             if (pw > 0 && ph > 0 && (g_layer.drawableSize.width != pw || g_layer.drawableSize.height != ph))
                 g_layer.drawableSize = CGSizeMake(pw, ph);
-            uint64_t t0 = gfx_profiling ? gfx_now_ns() : 0;
+            uint64_t t0 = gfx_now_ns();
             id<CAMetalDrawable> drawable = [g_layer nextDrawable];
+            uint64_t waited = gfx_now_ns() - t0;
             if (gfx_profiling)
-                g_prof.drawable_ns += gfx_now_ns() - t0;
+                g_prof.drawable_ns += waited;
+            if (!drawable)
+                present_stalled("the layer gave no drawable", now);
+            else if (waited > PRESENT_SLOW_NS)
+            {
+                char why[96];
+                snprintf(why, sizeof why, "a drawable took %.0f ms", (double)waited * 1e-6);
+                present_stalled(why, now);
+            }
             if (drawable)
             {
                 MTLRenderPassDescriptor* p = [MTLRenderPassDescriptor renderPassDescriptor];
@@ -4858,6 +4951,8 @@ void gfx_present(GfxTex* bb)
                 bb->used = g_serial;
             }
         }
+        else if (g_layer && bb)
+            g_present_skipped++; /* drawn, not shown: the screen is not there to show it */
         fps_tick();
         fx_reload();
         frame_end();
@@ -4957,6 +5052,10 @@ int gfx_init(void* window, int vsync)
                 g_layer.pixelFormat = MTLPixelFormatBGRA8Unorm;
                 g_layer.framebufferOnly = YES;
                 g_layer.displaySyncEnabled = vsync ? YES : NO;
+                /* gives up and returns nil rather than blocking for ever when the window server
+                 * is not handing drawables out; the gate in gfx_present keeps it from being
+                 * asked at all while the window cannot be seen. */
+                g_layer.allowsNextDrawableTimeout = YES;
                 int pw = 0, ph = 0;
                 SDL_GetWindowSizeInPixels(g_window, &pw, &ph);
                 if (pw > 0 && ph > 0)

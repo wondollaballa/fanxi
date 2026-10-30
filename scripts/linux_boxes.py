@@ -6,6 +6,11 @@
   python3 scripts/linux_boxes.py down
   python3 scripts/linux_boxes.py reap --dry-run
 
+`--addons-lua <remote-folder>` (default `/home/onedough83/fanxi-live-addons`) sets
+`FFXI_ADDONS_LUA` for the boxes, so a changed `host/addons/lua/control.lua` can be copied to
+that folder and tried without rebuilding the remote `host64-headless`. A missing folder is
+harmless: the client falls back to the copy embedded in the binary.
+
 The Mac keeps the server and the main client; the five subs run as headless host64 processes on the
 Linux box (build/host64-headless, SDL's dummy video and audio drivers). Each one listens on its own
 loopback control port there, and an ssh -L tunnel makes the same port reachable on this Mac, so the
@@ -258,12 +263,18 @@ def up(args) -> int:
             # A previous helper run may have started this account without recording it; clear
             # every copy before opening the new control port.
             stop_remote_account(args.ssh, user)
-            # The old process can outlive the kill by a moment; its control socket must be gone
-            # before the new client tries to listen on the same port.
-            for _ in range(20):
+            # The old process can outlive the kill by a moment; its control socket must be
+            # gone before the new client listens on the same port.  A stuck client held it
+            # for longer than the old 6 s window and the replacement then ran with no
+            # control port at all ("opened but did not answer"), so wait up to 30 s and
+            # skip the box rather than start one that cannot be controlled.
+            for _ in range(60):
                 if not remote_port_busy(args.ssh, port):
                     break
-                time.sleep(0.3)
+                time.sleep(0.5)
+            else:
+                print(f"@{user}: control port {port} is still held after 30 s; skipping")
+                continue
 
         try:
             data = api_call(base, token, "POST", f"/api/v1/accounts/sub/{sub['id']}/launch", {})
@@ -278,7 +289,10 @@ def up(args) -> int:
 
         env = (
             f"FFXI_CONTROL={port} SDL_VIDEO_DRIVER=dummy SDL_AUDIO_DRIVER=dummy "
-            f"FFXI_FX=0 LD_LIBRARY_PATH={shlex.quote(args.lib)}"
+            f"FFXI_FX=0 LD_LIBRARY_PATH={shlex.quote(args.lib)} "
+            f"FANXI_API_URL={shlex.quote(str(config.get('api_url', '')))} "
+            f"FANXI_API_TOKEN={shlex.quote(str(config.get('token', '')))}"
+            + (f" FFXI_ADDONS_LUA={shlex.quote(args.addons_lua)}" if args.addons_lua else "")
         )
         remote = " ".join(
             [
@@ -496,6 +510,8 @@ def main() -> int:
     parser.add_argument("--game", default="/home/onedough83/Games/FFXI2026")
     parser.add_argument("--data", default="/home/onedough83/fanxi-data")
     parser.add_argument("--lib", default="/home/onedough83/fanxi-lib", help="directory with libSDL3.so if it is not system-wide")
+    parser.add_argument("--addons-lua", default="/home/onedough83/fanxi-live-addons",
+                        help="remote folder for FFXI_ADDONS_LUA (a live control.lua without a rebuild)")
     parser.add_argument("--base-port", type=int, default=54400)
     parser.add_argument("--fps-divisor", type=int, default=2, help="1=60 fps, 2=30 fps")
     parser.add_argument("--wait", type=float, default=90.0)

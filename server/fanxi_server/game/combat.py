@@ -53,6 +53,7 @@ STR_TO_ATT_TWO_HANDED = 1.0
 STR_TO_ATT_H2H = 1.0
 STR_TO_ATT_MAIN = 0.75
 STR_TO_ATT_OFF_HAND = 0.5
+STR_TO_ATT_RANGED = 1.0
 DEX_TO_ACC = 0.75
 
 # LandSandBoat's scripts/data/level_correction.lua: the zones where the level-correction
@@ -82,6 +83,13 @@ HIT_RATE_FLOOR_PC = 0.20
 # One attack round -- both hands and every multi-attack proc -- is capped at 8 hits.
 MAX_ATTACKS_PER_ROUND = 8
 
+# The most damage one action result can carry.  Retail's client prints at most 99,999
+# for a hit, a weapon skill's summed hits, a spell or a skillchain, and the server applies
+# the same ceiling before it spends the target's HP: a 120,000 weapon skill takes 99,999,
+# not the full amount.  Every damage path clamps where it builds its number, so the HP
+# loss, the hate and the drains stay consistent with what the client is told.
+DAMAGE_CAP = 99999
+
 # Shield size -> base block rate, and how much of a blocked hit the shield eats.
 # The rate table is retail's; the absorption table is an approximation (retail's own
 # reference server leaves shield absorption at zero and only flags the block).
@@ -96,6 +104,15 @@ GUARD_CAP = 25
 def level_corrected(zone: int) -> bool:
     """True in the zones where the attacker/target level difference moves the ratio."""
     return int(zone) in LEVEL_CORRECTION_ZONES
+
+
+def cap_damage(damage: int) -> int:
+    """Clip one damage event to the game's 99,999 ceiling.
+
+    Call this where the number is *built*, before it is applied: a caller that subtracts
+    the uncapped value from HP would still lose more than the client is told.
+    """
+    return max(0, min(DAMAGE_CAP, int(damage)))
 
 
 # --- stat helpers ---------------------------------------------------------------------------
@@ -343,10 +360,16 @@ def guard_rate(defender_skill: int, attacker_skill: int) -> int:
     return max(5, min(GUARD_CAP, int(rate)))
 
 
-def block_rate(shield_size: int, block_skill: int, attacker_skill: int) -> int:
-    """Chance in percent that a shield blocks, from shield size and the skill gap."""
+def block_rate(shield_size: int, block_skill: int, attacker_skill: int,
+               *, mastery: int = 0) -> int:
+    """Chance in percent that a shield blocks, from shield size and the skill gap.
+
+    ``mastery`` is the Shield Mastery trait's percentage (PLD/WAR/RDM), added to the
+    roll so the trait's 10/20/... is not just a row in the trait list.
+    """
     base = SHIELD_BLOCK_RATE.get(int(shield_size), 0)
     rate = base + (int(block_skill) - int(attacker_skill)) * 0.2325
+    rate += max(0, int(mastery))
     return max(5, min(100, int(rate)))
 
 
@@ -367,10 +390,12 @@ def _defence_roll(attacker: Fighter, target: Fighter,
         if rng.randint(1, 100) <= guard_rate(target.guard_skill, attacker.skill_value):
             return "guard", GUARD_REDUCTION
 
-    # A shield blocks on its own skill, whatever the weapon is doing.
+    # A shield blocks on its own skill, whatever the weapon is doing.  Shield Mastery
+    # is a flat addition to that rate (RDM's rank 2 at 97 is +20%).
     if target.shield_size and target.shield_skill > 0:
-        if rng.randint(1, 100) <= block_rate(target.shield_size, target.shield_skill,
-                                             attacker.skill_value):
+        if rng.randint(1, 100) <= block_rate(
+                target.shield_size, target.shield_skill, attacker.skill_value,
+                mastery=int(target.mods.get(mod.SHIELD_MASTERY, 0))):
             return "block", SHIELD_ABSORB.get(int(target.shield_size), 0.4)
 
     return None, 1.0
@@ -469,7 +494,7 @@ def _magic_finish(raw: float, *, skill: int, caster_int: int, mods: dict[int, in
     adjusted = base * (100 + mab) / max(1, 100 + mdb)
     resist = magic_resist(skill=skill, caster_int=caster_int, mods=mods,
                           target_level=target_level, target_mods=target_mods)
-    return max(1, int(adjusted * resist))
+    return max(1, cap_damage(int(adjusted * resist)))
 
 
 def magic_damage(*, base: int, multiplier: float, caster_int: int, target_int: int,
@@ -485,6 +510,44 @@ def magic_damage(*, base: int, multiplier: float, caster_int: int, target_int: i
     raw = int(base) * float(multiplier) + max(0, dint) * 2
     return _magic_finish(raw, skill=skill, caster_int=caster_int, mods=mods,
                          target_mods=target_mods, target_level=target_level)
+
+
+def magic_weaponskill(*, wsc: int, weapon_level: int, level: int, ftp: float,
+                      dstat: int = 0, magic_damage: int = 0, wsd: int = 0,
+                      elemental_ws: int = 0, affinity: int = 0,
+                      mab: int = 0, mdb: int = 0, resist: float = 1.0,
+                      damage_multiplier: float = 1.0) -> int:
+    """Damage of one magical weapon skill (Seraph Blade, Sanguine Blade, ...).
+
+    BG-wiki's current formula::
+
+        base = (152 + floor((WeaponLevel - 99) * 2.45) + WSC) * fTP
+        base = floor(base * (1 + Elemental WS Damage)) + dSTAT + Magic Damage
+        damage = base * affinity * resist * MAB/MDB * MDT * WSD
+
+    The ``152 + ...`` base uses the equipped weapon's item level, which is 201 for an
+    iLvl 119 weapon; a sub-100 weapon (or no item level) uses the player-level form
+    ``5 + floor((Level - 1) * 1.5)``, which is 152 at level 99.  The elemental WS
+    damage augment (Oboro path C) multiplies only the fTP part, before dSTAT and flat
+    Magic Damage are added.  Target MDB is floored at -50% as retail does.
+
+    This function is pure so the formula can be pinned without a live session; the
+    caller supplies the already-resolved WSC, MAB, resist and damage-taken terms.
+    """
+    level = max(1, int(level))
+    if int(weapon_level) >= 100:
+        base = 152 + int((int(weapon_level) - 99) * 2.45)
+    else:
+        base = 5 + int((level - 1) * 1.5)
+    base += int(wsc)
+
+    raw = int(float(base) * float(ftp) * (1.0 + max(0, int(elemental_ws)) / 100.0))
+    raw += int(dstat) + max(0, int(magic_damage))
+    raw = int(raw * (1.0 + max(0, int(wsd)) / 100.0))
+    raw = int(raw * (1.0 + int(affinity) / 100.0))
+    raw = int(raw * (100 + int(mab)) / max(50, 100 + int(mdb)))
+    raw = int(raw * float(resist) * float(damage_multiplier))
+    return cap_damage(max(0, raw))
 
 
 def helix_damage(*, base: int, multiplier: float, caster_int: int, target_int: int,
@@ -518,8 +581,125 @@ def dia_damage(*, base: int, caster_mnd: int, target_mnd: int) -> int:
     return max(1, int(base) + bonus)
 
 
+# --- en-spells ------------------------------------------------------------------------------
+
+def enspell_potency(skill: int) -> int:
+    """The base damage of an elemental en-spell, from Enhancing Magic skill.
+
+    BG-wiki's current curve, kept continuous where the two pieces meet::
+
+        skill < 180:  skill / 9 + 5
+        skill >= 180: (skill - 180) / 8 + 25
+
+    A 500-skill Red Mage gets 65, which is the number the wiki's own tier II example
+    starts from.  (LandSandBoat's older ``enhancing_spell.lua`` uses a different
+    low-skill branch and is discontinuous at 400; the two agree from 401 up.)
+    """
+    skill = max(0, int(skill))
+    if skill >= 180:
+        return (skill - 180) // 8 + 25
+    return skill // 9 + 5
+
+
+def enspell_cap(skill: int) -> int:
+    """Tier II's ceiling: twice the base the same Enhancing Magic skill gives."""
+    return 2 * enspell_potency(skill)
+
+
+def enlight_potency(skill: int, *, tier: int = 1) -> int:
+    """Enlight/Endark's starting charge, from Divine (Enlight) or Dark (Endark) skill.
+
+    Both decay by one point per landed hit, so this is also the effect's total damage
+    before resist.  Tier I is ``12 + 3 * (skill / 20) - skill / 40``; tier II is the
+    higher Job-Point Gift curve.
+    """
+    skill = max(0, int(skill))
+    if int(tier) >= 2:
+        if skill >= 501:
+            value = skill + 400
+            return 2 * (value // 20) + value // 40
+        value = skill + 85
+        return 2 * (value // 13) + value // 26
+    return 12 + 3 * (skill // 20) - skill // 40
+
+
+def enspell_resist(element_meva: int) -> float:
+    """The damage multiplier from the defender's resistance to this element.
+
+    The reference server rolls one of five tiers against the defender's elemental
+    Magic Evasion: full damage, then 1/2, 1/4, 1/8 and 1/16 at thresholds of
+    ``m/100``, ``(m/100)^2`` and so on.  Fanxi's magic model is deterministic, so this
+    is the expectation of that roll.  Zero resistance is 1.0 and 100 is 1/16.
+    """
+    half = min(1.0, max(0.0, int(element_meva) / 100.0))
+    quarter = half * half
+    eighth = quarter * half
+    sixteenth = eighth * half
+    return ((1.0 - half) + (half - quarter) * 0.5 + (quarter - eighth) * 0.25
+            + (eighth - sixteenth) * 0.125 + sixteenth * 0.0625)
+
+
+def enspell_hit(*, tier: int, skill: int, element: int, potency: int = 0,
+                counter: int = 0, bonus: int = 0, percent: int = 0, merit: int = 0,
+                composure: bool = False,
+                target_mods: dict[int, int] | None = None) -> tuple[int, int]:
+    """One en-spell additional hit: ``(damage, the value the effect stores next)``.
+
+    The three tiers apply differently, and the stored value means a different thing for
+    each, which is why the second half of the tuple exists:
+
+    * tier I: the base is fixed at cast time (``potency``), and every landed swing in
+      the round carries it;
+    * tier II: the base is recalculated from the current skill plus a hidden counter
+      that starts at 0 on the cast, rises by one per successful round and caps at
+      twice the base (``enspell_cap``); the counter keeps rising past the cap so a
+      later skill change can raise the damage again;
+    * tier III (Enlight/Endark): ``potency`` is a charge that decays by one per hit.
+
+    The tail follows BG-wiki's en-spell damage page: flat "Sword enhancement spell
+    damage" and the merit line join the base, the percentage line and Composure are one
+    multiplier, then the elemental resistance and the target's magic damage taken
+    apply.  Magic Attack Bonus, Magic Defense Bonus and the Magic Damage statistic
+    deliberately do not: retail excludes all three from en-spell damage.
+    """
+    target_mods = target_mods or {}
+    tier = int(tier)
+    if tier == 1:
+        base = int(potency)
+        stored = int(potency)
+    elif tier == 2:
+        value = enspell_potency(skill)
+        base = min(value + int(counter), 2 * value)
+        stored = int(counter) + 1
+    else:
+        base = int(potency)
+        stored = max(0, int(potency) - 1)
+
+    raw = base + int(bonus) + int(merit)
+    if raw <= 0:
+        return 0, stored
+    multiplier = 1.0 + int(percent) / 100.0
+    if composure:
+        # RDM's Composure triples the elemental en-spells; LandSandBoat adds +200%.
+        multiplier += 2.0
+    damage = int(raw * multiplier)
+    resistance = 0
+    if 1 <= int(element) <= 8:
+        resistance = int(target_mods.get(mod.ELEMENTAL_MEVA[int(element) - 1], 0))
+    damage = int(damage * enspell_resist(resistance))
+    damage = int(damage * damage_taken(target_mods, physical=False))
+    return max(0, damage), stored
+
+
 def cast_time(milliseconds: int, fast_cast: int) -> int:
-    """Spell cast time after Fast Cast, capped at half the base and a 0.5s floor."""
+    """Spell cast time after Fast Cast.
+
+    A zero base stays zero: Chainspell and Spontaneity make a cast instant, and the
+    0.5 s floor is for a spell that still has a cast bar left.  Applying the floor to
+    zero turned both abilities into a half-second cast.
+    """
+    if int(milliseconds) <= 0:
+        return 0
     percent = max(0, min(50, int(fast_cast)))
     return max(500, int(milliseconds) * (100 - percent) // 100)
 
@@ -563,6 +743,28 @@ def tp_return(delay: int) -> int:
         tp = 61 + (delay - 180) * 88 / 360
     else:
         tp = 61 + (delay - 180) * 63 / 360
+    return max(0, int(tp))
+
+
+def tp_return_mob(delay: int) -> int:
+    """TP a monster gets from one landed swing, in tenths.
+
+    Monsters do not use the player curve: LandSandBoat's
+    ``xi.combat.tp.calculateTPReturn`` has a separate mob branch (from the JP wiki),
+    whose low-delay leg is much flatter.  A 240-delay mob gets 64 TP a hit instead of
+    the player formula's 75, which is why a monster's TP bar fills on its own schedule.
+    """
+    delay = int(delay)
+    if delay > 530:
+        tp = 145 + (delay - 530) * 35 / 470
+    elif delay > 480:
+        tp = 130 + (delay - 480) * 15 / 50
+    elif delay > 450:
+        tp = 115 + (delay - 450) * 15 / 30
+    elif delay > 180:
+        tp = 50 + (delay - 180) * 65 / 270
+    else:
+        tp = 50 + (delay - 180) * 15 / 180
     return max(0, int(tp))
 
 
@@ -668,7 +870,8 @@ class Hit:
 def melee(attacker: Fighter, target: Fighter, *, zone: int = 0,
           rng: random.Random | None = None, attack_multiplier: float = 1.0,
           ftp: float = 1.0, crit_bonus: float = 0.0, wsc: int = 0,
-          ignored_defense: float = 0.0) -> Hit:
+          ignored_defense: float = 0.0, allow_critical: bool = True,
+          flat_damage: int = 0, ranged: bool = False) -> Hit:
     """Resolve one physical swing, from hit check to damage-taken gear.
 
     ``crit_bonus`` is an extra critical-hit rate (a fraction) for the caller's own
@@ -676,6 +879,11 @@ def melee(attacker: Fighter, target: Fighter, *, zone: int = 0,
     with TP" here.  ``wsc`` is a weapon skill's secondary-attribute bonus, added to the
     weapon damage and fSTR before pDIF.  ``ignored_defense`` is the fraction of the
     target's Defense the skill ignores (Blade: Kamu's 25%, for example).
+    ``allow_critical`` is False for weapon skills whose description does not say their
+    critical-hit rate varies with TP: retail only lets those skills crit, so a normal
+    weapon skill must not take the base/dDEX/gear critical roll that an auto-attack does.
+    ``flat_damage`` is added after pDIF and critical damage but before the target's
+    damage-taken gear, which is where retail applies Souleater's HP conversion.
     """
     rng = rng or random
     corrected = level_corrected(zone)
@@ -688,7 +896,7 @@ def melee(attacker: Fighter, target: Fighter, *, zone: int = 0,
     if rng.random() >= hit_chance:
         return Hit(0, False, True)
 
-    critical = rng.random() < crit_rate(
+    critical = allow_critical and rng.random() < crit_rate(
         attacker_dex=attacker.dexterity, target_agi=target.agility,
         is_pc=attacker.is_pc,
         crit_mod=attacker.mods.get(mod.CRIT_HIT_RATE, 0),
@@ -723,6 +931,8 @@ def melee(attacker: Fighter, target: Fighter, *, zone: int = 0,
     if defended is not None:
         raw = int(raw * (1.0 - absorb))
 
-    raw = int(raw * damage_taken(target.mods, physical=True))
+    raw += max(0, int(flat_damage))
 
-    return Hit(raw, critical, False, defended)
+    raw = int(raw * damage_taken(target.mods, physical=True, ranged=ranged))
+
+    return Hit(cap_damage(raw), critical, False, defended)

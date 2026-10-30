@@ -37,10 +37,12 @@ MOD_LABELS = {
     29: "Magic Defense",
     mod.EVA: "Evasion",
     mod.STORETP: "Store TP",
+    mod.CONSERVE_TP: "Conserve TP",
+    mod.SAVETP: "Save TP",
     mod.FASTCAST: "Fast Cast",
     mod.DUAL_WIELD: "Dual Wield",
     mod.MARTIAL_ARTS: "Martial Arts",
-    71: "MP while healing",     # the base resting recovery the trait raises
+    mod.MP_WHILE_HEALING: "MP while healing",  # the resting recovery the trait raises
     mod.CLEAR_MIND: "Clear Mind",
     mod.REFRESH: "Refresh",
     mod.REGEN: "Regen",

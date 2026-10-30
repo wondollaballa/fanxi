@@ -106,6 +106,8 @@ once.
 | GET | `/world/online` | — | `{gateway, characters: [{id, char_id, name, zone, zone_name}], count}` |
 | GET | `/me` | — | `{account, characters}` |
 | GET | `/characters` | — | `{characters: [...]}` |
+| GET | `/characters/{id}/stats` | — | live stat sheet with every source (see below) |
+| GET | `/characters/{id}/target` | — | selected mob's live effects for the Target Debuffs HUD; optional `?entity_id=<ServerId>` |
 | POST | `/characters` | `{name, race, face, hair, size, nation, main_job, sub_job?}` | `201 {character}` |
 | PATCH | `/characters/{id}` | `{name}` | `{character}` |
 | PATCH | `/characters/{id}/design` | `{race?, face?, hair?, size?}` | `{character}` |
@@ -116,11 +118,39 @@ once.
 | POST | `/accounts/sub/{id}/characters` | `{name?, race?, ...}` | `201 {character}` |
 | DELETE | `/accounts/sub/{id}` | `purge=1` query | suspend, or purge |
 
+`GET /characters/{id}/data` is the launcher's one-round-trip Data snapshot; its
+`merits.categories` list carries all 50 merit menus and 274 rows in the client's order, with
+each row's cap, cost ladder and the character's current rank. `POST /characters/{id}/merits`
+still accepts `{"top_off": true}` and `{"points": n}`, and also
+`{"upgrades": {"384": 5}, "spend": false}` for a merit layout. The layout form validates each
+row's cap and each menu's category cap; `spend: true` charges the net cost to the unspent pool
+and refunds a lower layout.
+
+`POST /characters/{id}/ascension` writes or clears the two augment rows on one Shantotto's
+Ascension copy: `{container, slot, choices: ["phantom_roll_5"]}`, with an empty `choices` list
+to clear. The Data snapshot carries `ascension.items` (each bag copy and its current rows) and
+`ascension.options` (the add-on's 33-row table). The Phantom Roll row is the same mod 1076 the
+ability recast path reads.
+
 `GET /world/online` is the authoritative online roster (the same one `/sea all` reads). It lists
 live zone sessions, not `game_sessions` login rows: after a server restart the rows still exist
 for clients the world has forgotten, so they are not proof that a character is online. `gateway` is false when the game gateway is not attached (API-only server),
 in which case `characters` is empty and the launcher must not treat that as "everyone is offline".
 The public `/status` `online` count uses the same roster while the gateway is attached.
+
+`GET /characters/{id}/target` returns `{target: {id, name, hpp, distance} | null, effects: [...]}`.
+Each effect carries its status id, icon id, name (when the cast recorded it), remaining seconds,
+potency/power, damage tick and interval, and the hidden flag for a secondary song row. It is read
+from the live session's target, or from `entity_id` (the client's target `ServerId`) so a target
+change does not wait for the server's own target packet.
+
+`GET /characters/{id}/stats` is the launcher's checkparam-style sheet. It resolves the live
+zone session through the gateway, so it includes the equipment the character is actually wearing,
+food, active buffs, job abilities, job traits, job-point gifts and merits. Each statistic carries
+its final value and a source list (gear per slot, food, JT, JA, job points, buffs, merits, base and
+skill); the source contributions add up to the same number `combat_mods()`/`stat_sheet()` use for
+damage and magic. It answers `404` while the character is not in a zone (or when the gateway is
+detached); the launcher shows a waiting state until a live session exists.
 
 Sub-accounts are server-owned. A main account creates up to `FANXI_MAX_SUBS` (default 5) of
 them; each is created with exactly one character. They have no password and no API session, and

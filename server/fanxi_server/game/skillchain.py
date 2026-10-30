@@ -27,6 +27,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from enum import IntEnum
 
+from .combat import DAMAGE_CAP
+
 # Element ids match the client and the ``spells.element`` column.
 ELEMENT_FIRE = 1
 ELEMENT_ICE = 2
@@ -150,12 +152,35 @@ RESISTANCE_RANK_MULTIPLIER = {
     4: 0.50, 5: 0.40, 6: 0.30, 7: 0.25, 8: 0.20, 9: 0.15, 10: 0.10, 11: 0.05,
 }
 
-# State timings from GetSkillChainEffect.  An opening effect lasts 10 s.  The next
-# weapon skill must land *strictly more than* 3 s after the opening/last link; each
-# successful link subtracts 1 s from the effect's duration and resets its start.
-OPEN_SECONDS = 10.0
+# State timings from GetSkillChainEffect.  The next weapon skill must land *strictly
+# more than* 3 s after the opening/last link.
+#
+# AutoSkillchains (SnickySnacks/AutoSkillchains) is the retail reference for the
+# displayed window: `times = clock + delay + 8 - step`, where `delay` is the weapon
+# skill's 3 s action lock and `step` is 1 for the opener, 2 for the first link, and so
+# on.  That is 10/9/8/7 s, shrinking one second per link.  Fanxi deliberately adds one
+# second to the base: 11/10/9/8/7 s, which leaves room for the slower TP cycles here.
+#
+# Fanxi differs from retail in one more place: a **level-1 link keeps the full
+# OPEN_SECONDS**.  Retail shrinks the window for every link, so a level-1 loop
+# (Savage Blade -> Hot Shot -> Savage Blade) dies as soon as the window falls below the
+# player's weapon-skill cadence.  The only retail way to keep such a loop alive is the
+# Diamond Aspis, which COR -- the job that naturally owns both Savage Blade and Hot
+# Shot -- cannot equip.  Keeping level-1 links at 11 s makes the loop work on every
+# job while the level-2/3 chains still shrink exactly as retail does.  A status effect
+# expires on its container's next tick, so a close up to 0.5 s past the boundary still
+# lands.
+OPEN_SECONDS = 11.0
 CHAIN_DELAY_SECONDS = 3.0
 MAX_CHAIN_COUNT = 5
+CLOSE_GRACE_SECONDS = 0.5
+
+# Diamond Aspis pins the skillchain/Magic Burst window at the full OPEN_SECONDS after a
+# link, no matter which step of the chain it closed.  The Battle hub exposes the same
+# exception.  It matters for level-2/3 chains now that level-1 links already keep the
+# full window.
+DIAMOND_ASPIS_ITEM_ID = 26488
+DIAMOND_ASPIS_SECONDS = 11.0
 
 # 0x028 additional-effect proc ids (``ActionProcSkillChain``).  Note that this is a
 # permutation of the SC_* ids and that Light II / Darkness II use the Light / Darkness
@@ -230,6 +255,9 @@ class SkillchainState:
     count: int = 0
     started: float = 0.0
     until: float = 0.0
+    # The character (or "monster") whose weapon skill opened this state.  Kept for the
+    # log line only, so "who am I chaining with" is answerable from the server log.
+    opener: str = ""
 
     def expired(self, now: float) -> bool:
         return now > self.until
@@ -241,36 +269,58 @@ class SkillchainState:
         return self.tier > 0 and now <= self.until
 
 
-def _opening(props: tuple[int, int, int], now: float) -> SkillchainState:
-    return SkillchainState(props=props, started=now, until=now + OPEN_SECONDS)
+def _opening(props: tuple[int, int, int], now: float, opener: str = "") -> SkillchainState:
+    return SkillchainState(props=props, started=now, until=now + OPEN_SECONDS,
+                           opener=opener)
 
 
-def advance(state: SkillchainState | None, props, now: float
-            ) -> tuple[SkillchainState | None, int]:
+def _next_window(state: SkillchainState, formed: int, diamond: bool) -> float:
+    """Duration of the window opened by a formed chain, in seconds.
+
+    A level-1 link keeps ``OPEN_SECONDS`` so the level-1 loops stay infinite;
+    level-2/3 links shrink by one second per link as in retail, and the Diamond
+    Aspis pins every step to ``DIAMOND_ASPIS_SECONDS``.
+    """
+    if diamond:
+        return DIAMOND_ASPIS_SECONDS
+    if int(TIER[formed]) == 1:
+        return OPEN_SECONDS
+    return max(0.0, (state.until - state.started) - 1.0)
+
+
+def advance(state: SkillchainState | None, props, now: float, *,
+            diamond: bool = False, opener: str = "") -> tuple[SkillchainState | None, int]:
     """Feed one landed weapon skill's properties into the target's state.
 
     Returns ``(new_state, formed_sc)``; ``formed_sc`` is ``SC.NONE`` when this WS only
     opened (or reset) the state.  A WS with no properties does not alter the state at
-    all, matching LSB's ``primary_sc != 0`` gate.
+    all, matching LSB's ``primary_sc != 0`` gate.  ``diamond`` is set when the closing
+    weapon skill's owner wears the Diamond Aspis: the next window is then the full
+    ``OPEN_SECONDS`` (11 s) at any step of the chain.  Without it a level-1 link still
+    keeps the full window; only level-2/3 links shrink (see :func:`_next_window`).
+    ``opener`` labels the state for the log; a formed chain keeps the character that
+    opened it, so a closing line can say who it is chaining with.
     """
     props = _props(props)
     if not any(props):
         return state, int(SC.NONE)
-    if state is None or now > state.until:
-        return _opening(props, now), int(SC.NONE)
+    # The half-second grace only covers a close that was in flight when the effect's
+    # tick came round; an old window is still an opening reset.
+    if state is None or now > state.until + CLOSE_GRACE_SECONDS:
+        return _opening(props, now, opener), int(SC.NONE)
     # A WS that lands too soon does not chain; it replaces the opening state.
     if now <= state.started + CHAIN_DELAY_SECONDS:
-        return _opening(props, now), int(SC.NONE)
+        return _opening(props, now, opener), int(SC.NONE)
     resonance = (state.sc,) if state.tier > 0 else state.props
     formed = form_skillchain(resonance, props)
     if not formed:
-        return _opening(props, now), int(SC.NONE)
-    # LSB resets the start and reduces the duration by 1 s on every link.
-    old_duration = max(0.0, state.until - state.started)
+        return _opening(props, now, opener), int(SC.NONE)
+    duration = _next_window(state, formed, diamond)
     return (SkillchainState(
         props=props, tier=int(TIER[formed]), sc=formed,
         count=min(state.count + 1, MAX_CHAIN_COUNT),
-        started=now, until=now + max(0.0, old_duration - 1.0),
+        started=now, until=now + duration,
+        opener=state.opener or opener,
     ), formed)
 
 
@@ -309,7 +359,7 @@ def skillchain_damage(base_damage: int, tier: int, count: int, *,
     rank = max(-3, min(11, int(resistance_rank)))
     damage = int(damage * RESISTANCE_RANK_MULTIPLIER[rank])
     damage = int(damage * max(0.0, float(damage_taken)))
-    return max(0, min(99999, damage))
+    return max(0, min(DAMAGE_CAP, damage))
 
 
 def proc_kind(sc: int) -> int:

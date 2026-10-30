@@ -251,7 +251,9 @@ pub async fn spawn_host64(
     })?;
     let host64 = if headless {
         find_host64_headless(config).ok_or_else(|| {
-            AppError::Game("host64-headless is not built yet; run tools/build_posix.py host64-headless".into())
+            AppError::Game(
+                "host64-headless is not built yet; run tools/build_posix.py host64-headless".into(),
+            )
         })?
     } else {
         find_host64(config).ok_or_else(|| {
@@ -267,7 +269,9 @@ pub async fn spawn_host64(
 
     let mut command = build_launch_command(&host64, game_dir, client, login_token);
     if headless {
-        let data = config::data_dir().join("headless").join(safe_name(log_name));
+        let data = config::data_dir()
+            .join("headless")
+            .join(safe_name(log_name));
         std::fs::create_dir_all(&data)?;
         command.extend([
             "--fps-divisor".to_string(),
@@ -312,12 +316,18 @@ pub async fn spawn_host64(
         .stdin(Stdio::null())
         .stdout(Stdio::from(log))
         .stderr(Stdio::from(log_err))
-        .env("FFXI_CONTROL", control_port.to_string());
+        .env("FFXI_CONTROL", control_port.to_string())
+        .env("FANXI_API_URL", &config.api_url)
+        .env("FANXI_API_TOKEN", &config.token);
     if headless {
         process
             .env("SDL_VIDEO_DRIVER", "dummy")
             .env("SDL_AUDIO_DRIVER", "dummy")
             .env("FFXI_FX", "0");
+    } else if let Some(spec) = display::game_window_spec(&config.monitor) {
+        // The sign-in window and the game window open here instead of on the main display. The
+        // coordinates are the window API's own units (screen points on macOS).
+        process.env("FANXI_DISPLAY", spec);
     }
     #[cfg(unix)]
     {

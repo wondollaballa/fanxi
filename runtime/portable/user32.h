@@ -7,6 +7,10 @@ void user32_init(void);
 /* An SDL_Window already open (host64's sign-in screen, the graphics back end already on it) for
  * the game's first top-level window to take over instead of opening one: one window, start to end. */
 void user32_adopt_window(void* sdl_window);
+/* Puts a window on the display the launcher chose for this run (`FANXI_DISPLAY=x,y,w,h`): in the
+ * middle of its usable area, or at its top left when the window covers the display. Nothing when
+ * the launcher did not choose one: the window then opens where the platform puts it. */
+void user32_place_window(void* sdl_window, int cover);
 /* A full-screen device (D3D8 Windowed = FALSE) on hwnd: its window covers the display, in the
  * desktop's own mode. */
 void user32_set_fullscreen(uint32_t hwnd, int on);

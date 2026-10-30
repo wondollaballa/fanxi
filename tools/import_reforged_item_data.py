@@ -63,6 +63,20 @@ MOD = {
     "DMGMAGIC": 163, "DMGRANGE": 164, "DMGPHYS_II": 190, "DMGMAGIC_II": 831,
     "ENH_MAGIC_DURATION": 890, "REGEN_DURATION": 339, "REGEN_MULTIPLIER": 838,
     "PERPETUANCE": 1221,
+    # Bard song stats.  The tooltips have two spellings for cast time ("Song
+    # spellcasting time -16%", "Song casting time -15%") and for duration
+    # ("Song effect duration +14%", "Song duration +15%").
+    "SONG_CAST": 455, "SONG_DURATION": 454, "SONG_RECAST": 833,
+}
+
+# The per-family Song+ lines ("Madrigal"+1, "March"+1, ...).  These are the same
+# modifier ids song_potency_values reads to add to that family's song.
+SONG_FAMILY = {
+    "Minne": 433, "Minuet": 434, "Paeon": 435, "Requiem": 436,
+    "Threnody": 437, "Madrigal": 438, "Mambo": 439, "Lullaby": 440,
+    "Etude": 441, "Ballad": 442, "March": 443, "Finale": 444,
+    "Carol": 445, "Mazurka": 446, "Elegy": 447, "Prelude": 448,
+    "Hymnus": 449, "Virelai": 450, "Scherzo": 451,
 }
 
 # Client skill ids (0x062 block) -> the words the item description uses.
@@ -144,6 +158,14 @@ def parse_description(description: str):
 
     # Percent bonuses: hundredths where the engine stores hundredths.
     take(r"Haste\s*\+\s*(\d+)%", MOD["HASTE_GEAR"], lambda value: value * 100)
+    # Bard song stats.  Both tooltip spellings are in the client data: "Song
+    # spellcasting time -16%" / "Song casting time -15%" and "Song effect duration
+    # +14%" / "Song duration +15%".  Recast is whole seconds.
+    take(r"Song (?:spell)?casting time\s*-\s*(\d+)%", MOD["SONG_CAST"])
+    take(r"Song (?:effect )?duration\s*\+\s*(\d+)%", MOD["SONG_DURATION"])
+    take(r"Song recast delay\s*-\s*(\d+)", MOD["SONG_RECAST"])
+    for family, mod_id in SONG_FAMILY.items():
+        take(r'"%s"\s*\+\s*(\d+)' % family, mod_id)
     take(r'"Store TP"\s*\+\s*(\d+)', MOD["STORETP"])
     take(r'"Subtle Blow"\s*\+\s*(\d+)', MOD["SUBTLE_BLOW"])
     take(r'"Double Attack"\s*\+\s*(\d+)%?', MOD["DOUBLE_ATTACK"])

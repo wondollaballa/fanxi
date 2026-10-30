@@ -6,19 +6,23 @@ The server is intentionally small but speaks the real client protocol: 0x00A/0x0
 """
 from __future__ import annotations
 
+import json
 import logging
 import math
 import os
 import random
+import shlex
 import socket
 import struct
 import time
+from dataclasses import replace
 
-from . import capes, combat, dancer, design as character_design, effects, job_points, merits, pets, rolls, modifiers as mod, packets, skills, stats, traits, weapon_skill_effects, weapon_skills
+from . import base_stats, capes, geomancy, chain, check, combat, dancer, design as character_design, effects, item_usable, job_points, jugpets, live_state, merits, mounts, pets, prime_weapons, rolls, modifiers as mod, packets, skillchain, skills, stat_report, stats, traits, trust_ai, weapon_skill_effects, weapon_skill_jobs, weapon_skills
 from .cipher import md5
 from .entities import ZoneEntity
 from .party import PARTY_KIND_PARTY
-from ..service import WARP_PAGE_SIZE, WARP_SLOT_MAX
+from ..service import (ApiError, CONTAINER_RECYCLE, EXEMPLAR_PER_LEVEL, MASTER_LEVEL_MAX,
+                       WARDROBE_CONTAINERS, WARP_PAGE_SIZE, WARP_SLOT_MAX)
 from .world import (
     DISENGAGE_DISTANCE,
     ENGAGE_DELAY,
@@ -39,7 +43,56 @@ VANA_EPOCH = 1009810800
 # How many times a zone-in is rebuilt for a client that keeps retrying its login before
 # the session is dropped and the next 0x00A starts a fresh one.
 ZONE_IN_REBUILDS = 4
+# Every 0x00B moves the client's zone cipher on by 2.  A client that missed one (UDP) or
+# never processed one is then behind the server, and a client whose hand-off failed is
+# still on whichever key it last advanced to.  Keep the sequence the hand-off has used so
+# the zone-in can go out under all of them and client packets can be tried against all of
+# them; one of these is always the key the client actually holds.
+KEY_HISTORY = 8
+# A repeated //warp call to the same anchor inside this window is the launcher's
+# auto-pull racing a box that is already back; it is answered without a hand-off.
+WARP_REPEAT_GUARD = 120.0
 VANA_HOUR, VANA_DAY = 144, 3456
+# A zone session has no keepalive of its own: the client sends 0x015 and expects the
+# server to answer.  A character standing still in a quiet zone (a city, an empty field)
+# makes the server send nothing for minutes, and the client's own receive timer then
+# declares the link dead and shows FFXI-4001.  This is how often an otherwise silent
+# session gets a General-only 0x00D, the same packet the sleeping heartbeat uses.
+IDLE_HEARTBEAT = 5.0
+# The client builds the mount model when a ride starts and will not rebuild it while one
+# is out, so switching mounts has to pass through standing on foot first — and the client
+# needs about a second on foot to tear the old model down.  A pending switch is applied by
+# the tick once that second has passed.
+MOUNT_SWITCH_DELAY = 1.2
+# The state a buff, a bite of food or an ability cooldown leaves behind has to outlive the
+# session (see game/live_state.py): the tick compares the snapshot with the last one it
+# wrote every few seconds instead of on every change, because a song list is five echoes in
+# a row, and the eviction path forces one last save.  A chat line in the zone-in burst can
+# take the client out of movement, so the "welcome back" notice waits until the burst and
+# the client's own load are done.
+LIVE_STATE_SAVE_INTERVAL = 5.0
+LIVE_STATE_NOTICE_DELAY = 2.0
+#: Joachim's Trust spell id.  His explicit song set is per character (char_settings), the
+#: same way the Trust itself belongs to the character rather than to the party or account.
+JOACHIM_TRUST = 911
+#: The support Trusts whose actions the HUD can set.  Names are for the chat command; the
+#: numeric id is the stable key the HUD sends.
+SUPPORT_TRUST_ALIASES = {
+    "joachim": 911,
+    "luzaf": 928,
+    "qultada": 967,
+    "koru-moru": 952, "korumoru": 952, "koru": 952,
+    "sylvie": 981, "sylvie-uc": 981, "sylvieuc": 981,
+    "ygnas": 998,
+}
+SUPPORT_TRUST_NAMES = {
+    911: "Joachim", 928: "Luzaf", 952: "Koru-moru",
+    967: "Qultada", 981: "Sylvie Uc", 998: "Ygnas",
+}
+TRUST_ACTION_LABEL = {"song": "songs", "spell": "spells", "roll": "rolls"}
+TRUST_ACTION_ORDER = {
+    "cure": 0, "buff": 1, "debuff": 2, "aura": 3, "nuke": 4, "song": 5, "roll": 6,
+}
 # 0x063 type 9: one u16 icon per bar slot, then one u32 timer.  0xFF is an empty slot and
 # 0x7FFFFFFF is an effect that never wears off, so the client draws its icon without a
 # countdown.
@@ -65,12 +118,33 @@ PACKET_BYTES = 900
 # A client packet that does not acknowledge the last reply is re-sent at most this often,
 # so a lost packet still recovers without the resend path blocking every new request.
 RESEND_INTERVAL = 0.25
+# A gear set arrives as one 0x050 per slot, usually split over several datagrams.  Wait
+# this long after the last slot before sending the follow-up, so one burst owes one
+# update instead of one per datagram.
+EQUIP_SYNC_DELAY = 0.15
+# A client that keeps swapping (the phase engine flapping idle/movement) must not hold
+# the follow-up back forever: after this long the latest state goes out anyway.
+EQUIP_SYNC_MAX_DELAY = 0.6
+# The packets derived from the outfit.  Each is remembered by payload when it leaves, and
+# equipment_sync() queues only the ones whose payload changed: armour swaps keep the
+# job-derived blocks, and only a weapon that changes the skill type (or a granted skill)
+# rewrites the command data.
+EQUIP_SYNC_TYPES = (0x051, 0x0AA, 0x0AB, 0x0AC, 0x1A5, 0x061, 0x037)
+# 0x0AC makes host64 rewrite its whole ability list, and every client freeze in the
+# 2026-10-27/29 logs ends on that rebuild.  A phase-engine burst can change a weapon's
+# skill type several times a second; send at most one command-data rewrite this often
+# and let the tick send the final list once the burst settles.
+EQUIP_COMMANDS_MIN_GAP = 1.5
 
-# Master Levels cost 30,000 Exemplar Points each in this build.
-EXEMPLAR_PER_LEVEL = 30000
 # Every job-point category is sent at rank 20 (job_points_detail), so the Light Arts
 # Effect rank that adds +3 s per rank to Regen duration is also 20.
 JOB_POINT_RANK = 20
+
+# Two-hour abilities carry recast id 0 in the ability table.  Their cooldown is kept
+# per ability (so switching jobs does not block another job's one-hour) under keys
+# above the byte-sized ordinary recast ids; 0x119 slot 0 carries the current job's
+# two-hour timer.
+TWO_HOUR_RECAST_BASE = 0x100000
 
 
 def spell_animation(spell: dict) -> int:
@@ -91,6 +165,17 @@ HATE_ENFEEBLE = 100
 # Accession spreads the next white enhancing spell to the party around its caster.  The
 # area is ten yalms, which is the radius the client draws for a party-enhancing spell.
 ACCESSION_RANGE = 10.0
+# Killer Instinct's helm augment (+4 s per merit rank).  This server deliberately gives
+# the whole party the caster's full duration and effect instead of retail's 7.9-yalm,
+# 4:00 party copy.
+KILLER_INSTINCT_HEAD_ITEMS = frozenset({
+    26640,  # Ankusa Helm
+    26641,  # Ankusa Helm +1
+    23071,  # Ankusa Helm +2
+    23406,  # Ankusa Helm +3
+    23926,  # Ankusa Helm +4
+    10658,  # Mst. Helm +2 (augmented)
+})
 
 # C2S 0x053 lockstyle modes, in the client's order (XiPackets / LandSandBoat).
 LOCKSTYLE_DISABLE = 0
@@ -105,11 +190,17 @@ STYLE_SLOTS = {
     5: "style_body", 6: "style_hands", 7: "style_legs", 8: "style_feet",
 }
 
+# Main and sub are never drawn from the locked models: the equipped weapon always
+# shows, so swapping between a two-hander and a one-hander + shield (or between two
+# weapons) updates the graphic while the armour stays locked.
+WEAPON_STYLE_SLOTS = (0, 1)
+
 # 0x009 system-message ids from the client's ROM/27/76.DAT table.
 MSG_STYLE_LOCK_ON = 267
 MSG_STYLE_LOCK_OFF = 268
 MSG_STYLE_LOCK_IS_ON = 269
 MSG_STYLE_LOCK_IS_OFF = 270
+MSG_EXAMINE = 89             # "<player> examines you." (sent to the player being checked)
 
 # C2S 0x05D emote ids.  The values with no client text are still valid motions, but this
 # is the complete set the command parser sends; an id outside it is dropped.
@@ -210,6 +301,42 @@ MOGHOUSE_EXITS = {
 # TP is stored in tenths, the unit the client's TP bar uses (3000 = 300 TP).
 TP_MAX = 3000
 
+# A job change is a rest in a city or town: HP and MP come back full.  Everywhere else
+# (field, dungeon, instance) the change only recomputes the maxima, so the player keeps
+# whatever HP/MP they brought with them and the next fight is their problem.  The list
+# follows LandSandBoat's ``city`` zone type; Nashmau is a town even though its own zone
+# file calls it outdoors, and a Mog House interior is handled by ``char["moghouse"]``.
+SAFE_JOB_CHANGE_ZONES = frozenset({
+    26, 32,                                    # Tavnazian Safehold, Sealion's Den
+    48, 50, 53,                                # Al Zahbi, Whitegate, Nashmau
+    80, 87, 94,                                # Southern San d'Oria [S], Bastok Markets [S],
+                                               # Windurst Waters [S]
+    230, 231, 232, 233,                        # San d'Oria
+    234, 235, 236, 237,                        # Bastok
+    238, 239, 240, 241,                        # Windurst
+    243, 244, 245, 246,                        # Jeuno
+    247, 248, 249, 250, 251, 252,              # Rabao, Selbina, Mhaura, Kazham,
+                                               # Hall of the Gods, Norg
+    256, 257,                                  # Western and Eastern Adoulin
+})
+
+# Zones that refuse a job change even out of combat.  Dynamis - Divergence is the live
+# example; the original Dynamis zones are listed for when their DATs are added, so a
+# later import cannot turn one into a free job-change spot.
+JOB_CHANGE_BLOCKED_ZONES = frozenset({
+    39, 40, 41, 42,                            # Dynamis - Valkurm, Buburimu, Qufim, Tavnazia
+    134, 135,                                  # Dynamis - Beaucedine, Xarcabard
+    185, 186, 187, 188,                        # Dynamis - San d'Oria, Bastok, Windurst, Jeuno
+    294, 295, 296, 297,                        # Dynamis - San d'Oria/Bastok/Windurst/Jeuno [D]
+})
+
+# A job change drops the buff layer, but the conquest family belongs to the region and
+# nation rather than the job: Signet, Sanction, Sigil and Ionis stay on.  Food and every
+# other status effect (songs, rolls, job-ability buffs, debuffs) wears off with the job.
+JOB_CHANGE_KEPT_EFFECTS = frozenset({
+    effects.SIGNET, effects.SANCTION, effects.SIGIL, effects.IONIS,
+})
+
 EQUIP_SLOTS = {
     "main": 0, "sub": 1, "ranged": 2, "ammo": 3, "head": 4, "body": 5,
     "hands": 6, "legs": 7, "feet": 8, "neck": 9, "waist": 10,
@@ -250,6 +377,14 @@ def job_id(text: str) -> int | None:
         if key == name.casefold() or key == JOB_ABBREVIATIONS[number].casefold():
             return number
     return None
+
+
+def job_pair_label(main_job: int, sub_job: int = 0) -> str:
+    """``22, 13`` -> ``RUN/NIN``; a pair with no support job is just its main."""
+    label = JOB_ABBREVIATIONS.get(int(main_job), str(main_job))
+    if int(sub_job or 0):
+        label += "/" + JOB_ABBREVIATIONS.get(int(sub_job), str(sub_job))
+    return label
 
 
 # Utsusemi is the ninjutsu the working-stock refill exists for: the client will not
@@ -346,6 +481,16 @@ def cstr(s: str, n: int) -> bytes:
     return b + bytes(n - len(b))
 
 
+def _name_list(names: list[str]) -> str:
+    """Names as one English list: "A", "A and B", "A, B and C"."""
+    names = [str(name) for name in names if name]
+    if not names:
+        return ""
+    if len(names) == 1:
+        return names[0]
+    return "%s and %s" % (", ".join(names[:-1]), names[-1])
+
+
 def gauge_percent(value: int, maximum: int) -> int:
     """A 0-100 fill for an HP/MP bar.  A zero maximum reads as full.
 
@@ -370,8 +515,28 @@ class ZoneSession:
         self.client_id = 0
         self.cipher = self.prev_cipher = None
         self.key = None
+        # Every key this hand-off has used, oldest first.  The client moves its cipher on
+        # with each 0x00B it processes; a lost or unprocessed one leaves it on an older
+        # key, so the zone-in is sent under each of these and incoming packets are tried
+        # against each (see decrypt()).
+        self.key_history: list[bytes] = []
+        # The game session this client signed in with.  A relog after a failed hand-off
+        # keeps it; a restarted client gets a new one and starts over from the base key.
+        self.session_hash = b""
+        # Copies of the last zone-in sealed under the other keys in key_history.  The
+        # gateway sends them right after the primary reply; the client drops the ones its
+        # MD5 does not open.
+        self.extra_packets: list[bytes] = []
+        # A zone change that arrived while this one was still in flight; after_zone_in
+        # applies it once the client is in the world.
+        self.pending_zone = None
+        # The last //warp call this box was handed: repeated launcher pulls to the same
+        # anchor do not need a new 0x00B (see _warp_call).
+        self.warped_to: tuple | None = None
         # Set by decrypt(): the last packet opened under the pre-zone-change cipher.
         self.opened_with_prev = False
+        # The key that opened the last client packet when it was not the current one.
+        self.opened_with_key = None
         # The key before a zone-change bump, and the plaintext of the last server packet.
         # A client that does not advance its key on 0x00B gets the same zone-in re-sent
         # under this key; whichever one it opens, the decrypt path follows.
@@ -422,11 +587,22 @@ class ZoneSession:
         self.current_event_id = 0
         self.seen: set[int] = set()
         self.last_save = 0.0
-        # A slot changed in this packet batch. Its follow-up (looks, spells, abilities, stats)
-        # and the outfit save go out once, after the whole batch has been read: one copy per
-        # slot queued about a kilobyte each and the client is served one packet per ack, so a
-        # sixteen-slot swap used to show up a second late, slot by slot.
+        # A slot changed in this burst.  The outfit save and the derived packets (looks,
+        # stats, command data) wait until the burst settles: a set arrives as several
+        # datagrams, and the client is served one packet per ack, so a copy per datagram
+        # buried the later 0x050 echoes.  Each chunk still settles the outfit for the
+        # server's own numbers, because an action can ride in the same datagram.
         self.equipment_changed = False
+        self.equip_sync_at = 0.0
+        self.equip_sync_deadline = 0.0
+        self._commands_sent_at = 0.0
+        self._commands_pending = False
+        # The outfit whose save and vitals are current, so settle_equipment() is safe to
+        # call once per datagram and again from the deferred flush.
+        self._settled_outfit: dict[int, tuple[int, int, int]] = {}
+        # ptype -> payload of the last copy of each derived packet the client has, so a
+        # burst that changes nothing in one of them does not send it again.
+        self._sync_sent: dict[int, bytes] = {}
         self.client_hdr = b""
         self.entities: list = []
         # The alter egos this player has called, in call order.  They live in the world's
@@ -434,10 +610,32 @@ class ZoneSession:
         # check and what a zone change or logout cleans up.
         self.trust_entities: list = []
         self.pet_entity = None
+        # The Call Beast jug item behind the current jug pet, when one was called from ammo.
+        # Bestial Loyalty keeps the jug equipped; the HUD matches the pet's name to the same
+        # catalogue to choose which Ready moves to offer.
+        self.pet_jug_item = 0
+        # The mob Tame made docile: its next Charm gets the retail +10% charm chance.
+        self.tamed_mob_id = 0
+        # The Master chain window: the first level-99 kill arms it (60 s, shrinking to
+        # the 30 s floor as the chain grows), and each kill inside adds +2% exemplar
+        # points (capped at chain #50 / +100%).  See game/chain.py.
+        self.exemplar_chain = chain.ChainState()
+        # The mount this character is riding: -1 is on foot, otherwise a client mount id
+        # (0 is the personal chocobo — see mounts.py).  A zone line or a logout puts the
+        # character back on foot, the way retail does; the last mount called is kept in
+        # characters.mount so the HUD can preselect it next time.
+        self.mount_id = -1
+        self.mount_called_at = 0.0
+        # (mount id, when to call it): a switch waits out MOUNT_SWITCH_DELAY on foot.
+        self.pending_mount: tuple[int, float] | None = None
         self.engaged_id: int | None = None
         self.casting: dict | None = None
         # recast id -> unix time it becomes usable again (0x119 sends the remainder).
         self.ability_recasts: dict[int, float] = {}
+        # Samurai's Meditate ticks its TP over five beats instead of paying it at once.
+        self.meditate: dict | None = None
+        # Third Eye: the charges left and when the stance expires.
+        self.third_eye: dict | None = None
         # Timed 0x0AC re-sends: the client builds the Abilities menu before the first
         # zone-in copy lands, and a copy that arrives later is what fills it.
         self.abilities_retries: list[float] = []
@@ -450,6 +648,10 @@ class ZoneSession:
         self.casting = None
         self.trust_entities = []
         self.pet_entity = None
+        # The live aura of each bubble, {"indi": (status, hexed mob id), "geo": (...)}.
+        # A Geomancer runs one Indi- and one Geo- bubble, and a new cast replaces only
+        # its own, so this remembers what each one put where.
+        self.geo_bubble: dict[str, tuple[int, int]] = {}
         self.position_seen = False
         self.target_targid = 0
         self.engaged_targid = 0
@@ -471,24 +673,62 @@ class ZoneSession:
         self.shop_items: list[dict] = []
         self.equipped: dict[int, tuple[int, int, int]] = {}  # equip slot -> (container, slot, item id)
         self.status_effects: list[int] = []  # buff ids the client draws from 0x037
-        # effect id -> {until, power, potency, tick, icon, mods}; status_effects is the
-        # client's icon order and this dict is the server-side timer and payload.
+        # effect key -> {until, power, potency, tick, icon, mods}; status_effects is the
+        # client's icon order and this dict is the server-side timer and payload.  Songs
+        # use effects.song_key(spell_id) as the key so two songs that share an icon can
+        # be active at once; their state["icon"] keeps the canonical icon for 0x037.
         self.effect_state: dict[int, dict] = {}
         # The active food's modifiers, duration and item.  Food is a source for
         # combat_mods()/stat_sheet(), not just an icon.
         self.food: dict = {"item_id": 0, "name": "", "until": 0.0, "mods": {}}
+        # The reconnect snapshot (char_live_state, migration 0145) built from the three
+        # fields above and ability_recasts.  ``live_state_signature`` is the payload the
+        # row last held, so the tick writes only after a real change; ``live_state_restored``
+        # makes a retried zone-in restore once; ``live_state_closed`` is set by a deliberate
+        # logout, whose recasts-only row no later save may overwrite.
+        self.live_state_signature: str | None = None
+        self.live_state_checked_at = 0.0
+        self.live_state_restored = False
+        self.live_state_closed = False
+        # What a restored login tells the player, once the zone-in burst is over.
+        self.live_state_notice: live_state.Restored | None = None
+        self.live_state_notice_at = 0.0
         self.resting = False
         self.next_rest_tick = 0.0
         self.stats_refresh_at = 0.0
         self.door_close_at = 0.0
         self.door_entity = None
         self.opened_doors: set[int] = set()
+        # Charged dispense pouches/quivers: item id -> item_dispense row.  Loaded once so
+        # the zone-in inventory burst can include each pouch's charge/cooldown extdata
+        # without a query per item.
+        try:
+            self.dispense_items = {
+                int(row["item_id"]): row
+                for row in self.world.service.dispense_items()
+            }
+        except Exception:
+            self.dispense_items = {}
+        # Automatic doors are opt-in ("//doors auto on") and never run in a dungeon.
+        # Retail leaves a door shut until the player targets it or walks into it.
+        self.auto_open_doors = (
+            self._character_setting("auto_open_doors", "0") == "1")
+        # The owner's explicit support-Trust sets (char_settings).  Joachim keeps his own
+        # legacy key; the other support Trusts are one JSON map keyed by Trust spell id.
+        # Loaded once so the Trust tick never queries the database.
+        self.joachim_songs = self._load_joachim_songs()
+        self.trust_actions = self._load_trust_actions()
         self.last_packet_at = time.time()
+        self.idle_heartbeat_at = 0.0
+        self.next_position_refresh = 0.0
         self.last_release_at = 0.0
         # When the next Auto Refresh/Auto Regen (or gear Refresh/Regen) tick lands.
         # Retail ticks these every three seconds, not once per server frame.
         self.next_regen_tick = time.time() + traits.TICK_SECONDS
         self._trait_cache: tuple[tuple[int, int, int, int], list[traits.Trait]] | None = None
+        # (main job, main level) -> (every job-point spell id, this job's ids).  The
+        # gift names are resolved through the spells table once per job pair.
+        self._jp_spell_cache: tuple[tuple[int, int], frozenset[int], frozenset[int]] | None = None
 
     def save_position(self, force: bool = False) -> None:
         """Movement arrives many times a second; the database gets it every few seconds."""
@@ -497,23 +737,386 @@ class ZoneSession:
             self.last_save = now
             self.world.save_position(self.char, self.zone, self.pos)
 
-    def set_key(self, key: bytes) -> None:
+    def _character_setting(self, key: str, default: str = "") -> str:
+        """One persisted per-character preference, or ``default`` when unavailable."""
+        try:
+            value = self.world.service.character_setting(
+                int(self.char.get("id") or 0), key, default)
+        except Exception as exc:
+            # An old database without char_settings must still let the session start.
+            log.debug("%s setting %s unavailable: %s", self.addr, key, exc)
+            return default
+        return default if value is None else str(value)
+
+    # --- configurable support trusts ------------------------------------------------------------
+    # The support Trust follows the owner, so an explicit action set is a character setting,
+    # not a party or account one.  Joachim keeps his legacy `joachim_songs` key; the other
+    # support Trusts are one JSON map keyed by Trust spell id.  An absent/empty list means
+    # the built-in default logic.  A query with a trailing ``hud`` prints the machine-readable
+    # ``TrustData|`` lines the HUD swallows instead of showing them.
+
+    def _load_joachim_songs(self) -> list[int]:
+        """The character's saved Joachim set, or [] for the role plan."""
+        raw = self._character_setting("joachim_songs", "")
+        if not raw:
+            return []
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError):
+            return []
+        if not isinstance(value, list):
+            return []
+        out: list[int] = []
+        for entry in value:
+            try:
+                spell_id = int(entry)
+            except (TypeError, ValueError):
+                continue
+            if spell_id > 0 and spell_id not in out:
+                out.append(spell_id)
+            if len(out) >= trust_ai.TRUST_ACTION_LIMIT[911]:
+                break
+        return out
+
+    def _load_trust_actions(self) -> dict[int, list[int]]:
+        """The character's saved action sets for the other support Trusts."""
+        raw = self._character_setting("trust_actions", "")
+        if not raw:
+            return {}
+        try:
+            value = json.loads(raw)
+        except (TypeError, ValueError):
+            return {}
+        if not isinstance(value, dict):
+            return {}
+        out: dict[int, list[int]] = {}
+        for key, entries in value.items():
+            try:
+                trust_id = int(key)
+            except (TypeError, ValueError):
+                continue
+            if (trust_id == 911 or trust_id not in trust_ai.SUPPORT_TRUST_IDS
+                    or not isinstance(entries, list)):
+                continue
+            limit = trust_ai.TRUST_ACTION_LIMIT.get(trust_id, 12)
+            selected: list[int] = []
+            for entry in entries:
+                try:
+                    action_id = int(entry)
+                except (TypeError, ValueError):
+                    continue
+                if action_id > 0 and action_id not in selected:
+                    selected.append(action_id)
+                if len(selected) >= limit:
+                    break
+            if selected:
+                out[trust_id] = selected
+        return out
+
+    def _support_trust_id(self, token: str) -> int | None:
+        """A support Trust's spell id from a numeric id or one of the chat aliases."""
+        text = str(token or "").casefold()
+        try:
+            trust_id = int(text, 0)
+        except ValueError:
+            trust_id = SUPPORT_TRUST_ALIASES.get(text, 0)
+        return trust_id if trust_id in trust_ai.SUPPORT_TRUST_IDS else None
+
+    @staticmethod
+    def _action_key(name: str) -> str:
+        """A spell/roll name without case or punctuation, for commands and data rows."""
+        return "".join(ch for ch in str(name or "").casefold() if ch.isalnum())
+
+    def _trust_action_catalog(self, trust_id: int) -> list[dict]:
+        """Every action this Trust can use right now, in display order.
+
+        For the casters this is the kit's full action catalogue (not the default pruned
+        rotation), so a lower tier or Koru-Moru's Flurry can still be chosen explicitly.
+        For the Corsairs it is the Phantom Roll table.  A database error yields an empty
+        picker rather than a crashed command.
+        """
+        trust_id = int(trust_id)
+        kind = trust_ai.TRUST_ACTION_KIND.get(trust_id)
+        if kind is None:
+            return []
+        if kind == "roll":
+            rows = [
+                {"id": int(ability), "name": str(spec.name),
+                 "kind": "roll", "level": 0}
+                for ability, spec in rolls.ROLLS.items()
+            ]
+            rows.sort(key=lambda row: (row["name"].casefold(), row["id"]))
+            return rows
+        level = max(1, int(self.char.get("main_level", 1) or 1))
+        try:
+            spells = self.world.service.trust_spells(trust_id, level)
+            trust = self.world.service.trust(trust_id) or {}
+        except Exception as exc:
+            log.warning("%s could not read trust %d actions: %s", self.addr, trust_id, exc)
+            return []
+        levels = {int(spell["id"]): int(spell.get("min_level") or 0)
+                  for spell in spells}
+        kit = trust_ai.build_kit(
+            spells, level, int(trust.get("job") or 0), str(trust.get("name") or ""))
+        rows: list[dict] = []
+        for spell in kit.get("actions_all", []):
+            action_kind = kit.get("action_kind", {}).get(int(spell["id"]))
+            if action_kind is None:
+                continue
+            if kind == "song" and action_kind != "song":
+                continue
+            if kind == "spell" and action_kind == "song":
+                continue
+            rows.append({
+                "id": int(spell["id"]),
+                "name": str(spell.get("name") or ""),
+                "kind": action_kind,
+                "level": levels.get(int(spell["id"]), 0),
+            })
+        rows.sort(key=lambda row: (
+            TRUST_ACTION_ORDER.get(row["kind"], 9),
+            -int(row["level"]),
+            row["name"].casefold(),
+            row["id"],
+        ))
+        return rows
+
+    def _trust_selected_ids(self, trust_id: int) -> list[int]:
+        trust_id = int(trust_id)
+        if trust_id == 911:
+            return list(self.joachim_songs)
+        return list(self.trust_actions.get(trust_id, []))
+
+    def _save_trust_selected(self, trust_id: int, action_ids: list[int]) -> bool:
+        """Persist one set.  Empty means the built-in default logic."""
+        trust_id = int(trust_id)
+        if trust_id == 911:
+            return self._save_joachim_songs(action_ids)
+        limit = trust_ai.TRUST_ACTION_LIMIT.get(trust_id, 12)
+        saved = list(dict.fromkeys(int(action_id) for action_id in action_ids))[:limit]
+        if saved:
+            self.trust_actions[trust_id] = saved
+        else:
+            self.trust_actions.pop(trust_id, None)
+        payload = {str(key): list(value) for key, value in self.trust_actions.items() if value}
+        try:
+            self.world.service.set_character_setting(
+                int(self.char["id"]), "trust_actions",
+                json.dumps(payload) if payload else "")
+        except Exception as exc:
+            log.warning("%s could not save trust %d actions: %s", self.addr, trust_id, exc)
+            self.say("The action set could not be saved.")
+            return False
+        return True
+
+    def _save_joachim_songs(self, spell_ids: list[int]) -> bool:
+        """Persist one Joachim song set (empty means the role plan)."""
+        saved = list(dict.fromkeys(int(spell_id) for spell_id in spell_ids))
+        saved = saved[:trust_ai.TRUST_ACTION_LIMIT[911]]
+        try:
+            self.world.service.set_character_setting(
+                int(self.char["id"]), "joachim_songs",
+                json.dumps(saved) if saved else "")
+        except Exception as exc:
+            log.warning("%s could not save Joachim's songs: %s", self.addr, exc)
+            self.say("Joachim's song set could not be saved.")
+            return False
+        self.joachim_songs = saved
+        return True
+
+    def _parse_trust_actions(self, args: list[str],
+                             options: list[dict]) -> tuple[list[int], str | None]:
+        """Resolve quoted or plain action names to ids, in the order given.
+
+        The command line has already lost its shell quoting by the time it reaches the
+        zone (``words`` is whitespace-split), so the words are joined again and handed to
+        ``shlex``.  A name without quotes is still accepted: the longest run of words
+        that matches a known action wins.  Returns ``(ids, unknown_token)``.
+        """
+        text = " ".join(args)
+        try:
+            tokens = shlex.split(text)
+        except ValueError:
+            tokens = text.split()
+        by_key = {self._action_key(row["name"]): row for row in options}
+        chosen: list[int] = []
+        index = 0
+        while index < len(tokens):
+            match = None
+            for count in range(min(6, len(tokens) - index), 0, -1):
+                candidate = " ".join(tokens[index:index + count])
+                row = by_key.get(self._action_key(candidate))
+                if row is not None:
+                    match = (row, count)
+                    break
+            if match is None:
+                return [], tokens[index]
+            row, count = match
+            action_id = int(row["id"])
+            if action_id not in chosen:
+                chosen.append(action_id)
+            index += count
+        return chosen, None
+
+    def _trust_action_names(self, trust_id: int,
+                            action_ids: list[int] | None = None) -> list[str]:
+        """The canonical names of a saved set that are still in the catalogue."""
+        options = {int(row["id"]): str(row["name"])
+                   for row in self._trust_action_catalog(trust_id)}
+        ids = self._trust_selected_ids(trust_id) if action_ids is None else action_ids
+        return [options[int(action_id)] for action_id in ids if int(action_id) in options]
+
+    def _trust_send_ui(self, trust_id: int) -> None:
+        """Send the HUD's hidden action catalogue and current selection, one line each."""
+        trust_id = int(trust_id)
+        rows = self._trust_action_catalog(trust_id)
+        by_id = {int(row["id"]): row for row in rows}
+        selected = [int(action_id) for action_id in self._trust_selected_ids(trust_id)
+                    if int(action_id) in by_id]
+        limit = trust_ai.TRUST_ACTION_LIMIT.get(trust_id, 12)
+        kind = trust_ai.TRUST_ACTION_KIND.get(trust_id, "spell")
+        name = SUPPORT_TRUST_NAMES.get(
+            trust_id, str((self.world.service.trust(trust_id) or {}).get("name") or "Trust"))
+        auto = 0 if selected else 1
+        self.say("TrustData|%d|B|%s|%s|%d|%d|%s" % (
+            trust_id, name, kind, limit, auto,
+            ",".join(str(action_id) for action_id in selected)))
+        for row in rows:
+            self.say("TrustData|%d|A|%d|%d|%s|%s" % (
+                trust_id, int(row["id"]), int(row["level"]),
+                str(row["kind"]), str(row["name"])))
+        self.say("TrustData|%d|E" % trust_id)
+
+    def _trust_say_selection(self, trust_id: int, *, hud: bool = False) -> None:
+        """Report the current set: hidden data lines for the HUD, prose for chat."""
+        trust_id = int(trust_id)
+        if hud:
+            self._trust_send_ui(trust_id)
+            return
+        kind = trust_ai.TRUST_ACTION_KIND.get(trust_id, "spell")
+        label = TRUST_ACTION_LABEL.get(kind, "actions")
+        name = SUPPORT_TRUST_NAMES.get(trust_id, "The Trust")
+        names = self._trust_action_names(trust_id)
+        if names:
+            self.say("%s %s: %s" % (name, label, ", ".join(names)))
+        elif trust_id == 911:
+            self.say("Joachim chooses his songs by role. "
+                     'Use //trust joachim set songs "..." to pick them.')
+        else:
+            self.say("%s uses the default logic. Use //trust %d set %s "
+                     '"..." to choose actions.' % (name, trust_id, label))
+
+    def _trust_command(self, trust_id: int, args: list[str]) -> None:
+        """Show or choose one support Trust's action set.
+
+          //trust <id|name> [list]                  current set
+          //trust <id|name> set songs|spells|rolls "..."  explicit set (ordered)
+          //trust <id|name> set default                    built-in logic
+          //trust <id|name> ui hud                         HUD catalogue/data line
+        """
+        trust_id = int(trust_id)
+        args = list(args or [])
+        hud = bool(args and args[-1].casefold() == "hud")
+        if hud:
+            args.pop()
+        kind = trust_ai.TRUST_ACTION_KIND.get(trust_id, "spell")
+        label = TRUST_ACTION_LABEL.get(kind, "actions")
+        name = SUPPORT_TRUST_NAMES.get(trust_id, "The Trust")
+        if not args or args[0].casefold() in (
+                "list", "status", "show", "actions", "action",
+                "song", "songs", "spell", "spells", "roll", "rolls"):
+            self._trust_say_selection(trust_id, hud=hud)
+            return
+        action = args[0].casefold()
+        if action in ("ui", "data"):
+            if not hud:
+                self.say("Use //trust %d ui hud from the HUD." % trust_id)
+                return
+            self._trust_send_ui(trust_id)
+            return
+        if action in ("auto", "default", "reset"):
+            if self._save_trust_selected(trust_id, []):
+                self._trust_say_selection(trust_id, hud=hud)
+            return
+        if action not in ("set", "choose"):
+            self.say("Usage: //trust %d [set songs|spells|rolls \"<name>\" ... | "
+                     "set default]" % trust_id)
+            return
+        rest = args[1:]
+        if rest and rest[0].casefold() in (
+                "song", "songs", "spell", "spells", "roll", "rolls",
+                "action", "actions", "list"):
+            rest = rest[1:]
+        if not rest or (len(rest) == 1
+                        and rest[0].casefold() in ("auto", "default", "reset")):
+            if self._save_trust_selected(trust_id, []):
+                self._trust_say_selection(trust_id, hud=hud)
+            return
+        options = self._trust_action_catalog(trust_id)
+        if not options:
+            self.say("%s has no actions available at your level." % name)
+            return
+        chosen, unknown = self._parse_trust_actions(rest, options)
+        if unknown is not None:
+            self.say('%s does not know the action "%s".' % (name, unknown))
+            return
+        if not chosen:
+            self.say("No actions were named.")
+            return
+        limit = trust_ai.TRUST_ACTION_LIMIT.get(trust_id, 12)
+        if len(chosen) > limit:
+            if trust_id == 911:
+                self.say("Joachim's horn holds four songs; pick four or fewer.")
+            else:
+                self.say("%s can keep at most %d %s." % (name, limit, label))
+            return
+        if self._save_trust_selected(trust_id, chosen):
+            self._trust_say_selection(trust_id, hud=hud)
+
+    def set_key(self, key: bytes, history: list[bytes] | None = None) -> None:
         self.key = bytearray(key)
         self.base_key = bytes(key)
         self.cipher = self.world.zone_cipher_for(self.key)
+        self.prev_cipher = None
+        self.key_history = [bytes(item) for item in (history or [])]
+        current = bytes(self.key)
+        if current not in self.key_history:
+            self.key_history.append(current)
+        del self.key_history[:-KEY_HISTORY]
 
     def bump_key(self) -> None:
         """After 0x00B the client moves its key on by 2 (the last word, as a number).
 
         Every build has done this; a client that does not advance keeps using the key it
-        had. Both ciphers are kept: the replies go out under the new one and ``decrypt``
-        follows whichever key the client actually used, so either client works.
+        had. All of them are kept in ``key_history``: the replies go out under the new one,
+        and ``decrypt`` follows whichever key the client actually used, so a client that
+        missed a 0x00B (or processed one out of order) is not stranded on a key the server
+        has forgotten.
         """
         self.base_key = bytes(self.key)
         self.prev_cipher = self.cipher
         value = (struct.unpack_from("<I", self.key, 16)[0] + 2) & 0xFFFFFFFF
         struct.pack_into("<I", self.key, 16, value)
         self.cipher = self.world.zone_cipher_for(self.key)
+        current = bytes(self.key)
+        if not self.key_history or self.key_history[-1] != current:
+            self.key_history.append(current)
+        del self.key_history[:-KEY_HISTORY]
+
+    def adopt_key(self, key: bytes) -> None:
+        """Follow the key the client proved it is using instead of the newest bump."""
+        if self.key is not None and bytes(self.key) == bytes(key):
+            return
+        log.info("%s client kept zone key %s; following it", self.addr,
+                 bytes(key[16:20]).hex())
+        previous_key = bytes(self.key) if self.key is not None else None
+        previous_cipher = self.cipher
+        self.key = bytearray(key)
+        self.cipher = self.world.zone_cipher_for(self.key)
+        # Keep the key we were sending under as the fallback cipher, so a packet still in
+        # flight from before the switch is still readable.
+        self.prev_cipher = previous_cipher
+        self.base_key = previous_key
 
     @staticmethod
     def incoming(world, session, addr, buf: bytearray):
@@ -534,7 +1137,12 @@ class ZoneSession:
             # tunnel). The client retries 0x00A two seconds later; without this it would
             # evict the session it just created, over and over, and never send 0x00C.
             existing = world.session_by_char(cid)
+            # A session that is still zoning has not sent its first 0x00A yet: this is the
+            # continuation of the 0x00B, not a retry of an unacknowledged zone-in.  A
+            # same-zone warp reconnects inside the five-second retry window, so testing
+            # only `last` here sent it down the replay path and left the box looping.
             if (existing is not None and existing.last is not None
+                    and not getattr(existing, "zoning", False)
                     and time.time() - existing.last_packet_at <= 5.0):
                 if existing.addr != addr:
                     world.sessions.pop(existing.addr, None)
@@ -563,6 +1171,11 @@ class ZoneSession:
                              existing.zone_in_tries, "base" if use_base else "advanced",
                              ack, sync, existing.server_id)
                     out = existing.build(buf, next_id=False)
+                    # The primary alternates the two newest keys; a client further behind
+                    # still gets its own copy in the same tick, and so does the newest
+                    # when the primary is the pre-change key.
+                    primary = existing.base_key if use_base else existing.key
+                    existing.extra_packets = existing.zone_in_copies(primary)
                     return existing.resend(use_base=True) if use_base else out
                 if not existing.zone_loaded:
                     # It still will not take it: drop the session so the next 0x00A is a
@@ -589,10 +1202,28 @@ class ZoneSession:
             s.last_player_update = 0.0
             s.next_player_sync = 0.0
             if not continuing:
-                # A zone change advanced the client's cipher by 2 and it reconnects with
-                # that key; every other login starts from the account's sign-in key.
-                s.set_key(world.keys.get(account) or
-                          world.key_from_hash(game_session["session_hash"]))
+                # A client whose hand-off was dropped still holds the key it advanced to.
+                # Resetting it to the account's sign-in key here is what left boxes looping
+                # on "Downloading" forever: the client could never open the zone-in again,
+                # and the relaunch was the only way out.
+                parked = world.parked_keys(char, game_session["session_hash"])
+                if parked:
+                    s.set_key(parked[-1], history=parked)
+                    log.info("%s resuming the hand-off key for %s (%d candidates)",
+                             addr, s.char.get("name", "?"), len(parked))
+                else:
+                    primary = (world.keys.get(account) or
+                               world.key_from_hash(game_session["session_hash"]))
+                    # The client may still hold a key from a dropped hand-off whose game
+                    # session cannot be matched any more (a relaunch, or a hand-off row
+                    # replaced by another login).  Keep that sequence as extra copies: the
+                    # sign-in key stays the primary and one readable datagram is enough.
+                    stale = world.parked_history(char)
+                    s.set_key(primary, history=stale)
+                    if stale:
+                        log.info("%s resuming %d parked hand-off key(s) for %s as copies",
+                                 addr, len(stale), s.char.get("name", "?"))
+            s.session_hash = bytes(game_session["session_hash"])
             if DEBUG:
                 log.info("%s login key %s continuing=%s", addr, bytes(s.key).hex(), continuing)
             s.addr = addr
@@ -630,6 +1261,10 @@ class ZoneSession:
             log.info("%s char %#x zone-in id %d (ack %d sync %d, continuing=%s, key word %s)",
                      addr, cid, s.server_id, ack, sync, continuing,
                      bytes(s.key[16:20]).hex())
+            # Send the same zone-in under every key this hand-off has used; the gateway
+            # sends these right after the reply.  A client that missed a 0x00B is on an
+            # older key than the newest bump, and one datagram it can read is enough.
+            s.extra_packets = s.zone_in_copies()
             return reply
         if session is None:
             return None
@@ -660,24 +1295,51 @@ class ZoneSession:
         n = len(buf)
         words = ((n - HDR) // 4) & ~1
         self.opened_with_prev = False
-        for cipher in (self.cipher, self.prev_cipher):
-            if cipher is None:
+        self.opened_with_key = None
+        candidates: list[tuple[bytes, object]] = []
+        seen: set[bytes] = set()
+        if self.cipher is not None and self.key is not None:
+            current = bytes(self.key)
+            candidates.append((current, self.cipher))
+            seen.add(current)
+        if self.prev_cipher is not None and self.base_key is not None:
+            previous = bytes(self.base_key)
+            if previous not in seen:
+                candidates.append((previous, self.prev_cipher))
+                seen.add(previous)
+        # Every bump this hand-off has made, newest first.  A client that missed a 0x00B
+        # (UDP) or processed one late is on one of these, and the server no longer has to
+        # guess: the packet itself says which key it is.
+        for key in reversed(self.key_history):
+            if len(candidates) >= KEY_HISTORY + 2:
+                break
+            if key in seen:
                 continue
+            seen.add(key)
+            candidates.append((key, self.world.zone_cipher_for(key)))
+        for index, (key, cipher) in enumerate(candidates):
             b = bytearray(buf)
             cipher.run(b, HDR, words, False)
-            if md5(bytes(b[HDR:n - 16])) == bytes(b[n - 16:]):
-                # A packet still in flight from before 0x00B carries the old key. That is
-                # not the client telling us it kept its key: it just has not seen the zone
-                # change yet. Remember which cipher opened it and let 0x00C decide (see
-                # `handle`), otherwise one late packet pins every reply to the old key.
+            if md5(bytes(b[HDR:n - 16])) != bytes(b[n - 16:]):
+                continue
+            # A packet still in flight from before 0x00B carries the old key. That is
+            # not the client telling us it kept its key: it just has not seen the zone
+            # change yet. Remember which cipher opened it and let 0x00C decide (see
+            # `handle`), otherwise one late packet pins every reply to the old key.
+            # During a hand-off there is no such in-flight packet to protect: the client
+            # is proving which key it will read the zone-in under, so follow it at once.
+            if index > 0 and self.zone_loaded:
                 self.opened_with_prev = (cipher is self.prev_cipher
                                          and self.prev_cipher is not self.cipher)
-                nbits = struct.unpack_from("<I", b, n - 20)[0]
-                body = self.world.huff.decompress(bytes(b[HDR:n - 20]), nbits)
-                if body is None:
-                    log.warning("%s: a packet that does not decompress", self.addr)
-                return body
-        log.warning("%s: a packet neither key opens", self.addr)
+                self.opened_with_key = key
+            elif index > 0:
+                self.adopt_key(key)
+            nbits = struct.unpack_from("<I", b, n - 20)[0]
+            body = self.world.huff.decompress(bytes(b[HDR:n - 20]), nbits)
+            if body is None:
+                log.warning("%s: a packet that does not decompress", self.addr)
+            return body
+        log.warning("%s: a packet none of %d zone keys opens", self.addr, len(candidates))
         return None
 
     def parse(self, hdr: bytearray, body: bytes) -> None:
@@ -709,14 +1371,24 @@ class ZoneSession:
             # to a particular server packet).  Dropping them leaves the status and equip
             # windows waiting forever, and it is why an item used from the bag did nothing.
             # 0x00C is the same case: after a zone change it can arrive with sync 0, and
-            # dropping it means the rest of the zone state never goes out.
-            if ptype in (0x00C, 0x037, 0x050, 0x051, 0x052, 0x053, 0x05D, 0x061, 0x0B5,
-                         0x06E, 0x06F, 0x070, 0x071, 0x074, 0x076, 0x077, 0x078) or \
+            # dropping it means the rest of the zone state never goes out.  The Check menu
+            # (0x00DD) is another menu request, so it must not be gated on the sync either.
+            # 0x028 is the item menu's Drop and is a menu request too.
+            if ptype in (0x00C, 0x028, 0x037, 0x050, 0x051, 0x052, 0x053, 0x05D, 0x061,
+                         0x0B5, 0x0DD, 0x06E, 0x06F, 0x070, 0x071, 0x074, 0x076, 0x077,
+                         0x078) or \
                     self.client_id < sync <= code:
                 self.handle(ptype, body[offset:offset + size])
             offset += size
+        # Settle the outfit for this datagram's actions, but let the derived packets wait
+        # for the burst to finish (tick sends them once equip_sync_at passes).  A datagram
+        # that arrives after the window still flushes here: the session may stop ticking
+        # right after it (a /heal or a zone line), and the follow-up must not wait for the
+        # wake-up.
         if self.equipment_changed:
-            self.flush_equipment()
+            self.settle_equipment()
+            if time.time() >= self.equip_sync_at:
+                self.flush_equipment()
         self.client_id = code
 
     def handle(self, t: int, p: bytes) -> None:
@@ -743,6 +1415,8 @@ class ZoneSession:
             self.equipset_check(p)
         elif t == 0x037:  # item use
             self.item_use(p)
+        elif t == 0x028:  # the item menu's Drop: the player threw a stack away
+            self.item_drop(p)
         elif t == 0x03A:  # after sorting a bag, merge its partial stacks
             self.item_stack(p)
         elif t == 0x01A:  # target action: talk, engage, disengage
@@ -832,7 +1506,9 @@ class ZoneSession:
             line = self.world.zones.lines.get(rect)
             if line:
                 zone, pos = int(line[0]), list(line[1:])
-                self.change_zone(zone, pos)
+                # A main account leads its boxes through the line: the followers run the
+                # same zone-in their own client would have run had they stepped on it.
+                self.change_zone_with_family(zone, pos)
             else:
                 # Never leave the client on the black zone-transition screen: reload this
                 # zone at its spawn, which also moves the player off the trigger.
@@ -889,9 +1565,16 @@ class ZoneSession:
             self.lockstyle(p)
         elif t == 0x05D:  # an emote (/wave, /nod, /bow, ...)
             self.motion(p)
+        elif t == 0x00DD:  # /check, /checkname and /checkparam
+            self.inspect(p)
         elif t == 0x03C:  # the blacklist
             self.queue.append(self.blacklist())
         elif t == 0x0E7:  # /logout, /shutdown
+            # A deliberate logout is not a dropped link: retail takes the buffs with you,
+            # but an ability cooldown keeps running, so the row is rewritten with the
+            # recasts only and this dead session may not overwrite it again on its way out.
+            self.save_live_state(include_effects=False)
+            self.live_state_closed = True
             self.world.leave_party(self)
             self.world.despawn_player(self)
             self.gone = True
@@ -976,10 +1659,9 @@ class ZoneSession:
 
     def party_reload(self, p: bytes) -> None:
         """C2S 0x076: the client lost its party information and asks for it again."""
-        messages = self.party_packets()
-        if not messages:
-            # Solo: an empty table is still the answer, and it clears a stale roster.
-            messages = [sub(0x0C8, packets.group_table([], 0))]
+        # Solo: the empty table still clears a stale roster, and the own-row GROUP_LIST
+        # carries the job pair the HUD's spell/Trust lists read.
+        messages = self.party_packets() or self.world.solo_roster_packets(self)
         self.queue += messages
 
     def party_change(self, p: bytes) -> None:
@@ -1128,12 +1810,19 @@ class ZoneSession:
             self.say("No online sub-accounts to invite.")
 
     def trust_command(self, args: list[str]) -> None:
-        """//trust: list the alter egos that are out, or release one/all.
+        """//trust: list/release alter egos, or configure a support Trust's actions.
 
         The HUD calls ``//trust release <spell id>`` when an active Trust button is
         clicked.  The client's own Release menu is an entity action, not a chat command,
-        so this is the server-side equivalent.
+        so this is the server-side equivalent.  ``//trust <id|name> ...`` routes to the
+        per-character action set for Joachim, Luzaf, Qultada, Koru-Moru, Sylvie (UC) and
+        Ygnas.
         """
+        if args:
+            trust_id = self._support_trust_id(args[0])
+            if trust_id is not None:
+                self._trust_command(trust_id, args[1:])
+                return
         active = self.active_trusts()
         if not args or args[0].casefold() in ("list", "status"):
             if not active:
@@ -1144,7 +1833,9 @@ class ZoneSession:
                     for entity in active))
             return
         if args[0].casefold() not in ("release", "remove", "dismiss") or len(args) < 2:
-            self.say("Usage: //trust [list | release <spell id|name|all>]")
+            self.say("Usage: //trust [list | release <spell id|name|all> | "
+                     "<support trust> [set songs|spells|rolls \"<name>\" ... | "
+                     "set default]]")
             return
         target = " ".join(args[1:]).strip().strip('"').strip("'")
         if target.casefold() == "all":
@@ -1178,24 +1869,321 @@ class ZoneSession:
         self.say("%s leaves your party." % match.name)
         self.world.despawn_trust(match)
 
+    def doors_command(self, words: list[str]) -> None:
+        """//doors auto [on|off]: the opt-in automatic door mode."""
+        if not words or words[0].casefold() != "auto":
+            self.say("Automatic doors are %s. Use //doors auto on|off." % (
+                "on" if self.auto_open_doors else "off"))
+            return
+        if len(words) >= 2:
+            value = words[1].casefold()
+            if value in ("on", "1", "yes", "true"):
+                enabled = True
+            elif value in ("off", "0", "no", "false"):
+                enabled = False
+            else:
+                self.say("Use //doors auto on or //doors auto off.")
+                return
+        else:
+            enabled = not self.auto_open_doors
+        self.auto_open_doors = enabled
+        try:
+            self.world.service.set_character_setting(
+                int(self.char["id"]), "auto_open_doors", "1" if enabled else "0")
+        except Exception as exc:
+            log.warning("%s could not save the door setting: %s", self.addr, exc)
+            self.say("The door setting could not be saved.")
+            return
+        if enabled and not self.world.zones.allows_auto_doors(self.zone):
+            self.say("Automatic doors are on. This area is a dungeon, so its doors stay manual.")
+        else:
+            self.say("Automatic doors are %s." % ("on" if enabled else "off"))
+
+    # --- mounts --------------------------------------------------------------------------------
+
+    def mount(self) -> mounts.Mount | None:
+        """The mount this character is riding, or None while on foot."""
+        return mounts.by_id(self.mount_id)
+
+    def set_mount(self, mount_id: int, announce: bool = True) -> mounts.Mount | None:
+        """Call a mount under this character; every client that draws it is told.
+
+        The local client learns the id from 0x037 (mount_id plus Chocobo_Index, which is
+        what separates the personal chocobo from standing on the ground); every other
+        client gets the same id in the General block of 0x00D (Flags6).  Retail's
+        one-minute recast and thirty-minute ride are not enforced — a private server's
+        mounts are a convenience, and a team that has to wait a minute between calls is
+        not one.
+        """
+        mount = mounts.by_id(mount_id)
+        if mount is None:
+            return None
+        said = mount.description.replace("Calls forth", "You call forth", 1)
+        if int(self.mount_id) == int(mount.id):
+            if announce:
+                self.say("%s" % said)
+            return mount
+        if int(self.mount_id) >= 0:
+            # The client builds the mount model when the ride starts and keeps it while one
+            # is out: a switch has to stand on foot for a moment first.  Dismount now, hand
+            # the call to the tick, and say so at once so the command still answers.
+            self.mount_id = -1
+            self.pending_mount = (int(mount.id), time.time() + MOUNT_SWITCH_DELAY)
+            self.queue.append(self.char_status())
+            self.queue.append(self.char_update(packets.SEND_HP))
+            self.queue.append(self.status_icons())
+            self.world.broadcast_player(self, packets.SEND_HP)
+            if announce:
+                self.say("%s" % said)
+            log.info("%s switches to %s (%d) in %.1fs", self.addr, mount.name, mount.id,
+                     MOUNT_SWITCH_DELAY)
+            return mount
+        self.pending_mount = None
+        self.mount_id = int(mount.id)
+        self.mount_called_at = time.time()
+        # 0x037 carries the animation, the Mounted effect, the Chocobo_Index and the mount
+        # id — that is the packet the rider's own client acts on.  The General 0x00D puts
+        # the same animation and id on the entity a second time, the way retail's entity
+        # updates reach every client in the zone including the player's own.
+        self.queue.append(self.char_status())
+        self.queue.append(self.char_update(packets.SEND_HP))
+        self.queue.append(self.status_icons())
+        self.world.broadcast_player(self, packets.SEND_HP)
+        try:
+            self.world.service.set_character_mount(int(self.char["id"]), int(mount.id))
+        except Exception as exc:
+            log.warning("%s could not save the mount: %s", self.addr, exc)
+        if announce:
+            self.say("%s" % mount.description.replace("Calls forth", "You call forth", 1))
+        log.info("%s mounts %s (%d)", self.addr, mount.name, mount.id)
+        return mount
+
+    def resend_mounts(self) -> bool:
+        """Queue the mount unlock table (0x0AE) again for a live client."""
+        if not self.logged_in or self.zoning or getattr(self, "gone", False):
+            return False
+        self.queue.append(sub(0x0AE, mounts.bitfield()))
+        return True
+
+    def dismount(self, announce: bool = True) -> bool:
+        """Back on foot.  False when the character was not mounted."""
+        # An explicit dismount drops a switch that was waiting for the client's rebuild.
+        self.pending_mount = None
+        if int(self.mount_id) < 0:
+            if announce:
+                self.say("You are not mounted.")
+            return False
+        self.mount_id = -1
+        self.queue.append(self.char_status())
+        self.queue.append(self.char_update(packets.SEND_HP))
+        self.queue.append(self.status_icons())
+        self.world.broadcast_player(self, packets.SEND_HP)
+        if announce:
+            self.say("You dismount.")
+        log.info("%s dismounts", self.addr)
+        return True
+
+    def mount_family(self, mount: mounts.Mount) -> list["ZoneSession"]:
+        """Call one mount under this character and every online sub-account box."""
+        others = [session for session in self._family_sessions() if session is not self]
+        self.set_mount(mount.id)
+        for session in others:
+            session.set_mount(mount.id)
+        if others:
+            self.say("The call reaches %s." % _name_list(
+                [str(session.char.get("name") or "a box") for session in others]))
+        else:
+            self.say("No sub-account characters are online; the call reached only you.")
+        # A box that is still logging in (or parked) cannot answer; say so rather than
+        # letting the player wonder why the team is one short.
+        try:
+            family = {int(value) for value in self.world.service.account_family_ids(
+                int(self.char.get("account_id") or 0))}
+        except Exception:
+            family = set()
+        online = {int(self.char.get("account_id") or 0)}
+        online.update(int(session.char.get("account_id") or 0) for session in others)
+        missing = len(family - online)
+        if missing > 0:
+            self.say("%d sub-account character(s) are offline or asleep." % missing)
+        return [self] + others
+
+    def mount_party(self, mount: mounts.Mount | None = None) -> list["ZoneSession"]:
+        """Call a mount under this character and every online sub-account box.
+
+        With no name every box gets its own mount, drawn at random (the caller too), so
+        ``//mount party`` rides out as a mixed parade; with a name everyone rides that one.
+        """
+        others = [session for session in self._family_sessions() if session is not self]
+        targets = [self] + others
+        if mount is not None:
+            for session in targets:
+                session.set_mount(mount.id)
+            if others:
+                self.say("The call reaches %s." % _name_list(
+                    [str(session.char.get("name") or "a box") for session in others]))
+            else:
+                self.say("No sub-account characters are online; the call reached only you.")
+        else:
+            picks = random.sample(mounts.all_mounts(), min(len(targets), mounts.count()))
+            for session, pick in zip(targets, picks):
+                session.set_mount(pick.id)
+            parts = []
+            for session, pick in zip(targets, picks):
+                who = " (you)" if session is self else ""
+                parts.append(pick.name + who)
+            self.say("Mount party: %s." % ", ".join(parts))
+        # A box that is still logging in (or parked) cannot answer; say so rather than
+        # letting the player wonder why the team is one short.
+        try:
+            family = {int(value) for value in self.world.service.account_family_ids(
+                int(self.char.get("account_id") or 0))}
+        except Exception:
+            family = set()
+        online = {int(self.char.get("account_id") or 0)}
+        online.update(int(session.char.get("account_id") or 0) for session in others)
+        missing = len(family - online)
+        if missing > 0:
+            self.say("%d sub-account character(s) are offline or asleep." % missing)
+        return targets
+
+    def dismount_family(self) -> list["ZoneSession"]:
+        """Dismount this character and every online sub-account box."""
+        targets = [self] + [session for session in self._family_sessions() if session is not self]
+        changed = [session for session in targets if session.dismount(announce=session is not self)]
+        if not changed:
+            self.say("No one in the team is mounted.")
+        elif len(changed) > 1:
+            self.say("The team dismounts.")
+        return changed
+
+    def mount_list(self) -> None:
+        """Every mount this client knows, as id/name cells, four to a line."""
+        cells = ["%d %s" % (mount.id, mount.name) for mount in mounts.all_mounts()]
+        for offset in range(0, len(cells), 4):
+            self.say(", ".join(cells[offset:offset + 4]))
+        self.say("//mount <name|id> calls one; //mount party [name|id] calls it for your team "
+                 "(no name: a random mount for every box); //mount off dismounts.")
+
+    def songs_command(self, words: list[str]) -> None:
+        """//songs — the songs on this character, with their remaining time.
+
+        The client draws one icon per effect id, and every Minuet tier shares icon
+        198 (every March 214), so a bard cannot tell from the icon row which tiers
+        are up.  The server keys each song by spell id, so it can.
+        """
+        now = time.time()
+        active = [state for state in self.effect_state.values()
+                  if state.get("song") and float(state.get("until", 0.0)) > now]
+        if not active:
+            self.say("No songs on you.")
+            return
+        active.sort(key=lambda state: -float(state.get("until", 0.0)))
+        labels = (
+            (mod.ATT, "Attack", 1), (mod.RATT, "R.Attack", 1),
+            (mod.ACC, "Accuracy", 1), (mod.RACC, "R.Accuracy", 1),
+            (mod.DEF, "Defense", 1), (mod.MDEF, "M.Defense", 1),
+            (mod.MACC, "M.Accuracy", 1), (mod.EVA, "Evasion", 1),
+            (mod.HASTE_MAGIC, "Haste", 100),
+            (mod.DMG, "Damage taken", 100),
+            (mod.UDMGPHYS, "Damage taken", 100),   # Scherzo writes the uncapped pair
+            (mod.DAMAGE_LIMITP, "Damage limit", 100),
+            (mod.FIRE_MEVA, "Fire res.", 1), (mod.ICE_MEVA, "Ice res.", 1),
+            (mod.WIND_MEVA, "Wind res.", 1), (mod.EARTH_MEVA, "Earth res.", 1),
+            (mod.THUNDER_MEVA, "Thunder res.", 1), (mod.WATER_MEVA, "Water res.", 1),
+            (mod.LIGHT_MEVA, "Light res.", 1), (mod.DARK_MEVA, "Dark res.", 1),
+        )
+        for state in active:
+            left = int(float(state["until"]) - now)
+            mods = state.get("mods") or {}
+            parts = []
+            for mod_id, label, scale in labels:
+                value = int(mods.get(mod_id, 0))
+                if not value:
+                    continue
+                if scale == 100:
+                    parts.append("%s %g%%" % (label, value / 100.0))
+                else:
+                    parts.append("%s %+d" % (label, value))
+            if int(state.get("tick", 0)):
+                parts.append("tick %d" % int(state["tick"]))
+            self.say("%s (%d:%02d left)%s" % (
+                state.get("song_name") or "song", left // 60, left % 60,
+                "  " + ", ".join(parts) if parts else ""))
+        self.say("%d song(s) on you, %d slot(s)." % (len(active), self._song_limit()))
+
+    def mount_command(self, words: list[str]) -> None:
+        """//mount [all] <name|id> | off | list — the mount system's chat command."""
+        args = list(words or [])
+        team = False
+        if args and args[0].casefold() in ("all", "party", "team", "subs", "everyone"):
+            team = True
+            args = args[1:]
+        if not args:
+            if team:
+                # No name: the whole party gets a random mount each.
+                self.mount_party()
+            else:
+                self.mount_list()
+            return
+        verb = args[0].casefold()
+        if verb in ("list", "ls", "?"):
+            self.mount_list()
+            return
+        if verb in ("off", "dismount", "none", "down", "stop"):
+            if team:
+                self.dismount_family()
+            else:
+                self.dismount()
+            return
+        if verb in ("me", "self"):
+            team = False
+            args = args[1:]
+            if not args:
+                self.mount_list()
+                return
+        query = " ".join(args).strip()
+        if team and query.casefold() in ("random", "any", "mix"):
+            self.mount_party()
+            return
+        mount, error = mounts.find(query)
+        if mount is None:
+            self.say(error)
+            return
+        if team:
+            self.mount_party(mount)
+        else:
+            self.set_mount(mount.id)
+
     def command(self, words: list[str]) -> None:
         commands = (
             "commands: //zone <id> [x y z [rot]], //pos <x> <y> <z> [rot], //where, //door <id>, "
-            "//time <hour>, /heal rests, //heal refills, //entities, //moghouse, //home, "
+            "//time <hour>, /heal rests, //heal refills, //entities, //moghouse, //mh out [name|all] (step the family out), //home, "
             "//disengage (break a kept range engagement), "
             "//warp mark [alias] | me|all <number|alias> | all me | call <name> | list [page] | "
             "delete <n|alias> | rename <n> <alias> (your saved places), "
             "//hp [menu number|zone] (Home Points), //sg [n], "
             "//trust [list|release <spell id|name|all>] (alter egos), "
+            "//trust <joachim|luzaf|qultada|koru-moru|sylvie-uc|ygnas> "
+            "[set songs|spells|rolls \"<name>\" ...|set default] (support trust actions), "
             "//makeparty (drop your online subs from their parties, then invite them), "
             "//invite [subs|all|<name>] (party your online sub team, or invite one player)",
             "//locker store|grab|list <all|ammo|back|jsecapes|materials|name>, "
-            "//storage store|grab <job|all>",
+            "//storage organize | store <job|all> | grab <job|all> | list [job|all] "
+            "(keeps only this job's gear out; the 9999 locker holds the rest), "
+            "//recycle [list|restore <slot>|drop <bag> <slot>|purge] (30-day recycle bin), "
+            "//item move <bag> <slot> <to-bag> [count], //item store locker <bag> <slot> [count], "
+            "//item pull <slip|locker> <id> [extra]",
+            "//songs (the songs on you, with time left), "
             "//sleep (park this box without logging out), //wake (resume it), "
-            "//ws <name>, //ja <name>, //abilities, //traits, //job <job> [sub] (slips the old "
-            "job's gear, pulls its capes and tidies the bags), //cast <spell>, "
+            "//ws <name>, //ja <name>, //abilities, //traits, //job <job> [sub] (stores every "
+            "other job's gear, pulls this job's set and tidies the bags), "
+            "//job <character> <job> <sub> (the same swap on a sub-account), //cast <spell>, "
             "//equip <name>, //unequip <slot>, //model <item> <id>, //event <id> [p1..p8], "
             "//character model <race> <1-48|random>, //reload (re-read the launcher's Data page), "
+            "//doors auto [on|off] (automatically open city/outdoor doors), "
+            "//mount party [mount name|id] | off | list (mounts; no name gives every sub box "
+            "a random mount), "
             "//merits [n], //stock, //r30 [item], //rp30, "
             "//augment <A-D|index|off|list> <item>, "
             "//cape <build|list|off> <item>",
@@ -1206,6 +2194,9 @@ class ZoneSession:
                 return
             if words and words[0].casefold() == "wake":
                 self.wake()
+                return
+            if words and words[0].casefold() == "songs":
+                self.songs_command(words[1:])
                 return
             if words and words[0] == "reload":
                 self.reload_character()
@@ -1228,6 +2219,14 @@ class ZoneSession:
                     self.world.zones.name(self.zone), self.zone, self.pos[0], self.pos[1], self.pos[2], self.pos[3]))
             elif words and words[0].casefold() == "character":
                 self.character_command(words[1:])
+            elif words and words[0].casefold() == "doors":
+                self.doors_command(words[1:])
+            elif words and words[0].casefold() == "mount":
+                self.mount_command(words[1:])
+            elif words and words[0].casefold() == "mounts":
+                # The Mount HUD is a client addon and answers //mounts itself; a box
+                # without it gets the list here instead of the whole command help.
+                self.mount_list()
             elif words and words[0] == "door" and len(words) >= 2:
                 name = words[1][:4].ljust(4, "\0")
                 if name.rstrip("\0") not in {"_6u4", "_6u8", "_6ua", "_6ue"}:
@@ -1279,12 +2278,22 @@ class ZoneSession:
                     self.say("The client's current-point field is 7-bit: it shows 127/%d, "
                              "but the extra %d points are stored and spendable." % (
                                  max_points, points - 127))
-            elif words and words[0] == "moghouse":
-                self.toggle_moghouse()
+            elif words and words[0].casefold() in ("moghouse", "mh"):
+                if len(words) > 1 and words[1].casefold() in ("out", "exit", "leave"):
+                    self.mh_out(" ".join(words[2:]).strip())
+                elif len(words) == 1 or words[1].casefold() in ("enter", "toggle"):
+                    self.toggle_moghouse()
+                else:
+                    self.say("//mh [enter], or //mh out [name|all] to step the family out.")
+                    return
             elif words and words[0].casefold() == "storage":
                 self.storage_command(words[1:])
             elif words and words[0].casefold() == "locker":
                 self.locker_command(words[1:])
+            elif words and words[0].casefold() == "recycle":
+                self.recycle_command(words[1:])
+            elif words and words[0].casefold() == "item":
+                self.item_command(words[1:])
             elif words and words[0].casefold() == "stock":
                 self.stock_command()
             elif words and words[0] == "home":
@@ -1593,7 +2602,7 @@ class ZoneSession:
                 self.queue += [
                     sub(0x050, struct.pack("<BBBx", 0, kind, 0)),
                     self.grap_list(),
-                    sub(0x0AA, SPELL_BITS),
+                    sub(0x0AA, self.spell_bits()),
                     self.char_abilities(),
                 ]
                 log.info("%s //unequip kind=%d", self.addr, kind)
@@ -1858,19 +2867,33 @@ class ZoneSession:
         only make the leader blink out for the rest of the group.  Every other session in
         the account family zoned in at the sender's exact zone and position.
         """
+        if self.char.get("moghouse"):
+            self.say("You are in your Mog House. Use //mh out to bring the family out, "
+                     "then leave and warp from outside.")
+            return
         zone, pos = self._warp_anchor()
         zone_label = self.world.zones.name(zone)
+        # Remember the anchor before checking who is online: a box whose client is still
+        # logging in is absent from _family_sessions() and must join when it finishes.
+        self.world.set_team_anchor(self, zone, pos)
         targets = [session for session in self._family_sessions() if session is not self]
         if not targets:
-            self.say("No other characters in your team are online.")
+            self.say("No other characters in your team are online; they will join you "
+                     "when they finish logging in.")
             return
         name = self.char.get("name") or "A party member"
-        for target in targets:
-            target.say("%s warps you to their side in %s." % (name, zone_label))
+        if len(targets) == 1:
             # Always a zone hand-off, even in the same zone: the client treats its own
             # position as authoritative and ignores a server 0x00D for targid 0x400, so a
             # same-zone position update left every box standing where it was.
-            target.change_zone(zone, pos)
+            target = targets[0]
+            target.say("%s warps you to their side in %s." % (name, zone_label))
+            target.change_zone(zone, pos, follow_family=False)
+        else:
+            # Every box gets its own 0x00B in the same tick.  Five boxes measured 4.5 s
+            # from command to all-in-world this way; a first-load gate was slower (11.8 s)
+            # because it serialized a load the clients can overlap.
+            self.world.queue_warps(self, targets, zone, pos)
         moved = len(targets)
         self.say("Warped %d character%s to you in %s." % (
             moved, "" if moved == 1 else "s", zone_label))
@@ -1899,6 +2922,10 @@ class ZoneSession:
         if target is self:
             self.say("That is you.")
             return
+        if self.char.get("moghouse"):
+            self.say("You are in your Mog House. Use //mh out to bring the family out, "
+                     "then leave and warp from outside.")
+            return
         family = self.world.service.account_family_ids(
             int(self.char.get("account_id") or 0))
         if int(target.char.get("account_id") or 0) not in family:
@@ -1907,9 +2934,23 @@ class ZoneSession:
             return
         zone, pos = self._warp_anchor()
         zone_label = self.world.zones.name(zone)
+        # The launcher's auto-pull can arrive before the box's first position packet, when
+        # the ordinary "already there" test inside change_zone cannot see the client's
+        # spot yet.  A second call that hands the box the same anchor it was just given
+        # only reloads it -- the re-zone loop every fifteen seconds that kept a box out of
+        # the world.  A deliberate call somewhere else, or to a box that was not just
+        # handed this spot, still goes through.
+        last = target.warped_to
+        if (last is not None and int(last[0]) == int(zone)
+                and time.time() - float(last[2]) < WARP_REPEAT_GUARD
+                and target.already_at(zone, pos)):
+            self.say("%s is already with you in %s." % (
+                target.char.get("name") or name, zone_label))
+            return
         target.say("%s calls you to their side in %s." % (
             self.char.get("name") or "A party member", zone_label))
-        target.change_zone(zone, pos)
+        target.change_zone(zone, pos, follow_family=False)
+        target.warped_to = (int(zone), list(pos), time.time())
         self.say("Called %s to you in %s." % (
             target.char.get("name") or name, zone_label))
 
@@ -1928,7 +2969,7 @@ class ZoneSession:
             if target is not self:
                 target.say("%s warps the group to %s (%s)." % (
                     self.char.get("name") or "A party member", label, zone_label))
-            target.change_zone(zone, pos)
+            target.change_zone(zone, pos, follow_family=False)
             moved += 1
         if moved <= 1:
             self.say("Warped to %s (%s); no other characters in your family were online." % (
@@ -2019,92 +3060,297 @@ class ZoneSession:
             blueprint["variant"], blueprint["variants"]))
 
     def storage_command(self, words: list[str]) -> None:
-        """//storage store <job> / //storage grab <job|all>: slip storage from anywhere.
+        """//storage organize | store <job|all> | grab <job|all> | list [job|all].
 
-        Retail stores these items on a Storage Slip at a Porter Moogle.  Fanxi keeps the
-        same server-side record in ``char_storage`` and deletes the item from every bag,
-        so it never appears in the client's inventory or Storage container.  Store only
-        takes job-exclusive gear that a slip accepts; gear with no slip stays in the bags.
+        ``organize`` is the job-aware swap: everything the current job cannot equip
+        leaves the bags (a slip when the item has one, the 9,999 locker when it does
+        not), and everything the job can equip comes back into the Mog Wardrobes.
+        ``store all`` is the first half on its own, and ``grab <job>`` is the second
+        half for one job.  To the player the slips and the locker are one storage; the
+        client's 80-slot Storage bag is not used, so the 9999 limit is the real one.
         """
-        usage = "Usage: //storage store <job> (nin, Ninja, 13) or //storage grab <job|all>"
+        usage = ("Usage: //storage organize | store <job|all> | grab <job|all> | "
+                 "list [job|all]")
         if not words:
             self._storage_status()
             return
         action = words[0].casefold()
+        character_id = int(self.char["id"])
+        current_job = int(self.char.get("main_job") or 1)
+        if action in ("organize", "tidy"):
+            result = self._organize_storage(current_job)
+            if result is None:
+                return
+            self._queue_storage_moves(result)
+            self._report_organize(result, current_job)
+            log.info("%s //storage organize %s -> stored %d, pulled %d, tidied %d",
+                     self.addr, JOB_ABBREVIATIONS[current_job],
+                     result["stored_total"], result["pulled_total"],
+                     len(result["relocated"]))
+            return
         if action == "store":
-            if len(words) < 2:
+            wanted = " ".join(words[1:]).strip()
+            if not wanted:
                 self.say(usage)
                 return
-            wanted = " ".join(words[1:])
+            if wanted.casefold() in ("all", "everything", "*"):
+                result = self._organize_storage(
+                    current_job, pull=False, relocate=False)
+                if result is None:
+                    return
+                self._queue_storage_moves(result)
+                self._report_store(result, current_job, everything=True)
+                return
             job = job_id(wanted)
             if job is None:
-                self.say("Unknown job %r. Try NIN, Ninja or 13." % wanted)
+                self.say("Unknown job %r. Try NIN, Ninja, 13 or all." % wanted)
                 return
-            result = self.world.service.store_job_in_storage(int(self.char["id"]), job)
-            self._queue_storage_removals(result["moved"])
-            label = JOB_ABBREVIATIONS[job]
-            count = sum(int(move["quantity"]) for move in result["moved"])
-            if count:
-                self.say("Stored %d %s item%s on storage slips (%d total)." % (
-                    count, label, "" if count == 1 else "s", result["storage_count"]))
-                parts = ["%d:%d" % (slip, quantity) for slip, quantity
-                         in sorted(result["slips"].items()) if slip]
-                if parts:
-                    self.say("Slips: " + ", ".join(parts)[:130] + ".")
-            else:
-                self.say("No storable %s gear left in your bags." % label)
-            if result["unstoreable"]:
-                names = result["unstoreable_items"]
-                if len(names) <= 3:
-                    self.say("No slip for: " + ", ".join(names) + ".")
-                else:
-                    self.say("No slip for: %s and %d more." % (
-                        ", ".join(names[:3]), len(names) - 3))
-            if result["equipped"]:
-                self.say("Left %d equipped %s piece%s on." % (
-                    result["equipped"], label, "" if result["equipped"] == 1 else "s"))
-            log.info("%s //storage store %s -> %d items, %d unstoreable", self.addr,
-                     label, count, result["unstoreable"])
+            result = self._organize_storage(
+                job, scope="exclusive", pull=False, relocate=False)
+            if result is None:
+                return
+            self._queue_storage_moves(result)
+            self._report_store(result, job, everything=False)
             return
         if action == "grab":
-            job = None
-            label = "all"
             wanted = " ".join(words[1:]).strip()
-            if wanted and wanted.casefold() not in ("all", "everything", "*"):
-                job = job_id(wanted)
-                if job is None:
-                    self.say("Unknown job %r. Try NIN, Ninja, 13 or all." % wanted)
-                    return
-                label = JOB_ABBREVIATIONS[job]
-            result = self.world.service.take_from_storage(int(self.char["id"]), job)
-            self._queue_storage_returns(result["moved"])
-            count = sum(int(move["quantity"]) for move in result["moved"])
-            if count:
-                self.say("Took %d item%s off the storage slips (%d left)." % (
-                    count, "" if count == 1 else "s", result["storage_count"]))
-            elif result["storage_count"] == 0:
-                self.say("The storage slips are empty.")
-            elif result["remaining"]:
-                self.say("Your bags are full; nothing could be taken off the storage slips.")
-            elif result["skipped_job"]:
-                self.say("No %s gear on the storage slips." % label)
-            else:
-                self.say("Nothing came off the storage slips.")
-            if count and result["skipped_job"]:
-                if result["skipped_job"] == 1:
-                    self.say("1 other job item remains on the slips.")
-                else:
-                    self.say("%d other job items remain on the slips." % result["skipped_job"])
-            if count and result["remaining"]:
-                self.say("%d item%s stayed: your bags are full." % (
-                    result["remaining"], "" if result["remaining"] == 1 else "s"))
-            log.info("%s //storage grab %s -> %d items, %d left", self.addr, label, count,
-                     result["storage_count"])
+            if not wanted or wanted.casefold() in ("all", "everything", "*"):
+                self._grab_everything(character_id)
+                return
+            job = job_id(wanted)
+            if job is None:
+                self.say("Unknown job %r. Try NIN, Ninja, 13 or all." % wanted)
+                return
+            result = self._organize_storage(
+                job, scope="exclusive", store=False, pull=True, relocate=True)
+            if result is None:
+                return
+            self._queue_storage_moves(result)
+            self._report_pull(result, job)
+            return
+        if action == "list":
+            self._storage_list(words[1:])
             return
         self.say(usage)
 
+    def _organize_storage(self, job: int, **kwargs) -> dict | None:
+        """Run the organizer and report a database failure instead of dropping the command."""
+        try:
+            return self.world.service.organize_job_storage(
+                int(self.char["id"]), int(job), **kwargs)
+        except Exception as exc:
+            log.warning("%s storage organize failed: %s", self.addr, exc)
+            self.say("Could not organize the storage: %s" % exc)
+            return None
+
+    def _grab_everything(self, character_id: int) -> None:
+        """//storage grab all: empty both stores, the old slip/locker behaviour."""
+        slips = self.world.service.take_from_storage(character_id, None)
+        locker = self.world.service.take_from_locker(character_id, {"kind": "all"})
+        self._queue_storage_returns(list(slips["moved"]) + list(locker["moved"]))
+        count = (sum(int(move["quantity"]) for move in slips["moved"])
+                 + sum(int(move["quantity"]) for move in locker["moved"]))
+        if count:
+            self.say("Took %d item%s out of the slips and the locker (%d slip, %d locker)." % (
+                count, "" if count == 1 else "s",
+                int(slips["storage_count"]), int(locker["locker_items"])))
+        else:
+            self.say("The storage is empty.")
+        log.info("%s //storage grab all -> %d items, %d slip / %d locker items left",
+                 self.addr, count, int(slips["storage_count"]),
+                 int(locker["locker_items"]))
+
+    def _storage_list(self, words: list[str]) -> None:
+        """//storage list [job|all]: what is in the slips and locker, grouped by job."""
+        wanted = " ".join(words).strip()
+        character_id = int(self.char["id"])
+        if wanted.casefold() in ("all", "everything", "*"):
+            counts = self.world.service.storage_job_counts(character_id)
+            cells = ["%s %d" % (JOB_ABBREVIATIONS[job], counts["jobs"][job])
+                     for job in range(1, 23) if counts["jobs"][job]]
+            if counts["shared"]:
+                cells.append("shared %d" % counts["shared"])
+            if not cells:
+                self.say("No equipment is stored; //locker list shows ammo, materials and jugs.")
+                return
+            for offset in range(0, len(cells), 6):
+                self.say(", ".join(cells[offset:offset + 6]))
+            return
+        if wanted:
+            job = job_id(wanted)
+            if job is None:
+                self.say("Unknown job %r. Try NIN, Ninja, 13 or all." % wanted)
+                return
+        else:
+            job = int(self.char.get("main_job") or 1)
+        entries = self.world.service.storage_contents(character_id, job)
+        label = JOB_ABBREVIATIONS[job]
+        if not entries:
+            self.say("No %s gear in the slips or the locker." % label)
+            return
+        cells = []
+        for entry in entries:
+            item_id = int(entry["item_id"])
+            text = "%s x%d [%s]" % (
+                entry["name"], int(entry["quantity"]),
+                "slip" if entry["source"] == "slip" else "locker")
+            if entry["source"] == "locker" and capes.job_for_item(item_id):
+                try:
+                    text += " [%s]" % capes.describe(bytes(entry["extra"] or b""))
+                except ValueError:
+                    pass
+            cells.append(text)
+        limit = 24
+        for offset in range(0, min(len(cells), limit), 2):
+            self.say(", ".join(cells[offset:offset + 2]))
+        if len(cells) > limit:
+            self.say("... and %d more." % (len(cells) - limit))
+
+    @staticmethod
+    def _move_parts(result: dict, direction: str) -> str:
+        """``12 on slips, 3 in the locker`` for one direction of a move summary."""
+        slip = int(result.get(direction + "_slip") or 0)
+        locker = int(result.get(direction + "_locker") or 0)
+        parts = []
+        if slip:
+            parts.append("%d on slips" % slip)
+        if locker:
+            parts.append("%d in the locker" % locker)
+        return ", ".join(parts)
+
+    def _report_store(self, result: dict, job: int, *, everything: bool) -> None:
+        label = JOB_ABBREVIATIONS.get(int(job), str(job))
+        total = int(result["stored_total"])
+        if total:
+            parts = self._move_parts(result, "stored")
+            if everything:
+                self.say("Stored %d item%s you cannot equip as %s (%s)." % (
+                    total, "" if total == 1 else "s", label, parts))
+            else:
+                self.say("Stored %d %s item%s (%s)." % (
+                    total, label, "" if total == 1 else "s", parts))
+        elif not result["locker_full"]:
+            self.say("Nothing in your bags is waiting for storage." if everything
+                     else "No %s gear left in your bags." % label)
+        if result["locker_full"]:
+            self.say("%d item%s stayed: the locker is full." % (
+                result["locker_full"], "" if result["locker_full"] == 1 else "s"))
+        if result["equipped"]:
+            self.say("Left %d equipped piece%s on." % (
+                result["equipped"], "" if result["equipped"] == 1 else "s"))
+
+    def _report_pull(self, result: dict, job: int) -> None:
+        label = JOB_ABBREVIATIONS.get(int(job), str(job))
+        total = int(result["pulled_total"])
+        if total:
+            self.say("Pulled %d %s item%s into the wardrobes (%s)." % (
+                total, label, "" if total == 1 else "s",
+                self._move_parts(result, "pulled")))
+        elif not result["remaining"]:
+            self.say("No %s gear was in the slips or the locker." % label)
+        if result["relocated"]:
+            self.say("Tidied %d %s item%s from the inventory into the wardrobes." % (
+                len(result["relocated"]), label,
+                "" if len(result["relocated"]) == 1 else "s"))
+        if result["remaining"]:
+            self.say("%d item%s stayed in storage: the wardrobes and inventory are full." % (
+                result["remaining"], "" if result["remaining"] == 1 else "s"))
+        if total:
+            self.say("Wardrobes: %d free slot%s." % (
+                result["free"], "" if result["free"] == 1 else "s"))
+
+    def _report_organize(self, result: dict, job: int) -> None:
+        label = JOB_ABBREVIATIONS.get(int(job), str(job))
+        if result["stored_total"]:
+            self.say("Stored %d item%s %s cannot equip (%s)." % (
+                result["stored_total"], "" if result["stored_total"] == 1 else "s",
+                label, self._move_parts(result, "stored")))
+        if result["pulled_total"]:
+            self.say("Pulled %d %s item%s into the wardrobes (%s)." % (
+                result["pulled_total"], label,
+                "" if result["pulled_total"] == 1 else "s",
+                self._move_parts(result, "pulled")))
+        if result["relocated"]:
+            self.say("Tidied %d %s item%s into the wardrobes." % (
+                len(result["relocated"]), label,
+                "" if len(result["relocated"]) == 1 else "s"))
+        if not (result["stored_total"] or result["pulled_total"] or result["relocated"]):
+            self.say("The bags already match %s." % label)
+        if result["locker_full"]:
+            self.say("%d item%s stayed: the locker is full." % (
+                result["locker_full"], "" if result["locker_full"] == 1 else "s"))
+        if result["remaining"]:
+            self.say("%d item%s stayed in storage: the wardrobes and inventory are full." % (
+                result["remaining"], "" if result["remaining"] == 1 else "s"))
+        if result["equipped"]:
+            self.say("Left %d equipped piece%s on." % (
+                result["equipped"], "" if result["equipped"] == 1 else "s"))
+        self.say("Wardrobes: %d free slot%s; locker: %d/%d slots." % (
+            result["free"], "" if result["free"] == 1 else "s",
+            result["locker_count"], result["locker_capacity"]))
+
+    def _queue_storage_moves(self, result: dict) -> None:
+        """Repaint every bag slot the organizer changed.
+
+        A Mog Wardrobe cannot be updated by a bare 0x020: the client files rows into a
+        storage's item list only while that container's load window is open, so without
+        a state-0 0x01D first the equipment window keeps the previous wardrobe's list
+        and looks empty (or shows the last bag it had).  Every affected wardrobe is
+        therefore reopened and sent in full; non-wardrobe bags still use the lighter
+        clear/write pair.  All clears go before the writes so a reused slot never draws
+        the new item before the old one leaves.
+        """
+        clears: set[tuple[int, int]] = set()
+        writes: list[dict] = []
+        wardrobes: set[int] = set()
+        for move in result.get("stored", []):
+            container = int(move["from_container"])
+            clears.add((container, int(move["from_slot"])))
+            if container in WARDROBE_CONTAINERS:
+                wardrobes.add(container)
+        for move in result.get("relocated", []):
+            source = int(move["from_container"])
+            target = int(move["to_container"])
+            clears.add((source, int(move["from_slot"])))
+            if source in WARDROBE_CONTAINERS:
+                wardrobes.add(source)
+            if target in WARDROBE_CONTAINERS:
+                wardrobes.add(target)
+            else:
+                writes.append(move)
+        for move in result.get("pulled", []):
+            target = int(move["to_container"])
+            if target in WARDROBE_CONTAINERS:
+                wardrobes.add(target)
+            else:
+                writes.append(move)
+        if not clears and not writes and not wardrobes:
+            return
+        items = self.world.service.inventory(int(self.char["id"]))
+        present = {(int(item["container"]), int(item["slot"])) for item in items}
+        # Non-wardrobe sources first: a slot can be emptied here and filled by a write.
+        for container, slot in sorted(clears):
+            if container not in WARDROBE_CONTAINERS:
+                self.queue.append(sub(0x020, packets.item_attr(0, 0, container, slot)))
+        for container in sorted(wardrobes):
+            self.queue.append(sub(0x01D, packets.item_same(0, container, 1 << container)))
+            for item in items:
+                if int(item["container"]) == container:
+                    self.queue.append(self.item_packet(item))
+            # The full list omits a slot that stayed empty; make the removal explicit
+            # for a client that does not clear the container when it reopens.
+            for source, slot in sorted(clears):
+                if source == container and (source, slot) not in present:
+                    self.queue.append(sub(0x020, packets.item_attr(0, 0, container, slot)))
+        for move in writes:
+            self.queue.append(sub(0x020, packets.item_attr(
+                int(move["item_id"]), int(move["quantity"]),
+                int(move["to_container"]), int(move["to_slot"]),
+                extra=bytes(move.get("extra") or b""))))
+        self.queue.append(self.container_sync())
+
     def locker_command(self, words: list[str]) -> None:
-        """//locker store|grab|list: the hidden 9999-item locker, not a client bag.
+        """//locker store|grab|list: the hidden 9,999-slot locker, not a client bag.
 
         Store removes the item from every bag; grab puts it back in the inventory first,
         then the wardrobes.  Selectors are ``all``, a slot (``ammo``, ``back``, ``head``,
@@ -2115,8 +3361,8 @@ class ZoneSession:
                  "//locker list")
         if not words:
             summary = self.world.service.locker_summary(int(self.char["id"]))
-            self.say("Locker: %d/%d items (%d kinds)." % (
-                summary["items"], summary["capacity"], summary["kinds"]))
+            self.say("Locker: %d/%d slots." % (
+                summary["slots"], summary["capacity"]))
             self.say(usage)
             return
         action = words[0].casefold()
@@ -2150,7 +3396,7 @@ class ZoneSession:
             self._queue_storage_removals(result["moved"])
             count = sum(int(move["quantity"]) for move in result["moved"])
             if count:
-                self.say("Stored %d item%s in the locker (%d/%d)." % (
+                self.say("Stored %d item%s in the locker (%d/%d slots)." % (
                     count, "" if count == 1 else "s",
                     result["locker_count"], result["locker_capacity"]))
             else:
@@ -2169,7 +3415,7 @@ class ZoneSession:
         count = sum(int(move["quantity"]) for move in result["moved"])
         if count:
             self.say("Took %d item%s out of the locker (%d left)." % (
-                count, "" if count == 1 else "s", result["locker_count"]))
+                count, "" if count == 1 else "s", result["locker_items"]))
         elif result["locker_count"] == 0:
             self.say("The locker is empty.")
         elif result["remaining"]:
@@ -2182,7 +3428,7 @@ class ZoneSession:
             self.say("%d item%s stayed: your bags are full." % (
                 result["remaining"], "" if result["remaining"] == 1 else "s"))
         log.info("%s //locker grab %s -> %d items, %d left", self.addr, label, count,
-                 result["locker_count"])
+                 result["locker_items"])
 
     def stock_command(self) -> None:
         """//stock: top the visible consumables back up from the hidden locker."""
@@ -2199,16 +3445,199 @@ class ZoneSession:
             self.say(", ".join(cells[offset:offset + 3]))
 
     def _storage_status(self) -> None:
-        """//storage with no verb: what is on the slips, without opening a bag."""
-        stored = self.world.service.storage_summary(int(self.char["id"]))
-        if not stored:
-            self.say("The storage slips are empty. Use //storage store <job>.")
+        """//storage with no verb: both stores, and what the current job is waiting on."""
+        job = int(self.char.get("main_job") or 1)
+        label = JOB_ABBREVIATIONS.get(job, str(job))
+        overview = self.world.service.storage_overview(int(self.char["id"]), job)
+        slip = int(overview["slip_total"])
+        locker_items = int(overview["locker_total"])
+        locker_slots = int(overview["locker_slots"])
+        if not slip and not locker_items:
+            self.say("The storage is empty. Use //storage organize to fill it.")
             return
-        total = sum(int(quantity) for quantity in stored.values())
-        parts = ["%d:%d" % (slip, quantity) for slip, quantity in sorted(stored.items())]
-        self.say("Storage slips: %d item%s (%s)." % (
-            total, "" if total == 1 else "s", ", ".join(parts)[:100]))
-        self.say("Use //storage grab <job|all> to take them back.")
+        self.say("Storage: %d item%s on slips; locker %d/%d slots." % (
+            slip, "" if slip == 1 else "s", locker_slots,
+            int(overview["locker_capacity"])))
+        self.say("%s: %d stored, %d item%s in your bags for other jobs." % (
+            label, int(overview["stored_for_job"]), int(overview["away"]),
+            "" if int(overview["away"]) == 1 else "s"))
+        self.say("Use //storage organize to put the other jobs away and bring %s out." % label)
+
+    def item_command(self, words: list[str]) -> None:
+        """//item move ... and //item pull ...: the HUD's bag and Magic Bag actions."""
+        usage = ("Usage: //item move <bag> <slot> <to-bag> [count] or "
+                 "//item pull <slip|locker> <item-id> [extra-hex] [count]")
+        if words and words[0].casefold() == "pull":
+            if len(words) < 3:
+                self.say(usage)
+                return
+            source = words[1].casefold()
+            if source not in ("slip", "locker"):
+                self.say("Pull source must be slip or locker.")
+                return
+            try:
+                item_id = int(words[2], 0)
+            except ValueError:
+                self.say("Item id must be a number.")
+                return
+            extra = b""
+            count = None
+            rest = words[3:]
+            if source == "locker" and rest and len(rest[0]) >= 8:
+                try:
+                    extra = bytes.fromhex(rest[0])
+                    rest = rest[1:]
+                except ValueError:
+                    pass
+            if rest and rest[0].isdigit():
+                count = int(rest[0])
+            result = self.world.service.pull_magic_item(
+                int(self.char["id"]), source, item_id, extra, count)
+            if result is None:
+                self.say("That Magic Bag entry is gone.")
+                return
+            self.queue += self.container_items(0)
+            self.queue.append(self.container_sync())
+            if result.get("inventory_full"):
+                self.say("Your inventory is full; the item stays in the Magic Bag.")
+            else:
+                self.say("Pulled %d item%s out of the Magic Bag." % (
+                    int(result["pulled"]), "" if int(result["pulled"]) == 1 else "s"))
+            return
+        if words and words[0].casefold() == "store":
+            if len(words) < 4 or words[1].casefold() != "locker":
+                self.say("Usage: //item store locker <bag> <slot> [count]")
+                return
+            bag = self._recycle_bag(words[2])
+            if bag is None:
+                self.say("Unknown bag %r." % words[2])
+                return
+            if not words[3].isdigit():
+                self.say("Slot must be a number.")
+                return
+            count = int(words[4]) if len(words) > 4 and words[4].isdigit() else None
+            result = self.world.service.store_visible_in_locker(
+                int(self.char["id"]), bag, int(words[3]), count)
+            if result is None:
+                self.say("That bag slot is empty.")
+                return
+            self.queue += self.container_items(bag)
+            self.queue.append(self.container_sync())
+            if result.get("locker_full"):
+                self.say("The Magic Bag is full.")
+            else:
+                self.say("Moved %d item%s into the Magic Bag." % (
+                    int(result["stored"]), "" if int(result["stored"]) == 1 else "s"))
+            return
+        if len(words) < 4 or words[0].casefold() != "move":
+            self.say(usage)
+            return
+        source = self._recycle_bag(words[1])
+        target = self._recycle_bag(words[3])
+        if source is None or target is None:
+            self.say("Unknown bag. Use inventory, safe, storage, safe2, satchel, sack, "
+                     "case, wardrobe1..8 or a container number.")
+            return
+        if not words[2].isdigit():
+            self.say(usage)
+            return
+        count = int(words[4]) if len(words) > 4 and words[4].isdigit() else 1
+        slot = int(words[2])
+        row = self.world.service.inventory_slot(int(self.char["id"]), source, slot)
+        if row is None:
+            self.say("That bag slot is empty.")
+            return
+        quantity = min(count, int(row["quantity"]))
+        if not self.world.service.move_item(
+                int(self.char["id"]), source, slot, target, 0x52, quantity):
+            self.say("That move was refused.")
+            return
+        self.queue += self.container_items(source)
+        self.queue += self.container_items(target)
+        self.queue.append(self.container_sync())
+        self.say("Moved %d item%s." % (
+            quantity, "" if quantity == 1 else "s"))
+
+    RECYCLE_BAGS = {
+        "inventory": 0, "inv": 0, "safe": 1, "safe1": 1, "safe2": 9,
+        "storage": 2, "locker": 4, "satchel": 5, "sack": 6, "case": 7,
+        "wardrobe1": 8, "wardrobe2": 10, "wardrobe3": 11, "wardrobe4": 12,
+        "wardrobe5": 13, "wardrobe6": 14, "wardrobe7": 15, "wardrobe8": 16,
+    }
+
+    def _recycle_bag(self, text: str) -> int | None:
+        value = str(text or "").strip().casefold()
+        if value.isdigit():
+            return int(value) if 0 <= int(value) <= 17 else None
+        return self.RECYCLE_BAGS.get(value)
+
+    def recycle_command(self, words: list[str]) -> None:
+        """//recycle: the 30-day Recycle Bin (container 17), with restore and drop."""
+        usage = ("Usage: //recycle [list] | restore <slot> [count] | "
+                 "drop <bag> <slot> [count] | purge")
+        if not words or words[0].casefold() in ("list", "ls"):
+            items = self.world.service.recycle_items(int(self.char["id"]))
+            if not items:
+                self.say("The Recycle Bin is empty.")
+                return
+            cells = ["%s x%d [slot %d]" % (item["name"], int(item["quantity"]),
+                                           int(item["slot"])) for item in items]
+            for offset in range(0, len(cells), 3):
+                self.say(", ".join(cells[offset:offset + 3]))
+            self.say("//recycle restore <slot> [count] brings one back.")
+            return
+        action = words[0].casefold()
+        if action == "restore":
+            if len(words) < 2 or not words[1].isdigit():
+                self.say(usage)
+                return
+            count = int(words[2]) if len(words) > 2 and words[2].isdigit() else None
+            result = self.world.service.restore_recycle_item(
+                int(self.char["id"]), int(words[1]), count)
+            if result is None:
+                self.say("That Recycle Bin slot is empty.")
+                return
+            self.queue += self.container_items(CONTAINER_RECYCLE)
+            self.queue += self.container_items(0)
+            self.queue.append(self.container_sync())
+            if result.get("inventory_full"):
+                self.say("Your inventory is full; the item stays in the Recycle Bin.")
+            else:
+                self.say("Restored %d item%s from the Recycle Bin." % (
+                    int(result["restored"]), "" if int(result["restored"]) == 1 else "s"))
+            return
+        if action == "drop":
+            if len(words) < 3:
+                self.say(usage)
+                return
+            bag = self._recycle_bag(words[1])
+            if bag is None or bag == CONTAINER_RECYCLE:
+                self.say("Unknown bag %r." % words[1])
+                return
+            if not words[2].isdigit():
+                self.say(usage)
+                return
+            count = int(words[3]) if len(words) > 3 and words[3].isdigit() else 1
+            result = self.world.service.drop_item(
+                int(self.char["id"]), bag, int(words[2]), count)
+            if result is None:
+                self.say("That bag slot is empty.")
+                return
+            if result.get("recycle_full"):
+                self.say("The Recycle Bin is full.")
+                return
+            self.queue += self.container_items(bag)
+            self.queue += self.container_items(CONTAINER_RECYCLE)
+            self.queue.append(self.container_sync())
+            self.say("Moved %d item%s to the Recycle Bin for 30 days." % (
+                int(result["recycled"]), "" if int(result["recycled"]) == 1 else "s"))
+            return
+        if action == "purge":
+            count = self.world.service.purge_recycle(int(self.char["id"]))
+            self.say("Purged %d expired Recycle Bin slot%s." % (
+                count, "" if count == 1 else "s"))
+            return
+        self.say(usage)
 
     def _queue_storage_removals(self, moves: list[dict]) -> None:
         """Clear the bag slots an item left; slip contents are invisible to the client."""
@@ -2308,19 +3737,108 @@ class ZoneSession:
         self.sync_players()
         self.say("Awake.")
 
-    def change_zone_with_family(self, zone: int, pos, logout_state: int = 2,
-                                reason: str = "leads you") -> None:
-        """Move this session and its family boxes through one zone transition."""
+    def change_zone_with_family(self, zone: int, pos, logout_state: int = 2) -> None:
+        """Walk this session and its family boxes through one zone line.
+
+        A zone line is one interaction from the player but one hand-off per client, and the
+        boxes behind the leader only sometimes send a ``0x05E`` of their own: the client
+        asks for the zone its own character stepped on, and the follow controller's drive
+        through the leader's last point does not always reach the line.  They are moved
+        here instead, so the whole team runs the same zone-in script the leader does.  Only
+        the main account leads (``family_followers`` checks it); a sub that crosses alone
+        still zones, but nothing follows it.
+
+        The leader's ``0x00B`` goes out at once and the boxes' follow on the next tick, as
+        one batch: the clients overlap their zone loads, and the hand-off fixes (the parked
+        key sequence and the stolen-port rule) keep a simultaneous reconnect from losing a
+        box.  A box that did walk through the line itself has already arrived, and its
+        queued move is dropped.
+        """
         # Collect before moving the leader: family_followers looks in the old zone.
         followers = self.world.family_followers(self)
-        self.change_zone(zone, pos, logout_state)
-        for target in followers:
-            target.say("%s %s." % (self.char.get("name") or "Your leader", reason))
-            target.change_zone(zone, pos, logout_state)
+        if not self.change_zone(zone, pos, logout_state, follow_family=False):
+            return
+        if self.world.is_family_leader(self):
+            # A box that is still logging in cannot be in the list above; it joins the
+            # anchor once its zone-in finishes.
+            self.world.set_team_anchor(self, zone, pos)
+        if not followers:
+            return
+        label = self.world.zones.name(int(zone))
+        announce = "%s leads you into %s." % (
+            self.char.get("name") or "Your leader", label)
+        self.world.queue_warps(
+            self, followers, zone, pos, spacing=0.5, announce=announce,
+            skip_if_present=True)
+        log.info("%s leads %d family box(es) into %s", self.addr, len(followers), label)
 
-    def change_zone(self, zone: int, pos, logout_state: int = 2) -> None:
+    def already_at(self, zone: int, pos) -> bool:
+        """True when a move asks for the spot the character is already standing on.
+
+        The launcher's auto-warp used to pull a box once per poll while its leader was
+        barely moving, which re-zoned the whole team every few seconds for no gain.  A
+        same-zone move within a few yalms is a no-op, not a new hand-off.
+        """
+        if pos is None or int(zone) != int(self.zone):
+            return False
+        try:
+            return (abs(float(pos[0]) - float(self.pos[0])) <= 3.0
+                    and abs(float(pos[1]) - float(self.pos[1])) <= 3.0
+                    and abs(float(pos[2]) - float(self.pos[2])) <= 3.0)
+        except (TypeError, ValueError, IndexError):
+            return False
+
+    def change_zone(self, zone: int, pos, logout_state: int = 2,
+                    follow_family: bool = True) -> bool:
+        """Queue a zone hand-off; True when a ``0x00B`` was actually queued.
+
+        False means the move was deferred because another hand-off is already in flight,
+        or dropped as a no-op the client itself reported.  ``follow_family`` makes a main
+        character's move (a teleport spell, a survival guide, a home point, a warp item)
+        bring the sub-account boxes to the same place; scripted group moves pass False
+        because they already name every destination.
+        """
+        if self.zoning or (self.logged_in and not self.zone_loaded):
+            # A hand-off is already in flight.  `zoning` covers the 0x00B itself; the
+            # second test covers the window after 0x00A and before the client's 0x00C,
+            # when the server has already cleared `zoning` but the client is still
+            # loading.  Sending a 0x00B now moves the client's cipher on again under it;
+            # a repeated //warp call (or the launcher's auto-warp) did exactly that and
+            # left boxes looping on "Downloading".  Keep the new destination and apply
+            # it after the client has acknowledged this zone-in.
+            self.pending_zone = (int(zone), list(pos) if pos else None, logout_state)
+            log.info("%s zone change to %d deferred: the hand-off to %d is in flight",
+                     self.addr, int(zone), self.zone)
+            return False
+        if self.zone_loaded and self.position_seen and self.already_at(zone, pos):
+            # The client itself reported standing at this spot, so this really is a
+            # no-op.  position_seen matters: before the first position packet the server
+            # only knows the position it *sent* the box to, which is how the old shortcut
+            # skipped warps that were actually needed.  This also keeps a repeated
+            # //warp all me from reloading boxes that are already on top of the leader.
+            return False
+        followers = []
+        if follow_family and logout_state != 3 and self.world.is_family_leader(self):
+            # A teleport is not a walk: bring every online box, wherever it stands, not
+            # only the ones behind the leader in this zone.  Collect before moving.
+            followers = [session for session in self._family_sessions()
+                         if session is not self]
+            # A box that is still logging in is absent from the list; it joins the anchor
+            # when its zone-in finishes.
+            self.world.set_team_anchor(self, zone, pos)
+        if self.char.get("moghouse") and pos and any(abs(float(v)) > 1.0 for v in pos[:3]):
+            # A warp or a family follow is taking the character out of the Mog House.
+            # The login packet keys the interior off this flag; leaving it set made
+            # after_zone_in put the character back at the interior origin (0, 0, 0) after
+            # every pull, which is what kept a box re-zoning instead of joining the team.
+            self._set_moghouse(False)
         # The old zone's clients must lose this character before it reappears elsewhere.
         self.world.despawn_player(self)
+        # A mount does not survive a zone line: the client drops it on 0x00B, and the
+        # zone-in's 0x037 carries mount_id 0.  Clearing it here keeps a late 0x00D or the
+        # idle heartbeat from putting the old mount back on the newly loaded character.
+        self.mount_id = -1
+        self.pending_mount = None
         self.zone = int(zone)
         self.pos = list(pos) if pos else list(self.world.zones.position(self.zone))
         self.zoning = True
@@ -2333,6 +3851,13 @@ class ZoneSession:
         self.world.party_zone_changed(self)
         log.info("%s -> %s (%d) at %s", self.addr, self.world.zones.name(self.zone), self.zone, self.pos)
         self.queue.append(self.logout_packet(logout_state, zone_change=True))
+        if followers:
+            announce = "%s leads you into %s." % (
+                self.char.get("name") or "Your leader",
+                self.world.zones.name(self.zone))
+            self.world.queue_warps(self, followers, self.zone, self.pos,
+                                   announce=announce)
+        return True
 
     def logout_packet(self, state: int, zone_change: bool = False) -> Msg:
         ip = socket.inet_aton(self.world.host_ip) if zone_change else bytes(4)
@@ -2371,9 +3896,16 @@ class ZoneSession:
         A locked appearance is kept in its own columns, so every later gear change can
         still update the stats without changing the grap list.  That is what stops the
         "blinking" the client shows when the server echoes new models.
+
+        Turning the lock off forgets the stored look too, as retail does.  Leaving the
+        models behind let an old save or a stale keepalive paint the previous job's
+        clothing back on after a job change.
         """
         self.char["style_lock"] = 1 if locked else 0
-        if models is not None:
+        if not locked:
+            for key in STYLE_SLOTS.values():
+                self.char[key] = 0
+        elif models is not None:
             for kind, key in STYLE_SLOTS.items():
                 if kind in models:
                     self.char[key] = int(models[kind] or 0)
@@ -2389,32 +3921,50 @@ class ZoneSession:
         return [self.grap_list(), self.char_sync()]
 
     def lockstyle(self, p: bytes) -> None:
-        """C2S 0x053: /lockstyle on|off, /lockstyleset # and the zone-in keepalive."""
+        """C2S 0x053: /lockstyle on|off, /lockstyleset # and the client's continue."""
         if len(p) < 8:
             log.info("%s lockstyle short (%d bytes): %s", self.addr, len(p), bytes(p).hex())
             return
         count, mode, flags = int(p[4]), int(p[5]), int(p[6])
         log.info("%s lockstyle mode=%d count=%d flags=%d", self.addr, mode, count, flags)
+        if mode != LOCKSTYLE_KEEPALIVE or flags or DEBUG:
+            # The keepalive is the only packet here that arrives unasked (login, zoning);
+            # everything else is worth the whole packet in the log when a report says the
+            # command "did nothing".
+            log.info("%s lockstyle raw (%d bytes): %s", self.addr, len(p), bytes(p).hex())
         if mode == LOCKSTYLE_QUERY:
             self.queue.append(self.system_message(
                 MSG_STYLE_LOCK_IS_ON if self.style_locked() else MSG_STYLE_LOCK_IS_OFF))
             return
         if mode == LOCKSTYLE_KEEPALIVE:
-            # Sent while zoning with style lock enabled.  Keep the stored appearance;
-            # only snapshot when an older save has no models yet.
+            # Mode 1 is the client's "continue": it asserts that its own style lock is
+            # on.  It is what the client sends on login and zoning, and it is also what
+            # /lockstyle on produces when the client already believes the lock is on --
+            # it does not resend mode 4 in that state.  Ignoring the packet therefore
+            # left the two sides disagreeing forever: the client kept saying "still
+            # locked" while the server had it off, and every /lockstyle on typed after
+            # that sent only this packet and changed nothing on screen.
+            #
+            # A continue cannot resurrect an old look: turning the lock off clears the
+            # stored models, so this locks the appearance the character is wearing now.
             if not self.style_locked():
-                models = self._style_models()
-                if not any(models.values()):
-                    models = self._current_models()
-                self._apply_style(True, models)
+                self._apply_style(True, self._current_models())
+                self.queue += self.style_packets()
+                self.queue.append(self.system_message(MSG_STYLE_LOCK_ON))
+            elif not any(self._style_models().values()):
+                # A save from before the models were stored has the flag without any
+                # appearance.  Fill it in silently; the client already believes it is on.
+                self._apply_style(True, self._current_models())
                 self.queue += self.style_packets()
             return
         if mode == LOCKSTYLE_DISABLE:
-            if not self.style_locked():
+            was_locked = self.style_locked()
+            if not was_locked and not any(self._style_models().values()):
                 return
             self._apply_style(False)
             self.queue += self.style_packets()
-            self.queue.append(self.system_message(MSG_STYLE_LOCK_OFF))
+            if was_locked:
+                self.queue.append(self.system_message(MSG_STYLE_LOCK_OFF))
             return
         if mode not in (LOCKSTYLE_ENABLE, LOCKSTYLE_SET):
             log.info("%s lockstyle unknown mode %d", self.addr, mode)
@@ -2506,6 +4056,10 @@ class ZoneSession:
         self.casting = None
         self.trust_entities = []
         self.pet_entity = None
+        # The live aura of each bubble, {"indi": (status, hexed mob id), "geo": (...)}.
+        # A Geomancer runs one Indi- and one Geo- bubble, and a new cast replaces only
+        # its own, so this remembers what each one put where.
+        self.geo_bubble: dict[str, tuple[int, int]] = {}
         self.position_seen = False
         self.dead_until = 0.0
         self.engaged_id = None
@@ -2518,6 +4072,9 @@ class ZoneSession:
             # through the zone change) fills HP and MP and leaves no status effect.
             self.clear_status_effects()
             self.restore_vitals(refresh=False)
+            # The buffs are gone with the rest, but an ability cooldown is a server
+            # cooldown: it survives the logout just as it survives a dropped link.
+            self.restore_live_state(include_effects=False)
         elif int(self.char.get("hp_current", 1)) <= 0:
             self.char["hp_current"] = max(1, int(self.char["hp"]) // 2)
             self.char["mp_current"] = int(self.char.get("mp", 0)) // 2
@@ -2526,15 +4083,28 @@ class ZoneSession:
                     self.char["id"], self.char["hp_current"], self.char["mp_current"])
             except Exception:
                 pass
+            # A K.O. takes the buffs in retail; the recasts still come back.
+            self.restore_live_state(include_effects=False)
+        else:
+            # A dropped link is a relog to the client: give it back the song list and the
+            # cooldowns the server was holding for it (game/live_state.py).
+            self.restore_live_state()
         self.equip_initial()
         self.queue += [sub(0x04F, bytes(4)), self.grap_list(), self.item_max(), self.login_packet()]
         # Send the command data before the client asks for stats (0x061) and builds its
-        # menus, but after the login packet has defined the character.
-        self.queue += [self.char_feats(), self.char_abilities(), self.char_commands()]
+        # menus, but after the login packet has defined the character.  The 0x119 recast
+        # table belongs in this burst: it carries what restore_live_state just read, so a
+        # cooldown that survived the logout is in client memory before anything can use it.
+        self.queue += [self.char_feats(), self.char_abilities(), self.char_commands(),
+                       self.abil_recast()]
         self.queue += self.equipment_packets()
         self.stats_refresh_at = time.time() + 2.0
 
     def after_zone_in(self) -> None:
+        try:
+            self.world.service.purge_recycle(int(self.char["id"]))
+        except Exception as exc:
+            log.warning("%s recycle purge failed: %s", self.addr, exc)
         # Order matters: the client builds the Weapon Skills list when it processes the
         # 0x062 skill packet, from whatever 0x0AC bits it has at that moment.  Sending
         # 0x062 first leaves a fresh client with an empty list; the command data must
@@ -2561,10 +4131,14 @@ class ZoneSession:
              self.grap_list(), *self.equipment_packets(),
              self.job_info(), self.char_status(), self.char_stats(),
              self.char_feats(), self.char_abilities(), self.char_commands(),
+             self.abil_recast(),
              self.char_skills(), self.party_member(), self.char_update()]
         # The group page is server-owned: without this the client's Party Info window and
-        # the native party list stay empty even though the server knows the roster.
-        q += self.party_packets()
+        # the native party list stay empty even though the server knows the roster.  A
+        # solo player still needs the empty table plus its own row: the HUD reads the job
+        # pair from row 0, and with no row a fresh login reports MainJob 0 (which empties
+        # the spell and Trust windows) until something else repopulates it.
+        q += self.party_packets() or self.world.solo_roster_packets(self)
         # Every permanent key item, in both GetItemFlag and LookItemFlag bitmaps.
         q += [sub(0x055, KEY_ITEM_BITS[table] + KEY_ITEM_BITS[table] +
                    struct.pack("<HH", table, 0)) for table in range(7)]
@@ -2573,9 +4147,12 @@ class ZoneSession:
             0xD0, 0xD8, 0x30, 0x38, 0xE0, 0xE8, 0xF0, 0xF8, 0x100, 0x108)
         q += [sub(0x056, bytes(32) + struct.pack("<HH", port, 0)) for port in logs]
         q.append(sub(0x056, bytes(36) + struct.pack("<HH", 0xFFFF, 0)))
-        q += [sub(0x0AA, SPELL_BITS),         # every spell id in spell_list
+        q += [sub(0x0AA, self.spell_bits()),         # every spell id in spell_list
               self.job_points(), self.job_points_detail(),
-              sub(0x0AE, bytes(8)),            # no mounts
+              # 0x0AE is the client's mount table: one bit per mount id, eight bytes.
+              # Setting every bit the client knows puts all of them in its Mount menu
+              # and lets /mount and //mount call any of them.
+              sub(0x0AE, mounts.bitfield()),
               self.char_sync(),
               *self.merit_list(),             # the merits this character has bought
               self.blacklist()]
@@ -2588,6 +4165,9 @@ class ZoneSession:
         q += self.inventory_packets()
         self.queue += q
         self.zone_loaded = True
+        # This hand-off reached the world: the client is on a known key again, so the
+        # parked sequence for a failed one is no longer needed.
+        self.world.clear_parked_keys(int(self.char["id"]))
         # The client builds the Abilities menu from 0x0AC, but on this build the zone-in
         # copy is consumed before that menu exists.  Two later copies (after the 0x061
         # reply and a couple of seconds into the zone) make both submenus populate.
@@ -2599,6 +4179,34 @@ class ZoneSession:
         # this exact point is one of the two things that can take the client out of movement,
         # so keep the zone-in burst free of chat until that is settled.
         # self.say("%s (%d). Say //help for commands." % (self.world.zones.name(self.zone), self.zone))
+        self.apply_pending_zone()
+        # A box that was still logging in when the team was called joins the anchor now
+        # that its zone-in has finished, without waiting for another //warp all me.
+        self.world.join_team_anchor(self)
+        # The reconnect line waits the same couple of seconds the command retries do:
+        # chat in the burst itself can take the client out of movement, and the client may
+        # still have been loading when on_login read the snapshot.
+        if self.live_state_notice is not None:
+            self.live_state_notice_at = now + LIVE_STATE_NOTICE_DELAY
+
+    def apply_pending_zone(self) -> None:
+        """Run a zone change that was requested while this one was still loading.
+
+        A second //warp, a zone line, or the launcher's auto-warp used to send another
+        0x00B mid-hand-off, advancing the cipher again before the client had the zone it
+        was loading.  The move is kept instead and performed now, when a new hand-off is
+        safe.
+        """
+        pending = self.pending_zone
+        self.pending_zone = None
+        if not pending:
+            return
+        zone, pos, logout_state = pending
+        if self.already_at(zone, pos):
+            # A duplicate call to the same spot (the usual case: a warp already in
+            # progress) must not bounce the client through another zone-in.
+            return
+        self.change_zone(zone, pos, logout_state)
 
     # --- entities, inventory and actions -------------------------------------------------------
     def despawn_trusts(self) -> None:
@@ -2812,12 +4420,19 @@ class ZoneSession:
         flags = 0
         items = self.world.service.inventory(self.char["id"])
         for container in (0, 1, 9, 2, 17, 8, 10, 11, 12, 13, 14, 15, 16, 3, 4, 5, 6, 7):
+            flags |= 1 << container
+            # The state-0 0x01D opens the container, and it has to come first: the client
+            # files 0x020 rows into a storage's item list only while that container's load
+            # window is open.  Items sent before the marker still fill the bag, so GearSwap
+            # and the control addon see them, but the equipment window lists the Mog
+            # Wardrobe as empty.  Replaying state 0 -> 0x020 -> state 1 against a running
+            # client made an open wardrobe's list appear; the old item-then-marker order
+            # left it blank.
+            out.append(sub(0x01D, packets.item_same(0, container, flags)))
             for item in items:
                 if int(item["container"]) != container:
                     continue
                 out.append(self.item_packet(item))
-            flags |= 1 << container
-            out.append(sub(0x01D, packets.item_same(0, container, flags)))
         out.append(self.container_sync())
         return out
 
@@ -2831,12 +4446,29 @@ class ZoneSession:
 
     def item_packet(self, item: dict, container: int | None = None,
                     slot: int | None = None) -> Msg:
-        """One 0x020 for an inventory row, carrying its augment ``extdata``."""
+        """One 0x020 for an inventory row, carrying its augment ``extdata``.
+
+        A charged dispense pouch instead carries the client's ItemTimerInfo block, built
+        from the timer stored on that exact bag copy.  The same row therefore shows
+        ``1/1`` and an hour-long reuse countdown wherever it sits.
+        """
+        item_id = int(item["item_id"])
+        extra = bytes(item.get("extra") or b"")
+        spec = self.dispense_items.get(item_id)
+        if spec is not None:
+            extra = item_usable.charged_attr(
+                extra,
+                now=time.time(),
+                max_charges=int(spec["max_charges"]),
+                reuse_delay=int(spec["reuse_delay"]),
+                use_delay=int(spec["use_delay"]),
+                vana_epoch=VANA_EPOCH,
+            )
         return sub(0x020, packets.item_attr(
-            int(item["item_id"]), int(item["quantity"]),
+            item_id, int(item["quantity"]),
             int(item["container"] if container is None else container),
             int(item["slot"] if slot is None else slot),
-            extra=bytes(item.get("extra") or b"")))
+            extra=extra))
 
     def item_move(self, p: bytes) -> None:
         """C2S 0x029: move or split a stack between two containers (inventory, wardrobes...)."""
@@ -2852,6 +4484,61 @@ class ZoneSession:
         self.queue += self.container_items(cat1, clear_slot=idx1)
         self.queue += self.container_items(cat2)
         self.queue.append(self.container_sync())
+
+    def item_drop(self, p: bytes) -> None:
+        """C2S 0x028: move a stack to the 30-day Recycle Bin.
+
+        The packet carries ``ItemNum`` (the count to move), ``Category`` and
+        ``ItemIndex``; a partial count leaves the rest in the source slot.  Gil is never
+        droppable, a worn copy has to come off first, and the Recycle Bin itself cannot
+        be dropped into.  The reply clears/updates the source slot, fills the bin slot,
+        and sends the all-bag sync so both containers redraw.
+        """
+        if len(p) < 0x0C:
+            return
+        quantity = struct.unpack_from("<I", p, 4)[0]
+        container, slot = int(p[8]), int(p[9])
+        owner = int(self.char["id"])
+        log.info("%s recycles %d of %d:%d", self.addr, quantity, container, slot)
+        if container == 0 and slot == 0:
+            self.say("You cannot throw away gil.")
+            return
+        if container == CONTAINER_RECYCLE:
+            self.say("That item is already in the Recycle Bin.")
+            return
+        if any((int(c), int(s)) == (container, slot)
+               for c, s, _item in self.equipped.values()):
+            self.say("You cannot throw away something you are wearing.")
+            return
+        row = next((item for item in self.world.service.inventory(owner)
+                    if int(item["container"]) == container and int(item["slot"]) == slot), None)
+        if row is None:
+            self.say("You do not have that item.")
+            return
+        name = str(row.get("name") or "item")
+        have = int(row["quantity"])
+        dropped = self.world.service.drop_item(owner, container, slot, quantity)
+        if dropped is None:
+            self.say("You do not have that item.")
+            return
+        if dropped.get("recycle_full"):
+            self.say("The Recycle Bin is full; %s stays in your bag." % name)
+            return
+        left = int(dropped["quantity"])
+        recycled = int(dropped.get("recycled") or 0)
+        self.queue.append(sub(0x020, packets.item_attr(
+            int(dropped["item_id"]) if left else 0, left, container, slot,
+            extra=bytes(row.get("extra") or b"") if left else b"")))
+        self.queue.append(sub(0x020, packets.item_attr(
+            int(dropped["item_id"]), recycled, CONTAINER_RECYCLE,
+            int(dropped["recycle_slot"]),
+            extra=bytes(row.get("extra") or b""))))
+        self.queue.append(self.container_sync())
+        if left:
+            self.say("Moved %d %s to the Recycle Bin; %d stayed in your bag." % (
+                recycled, name, left))
+        else:
+            self.say("Moved %s to the Recycle Bin for 30 days." % name)
 
     def item_stack(self, p: bytes) -> None:
         """C2S 0x03A: the client sorted one bag; combine its partial stacks.
@@ -3116,7 +4803,9 @@ class ZoneSession:
         self.equipped.pop(kind, None)
         self._clear_equip_model(kind)
         self.queue.append(sub(0x050, struct.pack("<BBBx", 0, kind, 0)))
-        self.equipment_changed = True
+        self.note_equipment_change()
+        if kind in (0, 1, 2):
+            self._drop_aftermath()
         log.info("%s cleared equipment slot %d: %s", self.addr, kind, reason)
 
     def _enforce_weapon_pair(self, items: list[dict] | None = None) -> bool:
@@ -3159,7 +4848,7 @@ class ZoneSession:
             self._clear_equip_model(kind)
             self.queue.append(sub(0x050, struct.pack("<BBBx", 0, kind, 0)))
         if count:
-            self.equipment_changed = True
+            self.note_equipment_change()
             log.info("%s unequipped %d slots (%s)", self.addr, count, reason)
         # An empty equipment table is what keeps equip_initial() from restoring the
         # outfit we just took off once the storage pull has run.
@@ -3194,6 +4883,8 @@ class ZoneSession:
             self.equipped.pop(kind, None)
             self._clear_equip_model(kind)
             self.queue.append(sub(0x050, struct.pack("<BBBx", 0, kind, 0)))
+            if kind in (0, 1, 2):
+                self._drop_aftermath()
             log.info("%s unequipped %s (slot %d) for the new job", self.addr,
                      item.get("name"), kind)
             changed = True
@@ -3243,11 +4934,16 @@ class ZoneSession:
         log.info("%s equipset check kind=%d item=%d has=%d remove=%d -> 0x116",
                  self.addr, kind, item_id, has, remove)
 
-    def flush_equipment(self) -> None:
-        """Save the outfit and send its follow-up once, after a whole packet batch."""
-        if not self.equipment_changed:
+    def settle_equipment(self) -> None:
+        """Apply a batch's outfit to the server's numbers; send nothing yet.
+
+        Called as each datagram is read.  An action can share that datagram with its
+        precast 0x050s (the phase engine does this), and the damage roll and the Prime
+        "Adds weapon skill" grant both read the saved outfit, so the state cannot wait
+        for the burst to settle even though the look/stat packets can.
+        """
+        if not self.equipment_changed or self.equipped == self._settled_outfit:
             return
-        self.equipment_changed = False
         self.store_equipment()
         # The new outfit's HP/MP are part of the maxima, and the stats packet this batch
         # ends with has to agree with them.  Refreshing here is also what lets the passive
@@ -3255,6 +4951,22 @@ class ZoneSession:
         # at the old outfit's maximum, so the tick saw "already full" and did nothing while
         # the client still drew the missing points.
         self.refresh_vitals()
+        self._settled_outfit = dict(self.equipped)
+
+    def note_equipment_change(self, now: float | None = None) -> None:
+        """One slot changed: arm the follow-up for when the burst settles."""
+        now = time.time() if now is None else float(now)
+        if not self.equipment_changed:
+            self.equip_sync_deadline = now + EQUIP_SYNC_MAX_DELAY
+        self.equipment_changed = True
+        self.equip_sync_at = min(now + EQUIP_SYNC_DELAY, self.equip_sync_deadline)
+
+    def flush_equipment(self) -> None:
+        """Send the follow-up now: the burst settled, or an action needs it first."""
+        if not self.equipment_changed:
+            return
+        self.settle_equipment()
+        self.equipment_changed = False
         self.queue += self.equipment_sync()
         # Changing gear while engaged makes the client drop its battle stance: the animation
         # byte rides in the General block of 0x00D, and nothing re-sends it after an equip, so
@@ -3316,22 +5028,121 @@ class ZoneSession:
             return None
         return self.world.entity_by_id(self.zone, int(self.engaged_id))
 
-    def equipment_sync(self) -> list[Msg]:
-        """What the client needs after gear changed, once for the whole packet batch.
+    def target_effect_report(self, entity_id: int = 0) -> dict:
+        """The current target's live debuffs, for the HUD's Target Debuffs window.
 
-        Looks, spell bits, the ability tables and the stat sheet are all derived from the
-        final outfit, and the client shows each slot as its own 0x050 echo arrives.  Sending
-        this block per slot put about a kilobyte per slot in front of the later echoes in a
-        stop-and-wait queue, which is what made a full swap arrive in waves.
+        The client has no monster buff list, so the server is the only place that knows
+        what Dia/Frazzle/DoTs are actually on the mob.  ``entity_id`` is the client's
+        target ServerId, which is the world entity id; when it is absent the server's
+        own target targid is used.  Only effects with time left are returned, and the
+        hidden secondary rows (a Threnody's Magic Evasion down beside the song icon) are
+        marked so the window can show the spell instead of a duplicate icon.
         """
-        return [
+        entity = None
+        if int(entity_id or 0):
+            entity = self.world.entity_by_id(self.zone, int(entity_id))
+        if entity is None:
+            targid = int(self.target_targid or self.engaged_targid or 0)
+            if targid:
+                entity = self.world.entity_by_targid(self.zone, targid)
+            if entity is None:
+                entity = self.engaged_target()
+        if entity is None or getattr(entity, "kind", "") != "mob" or not entity.alive:
+            return {"target": None, "effects": []}
+        now = time.time()
+        effects = []
+        for effect_id, state in list(entity.effect_state.items()):
+            until = float(state.get("until") or 0.0)
+            remaining = max(0.0, until - now)
+            if remaining <= 0.0:
+                continue
+            effects.append({
+                "id": int(effect_id),
+                "icon": int(state.get("icon") or effect_id),
+                "name": str(state.get("name") or ""),
+                "remaining": round(remaining, 1),
+                "power": int(state.get("power") or 0),
+                "potency": int(state.get("potency") or 0),
+                "tick": int(state.get("tick") or 0),
+                "tick_interval": float(state.get("tick_interval") or 0.0),
+                "hidden": bool(state.get("hidden")),
+                "source": int(state.get("source") or 0),
+            })
+        effects.sort(key=lambda row: (row["name"].casefold(), row["id"]))
+        hpp = 100.0 * float(entity.hp) / max(1.0, float(entity.hp_max))
+        return {
+            "target": {
+                "id": int(entity.id),
+                "name": str(entity.name),
+                "hpp": round(hpp, 1),
+                "distance": round(float(entity.distance_to(*self.pos[:3])), 2),
+            },
+            "effects": effects,
+        }
+
+    @staticmethod
+    def _sync_signature(message: Msg) -> bytes:
+        """The state a derived packet carries, with its clock fields taken out.
+
+        0x037 carries the Vana'diel clock and the unix stamp, both of which move every
+        packet; comparing the whole body would always look like a change.  Everything
+        else is derived from the outfit, the job pair or the buff list.
+        """
+        body = bytes(message[4:])
+        if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x037:
+            body = body[:0x38] + body[0x40:]
+        return body
+
+    def _note_sent_sync(self, message: Msg) -> None:
+        """Remember a derived packet as the copy the client holds.
+
+        Called from pack() for every copy that actually leaves, so the zone-in bundle,
+        the 0x061 reply and ``//abilities`` all seed the baseline and equipment_sync()
+        compares against what the client really has rather than against a second guess.
+        """
+        ptype = struct.unpack_from("<H", message, 0)[0] & 0x1FF
+        if ptype in EQUIP_SYNC_TYPES:
+            self._sync_sent[ptype] = self._sync_signature(message)
+
+    def equipment_sync(self) -> list[Msg]:
+        """The follow-up a gear burst owes: only the parts whose payload changed.
+
+        Looks, spell bits, the ability tables, command data and the stat sheet are all
+        derived from the outfit, and the client shows each slot as its own 0x050 echo
+        arrives.  Sending the whole block per batch made every swap about a kilobyte the
+        client had to digest one packet per ack, and the 0x0AC copy makes host64 rewrite
+        its whole ability list -- the last line it logged before each client freeze.  A
+        part whose payload is unchanged from the copy the client already holds is dropped
+        here: an armour swap keeps the job-derived blocks, and only a weapon whose skill
+        type (or item-granted skill) changes rewrites the command data.
+        """
+        parts = [
             self.grap_list(),                # the models of everything now worn
-            sub(0x0AA, SPELL_BITS),          # magic data, as retail re-sends on a gear change
+            sub(0x0AA, self.spell_bits()),          # magic data, as retail re-sends on a gear change
             self.char_feats(),               # the 160-bit job ability table
             self.char_abilities(),           # command data
             self.char_commands(),            # and the incremental 0x1A5 update
             self.char_stats(), self.char_status(),
         ]
+        out: list[Msg] = []
+        now = time.time()
+        for message in parts:
+            ptype = struct.unpack_from("<H", message, 0)[0] & 0x1FF
+            signature = self._sync_signature(message)
+            if self._sync_sent.get(ptype) == signature:
+                continue
+            if ptype == 0x0AC and now - self._commands_sent_at < EQUIP_COMMANDS_MIN_GAP:
+                # Coalesce a burst of weapon swaps into one ability-list rewrite.  The sent
+                # signature is left alone, so the tick (or the next settle) sends the final
+                # list once the gap has passed.
+                self._commands_pending = True
+                continue
+            if ptype == 0x0AC:
+                self._commands_sent_at = now
+                self._commands_pending = False
+            self._sync_sent[ptype] = signature
+            out.append(message)
+        return out
 
     def equip(self, p: bytes) -> None:
         """C2S 0x050: the client changed one equipment slot."""
@@ -3341,6 +5152,9 @@ class ZoneSession:
             return
         slot, kind, category = int(p[4]), int(p[5]), int(p[6])
         log.info("%s equip request len=%d slot=%d kind=%d cat=%d", self.addr, len(p), slot, kind, category)
+        if category == CONTAINER_RECYCLE:
+            self.say("Take that item out of the Recycle Bin before wearing it.")
+            return
         if slot == 0:  # the client's "remove from this slot" form
             self.equipped.pop(kind, None)
             self._clear_equip_model(kind)
@@ -3348,7 +5162,9 @@ class ZoneSession:
             # weapon is in the slot makes the client treat the unequip as failed and it
             # never sends the follow-up 0x050 that puts the new item on.
             self.queue.append(sub(0x050, struct.pack("<BBBx", 0, kind, category)))
-            self.equipment_changed = True
+            self.note_equipment_change()
+            if kind in (0, 1, 2):
+                self._drop_aftermath()
             if kind == 0:
                 self._enforce_weapon_pair()
             return
@@ -3359,12 +5175,29 @@ class ZoneSession:
             self.equipped.pop(kind, None)
             self._clear_equip_model(kind)
             self.queue.append(sub(0x050, struct.pack("<BBBx", 0, kind, category)))
-            self.equipment_changed = True
+            self.note_equipment_change()
+            if kind in (0, 1, 2):
+                self._drop_aftermath()
             if kind == 0:
                 self._enforce_weapon_pair(items)
             return
         item_id, quantity = int(item["item_id"]), int(item["quantity"])
-        problem = (self._equip_blocked_reason(item, kind)
+        # One inventory copy can only occupy one slot, and a Rare item cannot be
+        # worn twice even if a database somehow holds two copies.  Without this the
+        # client could put the same Carnwenhan in main and sub and the server would
+        # happily store both rows.  Ex alone does not stop two copies being worn:
+        # it only stops them being traded.
+        duplicate = None
+        for other_kind, (other_container, other_slot, other_item) in self.equipped.items():
+            if int(other_kind) == int(kind):
+                continue
+            if (int(other_container), int(other_slot)) == (int(category), int(slot)):
+                duplicate = "That item is already equipped."
+                break
+            if int(item.get("rare") or 0) and int(other_item) == item_id:
+                duplicate = "%s is Rare and is already equipped." % item.get("name", "That item")
+                break
+        problem = (duplicate or self._equip_blocked_reason(item, kind)
                    or self._weapon_pair_error(item, kind, items))
         if problem:
             log.info("%s refused equip slot=%d kind=%d item=%d: %s", self.addr, slot, kind,
@@ -3374,13 +5207,26 @@ class ZoneSession:
             return
         log.info("%s equip slot=%d kind=%d cat=%d item=%d %s", self.addr, slot, kind,
                  category, item_id, item.get("name"))
+        # A gear burst re-sends every slot of the set, the worn weapon included.  That is
+        # not a weapon change: retail drops the aftermath when the worn weapon is replaced
+        # or taken off, so compare against the copy that is already in the slot rather
+        # than against the packet.  Without this the phase engine's post-WS TP set removed
+        # the Prime Aftermath about a second after granting it.
+        previous = self.equipped.get(kind)
+        same_copy = (previous is not None
+                     and tuple(int(value) for value in previous)
+                     == (int(category), int(slot), int(item_id)))
         self.equipped[kind] = (category, slot, item_id)
         self._apply_equip_model(kind, item)
         self.queue += [
             sub(0x050, struct.pack("<BBBx", slot, kind, category)),
             self.item_packet(item, container=category, slot=slot),
         ]
-        self.equipment_changed = True
+        self.note_equipment_change()
+        if kind in (0, 1, 2) and not same_copy:
+            # A real main/sub/ranged weapon change drops the aftermath.  Armour and ammo
+            # swaps leave it alone.
+            self._drop_aftermath()
         if kind == 0:
             # A two-handed main makes the old sub item illegal; take it off now so the
             # client and the server agree on the hands.
@@ -3412,9 +5258,15 @@ class ZoneSession:
             log.warning("%s character reload failed: %s", self.addr, exc)
             return
         self.refresh_vitals()
+        # A self 0x00D is deliberately left out.  After a reload the client asks for its
+        # own entity (C2S 0x016/0x017); a full-spawn reply carries the name/model blocks
+        # and resets the player entity, which is the green-name/NPC state that cannot act
+        # until a relog.  0x061, 0x037 and 0x0DF already carry the max/current vitals the
+        # Data page can change, so no entity update is needed here.
         packets_out = [
-            self.job_info(), self.char_stats(), self.char_update(), self.char_sync(),
-            self.char_skills(), sub(0x0AA, SPELL_BITS),
+            self.job_info(), self.char_stats(), self.char_status(),
+            self.party_member(), self.char_sync(),
+            self.char_skills(), sub(0x0AA, self.spell_bits()),
             self.merits(), *self.merit_list(), self.job_points(), self.job_points_detail(),
         ]
         packets_out += [sub(0x055, KEY_ITEM_BITS[table] + KEY_ITEM_BITS[table] +
@@ -3428,7 +5280,8 @@ class ZoneSession:
                      message: int | None = None, kind: int = 1,
                      category: int = packets.ACTION_CATEGORY_BASIC_ATTACK,
                      info: int | None = None, action_id: int | None = None,
-                     results: list[dict] | None = None) -> None:
+                     results: list[dict] | None = None,
+                     broadcast: bool = False) -> None:
         """Queue one 0x028 action for ``target_id``.
 
         ``results`` packs several hits into that single action, which is how a melee
@@ -3446,6 +5299,13 @@ class ZoneSession:
         for result in results:
             hit_miss = bool(result.get("miss", False))
             hit_damage = int(result.get("damage", 0))
+            if hit_damage > combat.DAMAGE_CAP:
+                # Every damage path clips where it builds the number, so this should
+                # never fire; keep it as the last line of defence and log the path that
+                # would otherwise put a six-digit number on the wire.
+                log.warning("%s action damage %d clipped to %d",
+                            self.addr, hit_damage, combat.DAMAGE_CAP)
+                hit_damage = combat.DAMAGE_CAP
             distortion = int(result.get("hit_distortion", 0))
             if not hit_miss and hit_damage and result.get("message") is None:
                 percent = hit_damage * 100 // max_hp
@@ -3455,10 +5315,21 @@ class ZoneSession:
             log.info("%s action out: actor=%d target=%#x damage=%d miss=%s anim=%d msg=%s",
                      self.addr, actor, int(target_id), hit_damage, hit_miss,
                      int(result.get("animation", 0)), result.get("message", message))
-        self.queue.append(sub(0x028, packets.battle_action(
+        packet = sub(0x028, packets.battle_action(
             actor, int(target_id), kind=kind, category=category,
             message=message, info=info, results=prepared,
-            action_id=(packets.BASIC_ATTACK_ID if action_id is None else int(action_id)))))
+            action_id=(packets.BASIC_ATTACK_ID if action_id is None else int(action_id))))
+        self.queue.append(packet)
+        if broadcast:
+            # Every other client in the zone needs the same result: a party member's
+            # weapon skill is what shows the skillchain animation on the main screen.
+            for observer in self.world.sessions_in_zone(self.zone):
+                if observer is self:
+                    continue
+                if int(self.char.get("targid", 0)) not in getattr(
+                        observer, "sent_targids", set()):
+                    continue
+                observer.queue.append(Msg(packet))
 
     def start_resting(self) -> None:
         if self.resting or self.casting or self.dead_until:
@@ -3510,8 +5381,12 @@ class ZoneSession:
         hp_max = max(1, int(self.char.get("hp", 1)))
         mp = int(self.char.get("mp_current", 0))
         mp_max = max(0, int(self.char.get("mp", 0)))
+        # Clear Mind is the resting MP trait: its "MP while healing" value (3/6/9/12
+        # at the RDM tiers) is added to the flat recovery.  It was in the trait table
+        # but the rest tick ignored it.
+        clear_mind = max(0, int(self.combat_mods().get(mod.MP_WHILE_HEALING, 0)))
         new_hp = min(hp_max, hp + max(1, hp_max // 20))
-        new_mp = min(mp_max, mp + (max(1, mp_max // 20) if mp_max else 0))
+        new_mp = min(mp_max, mp + (max(1, mp_max // 20 + clear_mind) if mp_max else 0))
         if new_hp == hp and new_mp == mp:
             return
         self.char["hp_current"] = new_hp
@@ -3563,6 +5438,25 @@ class ZoneSession:
                 if restored != mp:
                     self.char["mp_current"] = restored
                     changed = True
+            elif int(state.get("regain") or 0) > 0:
+                # Tactician's Roll is a Regain (TP per tick), not a Refresh/Regen.
+                tp = int(self.char.get("tp", 0))
+                gained = min(TP_MAX, tp + int(state["regain"]))
+                if gained != tp:
+                    self.char["tp"] = gained
+                    changed = True
+            elif state.get("song") and int(state.get("song_effect", 0)) == effects.PAEON:
+                hp = int(self.char.get("hp_current", 0))
+                healed = min(int(self.char.get("hp", hp)), hp + tick)
+                if healed != hp:
+                    self.char["hp_current"] = healed
+                    changed = True
+            elif state.get("song") and int(state.get("song_effect", 0)) == effects.BALLAD:
+                mp = int(self.char.get("mp_current", 0))
+                restored = min(int(self.char.get("mp", 0)), mp + tick)
+                if restored != mp:
+                    self.char["mp_current"] = restored
+                    changed = True
             elif effect_id == effects.SUBLIMATION:
                 hp = int(self.char.get("hp_current", 0))
                 stored = max(0, int(state.get("power") or 0))
@@ -3579,16 +5473,7 @@ class ZoneSession:
                 # here would render "takes 0 points of damage" from 0x029, and a 0x028
                 # action would play the character's casting animation every tick.
                 if int(self.char["hp_current"]) <= 0:
-                    self.dead_until = now + 6.0
-                    self.engaged_id = None
-                    self.engaged_targid = 0
-                    self.despawn_trusts()
-                    self.queue.append(self.char_update(packets.SEND_HP))
-                    self.say("You have been defeated. You recover in a moment.")
-                    try:
-                        self.world.service.record_death(int(self.char["id"]))
-                    except Exception:
-                        pass
+                    self.hit_zero_hp(now)
                     break
         if changed:
             if food_expired:
@@ -3621,7 +5506,114 @@ class ZoneSession:
         """Take every status effect away; the next 0x037 (its 0xFF slots) removes the icons."""
         self.status_effects.clear()
         self.effect_state.clear()
-        self.food = {"item_id": 0, "name": "", "until": 0.0, "mods": {}}
+        self.food = live_state.empty_food()
+
+    # --- the reconnect snapshot -------------------------------------------------------
+
+    def save_live_state(self, *, include_effects: bool = True,
+                        now: float | None = None) -> bool:
+        """Write the state a reconnect should get back (``char_live_state``).
+
+        The tick calls this every ``LIVE_STATE_SAVE_INTERVAL`` seconds and the row is only
+        written when the payload changed; ``World.evict_session`` calls it one last time on
+        the way out.  A deliberate logout passes ``include_effects=False``: retail takes the
+        buffs with you, but the ability cooldowns keep running.
+
+        Returns True when a row was written.
+        """
+        if self.live_state_closed or not self.logged_in:
+            return False
+        now = time.time() if now is None else now
+        self.live_state_checked_at = now
+        if include_effects:
+            payload = live_state.snapshot(
+                self.effect_state, self.status_effects, self.food,
+                self.ability_recasts, now)
+        else:
+            payload = live_state.snapshot({}, [], None, self.ability_recasts, now)
+        signature = live_state.signature(payload)
+        if signature == self.live_state_signature:
+            return False
+        try:
+            self.world.service.save_live_state(int(self.char["id"]), payload)
+        except Exception as exc:
+            log.warning("%s reconnect snapshot not saved: %s", self.addr, exc)
+            return False
+        self.live_state_signature = signature
+        return True
+
+    def restore_live_state(self, *, include_effects: bool = True) -> None:
+        """Put back what the server held for this character while it was offline.
+
+        Only a fresh login restores: a zone change keeps the live session object, so its
+        timers are already the running ones.  ``include_effects=False`` is the Mog House and
+        K.O. path, where retail takes the buffs but keeps the ability cooldowns.
+        """
+        if not getattr(self, "fresh_login", False) or self.live_state_restored:
+            return
+        self.live_state_restored = True
+        try:
+            row = self.world.service.live_state(int(self.char["id"]))
+        except Exception as exc:
+            log.warning("%s reconnect snapshot unavailable: %s", self.addr, exc)
+            return
+        if not row:
+            return
+        restored = live_state.restore(row, time.time())
+        self.ability_recasts.clear()
+        self.ability_recasts.update(restored.recasts)
+        if include_effects:
+            self.status_effects = list(restored.status_effects)
+            self.effect_state = dict(restored.effect_state)
+            self.food = dict(restored.food)
+        else:
+            restored.status_effects = []
+            restored.effect_state = {}
+            restored.food = live_state.empty_food()
+        # Force the next tick to rewrite the row, which prunes whatever expired offline.
+        self.live_state_signature = None
+        if restored.effect_count or restored.recasts:
+            self.live_state_notice = restored
+            self.live_state_notice_at = 0.0
+        log.info("%s reconnected: held %d buff(s) (%d song(s)) and %d recast(s)",
+                 self.addr, restored.effect_count, restored.song_count,
+                 len(restored.recasts))
+
+    def _announce_live_state(self) -> None:
+        """Tell the player what came back, after the zone-in burst is safely over."""
+        restored = self.live_state_notice
+        self.live_state_notice = None
+        self.live_state_notice_at = 0.0
+        if restored is None:
+            return
+        parts: list[str] = []
+        if restored.song_count:
+            parts.append("%d song(s)" % restored.song_count)
+        other = restored.effect_count - restored.song_count
+        if other:
+            parts.append("%d buff(s)" % other)
+        if restored.recasts:
+            parts.append("%d ability recast(s)" % len(restored.recasts))
+        welcome = "Welcome back. The server held %s while you were away." % _name_list(parts)
+        self.say(welcome)
+        log.info("%s %s", self.addr, welcome)
+        soonest = restored.next_expiry()
+        if soonest is not None:
+            effect_id, until = soonest
+            state = restored.effect_state.get(effect_id) or {}
+            left = max(0, int(until - time.time()))
+            if state.get("song_name"):
+                self.say("%s has %d:%02d left." % (
+                    state["song_name"], left // 60, left % 60))
+            elif effect_id == effects.FOOD and restored.food.get("name"):
+                self.say("%s has %d:%02d left." % (
+                    restored.food["name"], left // 60, left % 60))
+            else:
+                # The state does not carry the spell that put an ordinary buff up, and
+                # stat_report's label is only the first spell to share its icon, so do
+                # not name the wrong one: the countdown is what matters here.
+                self.say("Your shortest buff wears off in %d:%02d." % (
+                    left // 60, left % 60))
 
     # --- status effects ---------------------------------------------------------------
 
@@ -3637,16 +5629,27 @@ class ZoneSession:
 
     def add_effect(self, effect_id: int, *, duration: float = 0.0, power: int = 0,
                    potency: int = 0, tick: int = 0, icon: int = 0,
-                   mods: dict[int, int] | None = None) -> None:
+                   mods: dict[int, int] | None = None,
+                   song_base: float = 0.0, song_name: str = "",
+                   song_cast_at: float = 0.0, song_effect: int = 0) -> None:
         """Record a player effect and put its icon in the next 0x037.
 
         The caller queues ``char_status()``; this only mutates the state so two effects
-        landing in the same packet do not each send the client a partial list.
+        landing in the same packet do not each send the client a partial list.  A song
+        carries its unenhanced base in ``song_base``: that is what the overwrite and
+        recast rules compare against, and it is also how the effect list knows which
+        entries count against the instrument's song slots.
         """
         effect_id = int(effect_id)
         if effect_id <= 0:
             return
+        if (getattr(self, "_fealty", False)
+                and effect_id in weapon_skill_effects.AILMENTS):
+            self._fealty = False
+            self.say("Fealty nullifies the effect.")
+            return
         now = time.time()
+        is_song = bool(song_base)
         existing = self.effect_state.get(effect_id)
         if existing is not None:
             # A recast refreshes the timer and never lowers a Utsusemi/Blink count.
@@ -3657,7 +5660,16 @@ class ZoneSession:
             existing["icon"] = effects.icon_for(
                 effect_id, int(icon or existing.get("icon", effect_id)),
                 int(existing["power"]))
-            if mods:
+            if is_song:
+                # A song's mods belong to the new cast; merging them would keep a
+                # previous tier's stat after a weaker song lands.
+                existing["mods"] = {int(k): int(v) for k, v in (mods or {}).items()}
+                existing["song"] = True
+                existing["song_base"] = float(song_base)
+                existing["song_name"] = str(song_name)
+                existing["song_cast_at"] = float(song_cast_at or now)
+                existing["song_effect"] = int(song_effect or existing.get("song_effect", 0))
+            elif mods:
                 existing.setdefault("mods", {}).update({int(k): int(v) for k, v in mods.items()})
             return
         self.status_effects.append(effect_id)
@@ -3670,6 +5682,14 @@ class ZoneSession:
             "mods": {int(k): int(v) for k, v in (mods or {}).items()},
             "next_tick": now + 3.0,
         }
+        if is_song:
+            self.effect_state[effect_id].update({
+                "song": True,
+                "song_base": float(song_base),
+                "song_name": str(song_name),
+                "song_cast_at": float(song_cast_at or now),
+                "song_effect": int(song_effect),
+            })
 
     def remove_effect(self, effect_id: int, *, quiet: bool = False) -> bool:
         """Drop one effect; the caller queues 0x037 (and a wear-off line) as needed."""
@@ -3749,7 +5769,45 @@ class ZoneSession:
             return
         destination = int(self.zone if zone is None else zone)
         self._set_moghouse(False)
-        self.change_zone(destination, self.moghouse_door(destination), logout_state=2)
+        # The door is not a party zone line: the boxes are already outside and do not need
+        # a second 0x00B for the room the leader just left.  Handing them one made the
+        # clients that missed it go silent and get reaped -- the "one or two lost while
+        # zoning" pattern, and now a main-client drop when leaving a Mog House.
+        self.change_zone(destination, self.moghouse_door(destination), logout_state=3)
+
+    def mh_out(self, name: str = "") -> None:
+        """//mh out [name|all]: step family characters out of their Mog House.
+
+        A headless box cannot pick the Mog House exit menu.  This does what the menu does,
+        on the server: clear the inside flag and hand the client a normal 0x00B to the
+        door of its own city.  The door is used rather than the leader's position, so it
+        works while the leader is still inside and can never put a box into someone
+        else's interior.
+        """
+        family = self.world.service.account_family_ids(
+            int(self.char.get("account_id") or 0))
+        named = name and name.casefold() not in ("all", "everyone", "team", "subs")
+        targets = []
+        for session in list(self.world.sessions.values()):
+            if int(session.char.get("account_id") or 0) not in family:
+                continue
+            if not session.char.get("moghouse"):
+                continue
+            if named and str(session.char.get("name") or "").casefold() != name.casefold():
+                continue
+            targets.append(session)
+        if not targets:
+            if named:
+                self.say("%s is not in a Mog House." % name)
+            else:
+                self.say("No one in your family is in a Mog House.")
+            return
+        for target in targets:
+            target.leave_moghouse(int(target.zone))
+            if target is not self:
+                target.say("You step out of your Mog House.")
+        self.say("Stepped %d character%s out of the Mog House." % (
+            len(targets), "" if len(targets) == 1 else "s"))
 
     def moghouse_exit(self, p: bytes) -> None:
         """C2S 0x05E with rect ``zmrq``: a pick from the Mog House exit menu."""
@@ -3791,13 +5849,88 @@ class ZoneSession:
         """
         if len(p) < 6:
             return
+        error = self.job_change_error()
+        if error:
+            self.say(error)
+            return
         self._change_job(int(p[4]), int(p[5]))
 
     def _job_level(self, job: int) -> int:
         return int((self.char.get("jobs") or {}).get(int(job), (0, 0))[0])
 
+    def in_safe_job_change_zone(self) -> bool:
+        """Whether a job change here is a rest that refills HP and MP.
+
+        The Mog House flag is checked as well as the zone so a character standing in
+        its interior (which the client draws but the server keeps in the city zone)
+        always counts as safe.
+        """
+        return (bool(int(self.char.get("moghouse") or 0))
+                or int(self.zone) in SAFE_JOB_CHANGE_ZONES)
+
+    def in_fight(self) -> bool:
+        """True while this character is in combat, not just holding a weapon.
+
+        ``engaged_id`` is the player's own engagement.  A monster can also aggro and
+        attack before the player draws, so the zone's living mobs are checked for this
+        character as their hate target or claim.
+        """
+        if self.engaged_id:
+            return True
+        char_id = int(self.char["char_id"])
+        for entity in self.entities:
+            if getattr(entity, "kind", "") != "mob" or not getattr(entity, "alive", True):
+                continue
+            if int(getattr(entity, "engaged_char_id", 0) or 0) == char_id:
+                return True
+            if int(getattr(entity, "claim_char_id", 0) or 0) == char_id:
+                return True
+        return False
+
+    def job_change_error(self) -> str | None:
+        """Why a job change is refused right now, or None when it is allowed."""
+        if self.in_event:
+            return "You cannot change jobs during an event."
+        if self.in_fight():
+            return "You cannot change jobs while in a fight."
+        if self.dead_until or int(self.char.get("hp_current", 1)) <= 0:
+            # A city refill would otherwise revive the character from the K.O. recovery.
+            return "You cannot change jobs while knocked out."
+        if int(self.zone) in JOB_CHANGE_BLOCKED_ZONES:
+            return "You cannot change jobs in this area."
+        return None
+
+    def clear_job_change_effects(self) -> bool:
+        """Drop the effects a job change removes, keeping the regional buffs.
+
+        The client's buff bar is the 0x037 slot list, so clearing ``status_effects``
+        makes the next status packet write 0xFF into every slot.  A kept effect stays
+        in the list, in its relative order, with its timer and power state.
+        """
+        kept = [int(effect) for effect in self.status_effects
+                if int(effect) in JOB_CHANGE_KEPT_EFFECTS]
+        kept_state = {effect: self.effect_state[effect] for effect in kept
+                      if effect in self.effect_state}
+        changed = bool(self.status_effects or self.effect_state
+                       or int(self.food.get("item_id") or 0))
+        self.status_effects[:] = kept
+        self.effect_state.clear()
+        self.effect_state.update(kept_state)
+        self.food = live_state.empty_food()
+        if changed:
+            # Do not let the reconnect snapshot hand the old buffs back if the client
+            # drops before the next tick writes the new state.
+            self.live_state_signature = None
+        return changed
+
     def _change_job(self, main_job: int, sub_job: int, *, auto_equip: bool = True) -> bool:
         """Apply a job change and refresh every packet that depends on it."""
+        # The menu and //job both check before calling, and _job_swap checks before it
+        # touches a bag; this keeps a direct caller from changing jobs mid-event.
+        error = self.job_change_error()
+        if error:
+            self.say(error)
+            return False
         jobs = self.char.get("jobs") or {}
         if not main_job and not sub_job:
             return False
@@ -3827,10 +5960,21 @@ class ZoneSession:
                                         int(self.char["sub_level"]))
         except Exception as exc:
             log.warning("%s could not save the job change: %s", self.addr, exc)
-        # Retail clears style lock on a job change, and so does the client when it sends
-        # 0x053 mode 0; doing it here also covers the server-side //job command.
-        if self.style_locked():
+        # A new job carries none of the old job's buffs.  The conquest family stays
+        # (see JOB_CHANGE_KEPT_EFFECTS); food and every other status effect wear off.
+        # TP is earned with the weapon that was out, so it never crosses a job change.
+        self.clear_job_change_effects()
+        self.char["tp"] = 0
+        # Retail clears style lock on a job change and forgets the locked look, and so
+        # does the client when it sends 0x053 mode 0; doing it here also covers the
+        # server-side //job command.  The models have to go with the flag: leaving them
+        # in the character row let a stale keepalive paint the old job's clothing back
+        # on (a Dancer wearing the Scholar's outfit).
+        was_locked = self.style_locked()
+        if was_locked or any(self._style_models().values()):
             self._apply_style(False)
+        if was_locked:
+            self.queue.append(self.system_message(MSG_STYLE_LOCK_OFF))
         self._unequip_invalid()
         if auto_equip:
             # Dress the new job before the bundle, so the grap list carries the new models.
@@ -3839,7 +5983,16 @@ class ZoneSession:
         # bundle report both the sheet maximum and the stored current value.
         self._trait_cache = None
         self.refresh_vitals()
+        if self.in_safe_job_change_zone():
+            # A city or Mog House is a rest: the bars come back full.  A field, dungeon
+            # or instance only gets the recomputed maxima, so the player manages HP/MP.
+            self.restore_vitals(refresh=False)
         self.queue += self.job_bundle()
+        # The group list carries each member's job pair, and another client redraws a
+        # party row only when it sees a fresh one.  A job change therefore has to reach
+        # the whole party, not just the character whose job moved (the box leader's
+        # window would otherwise keep showing the old job after a remote //job).
+        self.world.reload_party(self.world.party_of(int(self.char["char_id"])))
         name = JOB_NAMES.get(int(self.char["main_job"]), "job")
         support_name = JOB_NAMES.get(int(self.char["sub_job"]), "")
         log.info("%s job change -> %s %d / %s %d", self.addr, name,
@@ -3854,130 +6007,177 @@ class ZoneSession:
         return True
 
     def job_command(self, words: list[str]) -> None:
-        """//job: slip the old job's gear, pull the new set and tidy the inventory.
+        """//job: change a job pair, here or on another character on the account.
 
-        A job change on this server used to leave the old outfit in the bag and the
-        new one split between slips and wardrobes.  The command makes the swap
-        self-contained: everything worn comes off, the old job's slipped gear is
-        stored, the new job's slips are emptied into a cleared inventory, and the
-        leftovers go into the wardrobes.  Working stock stays visible.
+        ``//job <job> [sub]`` changes this character.  ``//job <character> <job> <sub>``
+        changes one of the other online characters on this account or on one of its
+        sub-accounts -- the box form, so a leader can re-gear a support character
+        without typing into its client.  The count of words is the rule: three words
+        name the target first, two are the sender.  The target runs the same swap as
+        below: everything worn comes off, the old job's slipped gear is stored, the new
+        job's slips are emptied into a cleared inventory, and the leftovers go into the
+        wardrobes.  Working stock stays visible.  The old locked appearance is cleared
+        before the swap and the new outfit is locked afterwards, so a box never keeps
+        wearing the previous job's clothing.
         """
-        main_job = job_id(words[1])
-        sub_job = job_id(words[2]) if len(words) > 2 else 0
+        args = list(words[1:])
+        target = self
+        if len(args) >= 3:
+            # Three words is the box form: the character to change, then the job pair.
+            target = self._job_target(args[0])
+            if target is None:
+                return
+            args = args[1:]
+        if not args:
+            self.say("Usage: //job <job> [sub], or //job <character> <job> <sub>.")
+            return
+        main_job = job_id(args[0])
         if main_job is None:
-            self.say("Unknown job %r. Try NIN, Ninja or 13." % words[1])
+            hint = ""
+            if len(args) == 2 and job_id(args[1]) is not None:
+                hint = " To change another character use //job <character> <job> <sub>."
+            self.say("Unknown job %r. Try NIN, Ninja or 13.%s" % (args[0], hint))
             return
-        if self._job_level(main_job) <= 0:
-            self.say("That job is not available yet.")
+        sub_job = job_id(args[1]) if len(args) > 1 else 0
+        if len(args) > 1 and sub_job is None:
+            # An unrecognised support job used to fall through as "no change" and keep
+            # the old one, which is not what a typed job pair means.
+            self.say("Unknown support job %r. Try NIN, Ninja or 13." % args[1])
             return
-        if sub_job and self._job_level(sub_job) <= 0:
-            self.say("That support job is not available yet.")
+        remote = target is not self
+        target_name = str(target.char.get("name") or "That character")
+        if target._job_level(main_job) <= 0:
+            if remote:
+                self.say("%s has not unlocked that job." % target_name)
+            else:
+                self.say("That job is not available yet.")
             return
+        if sub_job and target._job_level(sub_job) <= 0:
+            if remote:
+                self.say("%s has not unlocked that support job." % target_name)
+            else:
+                self.say("That support job is not available yet.")
+            return
+        error = target.job_change_error()
+        if error:
+            # The box form reports the target's state, not the caller's: a leader in
+            # town cannot change a sub that is in a Dynamis instance or mid-event.
+            self.say(error.replace("You ", "%s " % target_name, 1) if remote else error)
+            return
+        if remote:
+            target.say("%s changes your job to %s." % (
+                self.char.get("name") or "Your leader", job_pair_label(main_job, sub_job)))
+        changed = target._job_swap(main_job, sub_job)
+        if remote and changed:
+            self.say("%s is now %s." % (target_name, job_pair_label(
+                int(target.char["main_job"]), int(target.char.get("sub_job") or 0))))
+
+    def _job_swap(self, main_job: int, sub_job: int) -> bool:
+        """Run the gear-aware job swap on this session; the caller has validated it."""
+        # Keep this check before the first bag move: a refused swap must leave the
+        # outfit, the storage and the job pair exactly as they were.
+        error = self.job_change_error()
+        if error:
+            self.say(error)
+            return False
         previous = int(self.char.get("main_job") or 1)
         previous_label = JOB_ABBREVIATIONS.get(previous, str(previous))
         new_label = JOB_ABBREVIATIONS.get(main_job, str(main_job))
 
-        # The slips only accept loose gear, so take the old outfit off first.
+        # The slips and the 9,999 locker are one storage to the player: everything the
+        # new job cannot equip goes away (a slip when it has one, the locker when it
+        # does not) and everything it can equip comes back into the Mog Wardrobes.
+        # The old outfit is loose by now, so it is part of the sweep.
         self._unequip_all("job change to %s" % new_label)
-        stored = {"moved": [], "unstoreable": 0, "unstoreable_items": []}
+        organized = {
+            "stored": [], "pulled": [], "relocated": [],
+            "stored_total": 0, "pulled_total": 0, "remaining": 0,
+            "stored_slip": 0, "stored_locker": 0, "pulled_slip": 0,
+            "pulled_locker": 0, "locker_full": 0, "equipped": 0,
+            "free": 0, "locker_count": 0, "locker_capacity": 0,
+        }
+        organized_ok = True
         try:
-            stored = self.world.service.store_job_in_storage(
-                int(self.char["id"]), previous)
+            organized = self.world.service.organize_job_storage(
+                int(self.char["id"]), main_job)
         except Exception as exc:
-            log.warning("%s could not store %s gear: %s", self.addr, previous_label, exc)
-            self.say("Could not store the old gear: %s" % exc)
-        else:
-            self._queue_storage_removals(stored["moved"])
-            count = sum(int(move["quantity"]) for move in stored["moved"])
-            if count:
-                self.say("Stored %d %s item%s on the storage slips." % (
-                    count, previous_label, "" if count == 1 else "s"))
-            else:
-                self.say("No storable %s gear was in the bags." % previous_label)
-            if stored["unstoreable"]:
-                names = stored["unstoreable_items"]
-                self.say("No slip for: %s%s." % (
-                    ", ".join(names[:3]), "" if len(names) <= 3 else " and %d more" % (
-                        len(names) - 3)))
-
-        # Free inventory space for the incoming set, but keep gear the new job can
-        # wear (and all-job pieces) where auto-equip can see it.
-        try:
-            tidy = self.world.service.sort_inventory_into_wardrobes(
-                int(self.char["id"]), keep_jobs=1 << (main_job - 1))
-            self._queue_inventory_moves(tidy["moved"])
-        except Exception as exc:
-            log.warning("%s could not tidy the inventory before the pull: %s", self.addr, exc)
+            organized_ok = False
+            log.warning("%s could not organize the storage for %s: %s",
+                        self.addr, new_label, exc)
+            self.say("Could not organize the storage: %s" % exc)
+        self._queue_storage_moves(organized)
 
         if not self._change_job(main_job, sub_job, auto_equip=False):
-            return
+            return False
 
-        try:
-            pulled = self.world.service.take_from_storage(int(self.char["id"]), main_job)
-        except Exception as exc:
-            log.warning("%s could not pull %s gear: %s", self.addr, new_label, exc)
-            pulled = {"moved": [], "skipped_job": 0, "remaining": 0, "storage_count": 0}
-        self._queue_storage_returns(pulled["moved"])
-        count = sum(int(move["quantity"]) for move in pulled["moved"])
-        if count:
-            self.say("Pulled %d %s item%s from the storage slips." % (
-                count, new_label, "" if count == 1 else "s"))
-        elif pulled["skipped_job"]:
-            self.say("No %s gear was on the storage slips." % new_label)
-        if pulled["remaining"]:
-            self.say("%d item%s stayed on the slips: the bags are full." % (
-                pulled["remaining"], "" if pulled["remaining"] == 1 else "s"))
-
-        # The 198 Ambuscade cape builds live in the hidden locker, not in a bag.
-        # Pull the new job's builds on every job change: the other jobs' capes stay
-        # in storage, so the wardrobes are not buried under 22 jobs at once.  The
-        # tidy below moves the loose ones from the inventory into the wardrobes.
-        selector = {"kind": "capes"}
-        cape_entry = capes.JOBS.get(new_label)
-        if cape_entry:
-            selector["cape_id"] = cape_entry["cape_id"]
-        try:
-            cape_pull = self.world.service.take_from_locker(
-                int(self.char["id"]), selector)
-        except Exception as exc:
-            log.warning("%s could not pull capes from the locker: %s", self.addr, exc)
-            cape_pull = {"moved": [], "remaining": 0, "locker_count": 0}
-        self._queue_storage_returns(cape_pull["moved"])
-        cape_count = sum(int(move["quantity"]) for move in cape_pull["moved"])
-        if cape_count:
-            self.say("Pulled %d %s cape%s out of the locker." % (
-                cape_count, new_label, "" if cape_count == 1 else "s"))
-        if cape_pull["remaining"]:
-            self.say("%d %s cape%s stayed in the locker: the wardrobes are full." % (
-                cape_pull["remaining"], new_label,
-                "" if cape_pull["remaining"] == 1 else "s"))
-
-        # Wear what was just pulled, then put the unused pieces away.
+        # Wear what was just pulled.  The organizer already put the job's loose gear
+        # into the wardrobes, so auto-equip sees all of it.
         self.equipped.clear()
         self.equip_initial(bags=AUTO_EQUIP_BAGS)
         self.queue += self.equipment_packets()
         self.refresh_vitals()
-        try:
-            leftovers = self.world.service.sort_inventory_into_wardrobes(
-                int(self.char["id"]))
-            self._queue_inventory_moves(leftovers["moved"])
-        except Exception as exc:
-            log.warning("%s could not tidy the inventory after the pull: %s", self.addr, exc)
-            leftovers = {"moved": [], "remaining": 0}
-        if leftovers["moved"]:
-            self.say("Moved %d leftover item%s into the wardrobes." % (
-                len(leftovers["moved"]), "" if len(leftovers["moved"]) == 1 else "s"))
-        if leftovers["remaining"]:
-            self.say("%d item%s stayed in the inventory: the wardrobes are full." % (
-                leftovers["remaining"], "" if leftovers["remaining"] == 1 else "s"))
+        if self.in_safe_job_change_zone():
+            # Refill against the new outfit's maxima, not the ones the job bundle saw
+            # before auto-equip.  In a field the current HP/MP stay where they were.
+            self.restore_vitals(refresh=False)
+        if organized_ok:
+            self._report_organize(organized, main_job)
         # The unequip/auto-equip pair changed the stat sheet, so send the final
         # appearance and stats once even when nothing was originally worn.
-        self.equipment_changed = True
+        self.note_equipment_change()
         self.flush_equipment()
-        log.info("%s //job %s -> %s: stored %d, pulled %d, capes %d, tidied %d",
+        # The old job's locked look was cleared before the swap.  Lock the outfit the
+        # swap just dressed: the character keeps the new job's appearance through later
+        # gear changes, and the models persisted here are the new ones.  Then repaint
+        # the clients that draw this character -- an observer only re-reads another
+        # player's models when it spawns the entity, so without the respawn a box
+        # leader's window keeps drawing the previous job's clothing.
+        self._apply_style(True, self._current_models())
+        self.queue += self.style_packets()
+        self.queue.append(self.system_message(MSG_STYLE_LOCK_ON))
+        self.world.refresh_player_appearance(self)
+        log.info("%s //job %s -> %s: stored %d, pulled %d, tidied %d",
                  self.addr, previous_label, new_label,
-                 sum(int(move["quantity"]) for move in stored["moved"]),
-                 count, cape_count, len(leftovers["moved"]))
+                 organized["stored_total"], organized["pulled_total"],
+                 len(organized["relocated"]))
+        return True
+
+    def _job_target(self, query: str) -> "ZoneSession | None":
+        """The online family session named by ``//job <character> <job> <sub>``.
+
+        Only the sender's own account family is reachable: the main account plus its
+        sub-accounts, which is the same multibox group ``//warp all`` and ``//invite
+        subs`` use.  A parked (``//sleep``) box is refused rather than changed behind a
+        client that is not reading its packet queue; wake it first.
+        """
+        name = str(query or "").strip().strip('"').strip("'")
+        if not name:
+            self.say("Which character? Use //job <character> <job> <sub>.")
+            return None
+        target = self.world.session_by_name(name)
+        if target is None:
+            # ``session_by_name`` skips a box that is mid-zone-change; say that rather
+            # than claiming a character the player can see is offline.
+            for session in self.world.sessions.values():
+                if str(session.char.get("name") or "").casefold() != name.casefold():
+                    continue
+                if getattr(session, "zoning", False) and getattr(session, "logged_in", False):
+                    self.say("%s is still zoning; try again in a moment." % (
+                        session.char.get("name") or name))
+                    return None
+            self.say("No online character called %s. //job <job> [sub] changes your own job; "
+                     "//job <character> <job> <sub> changes a box." % name)
+            return None
+        family = self.world.service.account_family_ids(
+            int(self.char.get("account_id") or 0))
+        if int(target.char.get("account_id") or 0) not in family:
+            self.say("%s is not on your account or a sub-account." % (
+                target.char.get("name") or name))
+            return None
+        if getattr(target, "sleeping", False):
+            self.say("%s is asleep; //wake it first." % (target.char.get("name") or name))
+            return None
+        return target
 
     def job_bundle(self) -> list[Msg]:
         """Every packet the client re-reads after the job (or support job) changes."""
@@ -3986,7 +6186,7 @@ class ZoneSession:
                 self.char_skills(), self.abil_recast(),
                 self.job_points(), self.job_points_detail(), self.merits(),
                 self.monstrosity(), *self.merit_list(),
-                sub(0x0AA, SPELL_BITS), self.char_sync(), self.party_member(),
+                sub(0x0AA, self.spell_bits()), self.char_sync(), self.party_member(),
                 self.char_update()]
 
     def open_door(self, entity) -> None:
@@ -4002,12 +6202,35 @@ class ZoneSession:
         self.door_entity = entity
         self.door_close_at = time.time() + 7.0
 
+    def talk_to_door(self, entity) -> None:
+        """The player targeted a door: normal doors open, moving structures stay put."""
+        if str(getattr(entity, "door_kind", "") or "") == "drawbridge":
+            if int(getattr(entity, "animation", 0)) == 9:
+                self.say("The drawbridge is up. Wait for it to lower.")
+            else:
+                self.say("The drawbridge is down and cannot be raised by hand.")
+            return
+        self.open_door(entity)
+
     def open_nearby_doors(self) -> None:
-        """Open only the nearest door, once per approach: no packet bursts."""
+        """Open the nearest door automatically, when the player asked for that mode.
+
+        Retail leaves doors shut until the player targets them, so the mode is opt-in
+        (``//doors auto on``) and only applies in city and outdoor zones.  Moving
+        structures such as Port Bastok's drawbridge are never opened this way; their own
+        arrival event drives them.
+        """
+        if not self.auto_open_doors or not self.world.zones.allows_auto_doors(self.zone):
+            self.opened_doors.clear()
+            return
         nearest = None
         best = 5.0
         for entity in self.entities:
-            if int(getattr(entity, "size", 0)) != 2:
+            if entity.kind != "npc" or int(getattr(entity, "size", 0)) != 2:
+                continue
+            if not int(getattr(entity, "door_id", 0) or 0):
+                continue
+            if str(getattr(entity, "door_kind", "") or ""):
                 continue
             distance = entity.distance_to(*self.pos[:3])
             if distance <= best:
@@ -4126,6 +6349,19 @@ class ZoneSession:
             target = next((e for e in self.entities if e.id == int(_unique)), None)
         if action_id == 0x14:  # SendResRdy: the client is ready for nearby entities
             self.sync_entities()
+        elif action_id == packets.ACTION_MOUNT:
+            # The client's Mount menu and its own /mount <name>: ActionBuf[0] is the id it
+            # picked.  0 is the personal chocobo (and a valid call), so an out-of-range id
+            # is the only thing that is refused.
+            if len(p) < 16:
+                return
+            mount_id = int(struct.unpack_from("<I", p, 12)[0])
+            if mounts.by_id(mount_id) is None:
+                self.say("That mount is not available.")
+                return
+            self.set_mount(mount_id)
+        elif action_id == packets.ACTION_DISMOUNT:
+            self.dismount()
         elif action_id == packets.ACTION_TALK:
             if target is None and self.char.get("moghouse"):
                 # The Mog House's "Back to Town" door is drawn by the client from the zone
@@ -4145,7 +6381,7 @@ class ZoneSession:
                     self.say("You are too far away.")
                     return
                 if int(getattr(target, "size", 0)) == 2:
-                    self.open_door(target)
+                    self.talk_to_door(target)
                     return
                 from . import content
                 content.npc_talk(self, target)
@@ -4197,8 +6433,75 @@ class ZoneSession:
             self.job_ability(p, int(act_index))
         elif action_id == packets.ACTION_ATTACK_OFF:
             self.attack_off()
+        elif action_id == packets.ACTION_SHOOT:
+            if target is not None and target.kind == "mob" and target.alive:
+                self._ranged_shot(target)
+            else:
+                self.say("You cannot shoot that.")
         elif action_id == packets.ACTION_CHANGE_TARGET:
             self.target_targid = int(act_index)
+
+    def _steal(self, entity) -> None:
+        """Thief Steal: take one weighted item from the monster's steal table."""
+        template_id = int(getattr(entity, "template_id", 0) or 0)
+        rows = self.world.service.monster_steal_items(template_id) if template_id else []
+        if not rows or self.world.rng.random() >= 0.75:
+            self.say("You fail to steal anything.")
+            return
+        weights = [max(1, int(row.get("weight") or 1)) for row in rows]
+        picked = self.world.rng.choices(rows, weights=weights, k=1)[0]
+        item_id = int(picked["item_id"])
+        try:
+            self.world.service.add_item(int(self.char["id"]), item_id, 1)
+        except Exception as exc:
+            self.say("You could not steal the item: %s" % exc)
+            return
+        self.refresh_inventory()
+        item = self.world.service.item(item_id)
+        self.say("You steal %s." % (item["name"] if item else "an item"))
+
+    def _ranged_shot(self, entity, *, bonus: int = 0) -> int:
+        """One ranged attack using the equipped ranged weapon and ammo.
+
+        The server has kept melee and ranged separate until now; this is the shared path
+        used by /ra and Bounty Shot.  It uses the same hit/damage engine as melee with the
+        ranged weapon's skill and damage, the ammo's damage and the ranged mods.
+        """
+        try:
+            weapons = self.world.service.equipped_weapons(int(self.char["id"]))
+        except Exception as exc:
+            log.warning("%s equipped weapons unavailable: %s", self.addr, exc)
+            weapons = {}
+        ranged = weapons.get(stats.SLOT_RANGED) or {}
+        ammo = weapons.get(stats.SLOT_AMMO) or {}
+        if not int(ranged.get("item_id") or 0) or not int(ammo.get("item_id") or 0):
+            self.say("You have no ranged weapon and ammunition equipped.")
+            return 0
+        sheet = self.stat_sheet()
+        attacker = sheet.ranged_fighter
+        if attacker is None:
+            self.say("You have no usable ranged weapon and ammunition equipped.")
+            return 0
+        target = self.world.debuffed_monster(entity)
+        hit = combat.melee(attacker, target, zone=int(self.zone),
+                           rng=self.world.rng, ranged=True)
+        damage = combat.cap_damage(max(0, int(hit.damage) + int(bonus)))
+        if hit.missed or damage <= 0:
+            self.queue.append(sub(0x028, packets.battle_action(
+                int(self.char["char_id"]), int(entity.id), 0, kind=0,
+                message=packets.MESSAGE_ATTACK_MISSES,
+                category=packets.ACTION_CATEGORY_BASIC_ATTACK)))
+            return 0
+        self.world.add_damage_hate(entity, int(self.char["char_id"]), damage, time.time())
+        entity.hp = max(0, int(entity.hp) - damage)
+        self.world._queue_mob_hp(entity)
+        self.world.wake_mob(entity)
+        self.queue.append(sub(0x028, packets.battle_action(
+            int(self.char["char_id"]), int(entity.id), damage, kind=2,
+            message=packets.MESSAGE_DAMAGE, category=packets.ACTION_CATEGORY_BASIC_ATTACK)))
+        if int(entity.hp) <= 0:
+            self.world.kill_mob(self, entity, time.time())
+        return damage
 
     def attack_off(self) -> None:
         """C2S 0x01A action 0x04: /attack off, or the client's own range drop.
@@ -4222,6 +6525,106 @@ class ZoneSession:
             self.assert_stance()
             return
         self.disengage()
+
+    # --- /check and the inspect menu ----------------------------------------------------------
+    def inspect(self, p: bytes) -> None:
+        """C2S 0x00DD: /check, /checkname and /checkparam.
+
+        The client names the entity (server id and target index) and the Kind of
+        inspection.  Kind 0 is /check: a monster is answered by its own check line, a
+        player by the examine notice.  Kinds 1 and 2 belong to the client's Monstrosity
+        and /checkparam windows; Fanxi has neither, so they are only logged.
+        """
+        if len(p) < 13:
+            return
+        unique, act_index, kind = struct.unpack_from("<IIB", p, 4)
+        targid = int(act_index) & 0xFFF
+        target = self.world.entity_by_targid(self.zone, targid)
+        if target is None:
+            target = next((entity for entity in self.entities
+                           if int(getattr(entity, "id", 0)) == int(unique)), None)
+        log.info("%s inspect kind=%d target=%#x (%s)", self.addr, int(kind), targid,
+                 getattr(target, "name", None) or "unknown")
+        if int(kind) != 0:
+            return
+        if target is not None and target.kind == "mob":
+            # The targid can have been reused after a respawn; do not answer with a
+            # different monster's level when the client's own id no longer matches.
+            if int(unique) not in (0, int(target.id)):
+                return
+            self.check_mob(target)
+            return
+        other = self.world.session_by_char(int(unique)) if int(unique) else None
+        if other is not None and int(other.zone) != int(self.zone):
+            other = None
+        if other is None:
+            other = self.player_by_targid(targid)
+        if other is not None:
+            self.examine_player(other)
+            return
+        if target is not None and target.kind in ("trust", "pet"):
+            self.say("You examine %s." % target.name)
+        # An NPC has nothing to check in retail; stay silent, as the client's menu does.
+
+    def player_by_targid(self, targid: int):
+        """The live session another client knows as ``targid`` in this zone.
+
+        The local client always calls itself 0x400, so its own index resolves to this
+        session before the world table is consulted.
+        """
+        wanted = int(targid)
+        if wanted == int(self.char.get("targid", TARGID) or TARGID):
+            return self
+        for session in list(self.world.sessions.values()):
+            if (session is self or not session.logged_in or session.zoning
+                    or getattr(session, "sleeping", False) or getattr(session, "gone", False)
+                    or int(session.zone) != int(self.zone)):
+                continue
+            if int(getattr(session, "targid", 0) or 0) == wanted:
+                return session
+        return None
+
+    def check_mob(self, entity) -> None:
+        """Answer /check on a monster with the client's own check line (0x029).
+
+        The client renders the text; the packet carries the monster's level in Data and
+        the difficulty in Data2 as ``64 + the client's enum``.  Messages 170..178 add
+        the Defense/Evasion sentence, so this is the answer LandSandBoat sends.
+        """
+        level = int(entity.level)
+        player_level = int(self.char.get("main_level", 1) or 1)
+        player = self.stat_sheet()
+        monster = self.world.debuffed_monster(entity)
+        result = check.difficulty(player_level, level)
+        message = check.message_id(int(player.attack), int(player.accuracy),
+                                   int(monster.defense), int(monster.evasion))
+        cid = int(self.char["char_id"])
+        targid = int(self.char.get("targid", 0) or TARGID)
+        self.queue.append(sub(0x029, packets.battle_message(
+            cid, int(entity.id), targid, int(entity.targid), level,
+            int(check.CHECK_DATA_BASE) + int(result), message)))
+        log.info("%s checks %s (Lv.%d): %s, message %d", self.addr, entity.name, level,
+                 check.DIFFICULTY_NAMES[result], message)
+
+    def examine_player(self, other) -> None:
+        """Answer /check on a player with the examine notice.
+
+        Retail opens the equipment window from the 0x0C9/0x0CA family, which Fanxi does
+        not send yet.  The checked player still gets retail's "<name> examines you."
+        line, and the checker gets a chat line instead of no feedback at all.
+        """
+        if other is self:
+            self.say("You examine yourself.")
+            return
+        # The checked player's client knows the checker by the targid the server
+        # assigned in this zone (0x400 is only ever "self" inside the checker's own
+        # client), so send that one rather than the local-player index.
+        other.queue.append(sub(0x009, packets.system_message(
+            MSG_EXAMINE, unique_no=int(self.char["char_id"]),
+            act_index=int(self.targid or TARGID), attr=0x10,
+            name=str(self.char.get("name", "")))))
+        log.info("%s examines %s", self.addr, other.char.get("name", "?"))
+        self.say("You examine %s." % other.char.get("name", "?"))
 
     def item_use(self, p: bytes) -> None:
         """C2S 0x037: use a medicine or a food item.
@@ -4249,6 +6652,9 @@ class ZoneSession:
         container = struct.unpack_from("<I", p, 0x10)[0]
         if container > 0xFF:
             return
+        if container == CONTAINER_RECYCLE:
+            self.say("Take that item out of the Recycle Bin before using it.")
+            return
         stock = None
         try:
             stock = self.world.service.inventory_slot(
@@ -4259,6 +6665,10 @@ class ZoneSession:
             self.say("You do not have that item.")
             return
         item_id = int(stock["item_id"])
+        spec = self.dispense_items.get(item_id)
+        if spec is not None:
+            self.dispense_item(container, slot, stock, spec)
+            return
         food = None
         try:
             food = self.world.service.food_effect(item_id)
@@ -4309,6 +6719,75 @@ class ZoneSession:
                 self.world.service.refill_working_stock(int(self.char["id"])))
         except Exception as exc:
             log.warning("%s item refill failed: %s", self.addr, exc)
+
+    def dispense_item(self, container: int, slot: int, stock: dict,
+                      spec: dict) -> None:
+        """Use one RMEA dispense pouch: grant its ammo and start the reuse timer.
+
+        The pouch is equipment, not a consumable, so it stays in the bag.  Its
+        24-byte timer block lives on that exact char_inventory row; when the hour is up
+        a fresh 0x020 reports the charge ready again.
+        """
+        char_id = int(self.char["id"])
+        item_id = int(stock["item_id"])
+        ammo_id = int(spec["ammo_id"])
+        quantity = max(1, int(spec["quantity"]))
+        max_charges = max(1, int(spec["max_charges"]))
+        reuse = max(0, int(spec["reuse_delay"]))
+        use_delay = max(0, int(spec["use_delay"]))
+        now = time.time()
+        extra = bytes(stock.get("extra") or b"")
+        timer = item_usable.read_timer(extra)
+        charges = max_charges if timer is None else max(0, min(max_charges, timer[0]))
+        item = self.world.service.item(item_id) or {}
+        name = str(item.get("name") or "pouch")
+
+        remaining = item_usable.cooldown_remaining(
+            extra, now=now, reuse_delay=reuse, vana_epoch=VANA_EPOCH)
+        if charges <= 0:
+            self.say("The %s is empty." % name)
+            self.queue.append(self.item_packet(stock, container, slot))
+            return
+        if remaining > 0:
+            self.say("You must wait longer to use that item.")
+            self.queue.append(self.item_packet(stock, container, slot))
+            return
+
+        try:
+            self.world.service.add_item(char_id, ammo_id, quantity)
+        except ApiError as exc:
+            if exc.code == "inventory_full":
+                self.say("Your inventory is full.")
+            else:
+                self.say(exc.message)
+            return
+        except Exception as exc:
+            log.warning("%s dispense %d failed: %s", self.addr, item_id, exc)
+            self.say("That item cannot be used right now.")
+            return
+
+        new_extra = item_usable.record_use(
+            extra, now=now, max_charges=max_charges, vana_epoch=VANA_EPOCH)
+        if not self.world.service.set_item_extra(char_id, container, slot, new_extra):
+            log.warning("%s dispense timer not saved for %d:%d", self.addr, container, slot)
+        stock = {**stock, "extra": new_extra}
+        me = int(self.char["char_id"])
+        self.queue.append(sub(0x028, packets.battle_action(
+            me, me, 0, animation=int(spec.get("animation") or 0), message=0, kind=1,
+            category=packets.ACTION_CATEGORY_ITEM_FINISH,
+            action_id=item_id, info=0)))
+        # The pouch's charge/cooldown block, then every inventory row of the ammo so an
+        # existing stack and a newly created one both redraw.
+        self.queue.append(self.item_packet(stock, container, slot))
+        for row in self.world.service.inventory(char_id):
+            if int(row["container"]) == 0 and int(row["item_id"]) == ammo_id:
+                self.queue.append(self.item_packet(row))
+        self.queue.append(self.container_sync())
+        ammo = self.world.service.item(ammo_id) or {}
+        ammo_name = str(ammo.get("name") or "items")
+        if quantity != 1 and not ammo_name.endswith("s"):
+            ammo_name += "s"
+        self.say("You dispense %d %s." % (quantity, ammo_name))
 
     def apply_food(self, item_id: int, food: dict) -> None:
         """Put one food's modifiers on the session and start its timer."""
@@ -4367,11 +6846,15 @@ class ZoneSession:
         self.stop_resting()
         self.queue += [self.char_stats(), self.char_status()]
         actor = int(self.char["char_id"])
+        # Retail's Magic Start carries the spell's own animation and the client's
+        # "starts casting" message.  A zero animation made every cast start with the
+        # client's default (Cure's) pose and the correct animation only at the finish.
         self.queue.append(sub(0x028, packets.battle_action(
-            actor, actor, int(spell["id"]), animation=0, message=0, kind=0,
+            actor, actor, int(spell["id"]),
+            animation=spell_animation(spell),
+            message=packets.MESSAGE_MAGIC_STARTS_CASTING, kind=0,
             category=packets.ACTION_CATEGORY_MAGIC_START,
             action_id=packets.MAGIC_CAST_TRUST, info=0)))
-        self.say("You start casting %s." % spell["name"])
 
     def finish_trust_cast(self, trust: dict) -> None:
         """Land a Trust spell: play the finish action and put the alter ego in the zone."""
@@ -4397,6 +6880,103 @@ class ZoneSession:
         if self.engaged_id and not self.zoning:
             self.assert_stance()
 
+    def _spell_allowed(self, entries) -> bool:
+        """Whether the main or sub job has the level a spell's row asks for."""
+        if not entries:
+            return True
+        main_job = int(self.char.get("main_job") or 0)
+        main_level = int(self.char.get("main_level") or 0)
+        sub_job = int(self.char.get("sub_job") or 0)
+        sub_level = int(self.char.get("sub_level") or 0)
+        for job, level in entries:
+            if int(job) == main_job and main_level >= int(level):
+                return True
+            if sub_job and int(job) == sub_job and sub_level >= int(level):
+                return True
+        return False
+
+    @staticmethod
+    def _spell_name_key(name: str) -> str:
+        return "".join(str(name or "").split()).casefold()
+
+    def job_point_spell_ids(self) -> tuple[frozenset[int], frozenset[int]]:
+        """(every job-point gift spell, the ones this character's main job grants).
+
+        Job-point spells are not level rows: LandSandBoat adds them to the character's
+        spell list from the gift table.  Fanxi has one spell bitmap rather than a
+        per-character list, so a gift spell is allowed to the granting main job at level
+        99 and refused to everyone else (a support job never receives a gift).  The
+        result is cached per job pair; a job change invalidates it by key.
+        """
+        main_job = int(self.char.get("main_job") or 0)
+        main_level = int(self.char.get("main_level") or 0)
+        key = (main_job, main_level)
+        cached = self._jp_spell_cache
+        if cached is not None and cached[0] == key:
+            return cached[1], cached[2]
+        try:
+            by_name = self.world.service.spell_ids_by_name()
+        except Exception as exc:
+            log.warning("%s spell-name index unavailable: %s", self.addr, exc)
+            by_name = {}
+        every: set[int] = set()
+        for name in job_points.all_spell_grants():
+            every.update(by_name.get(name, ()))
+        mine: set[int] = set()
+        if main_job > 0 and main_level >= 99:
+            for name in job_points.spell_grants(main_job):
+                mine.update(by_name.get(self._spell_name_key(name), ()))
+        self._jp_spell_cache = (key, frozenset(every), frozenset(mine))
+        return self._jp_spell_cache[1], self._jp_spell_cache[2]
+
+    def can_cast_spell(self, spell_id: int) -> bool:
+        """Retail gates spells by job and level; a spell with no row is not gated.
+
+        A job-point spell (Fire V for a Red Mage, Death for a Black Mage, Addle II for
+        its gift line) is allowed to the granting main job at 99 even though its
+        ordinary row belongs to another job or does not exist at all.
+        """
+        spell_id = int(spell_id)
+        every, mine = self.job_point_spell_ids()
+        if spell_id in mine:
+            return True
+        entries = self.world.service.spell_levels(spell_id)
+        if entries:
+            return self._spell_allowed(entries)
+        # A job-point gift spell has no ordinary level row.  Only its granting job
+        # may cast it; every other row-less spell (a Trust, a merit spell) stays open.
+        return spell_id not in every
+
+    def spell_bits(self) -> bytes:
+        """0x0AA: every valid spell id, minus the ones this character's jobs cannot cast.
+
+        The constant is the client's full valid-id set; retail greys a spell the job
+        has not learned, so the bits for those are cleared here.  Spells with no level
+        row (Trusts, merit and monster-only ids) stay set, except the job-point gift
+        spells: those have no level row either, but only their granting job can use
+        them.
+        """
+        bits = bytearray(SPELL_BITS)
+        table = self.world.service.spell_level_table()
+        every, mine = self.job_point_spell_ids()
+        for spell_id, entries in table.items():
+            spell_id = int(spell_id)
+            if not 0 < spell_id < len(bits) * 8:
+                continue
+            if spell_id in mine or self._spell_allowed(entries):
+                continue
+            bits[spell_id // 8] &= ~(1 << (spell_id % 8)) & 0xFF
+        # Gift spells with no ordinary level row (RDM's Refresh III/Temper II, BLM's
+        # Death, …) are not in the table above.  Clear their bits unless this job's
+        # gift grants them.  A spell that also has a level row is handled by the loop
+        # above, so a Black Mage still keeps Fire V by level.
+        gift_no_level = every.difference({int(sid) for sid in table})
+        for spell_id in gift_no_level - mine:
+            spell_id = int(spell_id)
+            if 0 < spell_id < len(bits) * 8:
+                bits[spell_id // 8] &= ~(1 << (spell_id % 8)) & 0xFF
+        return bytes(bits)
+
     def cast_magic(self, p: bytes, act_index: int = 0) -> None:
         """C2S 0x01A action 0x03: the client is casting a spell.
 
@@ -4414,6 +6994,10 @@ class ZoneSession:
         if spell is None:
             self.say("That spell does not exist.")
             return
+        required = effects.required_instrument(str(spell["name"]))
+        if required is not None and self.equipped_range_item() not in required:
+            self.say("You do not have the instrument for %s." % spell["name"])
+            return
         now = time.time()
         if self.casting and now < self.casting["finish"]:
             return
@@ -4421,8 +7005,12 @@ class ZoneSession:
         if trust is not None:
             self.cast_trust(spell, trust, now)
             return
+        if not self.can_cast_spell(spell_id):
+            self.say("You cannot cast that spell.")
+            return
         ninjutsu = int(spell["skill"]) == NINJUTSU_SKILL
-        cost = 0 if ninjutsu else int(spell["mp"])
+        # Manafont makes every spell free for its 30-second duration.
+        cost = 0 if ninjutsu or self.has_effect(effects.MANAFONT) else int(spell["mp"])
         if not ninjutsu and int(self.char.get("mp_current", 0)) < cost:
             self.say("You do not have enough MP for %s." % spell["name"])
             self.queue += [self.char_stats(), self.char_status()]
@@ -4460,6 +7048,28 @@ class ZoneSession:
                                        and bool(targets & ENEMY_TARGET)):
             needs_enemy = True
         self_cast = not needs_enemy
+        party_target = None
+        if (self_cast and act_index and not accession
+                and str(spell.get("name") or "").casefold().startswith("indi-")
+                and self.has_effect(effects.ENTRUST)):
+            party_target = self._party_spell_target(int(act_index))
+            if party_target is not None:
+                self_cast = False
+                self.remove_effect(effects.ENTRUST, quiet=True)
+                self.queue.append(self.char_status())
+        if (self_cast and act_index and not accession
+                and int(spell.get("skill") or 0) not in effects.SONG_SKILLS):
+            can_party = bool(targets & 0x02) or bool(targets & 0x10)
+            if can_party and (healing or (spec is not None and spec.kind == "buff")):
+                party_target = self._party_spell_target(int(act_index))
+                if party_target is None:
+                    self.say("There is no valid target for %s." % spell["name"])
+                    self.assert_stance()
+                    return
+                if party_target is self:
+                    party_target = None
+                else:
+                    self_cast = False
         if needs_enemy:
             if target is None or target.kind != "mob" or not target.alive:
                 self.say("There is no valid target for %s." % spell["name"])
@@ -4487,25 +7097,273 @@ class ZoneSession:
                     self.world.service.refill_working_stock(int(self.char["id"])))
             except Exception as exc:
                 log.warning("%s tool refill failed: %s", self.addr, exc)
-        level = int(self.char.get("main_level", 1))
         sheet = self.stat_sheet()
+        # The action packet starts the cast before the client has finished sending the
+        # midcast set.  These are the numbers that set controls (Cure potency, MAB,
+        # enfeebling duration, Macc), so they are computed again at the finish; this
+        # first pass keeps the cast record complete for anything that reads it early.
+        value_target = party_target or (self if healing else target)
+        spell_name = str(spell.get("name") or "").casefold()
+        if spell_name.startswith("geo-"):
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                pet = self.world.spawn_pet(self, "luopan", now)
+            if pet is not None:
+                pet.geo_mp_cost = int(cost)
+                pet.geo_potency = 100
+                pet.geo_drain = 24
+                pet.next_geo_tick = now + 3.0
+                pet.geo_name = str(spell.get("name") or "")
+        dark_seal = (bool(getattr(self, "_dark_seal", False))
+                     and int(spell.get("skill") or 0) == packets.SKILL_DARK)
+        cascade_bonus = int(getattr(self, "_cascade_bonus", 0) or 0)
+        convergence = (self.has_effect(effects.CONVERGENCE)
+                       and int(spell.get("skill") or 0) == packets.SKILL_BLUE)
+        values = self._cast_numbers(
+            spell, spec, value_target, healing=healing, sheet=sheet,
+            dark_seal=dark_seal, cascade_bonus=cascade_bonus,
+            convergence=convergence)
+        if convergence:
+            self.remove_effect(effects.CONVERGENCE, quiet=True)
+        if dark_seal:
+            self._dark_seal = False
+        if cascade_bonus:
+            self._cascade_bonus = 0
+        amount = values["amount"]
+        resist = values["resist"]
+        effect_duration = values["effect_duration"]
+        effect_potency = values["effect_potency"]
+        if not ninjutsu:
+            self.char["mp_current"] = int(self.char.get("mp_current", 0)) - cost
+        fast_cast = int(sheet.fighter.mods.get(mod.FASTCAST, 0))
+        cast_ms = int(spell["cast_time"])
+        song = int(spell["skill"]) in effects.SONG_SKILLS
+        if song:
+            # Nightingale halves and Troubadour raises the song cast to 150%;
+            # together they are the usual 75%.  Song spellcasting-time gear (455)
+            # is a further percentage reduction.  Soul Voice and Pianissimo's JP
+            # rows add Fast Cast while their status is up.
+            if self.has_effect(effects.NIGHTINGALE):
+                cast_ms = cast_ms // 2
+            if self.has_effect(effects.TROUBADOUR):
+                cast_ms = cast_ms * 3 // 2
+            song_fast = int(self.combat_mods().get(mod.SONG_SPELLCASTING_TIME, 0))
+            cast_ms = max(500, cast_ms * max(0, 100 - song_fast) // 100)
+            if self.has_effect(effects.SOUL_VOICE):
+                fast_cast += job_points.category_total(10, "Soul Voice Effect")
+            if self.has_effect(effects.PIANISSIMO):
+                fast_cast += job_points.category_total(10, "Pianissimo Effect")
+        else:
+            fast_cast += (int(self.combat_mods().get(mod.NINJUTSU_FASTCAST, 0))
+                          if int(spell["skill"]) == NINJUTSU_SKILL else 0)
+        if self.has_effect(effects.HASSO):
+            # The stance's other half: +50% casting time for all magic while it is up.
+            cast_ms = int(cast_ms * 1.5)
+        if self.has_effect(effects.CHAINSPELL):
+            cast_ms = 0
+        if getattr(self, "_spontaneity", False):
+            cast_ms = 0
+            self._spontaneity = False
+        cast_finish = now + combat.cast_time(cast_ms, fast_cast) / 1000.0
+        # Red Mage Quick Magic: a 5% trait proc makes the cast finish on the next
+        # tick.  The job-point "Quick Magic Effect" row is not extra proc chance:
+        # LandSandBoat's comment for it is "MP consumption -2%", so a proc refunds
+        # 2% of the spell's MP cost per rank (40% at rank 20).
+        if int(self.char.get("main_job") or 0) == 5 and self.world.rng.random() < 0.05:
+            cast_finish = now
+            percent = job_points.category_total(5, "Quick Magic Effect")
+            if percent and not ninjutsu:
+                paid = int(self.char.get("mp_current", 0))
+                max_mp = max(0, int(self.char.get("mp", 0)))
+                refund = max(0, int(cost)) * min(100, int(percent)) // 100
+                self.char["mp_current"] = min(max_mp, paid + refund)
+            self.say("Quick Magic!")
+        self.casting = {"spell": spell, "target": int(target.id) if target else 0,
+                        "party_target": int(party_target.char["char_id"]) if party_target else 0,
+                        "finish": cast_finish,
+                        "amount": int(amount), "healing": healing,
+                        "self": self_cast, "effect": spec,
+                        "accession": accession,
+                        "effect_duration": effect_duration,
+                        "effect_potency": effect_potency,
+                        "skill": int(spell["skill"]), "resist": resist,
+                        "dark_seal": dark_seal, "cascade_bonus": cascade_bonus,
+                        "convergence": convergence}
+        self.stop_resting()
+        self.queue += [self.char_stats(), self.char_status()]
+        try:
+            self.world.service.save_vitals(self.char["id"], int(self.char.get("hp_current", 0)),
+                                           int(self.char.get("mp_current")))
+        except Exception:
+            pass
+        # 0x028 MagicStart: this is what puts the cast bar and the casting animation on the
+        # client.  The value is the spell id; cmd_arg is the school's four-character code
+        # (canj for ninjutsu, cawh for white magic, ...), not the spell id.  The result's
+        # animation is the spell's own client animation, and the message is retail's
+        # "starts casting" line: the client prints it for the caster and everyone nearby.
+        actor = int(self.char["char_id"])
+        if party_target is not None:
+            start_target = int(party_target.char["char_id"])
+        else:
+            start_target = int(target.id) if target is not None else actor
+        self.queue.append(sub(0x028, packets.battle_action(
+            actor, start_target, int(spell["id"]),
+            animation=spell_animation(spell),
+            message=packets.MESSAGE_MAGIC_STARTS_CASTING, kind=0,
+            category=packets.ACTION_CATEGORY_MAGIC_START,
+            action_id=packets.magic_cast_arg(int(spell["skill"])), info=0)))
+
+    def _shikikoyo(self, act_index: int, ability: dict, now: float) -> None:
+        """Share TP above 1000 with the targeted party member.
+
+        The Samurai keeps 1000 TP; the target gains what was above it, and the merit
+        ranks (+12% each) raise what the target receives, which is why 5/5 hands over
+        more than the Samurai gives up.
+        """
+        ally, error = self._waltz_target(act_index, ability)
+        if error:
+            self.say(error)
+            return
+        if ally is self:
+            self.say("You cannot share TP with yourself.")
+            return
+        tp = int(self.char.get("tp", 0))
+        share = max(0, tp - 1000)
+        if share <= 0:
+            self.say("You need more than 1000 TP to share.")
+            return
+        ranks = 0
+        if int(self.char.get("main_job") or 0) == 12:
+            ranks = min(5, int(self.merit_counts().get(merits.SHIKIKOYO, 0)))
+        received = share * (100 + 12 * ranks) // 100
+        self.char["tp"] = tp - share
+        target_tp = min(3000, int(ally.char.get("tp", 0)) + received)
+        ally.char["tp"] = target_tp
+        self.queue.append(self.party_member())
+        if ally is not self:
+            ally.queue.append(ally.party_member())
+            self.say("You share %d TP with %s." % (received, ally.char.get("name", "them")))
+
+    def _blade_bash(self, target, now: float) -> None:
+        """Blade Bash's stun: no damage, no TP, a short stun on the target."""
+        if target is None or getattr(target, "kind", "") != "mob" or not target.alive:
+            return
+        target.effect_state[effects.STUN] = {"until": now + 3.0, "power": 0}
+        if effects.STUN not in target.status_effects:
+            target.status_effects.append(effects.STUN)
+        self.say("%s is stunned." % target.name)
+
+    def _seed_konzen_chain(self, entity, ws: dict, now: float) -> None:
+        """Konzen-ittai readies the monster so the weapon skill chains by itself.
+
+        The status "readies the enemy for a skillchain": the skill that lands while it
+        is up opens and closes the chain in one action.  We seed the monster with a
+        property the skill resonates with, and let the normal advance form the chain.
+        """
+        props = self.world.service.weaponskill_properties(int(ws["id"]))
+        if not any(props):
+            return
+        closing = int(props[0])
+        for resonance in range(1, 15):
+            if skillchain.TRANSITIONS.get((closing, resonance)):
+                entity.skillchain = skillchain.SkillchainState(
+                    props=(resonance, 0, 0), started=now - 4.0, until=now + 10.0,
+                    opener=str(self.char.get("name") or self.addr))
+                return
+
+    def _song_extra_debuff(self, entity, spell: dict, spec, now: float,
+                           duration: float | None) -> None:
+        """The parts of a song debuff the monster keeps as their own effect.
+
+        Threnody's Magic Evasion down and Elegy's attack-speed slow are not modifiers on
+        the caster: ``world.monster_debuff_mods`` reads the first from the mob's effect
+        state, and the mob's swing timer multiplies its delay by the second's potency.
+        They ride beside the song's own icon, hidden from the wear-off line.
+        """
+        family = effects.song_family(str(spell["name"]))
+        if family not in ("threnody", "elegy"):
+            return
+        seconds = float(duration or 0.0)
+        if seconds <= 0:
+            return
+        mods = self.combat_mods()
+        if family == "threnody":
+            value = effects.song_table_value(str(spell["name"]), "meva", mods)
+            if value > 0:
+                entity.effect_state[effects.MAGIC_EVASION_DOWN] = {
+                    "until": now + seconds, "power": value, "potency": value,
+                    "hidden": True, "icon": int(spec.effect)}
+        else:
+            value = effects.song_table_value(str(spell["name"]), "slow", mods)
+            if value > 0:
+                entity.effect_state[effects.SLOW] = {
+                    "until": now + seconds, "potency": value,
+                    "hidden": True, "icon": int(spec.effect)}
+
+    def _song_debuff_tick(self, spell: dict, spec: "effects.SpellEffect") -> int:
+        """Requiem's per-tick damage after Song+ gear, Soul Voice and the job-point row.
+
+        Requiem's +3 a rank (60 at rank 20) lands *after* Soul Voice/Marcato: the
+        wiki's worked examples are (14 x 1.5) + 60 = 81 and (14 x 2) + 60 = 88.
+        """
+        soul_voice = self.has_effect(effects.SOUL_VOICE)
+        name = str(spell["name"])
+        _mods, tick = effects.song_potency_values(
+            name, spec, self.combat_mods(),
+            soul_voice=soul_voice,
+            marcato=self.has_effect(effects.MARCATO) and not soul_voice)
+        if int(self.char.get("main_job") or 0) == 10:
+            tick += job_points.category_total(10, "Requiem Effect")
+        return max(0, int(tick))
+
+    def song_duration_flat(self, name: str) -> float:
+        """Flat seconds a song's timer gets from its job-point row (Lullaby +1s a rank)."""
+        if int(self.char.get("main_job") or 0) != 10:
+            return 0.0
+        if effects.song_family(name) != "lullaby":
+            return 0.0
+        return float(job_points.category_total(10, "Lullaby Duration"))
+
+    def _cast_numbers(self, spell: dict, spec, target, *, healing: bool,
+                      sheet=None, dark_seal: bool = False,
+                      cascade_bonus: int = 0, convergence: bool = False) -> dict:
+        """The result values the midcast gear controls.
+
+        The host wears the fast-cast set before the action and the midcast set right
+        behind it, exactly like GearSwap.  The server used to freeze these numbers in
+        ``cast_magic`` when the action arrived, before the midcast ``0x050`` burst, so a
+        Cure was rolled with the fast-cast set's 0% ``"Cure" potency`` and a nuke with
+        the fast-cast set's MAB.  They are read here from the gear on at the finish.
+        ``sheet`` lets the caller reuse the stat sheet it already built.
+        """
+        if sheet is None:
+            sheet = self.stat_sheet()
+        level = int(self.char.get("main_level", 1))
+        cost = 0 if int(spell.get("skill") or 0) == NINJUTSU_SKILL \
+            else int(spell.get("mp") or 0)
         skill_values, _base_caps = self.effective_skills()
         spell_skill = int(skill_values.get(int(spell["skill"]), 0))
-        target_sheet = self.world.monster_sheet(target) if target is not None else None
-        # Debuffs a weapon skill left on the monster are part of the magic target too:
-        # Magic Defense Down / Magic Evasion Down are modifier deltas, INT Down a flat
-        # stat subtraction.  The monster sheet is cached and stays clean.
-        target_mods = self.world.monster_debuff_mods(target) if target is not None else {}
-        target_int = (int(target_sheet.attributes.get("int", 0))
-                      if target_sheet is not None else 0)
-        if target is not None:
+        mob = target is not None and getattr(target, "is_mob", lambda: False)()
+        target_sheet = self.world.monster_sheet(target) if mob else None
+        if mob:
+            # Debuffs a weapon skill left on the monster are part of the magic target
+            # too: Magic Defense Down / Magic Evasion Down are modifier deltas, INT Down
+            # a flat stat subtraction.  The monster sheet is cached and stays clean.
+            target_mods = self.world.monster_debuff_mods(target)
+            target_int = int(target_sheet.attributes.get("int", 0))
             int_down = target.effect_state.get(effects.INT_DOWN)
             if int_down is not None:
                 target_int = max(0, target_int - int(int_down.get("power", 0)))
+        else:
+            # A Cure's received-potency line belongs to the player being healed.
+            target_mods = (target.combat_mods()
+                           if target is not None and hasattr(target, "combat_mods")
+                           else {})
+            target_int = 0
         base = int(spell["base"])
         if healing:
             amount = effects.healing_amount(
-                int(cost * 3 + level), sheet.fighter.mods, sheet.fighter.mods)
+                int(cost * 3 + level), sheet.fighter.mods, target_mods)
         elif spec is not None and spec.helix and target_sheet is not None:
             # A Helix's opening hit is a nuke with its own dINT curve; the same number
             # comes back every ten seconds while the effect lasts (see resolve_casting).
@@ -4528,7 +7386,7 @@ class ZoneSession:
                             if target_sheet is not None else 0))
         elif spec is None and base > 0 and target_sheet is not None:
             spell_mods = sheet.fighter.mods
-            if spell_skill == 39:  # elemental Ninjutsu only
+            if spell_skill == NINJUTSU_SKILL:  # elemental Ninjutsu only
                 spell_mods = dict(spell_mods)
                 spell_mods[mod.MAGIC_DAMAGE] = (
                     int(spell_mods.get(mod.MAGIC_DAMAGE, 0))
@@ -4549,15 +7407,41 @@ class ZoneSession:
             # is what made Breakga hit for 233 and turned every unimplemented spell into
             # a fixed nuke.
             amount = 0
-        if not ninjutsu:
-            self.char["mp_current"] = int(self.char.get("mp_current", 0)) - cost
-        fast_cast = int(sheet.fighter.mods.get(mod.FASTCAST, 0))
+        if cascade_bonus and not healing and int(amount) > 0:
+            amount = int(amount) + int(cascade_bonus)
+        if convergence and not healing and int(amount) > 0:
+            amount = int(amount * 3 // 2)
         # Enfeebles share the Magic Accuracy roll: an under-geared caster keeps the
         # effect for less time instead of the spell always landing at full duration.
         resist = 1.0
+        # A Magic Burst is a damaging spell of the chain's element launched inside the
+        # window: it gets the burst multiplier and +100 Magic Accuracy.
+        burst_tier = 0
+        if target_sheet is not None and not healing:
+            burst_tier = skillchain.magic_burst_tier(
+                getattr(target, "skillchain", None), int(spell.get("element") or 0),
+                time.time())
         if target_sheet is not None:
+            # The Bard job-point "Song Accuracy Bonus" (+1 a rank) is song-only; it
+            # adds to the singing skill here rather than to the generic Magic Accuracy.
+            song_skill = spell_skill
+            if (int(spell.get("skill") or 0) in effects.SONG_SKILLS
+                    and int(self.char.get("main_job") or 0) == 10):
+                song_skill += job_points.category_total(10, "Song Accuracy Bonus")
+            # Distract and Frazzle use dMND instead of dINT and carry an innate +150
+            # Magic Accuracy (BG Wiki).  Without this they resisted like a tier-I
+            # enfeebling even with a RDM's capped skill.
+            name_key = str(spell.get("name") or "").casefold()
+            dmnd_enfeeble = (name_key.startswith("frazzle")
+                             or name_key.startswith("distract"))
+            diabolic = (int(spell.get("skill") or 0) == packets.SKILL_DARK
+                        and float(getattr(self, "_diabolic_until", 0.0)) > time.time())
             resist = combat.magic_resist(
-                skill=spell_skill, caster_int=int(sheet.attributes.get("int", 0)),
+                skill=song_skill + (150 if dmnd_enfeeble else 0)
+                      + (100 if burst_tier else 0) + (100 if dark_seal else 0)
+                      + (50 if diabolic else 0) + (50 if convergence else 0),
+                caster_int=int(sheet.attributes.get(
+                    "mnd" if dmnd_enfeeble else "int", 0)),
                 mods=sheet.fighter.mods,
                 target_level=int(target_sheet.fighter.level),
                 target_mods=target_mods)
@@ -4570,58 +7454,62 @@ class ZoneSession:
             effect_duration = effects.helix_duration(
                 sch_level, dark_arts=self.has_effect(effects.DARK_ARTS),
                 jp_rank=JOB_POINT_RANK)
+        elif (spec is not None and debuff
+              and int(spell.get("skill") or 0) in effects.SONG_SKILLS):
+            # Troubadour doubles a debuff song's timer; Soul Voice leaves Lullaby's
+            # duration alone (it doubles its magic accuracy, which is not modelled),
+            # and the Clarion/Tenuto/Marcato job-point seconds are added last.
+            soul_voice = self.has_effect(effects.SOUL_VOICE)
+            marcato = self.has_effect(effects.MARCATO) and not soul_voice
+            effect_duration = effects.song_duration(
+                spec, name=str(spell["name"]), mods=sheet.fighter.mods,
+                troubadour=self.has_effect(effects.TROUBADOUR),
+                soul_voice=False, marcato=marcato,
+                clarion=self.has_effect(effects.CLARION_CALL),
+                tenuto=self.has_effect(effects.TENUTO),
+                flat_seconds=self.song_duration_flat(str(spell["name"])))
         else:
             effect_duration = (effects.debuff_duration(
-                spec, skill=int(spell["skill"]), mods=sheet.fighter.mods)
+                spec, skill=int(spell["skill"]), mods=sheet.fighter.mods,
+                name=str(spell["name"]))
                 if debuff else 0.0)
         effect_potency = (effects.debuff_potency(
             spec, skill=int(spell["skill"]), mods=sheet.fighter.mods)
             if debuff else 0)
-        cast_finish = now + combat.cast_time(
-            int(spell["cast_time"]), fast_cast
-            + (int(self.combat_mods().get(mod.NINJUTSU_FASTCAST, 0))
-               if spell_skill == 39 else 0)) / 1000.0
-        # Red Mage Quick Magic: a trait proc makes the cast finish on the next tick.
-        if int(self.char.get("main_job") or 0) == 5:
-            chance = 0.05 + job_points.category_total(5, "Quick Magic Effect") / 100.0
-            if self.world.rng.random() < chance:
-                cast_finish = now
-                self.say("Quick Magic!")
-        if spec is not None and int(spec.effect) == 193 and int(spell.get("skill") or 0) in effects.SONG_SKILLS:
-            effect_duration += job_points.category_total(10, "Lullaby Duration")
         if (int(self.char.get("main_job") or 0) == 21
                 and str(spell.get("name") or "").casefold().startswith("indi")):
-            effect_duration += job_points.category_total(21, "Indicolure Spell Effect Dur.")
-        self.casting = {"spell": spell, "target": int(target.id) if target else 0,
-                        "finish": cast_finish,
-                        "amount": int(amount), "healing": healing,
-                        "self": self_cast, "effect": spec,
-                        "accession": accession,
-                        "effect_duration": effect_duration,
-                        "effect_potency": effect_potency,
-                        "skill": int(spell["skill"]), "resist": resist}
-        self.stop_resting()
-        self.queue += [self.char_stats(), self.char_status()]
-        try:
-            self.world.service.save_vitals(self.char["id"], int(self.char.get("hp_current", 0)),
-                                           int(self.char.get("mp_current")))
-        except Exception:
-            pass
-        # 0x028 MagicStart: this is what puts the cast bar and the casting animation on the
-        # client.  The value is the spell id; cmd_arg is the school's four-character code
-        # (canj for ninjutsu, cawh for white magic, ...), not the spell id.
-        # The result message stays 0 and the chat line below carries the self message:
-        # the client renders 327 in the third person ("Onedough starts casting Dia on
-        # Marauder Dvogzog.") for this server's player id, so sending both printed the
-        # start line twice.
-        actor = int(self.char["char_id"])
-        start_target = int(target.id) if target is not None else actor
-        self.queue.append(sub(0x028, packets.battle_action(
-            actor, start_target, int(spell["id"]), animation=0,
-            message=0, kind=0,
-            category=packets.ACTION_CATEGORY_MAGIC_START,
-            action_id=packets.magic_cast_arg(int(spell["skill"])), info=0)))
-        self.say("You start casting %s." % spell["name"])
+            effect_duration += job_points.category_total(
+                21, "Indicolure Spell Effect Dur.")
+        if burst_tier and not healing and int(amount) > 0:
+            # The base burst multiplier, then the "Magic Burst Bonus" family: the
+            # Red Mage trait is the uncapped 274 and SCH/BLM gear and job points use
+            # the +40%-capped 487.  Without this a RDM's Mag. Burst Bonus trait (5/7
+            # at 85/95) did nothing at all.
+            mods = sheet.fighter.mods
+            amount = int(amount * skillchain.magic_burst_multiplier(burst_tier)
+                         * skillchain.magic_burst_bonus(
+                             capped=int(mods.get(mod.MAGIC_BURST_BONUS_CAPPED, 0)),
+                             uncapped=int(mods.get(mod.MAGIC_BURST_BONUS_UNCAPPED, 0))))
+            if float(getattr(self, "_sengikori_mb_until", 0.0) or 0.0) > time.time():
+                amount = int(amount * 1.25)
+                self._sengikori_mb_until = 0.0
+        # Magic Burst and Sengikori multiply after the engine has already capped the
+        # spell, so a burst nuke gets the same 99,999 ceiling as a plain one here.
+        if not healing:
+            amount = combat.cap_damage(amount)
+        return {"amount": int(amount), "resist": resist,
+                "magic_burst": int(burst_tier),
+                "effect_duration": effect_duration,
+                "effect_potency": effect_potency}
+
+    def _refresh_cast_numbers(self, cast: dict, target) -> None:
+        """Re-read a finished cast's numbers from the gear worn at the finish."""
+        cast.update(self._cast_numbers(
+            cast["spell"], cast.get("effect"), target,
+            healing=bool(cast.get("healing")),
+            dark_seal=bool(cast.get("dark_seal")),
+            cascade_bonus=int(cast.get("cascade_bonus") or 0),
+            convergence=bool(cast.get("convergence"))))
 
     def resolve_casting(self, now: float) -> None:
         """Apply a finished cast: a buff, a debuff, damage, or a heal."""
@@ -4645,30 +7533,60 @@ class ZoneSession:
             if self.engaged_id and not self.zoning:
                 self.assert_stance()
             return
-        if cast["healing"]:
-            hp = int(self.char.get("hp_current", 0))
-            healed = min(int(self.char.get("hp", hp)), hp + int(cast["amount"]))
-            self.char["hp_current"] = healed
-            self.queue.append(sub(0x028, packets.battle_action(
-                me, me, healed - hp, animation=spell_animation(spell), kind=0,
-                message=packets.MESSAGE_MAGIC_RECOVERS_HP, info=0,
+        if str(spell.get("name") or "").casefold().startswith(("indi-", "geo-")):
+            self._indi_aura(spell, now, cast)
+            self.assert_stance()
+            return
+        party_target_id = int(cast.get("party_target") or 0)
+        if party_target_id:
+            target = self.world.session_by_char(party_target_id)
+            if (target is None or int(target.zone) != int(self.zone)
+                    or target.dead_until
+                    or int(target.char.get("hp_current", 0)) <= 0):
+                self.say("The spell fizzles.")
+                self.assert_stance()
+                return
+            if cast["healing"]:
+                self._refresh_cast_numbers(cast, target)
+                self._heal_target(target, spell, cast)
+                self.assert_stance()
+                return
+            if spec is not None and spec.kind == "buff":
+                self._buff_target(target, spell, now, spec)
+                self.assert_stance()
+                return
+            action = sub(0x028, packets.battle_action(
+                me, int(target.char["char_id"]), 0,
+                animation=spell_animation(spell), kind=0,
+                message=packets.MESSAGE_MAGIC_NO_EFFECT, info=0,
                 category=packets.ACTION_CATEGORY_MAGIC_FINISH,
-                action_id=int(spell["id"]))))
-            self.queue += [self.char_status(), self.party_member()]
-            try:
-                self.world.service.save_vitals(self.char["id"], healed,
-                                               int(self.char.get("mp_current", 0)))
-            except Exception:
-                pass
+                action_id=int(spell["id"])))
+            self.queue.append(action)
+            target.queue += [action, target.char_status()]
+            return
+        if str(spell.get("name") or "").casefold().startswith(("indi-", "geo-")):
+            self._indi_aura(spell, now, cast)
+            self.assert_stance()
+            return
+        if cast["healing"]:
+            self._refresh_cast_numbers(cast, self)
+            self._heal_target(self, spell, cast)
             self.assert_stance()
             return
         if cast.get("self"):
             if (spec is not None and int(spell.get("skill") or 0) in effects.SONG_SKILLS
                     and effects.is_buff(spec)):
-                self.resolve_song_spell(spell, now, spec)
+                self.resolve_song_spell(spell, now, spec, cast)
+            elif (self.has_effect(effects.DIFFUSION) and spec is not None
+                    and int(spell.get("skill") or 0) == packets.SKILL_BLUE):
+                self.remove_effect(effects.DIFFUSION, quiet=True)
+                self.resolve_party_spell(spell, now, spec)
             elif (cast.get("accession") and spec is not None
                     and self.has_effect(effects.ACCESSION)):
                 self.resolve_party_spell(spell, now, spec)
+            elif (spec is not None and spec.kind == "buff"
+                    and effects.is_area_party_buff(spell["name"])):
+                self.resolve_area_buff(spell, now, spec)
             else:
                 self.resolve_self_spell(spell, now, spec)
             if self.engaged_id and not self.zoning:
@@ -4679,6 +7597,7 @@ class ZoneSession:
             self.say("The spell fizzles.")
             self.assert_stance()
             return
+        self._refresh_cast_numbers(cast, entity)
         self._last_target_hp = entity.hp_max
         animation = spell_animation(spell)
         if effects.is_debuff(spec):
@@ -4697,12 +7616,16 @@ class ZoneSession:
                     duration=cast.get("effect_duration"),
                     potency=cast.get("effect_potency"),
                     tick=(min(damage, effects.HELIX_TICK_CAP) if spec.helix else
-                          (int(spec.tick) + job_points.category_total(10, "Requiem Effect")
+                          (self._song_debuff_tick(spell, spec)
                            if int(spec.effect) == effects.REQUIEM else None)),
                     tick_interval=(effects.HELIX_TICK_SECONDS if spec.helix else 3.0),
                     first_tick_delay=(self.world.rng.uniform(*effects.HELIX_FIRST_TICK)
                                       if spec.helix else None),
-                    tier=(effects.tier_of(spell["name"]) if spec.helix else 0))
+                    tier=(effects.tier_of(spell["name"]) if spec.helix else 0),
+                    name=str(spell.get("name") or ""))
+                if remaining:
+                    self._song_extra_debuff(entity, spell, spec, now,
+                                            cast.get("effect_duration"))
             defeated = False
             if damage > 0:
                 # Dia, Diaga and a Helix are one action in retail: the result prints the
@@ -4713,7 +7636,8 @@ class ZoneSession:
                 self.queue.append(sub(0x028, packets.battle_action(
                     me, int(entity.id), damage, defeated=defeated,
                     animation=animation, kind=0,
-                    message=packets.MESSAGE_MAGIC_DMG, info=0,
+                    message=(packets.MESSAGE_MAGIC_BURST if cast.get("magic_burst")
+                             else packets.MESSAGE_MAGIC_DMG), info=0,
                     category=packets.ACTION_CATEGORY_MAGIC_FINISH,
                     action_id=int(spell["id"]))))
                 entity.hp = max(0, entity.hp - damage)
@@ -4760,7 +7684,8 @@ class ZoneSession:
         self.queue.append(sub(0x028, packets.battle_action(
             me, int(entity.id), damage, defeated=defeated,
             animation=animation, kind=0,
-            message=packets.MESSAGE_MAGIC_DMG, info=0,
+            message=(packets.MESSAGE_MAGIC_BURST if cast.get("magic_burst")
+                             else packets.MESSAGE_MAGIC_DMG), info=0,
             category=packets.ACTION_CATEGORY_MAGIC_FINISH, action_id=int(spell["id"]))))
         entity.hp = max(0, entity.hp - damage)
         self.queue_entity(entity, packets.SEND_HP)
@@ -4779,7 +7704,7 @@ class ZoneSession:
         name = str(spell["name"])
         folded = name.casefold()
         animation = spell_animation(spell)
-        if folded.startswith("dispel"):
+        if folded.startswith("dispel") or effects.song_family(name) == "finale":
             removed = self.world.dispel_mob(entity)
             self.queue.append(sub(0x028, packets.battle_action(
                 me, int(entity.id), removed, animation=animation, kind=0,
@@ -4843,6 +7768,10 @@ class ZoneSession:
         """
         if len(p) < 16:
             return
+        # The phase engine can put the precast 0x050s and the action in one packet batch.
+        # The action handler must see the batch's equipment, not the previous outfit:
+        # stat_sheet() and the Prime "Adds weapon skill" grant both read char_equip.
+        self.flush_equipment()
         ws_id = struct.unpack_from("<I", p, 12)[0]
         try:
             ws = self.world.service.weaponskill(ws_id)
@@ -4861,6 +7790,18 @@ class ZoneSession:
             log.warning("%s weapon skill availability failed: %s", self.addr, exc)
             available = set()
         if int(ws_id) not in available:
+            # A GearSwap/equip race is invisible otherwise: the HUD advertised the
+            # skill from the previous outfit, but this handler sees the weapon that is
+            # in char_equip when the action arrives.  Log the ids so a failed attempt
+            # can be diagnosed from server.log.
+            # Do not name these ``sub``: that shadows the module-level packet helper
+            # for the whole function, so every later ``sub(0x028, ...)`` raises
+            # UnboundLocalError instead of sending the weapon skill.
+            main_id = (self.equipped.get(0) or (0, 0, 0))[2]
+            sub_id = (self.equipped.get(1) or (0, 0, 0))[2]
+            log.info("%s weapon skill %s (%d) rejected: main=%s sub=%s available=%s",
+                     self.addr, ws["name"], int(ws_id), int(main_id or 0),
+                     int(sub_id or 0), sorted(available))
             self.say("You cannot use %s with your equipped weapon." % ws["name"])
             return
         extra = weapon_skill_effects.for_weaponskill(str(ws["name"]))
@@ -4882,18 +7823,44 @@ class ZoneSession:
             self.say("You do not have enough TP for %s." % ws["name"])
             return
         now = time.time()
+        sheet = None
         try:
             mods = self.combat_mods()
-            effective_tp = self.weaponskill_tp(tp, mods)
+            sheet = self.stat_sheet(mods=mods)
+            effective_tp = self._weaponskill_effective_tp(tp, mods, now)
         except Exception as exc:
             log.warning("%s weapon skill modifiers unavailable: %s", self.addr, exc)
             mods, effective_tp = {}, tp
+        if sheet is None:
+            try:
+                sheet = self.stat_sheet()
+            except Exception:
+                sheet = None
         # A weapon skill spends every point of TP up to the 3000 cap; the bar keeps the
         # excess.  TP Bonus gear and Fencer raise the TP used for scaling, not the spend.
-        self.char["tp"] = tp - min(tp, TP_MAX)
+        # Meikyo Shisui spends exactly 1000 but still scales from the current TP.
+        meikyo = float(getattr(self, "_meikyo_until", 0.0) or 0.0) > now
+        sekkanoki = float(getattr(self, "_sekkanoki_until", 0.0) or 0.0) > now
+        if meikyo or sekkanoki:
+            self._sekkanoki_until = 0.0
+        self._warriors_charge_until = 0.0
+        self.char["tp"] = tp - (1000 if (meikyo or sekkanoki) else min(tp, TP_MAX))
         self.queue.append(self.party_member())
+        # Prime Aftermath goes up before the hit loop: retail applies it to the weapon
+        # skill that grants it ("AM applies on the activating WS"), and the rest of the
+        # duration then rides on the sheet for auto-attacks and later skills.
+        try:
+            self._grant_prime_aftermath(ws, tp)
+        except Exception as exc:
+            log.warning("%s prime aftermath unavailable: %s", self.addr, exc)
         me = int(self.char["char_id"])
         animation = int(ws["animation"])
+        # Retail sends a SkillStart action before the SkillFinish: the start carries the
+        # skill id in its result and message 43, which is what puts the client into a
+        # weapon-skill context.  Without it the finish's sub-kind is not always read as
+        # a weapon-skill animation (Rudra's Storm's 236 is also Frost's spell animation),
+        # so the client can play a spell motion instead.
+        self._queue_weaponskill_start(ws, me if self_targeted else int(entity.id))
 
         if self_targeted:
             self._self_weaponskill(ws, extra, effective_tp, animation)
@@ -4907,21 +7874,21 @@ class ZoneSession:
         # so it lands before the target's damage-taken, and the first-hit line is only
         # folded into the first hit.
         no_damage = bool(extra is not None and extra.no_damage)
-        results: list[dict] = []
-        damage = 0
-        miss = True
-        critical = False
-        defeated = False
+        magic_ws = False
         if no_damage:
             # Energy Drain and Energy Steal are MP drains, not HP damage: retail prints
             # the MP taken, and the formula uses dagger skill and MND, not the hit.
-            miss, damage, critical = False, 0, False
+            miss, damage, critical, defeated = False, 0, False, False
         else:
             try:
                 ws_data = weapon_skills.for_id(int(ws["id"]))
             except Exception as exc:
                 log.warning("%s weapon skill data unavailable: %s", self.addr, exc)
                 ws_data = None
+            magic_ws = bool(ws_data is not None and ws_data.magic)
+            ranged_ws = bool(
+                (ws_data is not None and int(ws_data.skill) in (25, 26))
+                or int(ws.get("skill") or 0) in (25, 26))
             try:
                 attributes = getattr(self.stat_sheet(), "attributes", {})
             except Exception as exc:
@@ -4931,16 +7898,23 @@ class ZoneSession:
             wsd_all = (max(0, int(mods.get(mod.WSD_ALL_HITS, 0)))
                        + max(0, int(mods.get(mod.WEAPONSKILL_DAMAGE_BASE
                                              + int(ws["id"]), 0))))
+            if self.has_effect(effects.RESTRAINT):
+                wsd_all += min(30, int(getattr(self, "_restraint_bonus", 0)))
             wsd_first = max(0, int(mods.get(mod.WSD_FIRST_HIT, 0)))
             # "fTP +x" gear is stored in 1/256 units.  It raises the fTP the skill scales
             # from, not the TP the player spends.
             ftp_bonus = max(0, int(mods.get(mod.ANY_FTP_BONUS, 0))) / 256.0
+            # Only a skill whose description says its critical-hit rate varies with TP
+            # can crit.  A normal weapon skill takes no base/dDEX/gear critical roll;
+            # that is the difference between a retail Rudra's and an auto-attack.
+            crit_capable = bool(ws_data is not None and ws_data.crit_varies)
             if ws_data is not None and ws_data.ftp:
                 ftp_base = ws_data.ftp_at(effective_tp) + ftp_bonus
                 hits = max(1, ws_data.hits)
                 multi_hit_ftp = ws_data.multi_hit_ftp
                 attack_multiplier = ws_data.attack_at(effective_tp)
-                crit_bonus = self.fencer_crit_bonus(mods) + ws_data.crit_at(effective_tp)
+                crit_bonus = (self.fencer_crit_bonus(mods)
+                              + ws_data.crit_at(effective_tp))
                 ignored_defense = ws_data.ignored_defense_at(effective_tp)
             else:
                 # No per-skill row (the self skills, Campaign-only skills and Dagda):
@@ -4951,54 +7925,113 @@ class ZoneSession:
                 attack_multiplier = 1.0
                 crit_bonus = self.fencer_crit_bonus(mods)
                 ignored_defense = 0.0
-            hp_left = int(entity.hp)
-            for index in range(hits):
-                if index and hp_left <= 0:
-                    break
-                # Only the first hit gets the full fTP; later hits of a skill that does
-                # not carry fTP over (LandSandBoat's multiHitfTP) use 1.0.
-                ftp = ftp_base if (index == 0 or multi_hit_ftp) else 1.0
-                if wsd_all:
-                    ftp *= 1.0 + wsd_all / 100.0
-                if index == 0 and wsd_first:
-                    ftp *= 1.0 + wsd_first / 100.0
-                hit_miss, hit_damage, hit_critical = self.world.player_attack(
-                    self, entity, ftp=ftp,
-                    accuracy_bonus=int(mods.get(mod.WS_ACCURACY, 0)),
-                    attack_multiplier=attack_multiplier, crit_bonus=crit_bonus,
-                    wsc=wsc, ignored_defense=ignored_defense)
-                hit_defeated = (not hit_miss) and hp_left - hit_damage <= 0
-                results.append({
-                    "damage": int(hit_damage), "miss": bool(hit_miss),
-                    "critical": bool(hit_critical), "defeated": bool(hit_defeated),
-                    # Only the first result carries the skill's animation; the extra
-                    # hits are damage numbers on the same animation, not a replay.
-                    "animation": animation if index == 0 else 0,
-                    "message": (packets.MESSAGE_ATTACK_MISSES if hit_miss
-                                else packets.MESSAGE_DAMAGE)})
-                if hit_miss:
-                    continue
+            ws_accuracy = int(mods.get(mod.WS_ACCURACY, 0))
+            # Building Flourish is spent by the next weapon skill: 1-3 finishing
+            # moves buy Accuracy+40, then Attack+25%, then Critical Hit Rate+10%, and
+            # its job-point row adds 1% Weapon Skill Damage per rank to every hit.
+            build = self.effect(effects.BUILDING_FLOURISH)
+            if build is not None:
+                build_moves = max(1, min(3, int(build.get("power") or 1)))
+                build_merit = self._dnc_merit(dancer.MERIT_BUILDING_FLOURISH)
+                # The Flourish II category's Building clause is 1% per rank (20 at 20/20),
+                # not the category's first number (Reverse Flourish's +2 TP).
+                if int(self.char.get("main_job", 0)) == dancer.DANCER_JOB:
+                    wsd_all += JOB_POINT_RANK
+                ws_accuracy += 40 + 2 * build_merit
+                if build_moves >= 2:
+                    attack_multiplier *= 1.25 + 0.01 * build_merit
+                if build_moves >= 3:
+                    crit_bonus += 0.10 + 0.01 * build_merit
+                self.remove_effect(effects.BUILDING_FLOURISH, quiet=True)
+                self.queue.append(self.char_status())
+            # Flourish III: Climactic guarantees the next WS crits, while Striking
+            # and Ternary add one/two guaranteed hits.  All three are one-shot.
+            if self.has_effect(effects.CLIMACTIC_FLOURISH):
+                crit_bonus = max(float(crit_bonus), 1.0)
+                crit_capable = True
+                self.remove_effect(effects.CLIMACTIC_FLOURISH, quiet=True)
+                self.queue.append(self.char_status())
+            if self.has_effect(effects.STRIKING_FLOURISH):
+                hits += 1
+                self.remove_effect(effects.STRIKING_FLOURISH, quiet=True)
+                self.queue.append(self.char_status())
+            if self.has_effect(effects.TERNARY_FLOURISH):
+                hits += 2
+                self.remove_effect(effects.TERNARY_FLOURISH, quiet=True)
+                self.queue.append(self.char_status())
+            if magic_ws:
+                # Retail resolves a magical weapon skill through the magic formula, not
+                # through pDIF.  Seraph Blade and Sanguine Blade are magical: their
+                # damage is WSC plus the weapon-level base, times fTP, then dSTAT,
+                # Magic Damage, MAB/MDB, elemental affinity and the magic resist.
+                damage = self._magic_weaponskill(
+                    ws_data, sheet, attributes, mods, entity, effective_tp,
+                    wsd_all, wsd_first, ftp_bonus, ranged=ranged_ws)
+                # A killing blow prints the HP the target had left, not the overkill;
+                # the physical round caps the same way before it returns its total.
+                damage = min(damage, max(0, int(entity.hp)))
+                # Restraint builds only until the next weapon skill, magical or not.
+                self._restraint_bonus = 0
                 miss = False
-                critical = critical or bool(hit_critical)
-                damage += int(hit_damage)
-                hp_left = max(0, hp_left - int(hit_damage))
-                if hit_defeated:
-                    defeated = True
-                    break
+                critical = False
+                physical_damage = 0
+                hybrid_magic = 0
+                round_result = None
+                defeated = entity.hp <= damage
+                log.info("%s weapon skill %s (magical): %d damage%s",
+                         self.addr, ws["name"], damage,
+                         " (defeated)" if defeated else "")
+            else:
+                round_result = self._roll_weaponskill_round(
+                    entity, sheet=sheet, ftp_base=ftp_base, hits=hits,
+                    multi_hit_ftp=multi_hit_ftp,
+                    attack_multiplier=attack_multiplier,
+                    ignored_defense=ignored_defense, crit_bonus=crit_bonus,
+                    crit_capable=crit_capable, ws_accuracy=ws_accuracy,
+                    wsc=wsc, wsd_all=wsd_all, wsd_first=wsd_first,
+                    ranged=ranged_ws)
+                # Restraint builds only until the next weapon skill.
+                self._restraint_bonus = 0
+                physical_damage = int(round_result["damage"])
+                miss = not round_result["landed"]
+                critical = bool(round_result["critical"])
+                # A hybrid skill's magic half is based on the physical damage that
+                # landed.  If the physical hit already killed the target retail does
+                # not add it, so the same guard is kept here.
+                hybrid_magic = 0
+                if not miss and entity.hp > physical_damage:
+                    magic_fighter = (sheet.ranged_fighter if ranged_ws
+                                     else sheet.fighter) if sheet is not None else None
+                    magic_skill = int(getattr(magic_fighter, "skill_value", 0) or 0)
+                    hybrid_magic = self._hybrid_weaponskill_magic(
+                        ws_data, physical_damage, effective_tp, attributes,
+                        mods, entity, wsd_all, magic_skill, ftp_bonus)
+                damage = min(combat.DAMAGE_CAP, physical_damage + hybrid_magic)
+                defeated = bool(round_result["defeated"]) or (
+                    not miss and entity.hp <= damage)
+                log.info("%s weapon skill %s: %d hits, %d landed, %d physical + %d "
+                         "hybrid magic = %d damage%s",
+                         self.addr, ws["name"], int(round_result["swings"]),
+                         int(round_result["landed"]), physical_damage,
+                         hybrid_magic, damage,
+                         " (defeated)" if defeated else "")
         drained_mp = 0
         if no_damage and extra is not None and extra.mp_formula:
             drained_mp, _restored_hp = self._weaponskill_drain(
                 ws, extra, 0, effective_tp, announce=False)
-        result = drained_mp if no_damage else damage
         if no_damage:
             message = (packets.MESSAGE_SKILL_DRAIN_MP if drained_mp
                        else packets.MESSAGE_MAGIC_NO_EFFECT)
         else:
-            message = packets.MESSAGE_ATTACK_MISSES if miss else packets.MESSAGE_DAMAGE
+            # One result carries the whole skill.  A multi-hit weapon skill is a single
+            # number in retail's log and one animation: the client draws every hit from
+            # the animation itself, not from one result per hit.
+            message = (packets.MESSAGE_DAMAGE if not miss
+                       else packets.MESSAGE_SKILL_MISSES)
         self._last_target_hp = entity.hp_max
         if no_damage:
             self.queue.append(sub(0x028, packets.battle_action(
-                me, int(entity.id), result, miss=miss, critical=critical,
+                me, int(entity.id), drained_mp, miss=False, critical=False,
                 defeated=False, animation=animation, kind=3, message=message,
                 category=packets.ACTION_CATEGORY_SKILL_FINISH, action_id=int(ws["id"]))))
             self.queue.append(self.party_member())
@@ -5007,23 +8040,44 @@ class ZoneSession:
             self.world.add_mob_hate(entity, me, HATE_ENFEEBLE, now)
             self.next_attack_at = now + 2.0
             return
-        self.queue_action(int(entity.id), damage=damage, miss=miss, critical=critical,
-                          defeated=defeated, animation=animation, message=message,
-                          kind=3, category=packets.ACTION_CATEGORY_SKILL_FINISH,
-                          action_id=int(ws["id"]), results=results)
-        if miss:
-            self.say("%s misses %s." % (ws["name"], entity.name))
-        else:
-            self.say("%s strikes %s for %d points of damage." % (ws["name"], entity.name, damage))
-        # A weapon skill is a direct action too: it claims an idle monster and adds to
-        # the hate list even on a miss.
-        self.world.add_damage_hate(entity, me, damage, now)
+        # Apply the weapon skill's damage first: a skillchain's base is the damage that
+        # actually landed, and the opening state only starts on a live target.  The
+        # chain's own damage and additional-effect block then ride this same result.
+        chain = None
         if not miss:
             # Damage breaks Sleep/Stun before the skill's own effect lands, so a
             # Shockwave can put the target to sleep with the hit that woke it.
             self.world.wake_mob(entity)
             entity.hp = max(0, entity.hp - damage)
-            self.queue_entity(entity, packets.SEND_HP)
+            if not defeated:
+                if self.has_effect(effects.KONZEN_ITTAI):
+                    self._seed_konzen_chain(entity, ws, now)
+                    self.remove_effect(effects.KONZEN_ITTAI, quiet=True)
+                chain = self._advance_skillchain(entity, ws, damage, now)
+                if chain is not None and chain["defeated"]:
+                    defeated = True
+        result = dict(damage=damage, miss=miss, critical=critical,
+                      defeated=defeated, animation=animation, message=message)
+        if chain is not None and int(chain["damage"]) > 0:
+            # The client plays a skillchain from the closing weapon skill's
+            # additional-effect block, not from a separate action.  The proc kind picks
+            # the animation, and 287 + proc is the "Skillchain!" line.
+            result.update(add_effect=int(chain["proc"]),
+                          add_value=int(chain["damage"]),
+                          add_message=int(chain["message"]))
+        self.queue_action(int(entity.id), results=[result], kind=3,
+                          category=packets.ACTION_CATEGORY_SKILL_FINISH,
+                          action_id=int(ws["id"]), broadcast=True)
+        # The client prints its own "uses <skill>. <target> takes N points of damage."
+        # line from the result, so there is no second chat line here: the old self.say
+        # was the duplicate (and, on a multi-hit skill, the only line that was a total).
+        # A weapon skill is a direct action too: it claims an idle monster and adds to
+        # the hate list even on a miss.
+        self.world.add_damage_hate(entity, me, damage, now)
+        if not miss:
+            for observer in self.world.sessions_in_zone(entity.zone):
+                if int(entity.targid) in getattr(observer, "sent_targids", set()):
+                    observer.queue_entity(entity, packets.SEND_HP)
             if damage > 0 and extra is not None:
                 # Drain skills first (Spirit Taker/Mystic Boon/Entropy/Catastrophe/
                 # Sanguine Blade), then the debuffs land.
@@ -5031,11 +8085,504 @@ class ZoneSession:
                 if extra.statuses and not defeated:
                     self._apply_weaponskill_statuses(
                         ws, extra, entity, effective_tp, mods, now)
-            if defeated:
-                self.world.kill_mob(self, entity, now=now)
+        if defeated:
+            self.world.kill_mob(self, entity, now=now)
+        # Weapon-skill hits pay TP back: first main hand delay, the one-hit off hand's
+        # delay, and 10 TP for every other landed hit, all after Store TP.  Save TP and
+        # Conserve TP are applied there too.  This includes a miss (Save TP still
+        # applies) and a killing WS (the hits landed before the target fell).
+        if sheet is not None and not no_damage:
+            tp_round = round_result
+            if magic_ws:
+                # A magical WS has one "hit" for TP return: the main-hand delay.
+                tp_round = {"first_main_landed": True, "offhand_tp_hit": False,
+                            "extra_landed": 0}
+            self._weaponskill_tp_return(sheet, tp_round, mods, now,
+                                        ranged=ranged_ws)
         self.next_attack_at = now + 2.0
 
+    def has_diamond_aspis(self) -> bool:
+        """Whether this character is wearing the Diamond Aspis, the SC window exception."""
+        return int(self.equipped.get(1, (0, 0, 0))[2] or 0) == \
+            skillchain.DIAMOND_ASPIS_ITEM_ID
+
+    def self_ability_duration(self, seconds: float) -> float:
+        """Diamond Aspis extends standard abilities used on self by +25%."""
+        if self.has_diamond_aspis():
+            return float(seconds) * 1.25
+        return float(seconds)
+
+    def killer_instinct_duration(self, rank: int) -> tuple[float, float]:
+        """(self, party) seconds for Killer Instinct at one merit rank.
+
+        Retail: 180 s plus 10 s for every rank past the first, plus the
+        Ankusa/Mst. Helm augment's 4 s per merit rank, and the Diamond Aspis adds
+        25% to the caster only.  This server deliberately gives the party the same
+        full duration as the caster (custom BST Killer Instinct change), so both
+        entries are the same and the party keeps the full +15%/-15% effect too.
+        """
+        rank = max(1, min(5, int(rank)))
+        base = 180.0 + 10.0 * (rank - 1)
+        head = int(self.equipped.get(4, (0, 0, 0))[2] or 0)
+        if head in KILLER_INSTINCT_HEAD_ITEMS:
+            base += 4.0 * rank
+        duration = self.self_ability_duration(base)
+        return duration, duration
+
+    def _advance_skillchain(self, entity, ws: dict, base_damage: int,
+                            now: float) -> dict | None:
+        """Feed a landed weapon skill into the monster's skillchain state.
+
+        The first skill with properties opens the window (11 s); a later skill whose
+        properties resonate with the opening forms the chain.  The chain damage is
+        based on the closing skill's damage and is applied here.  The returned dict is
+        the closing result's **additional-effect block** (proc kind, damage and client
+        message); the caller puts it on the same 0x028 as the weapon skill so the client
+        draws the skillchain animation.  A separate action with message 287+proc shows
+        text but has no additional-effect block, which is why no animation played.
+        """
+        props = self.world.service.weaponskill_properties(int(ws["id"]))
+        if not any(props):
+            return None
+        # Diamond Aspis is a closer's shield: it keeps the next window at the full
+        # 11 s instead of dropping one second with every link.
+        diamond = self.has_diamond_aspis()
+        owner = str(self.char.get("name") or self.addr)
+        state, formed = skillchain.advance(
+            getattr(entity, "skillchain", None), props, now, diamond=diamond,
+            opener=owner)
+        entity.skillchain = state
+        if not formed:
+            log.info("%s skillchain open ws=%d props=%s until=%.1f%s opener=%s target=%s",
+                     self.addr, int(ws["id"]), props, state.until,
+                     " (Diamond Aspis)" if diamond else "", owner, entity.name)
+            return None
+        tier = int(skillchain.TIER[formed])
+        mods = self.combat_mods()
+        damage = skillchain.skillchain_damage(
+            int(base_damage), tier, int(state.count),
+            skillchain_bonus=int(mods.get(mod.SKILLCHAIN_BONUS, 0)),
+            skillchain_damage=int(mods.get(mod.SKILLCHAIN_DAMAGE, 0)))
+        if float(getattr(self, "_sengikori_until", 0.0) or 0.0) > now:
+            # Sengikori: +25% chain damage and +25% burst damage for the next skill,
+            # applied as its own step on top of the gear bonuses.  The spell/chain
+            # formula has already clipped at 99,999, so clip again after the bonus.
+            damage = combat.cap_damage(int(damage * 1.25))
+            self._sengikori_until = 0.0
+            self._sengikori_mb_until = now + 30.0
+        if damage <= 0:
+            return None
+        applied = min(damage, max(0, int(entity.hp)))
+        entity.hp = max(0, int(entity.hp) - damage)
+        self.world.add_damage_hate(entity, int(self.char["char_id"]), applied, now)
+        log.info("%s skillchain %s: base=%d tier=%d link=%d damage=%d applied=%d "
+                 "closer=%s opener=%s target=%s",
+                 self.addr, skillchain.SC(int(formed)).name, int(base_damage), tier,
+                 int(state.count), damage, applied, owner,
+                 state.opener or "?", entity.name)
+        return {"proc": int(skillchain.proc_kind(formed)),
+                "damage": applied,
+                "message": int(skillchain.proc_message(formed)),
+                "defeated": entity.hp <= 0}
+
     # --- weapon-skill helpers -----------------------------------------------------------
+
+    def _queue_weaponskill_start(self, ws: dict, target_id: int) -> None:
+        """Queue the 0x028 SkillStart action that opens a weapon skill.
+
+        LandSandBoat sends this before the finish: category 7, action id ``SkillUse``,
+        one result whose value is the weapon-skill id and whose message is 43.  The
+        client uses it to set up the weapon-skill animation, so the finish's sub-kind is
+        not read against the spell animation table (236 is both Rudra's Storm's skill
+        animation and Frost's spell animation).
+        """
+        packet = sub(0x028, packets.battle_action(
+            int(self.char["char_id"]), int(target_id), kind=0,
+            category=packets.ACTION_CATEGORY_SKILL_START,
+            action_id=packets.ACTION_SKILL_USE,
+            results=[dict(damage=int(ws["id"]), miss=False, critical=False,
+                          defeated=False, animation=0, kind=0,
+                          message=packets.MESSAGE_READIES_WEAPONSKILL, info=0)]))
+        self.queue.append(packet)
+        # Observers need the SkillStart too, or their client sees only the finish and
+        # can read the animation id against the spell table (Rudra's Storm -> Frost).
+        for observer in self.world.sessions_in_zone(self.zone):
+            if observer is self:
+                continue
+            if int(self.char.get("targid", 0)) not in getattr(
+                    observer, "sent_targids", set()):
+                continue
+            observer.queue.append(Msg(packet))
+
+    def _roll_weaponskill_round(self, entity, *, sheet=None, ftp_base: float,
+                                hits: int, multi_hit_ftp: bool,
+                                attack_multiplier: float, ignored_defense: float,
+                                crit_bonus: float, crit_capable: bool,
+                                ws_accuracy: int, wsc: int, wsd_all: int,
+                                wsd_first: int, ranged: bool = False) -> dict:
+        """Roll every swing of one weapon skill and return its summed round.
+
+        Retail resolves a weapon skill as one attack round, not as the skill's listed
+        hits alone:
+
+        * the listed hits are the main hand's native hits (four for Ruthless Stroke);
+        * Double, Triple and Quadruple Attack roll on each of those hits, up to two
+          procs, and their extra swings use the main hand's fTP rule;
+        * dual wielding adds one off-hand swing plus its own multi-attack procs,
+          even for a one-hit skill;
+        * the whole round is capped at eight results and stops once the target's HP is
+          spent;
+        * only the first main-hand hit gets the hidden +100 accuracy and the
+          first-hit-only weapon-skill damage line;
+        * only a "critical hit rate varies with TP" skill may crit.  A normal weapon
+          skill takes no critical roll at all.
+
+        The returned ``damage`` is capped at 99,999 and at the target's remaining HP, so
+        an 18K Rudra's on a 2K monster prints 2K, as retail does, instead of an overkill
+        number the client would show as real damage -- and a 120K multi-hit skill prints
+        99,999.
+        """
+        sheet = sheet if sheet is not None else self.stat_sheet()
+        hp_start = max(0, int(entity.hp))
+        total = 0
+        landed = 0
+        swings = 0
+        critical = False
+        first_main_landed = False
+        offhand_tp_hit = False
+        extra_landed = 0
+        native = max(1, int(hits))
+        limit = int(combat.MAX_ATTACKS_PER_ROUND)
+
+        def ftp_for(first_main: bool) -> float:
+            ftp = ftp_base if (first_main or multi_hit_ftp) else 1.0
+            if wsd_all:
+                ftp *= 1.0 + wsd_all / 100.0
+            if first_main and wsd_first:
+                ftp *= 1.0 + wsd_first / 100.0
+            return ftp
+
+        def swing(off_hand: bool, first_main: bool, tp_kind: str) -> None:
+            nonlocal total, landed, swings, critical
+            nonlocal first_main_landed, offhand_tp_hit, extra_landed
+            if swings >= limit or total >= hp_start:
+                return
+            # The hidden first-hit accuracy bonus is LSB's ``bonusAcc + 100``; the
+            # off hand and every later hit use only the skill's own WS Accuracy.
+            accuracy = int(ws_accuracy) + (100 if first_main else 0)
+            hit_miss, hit_damage, hit_critical = self.world.player_attack(
+                self, entity, ftp=ftp_for(first_main), off_hand=off_hand,
+                accuracy_bonus=accuracy, attack_multiplier=attack_multiplier,
+                crit_bonus=crit_bonus if crit_capable else 0.0,
+                wsc=wsc, ignored_defense=ignored_defense,
+                allow_critical=crit_capable, ranged=ranged)
+            swings += 1
+            if hit_miss:
+                return
+            landed += 1
+            total += int(hit_damage)
+            critical = critical or bool(hit_critical)
+            if tp_kind == "main":
+                first_main_landed = True
+            elif tp_kind == "offhand":
+                offhand_tp_hit = True
+            else:
+                extra_landed += 1
+
+        main_multis = 0
+        procs = 0
+        for index in range(native):
+            if total >= hp_start:
+                break
+            swing(False, index == 0, "main" if index == 0 else "extra")
+            # LandSandBoat rolls another multi-attack after each native hit and stops
+            # after two procs; extra hits themselves do not roll again.  Ranged
+            # weapon skills are excluded: a gun WS is its listed hit count, not a
+            # Double/Triple Attack round from melee gear.
+            if not ranged and procs < 2:
+                extra = max(0, self._multi_attack_hits(sheet) - 1)
+                if extra:
+                    main_multis += extra
+                    procs += 1
+        for _ in range(main_multis):
+            swing(False, False, "extra")
+        if not ranged and sheet.sub_fighter is not None and total < hp_start:
+            # A one-hit WS's off-hand swing is a TP hit from that hand's delay;
+            # on a multi-hit WS it is one of the flat 10-TP extra hits.  A ranged
+            # weapon skill never gets an off-hand swing from the melee set.
+            swing(True, False, "offhand" if native == 1 else "extra")
+            for _ in range(max(0, self._multi_attack_hits(sheet) - 1)):
+                swing(True, False, "extra")
+        # A miss on every hit is still one result (the SkillMisses line), and no overkill
+        # number ever reaches the client.  The skill's hits are summed first, so the
+        # 99,999 ceiling applies to the one number the client prints, not to each hit:
+        # three 40K hits are a 99,999 weapon skill, not a 120,000 one.
+        sent = min(total, hp_start, combat.DAMAGE_CAP) if hp_start else 0
+        return {"damage": sent, "swings": swings, "landed": landed,
+                "critical": critical,
+                "first_main_landed": first_main_landed,
+                "offhand_tp_hit": offhand_tp_hit,
+                "extra_landed": extra_landed,
+                # Compare the *clipped* total: with more than 99,999 HP left a 120K
+                # roll no longer kills, because only 99,999 was actually applied.
+                "defeated": bool(landed and hp_start and sent >= hp_start)}
+
+    def _magic_weaponskill(self, ws_data, sheet, attributes: dict, mods: dict,
+                           entity, effective_tp: int, wsd_all: int, wsd_first: int,
+                           ftp_bonus: float = 0.0, *, ranged: bool = False) -> int:
+        """Retail's magical weapon-skill damage.
+
+        BG-wiki's current magical-WS formula (2026) is::
+
+            base = (152 + floor((WeaponLevel - 99) * 2.45) + WSC) * fTP
+            base = floor(base * (1 + Elemental WS Damage)) + dSTAT + Magic Damage
+            damage = base * affinity * resist * MAB/MDB * MDT * WSD
+
+        The level term is the **equipped weapon's** item level, not the player's level:
+        a level 99 character with an iLvl 119 weapon gets 201, while the old
+        ``Level + 2`` reading LSB uses gives 101 and loses about a fifth of the base
+        before fTP.  Each multiplier is floored in turn, as retail does.
+
+        This path is for ``magic: true`` rows only (Seraph Blade, Sanguine Blade,
+        Seraph Strike, Wildfire, ...).  Hybrid rows keep their physical roll and add
+        :meth:`_hybrid_weaponskill_magic`; physical rows (Black Halo) never come here.
+        """
+        if ws_data is None:
+            return 0
+        ftp = ws_data.ftp_at(effective_tp) + float(ftp_bonus or 0.0)
+        if ftp <= 0:
+            return 0
+        wsc = ws_data.wsc_for(attributes)
+        level = max(1, int(self.char.get("main_level", 99) or 99))
+        # A ranged magical WS (Wildfire, Trueflight, ...) scales from the ranged
+        # weapon's item level and Magic Accuracy skill, not the main hand's.
+        if ranged:
+            weapon = getattr(sheet, "ranged_weapon", None)
+            fighter = getattr(sheet, "ranged_fighter", None)
+        else:
+            weapon = getattr(sheet, "weapon", None)
+            fighter = getattr(sheet, "fighter", None)
+        weapon_level = int(getattr(weapon, "item_level", 0) or 0)
+        skill_value = int(getattr(fighter, "skill_value", 0) or 0)
+
+        target = self.world.debuffed_monster(entity)
+        # Magic-side debuffs (Magic Defense Down, Magic Evasion Down, Daze) are a
+        # separate row set from the physical Defense/Evasion copy above.
+        target_mods = self.world.monster_debuff_mods(entity)
+        target_attributes: dict[str, int] = {}
+        try:
+            target_attributes = dict(self.world.monster_sheet(entity).attributes)
+            # INT Down is a flat stat subtraction; Sanguine Blade's dSTAT is INT-based.
+            int_down = entity.effect_state.get(effects.INT_DOWN)
+            if int_down is not None:
+                target_attributes["int"] = max(
+                    0, int(target_attributes.get("int", 0))
+                    - int(int_down.get("power", 0) or 0))
+        except Exception as exc:
+            log.debug("%s target attributes unavailable: %s", self.addr, exc)
+        dstat = ws_data.dstat_for(attributes, target_attributes)
+        wsd = max(0, int(wsd_all)) + max(0, int(wsd_first))
+        affinity_id = mod.elemental_mod(ws_data.element)
+        affinity = int(mods.get(affinity_id, 0)) if affinity_id is not None else 0
+        mab = max(-100, int(mods.get(mod.MATT, 0)))
+        mdb = max(-100, int(target_mods.get(mod.MDEF, 0)))
+        resist = combat.magic_resist(
+            skill=skill_value,
+            caster_int=int(attributes.get("int", 0)),
+            mods=mods, target_level=int(target.level), target_mods=target_mods)
+        taken = combat.damage_taken(target_mods, physical=False)
+        elemental_ws = max(0, int(mods.get(mod.ELEMENTAL_WS_DAMAGE, 0)))
+        magic_damage = max(0, int(mods.get(mod.MAGIC_DAMAGE, 0)))
+        damage = combat.magic_weaponskill(
+            wsc=wsc, weapon_level=weapon_level, level=level, ftp=ftp,
+            dstat=dstat, magic_damage=magic_damage, wsd=wsd,
+            elemental_ws=elemental_ws, affinity=affinity, mab=mab, mdb=mdb,
+            resist=resist, damage_multiplier=taken)
+        log.info("%s magical WS %s: weapon_level=%d wsc=%d ftp=%.3f dstat=%d "
+                 "mdmg=%d elemental_ws=%d wsd=%d affinity=%d mab=%d mdb=%d "
+                 "resist=%.3f damage=%d",
+                 self.addr, ws_data.name, weapon_level, wsc, ftp, dstat,
+                 magic_damage, elemental_ws, wsd, affinity, mab, mdb,
+                 resist, damage)
+        return damage
+
+    def _hybrid_weaponskill_magic(self, ws_data, damage: int, effective_tp: int,
+                                  attributes: dict, mods: dict, entity,
+                                  wsd_all: int, skill_value: int,
+                                  ftp_bonus: float = 0.0) -> int:
+        """The magic half of a hybrid weapon skill, after its physical half landed.
+
+        LandSandBoat's ``calculateHybridMagicDamage``: take the physical damage the
+        skill just did, multiply it by the same fTP, add flat ``Magic Damage``, apply
+        Weapon Skill Damage again, then run it through the caster's Magic Attack Bonus
+        against the target's Magic Defense Bonus and Magic Accuracy resist.  Hot Shot,
+        Searing Arrow and the elemental blade skills are hybrid skills; without this
+        their physical hit was the whole result, which is why a 3,000-TP Hot Shot could
+        print only a few thousand damage.
+        """
+        if ws_data is None or damage <= 0 or not ws_data.hybrid:
+            return 0
+        target = self.world.debuffed_monster(entity)
+        ftp = ws_data.ftp_at(effective_tp)
+        if ftp <= 0:
+            return 0
+        raw = float(damage) * ftp
+        raw += max(0, int(mods.get(mod.MAGIC_DAMAGE, 0)))
+        if wsd_all:
+            raw *= 1.0 + max(0, int(wsd_all)) / 100.0
+        if ftp_bonus:
+            raw += float(damage) * float(ftp_bonus)
+        mab = max(-100, int(mods.get(mod.MATT, 0)))
+        mdb = max(-100, int(target.mods.get(mod.MDEF, 0)))
+        # Retail floors the target's MDB term at 0.5, the same as the magical path.
+        raw = raw * (100 + mab) / max(50, 100 + mdb)
+        raw *= combat.magic_resist(
+            skill=max(0, int(skill_value)),
+            caster_int=int(attributes.get("int", 0)),
+            mods=mods, target_level=int(target.level),
+            target_mods=target.mods)
+        raw *= combat.damage_taken(target.mods, physical=False)
+        return combat.cap_damage(max(0, int(raw)))
+
+    def _weaponskill_tp_return(self, sheet, round_result: dict, mods: dict,
+                               now: float, *, ranged: bool = False) -> int:
+        """Give the weapon skill back the TP its landed hits generate.
+
+        Retail: the first main-hand hit returns that weapon's delay TP, a one-hit
+        skill's off-hand swing returns the sub weapon's delay TP, and every other
+        landed hit (native later hits, DA/TA/QA procs and off-hand multi-attacks) is a
+        flat 10 TP.  Store TP multiplies each hit's return.  Save TP replaces the total
+        when it is larger, and Conserve TP adds 10-200 TP on a proc.  Meikyo Shisui
+        suppresses the return.  TP is capped by ``gain_tp`` at 3000.
+        """
+        meikyo = float(getattr(self, "_meikyo_until", 0.0) or 0.0) > now
+        hagakure = float(getattr(self, "_hagakure_until", 0.0) or 0.0) > now
+        if meikyo:
+            self._meikyo_until = 0.0
+            self._hagakure_until = 0.0
+            return 0
+        store_tp = max(0, int(mods.get(mod.STORETP, 0)))
+        tp = 0
+        if round_result.get("first_main_landed"):
+            tp += combat.tp_gain(sheet.tp_per_hit(off_hand=False, ranged=ranged),
+                                 store_tp)
+        if round_result.get("offhand_tp_hit"):
+            tp += combat.tp_gain(sheet.tp_per_hit(off_hand=True), store_tp)
+        extra = max(0, int(round_result.get("extra_landed") or 0))
+        if extra:
+            tp += combat.tp_gain(10, store_tp) * extra
+        regular = tp
+        # Save TP is compared with the normal return, not added to it; it caps at 500.
+        save_tp = min(500, max(0, int(mods.get(mod.SAVETP, 0))))
+        if hagakure:
+            save_tp = max(save_tp, 400)
+        if save_tp:
+            tp = max(tp, save_tp)
+        # Conserve TP is a straight save, added after the hit return.
+        conserve = max(0, min(100, int(mods.get(mod.CONSERVE_TP, 0))))
+        conserved = 0
+        if conserve and self.world.rng.random() * 100.0 < conserve:
+            conserved = self.world.rng.randint(10, 200)
+            tp += conserved
+        if tp:
+            self.gain_tp(tp)
+        self._hagakure_until = 0.0
+        self._hagakure_tp_bonus = 0
+        if tp:
+            log.info("%s weapon skill TP return: hits=%d extra=%d store_tp=%d "
+                     "regular=%d save_tp=%d conserve=%d total=%d",
+                     self.addr, 1 if round_result.get("first_main_landed") else 0,
+                     extra, store_tp, regular, save_tp, conserved, tp)
+        return tp
+
+    def _prime_aftermath_weapon(self, ws: dict) -> prime_weapons.PrimeWeapon | None:
+        """The equipped Prime weapon that grants *ws*, or None.
+
+        The item that carries the 355 modifier is the one that grants the aftermath: a
+        Prime dagger in the main hand does not grant it to Rudra's Storm, only to its own
+        Ruthless Stroke.  Ranged Prime skills use the ranged slot even though the ranged
+        damage path itself is still missing.  Melee checks the main hand first and the
+        sub slot second, matching ``equipped_weapon_skills``: when a Prime weapon is
+        dual-wielded off-hand, its granted skill is still in the menu.
+        """
+        if int(ws.get("skill") or 0) in (25, 26):
+            slots = (stats.SLOT_RANGED,)
+        else:
+            slots = (stats.SLOT_MAIN, stats.SLOT_SUB)
+        for slot in slots:
+            row = self.equipped.get(slot)
+            if not row:
+                continue
+            try:
+                item_id = int(row[2])
+            except (IndexError, TypeError, ValueError):
+                continue
+            try:
+                weapon = self.world.service.prime_weapon(item_id)
+            except Exception as exc:
+                log.warning("%s Prime weapon lookup failed: %s", self.addr, exc)
+                continue
+            if weapon is not None and int(weapon.ws_id) == int(ws["id"]):
+                return weapon
+        return None
+
+    def _grant_prime_aftermath(self, ws: dict, tp: int) -> None:
+        """Grant or refresh the Prime Aftermath for one weapon skill.
+
+        *tp* is the TP the skill actually spent, not ``effective_tp``: TP Bonus and
+        Fencer must not change the tier or potency.  A lower tier never replaces a
+        higher one, and tiers 2/3 do not refresh themselves; tier 1 does (BG-wiki
+        Aftermath, the same rule Mythic/Empyrean aftermath uses).
+        """
+        weapon = self._prime_aftermath_weapon(ws)
+        if weapon is None:
+            return
+        aftermath = prime_weapons.aftermath_for(weapon, tp)
+        if aftermath is None:
+            return
+        current = self.effect(effects.AFTERMATH)
+        if current is not None and float(current.get("until") or 0.0) <= time.time():
+            # The tick that clears expired buffs runs every few seconds; a skill inside
+            # that window must not be blocked by a tier that has already run out.
+            self.remove_effect(effects.AFTERMATH, quiet=True)
+            current = None
+        if current is not None:
+            current_tier = int(current.get("power", 0))
+            if not prime_weapons.can_overwrite(current_tier, aftermath.tier):
+                return
+        self.remove_effect(effects.AFTERMATH, quiet=True)
+        self.add_effect(
+            effects.AFTERMATH, duration=aftermath.duration, power=aftermath.tier,
+            potency=aftermath.potency, icon=aftermath.icon, mods=aftermath.mods)
+        # 0x037 is followed by the 0x063 timer packet by the output loop, so one status
+        # packet is enough to draw the icon and its countdown.
+        self.queue.append(self.char_status())
+        log.info("%s prime aftermath ws=%d stage=%d tp=%d tier=%d pdl=%d%% %ds",
+                 self.addr, aftermath.ws_id, aftermath.stage, aftermath.tp,
+                 aftermath.tier, aftermath.potency, aftermath.duration)
+
+    def _drop_aftermath(self) -> None:
+        """Take the Prime Aftermath off when a weapon slot changes; retail does this."""
+        if self.remove_effect(effects.AFTERMATH, quiet=True):
+            self.queue.append(self.char_status())
+
+    def _weaponskill_effective_tp(self, tp: int, mods: dict | None, now: float) -> int:
+        """TP a weapon skill scales from after next-skill abilities.
+
+        Sekkanoki caps at 1000 and disables the TP Bonus abilities, Hagakure adds
+        1000, and Warrior's Charge adds 1000.  The abilities are consumed by the
+        weapon-skill path after this call.
+        """
+        effective = self.weaponskill_tp(tp, mods)
+        if float(getattr(self, "_sekkanoki_until", 0.0) or 0.0) > now:
+            return min(effective, 1000)
+        if float(getattr(self, "_hagakure_until", 0.0) or 0.0) > now:
+            effective = min(TP_MAX, effective + int(
+                getattr(self, "_hagakure_tp_bonus", 1000)))
+        elif float(getattr(self, "_warriors_charge_until", 0.0) or 0.0) > now:
+            effective = min(TP_MAX, effective + int(
+                getattr(self, "_warriors_charge_tp_bonus", 1000)))
+        return effective
 
     def weaponskill_tp(self, tp: int, mods: dict | None = None) -> int:
         """The TP a weapon skill scales from: the spent TP plus TP Bonus and Fencer.
@@ -5295,11 +8842,1011 @@ class ZoneSession:
         return self._finishing_moves()
 
     def _spend_finishing_moves(self, count: int) -> int:
+        if self.has_effect(effects.GRAND_PAS):
+            return 0
         current = self._finishing_moves()
         spent = max(0, min(current, int(count)))
         if spent:
             self._set_finishing_moves(current - spent)
         return spent
+
+    # --- Dancer ------------------------------------------------------------------------
+
+    def _dnc_jp(self, category: str) -> int:
+        """A Dancer job-point row's total at rank 20, only while Dancer is the main job."""
+        if int(self.char.get("main_job", 0)) != dancer.DANCER_JOB:
+            return 0
+        return job_points.category_total(dancer.DANCER_JOB, category)
+
+    def _dnc_merit(self, merit_id: int) -> int:
+        """A Dancer group-1/group-2 merit's rank, only while Dancer is the main job."""
+        if int(self.char.get("main_job", 0)) != dancer.DANCER_JOB:
+            return 0
+        return int(self.merit_counts().get(int(merit_id), 0))
+
+    def _waltz_tp_reduction(self) -> int:
+        """TP taken off a waltz by "Waltz TP Cost" gear.
+
+        LandSandBoat stores the modifier in 5-TP units and its Dancer script subtracts
+        ``mod * 10``: Desultor Tassets' -50 TP is mod value 5.  The HUD carries the same
+        item table for its pre-click check.
+        """
+        try:
+            mods = self.combat_mods()
+        except Exception as exc:
+            log.warning("%s waltz cost gear unavailable: %s", self.addr, exc)
+            return 0
+        return max(0, int(mods.get(mod.WALTZ_COST, 0))) * 10
+
+    def _waltz_target(self, act_index: int, ability: dict):
+        """The party member the client aimed a waltz at, and an error string if not."""
+        name = str(ability.get("name") or "that waltz")
+        if not act_index or int(act_index) == TARGID:
+            return self, None
+        target = None
+        for other in self.world.sessions_in_zone(self.zone):
+            if int(getattr(other, "targid", 0) or 0) == int(act_index):
+                target = other
+                break
+        if target is None:
+            return None, "There is no valid target for %s." % name
+        if target is self:
+            return self, None
+        if (getattr(target, "dead_until", 0.0) > time.time()
+                or int(target.char.get("hp_current", 0)) <= 0):
+            return None, "That party member is not available."
+        reach = float(ability.get("range") or 20.0)
+        if math.dist(self.pos[:3], target.pos[:3]) > reach + 1.0:
+            return None, "You are too far away."
+        return target, None
+
+    def _dnc_precheck(self, ability_id: int, target) -> str | None:
+        """Refuse a dance before its use animation when the resources are missing."""
+        if dancer.is_waltz(ability_id):
+            if self.has_effect(effects.SABER_DANCE):
+                return "You cannot use %s while Saber Dance is active."
+            spec = dancer.waltz(ability_id)
+            if not self.has_effect(effects.TRANCE):
+                cost = dancer.waltz_tp_cost(
+                    spec, gear_reduction=self._waltz_tp_reduction(),
+                    contradance=self.has_effect(effects.CONTRADANCE),
+                    contradance_jp=self._dnc_jp("Contradance Effect"))
+                if int(self.char.get("tp", 0)) < cost:
+                    return "You do not have enough TP for %s."
+            return None
+        if dancer.is_step(ability_id):
+            # Steps are recast-only in this server's design; no TP or engagement gate.
+            return None
+        if dancer.is_flourish(ability_id):
+            if self.has_effect(effects.GRAND_PAS):
+                return None
+            spec = dancer.flourish(ability_id)
+            moves = self._finishing_moves()
+            if moves < spec.min_moves:
+                if moves <= 0:
+                    return "You have no finishing moves."
+                return "You do not have enough finishing moves for %s."
+            return None
+        if dancer.is_samba(ability_id):
+            if self.has_effect(effects.FAN_DANCE):
+                return "You cannot use %s while Fan Dance is active."
+            spec = dancer.samba(ability_id)
+            if (not self.has_effect(effects.TRANCE)
+                    and int(self.char.get("tp", 0)) < spec.tp_cost):
+                return "You do not have enough TP for %s."
+            return None
+        if ability_id == dancer.NO_FOOT_RISE:
+            if self._finishing_moves() >= self._max_finishing_moves():
+                return "You already have the maximum number of finishing moves."
+        return None
+
+    def _dnc_ability(self, ability_id: int, name: str, ability: dict, target,
+                     ally, now: float) -> bool:
+        """Run one Dancer ability.  Returns True when the ability was consumed."""
+        if dancer.is_waltz(ability_id):
+            self._use_waltz(ability_id, ability, ally, now)
+            return True
+        if dancer.is_step(ability_id):
+            self._use_step(ability_id, name, ability, target, now)
+            return True
+        if dancer.is_flourish(ability_id):
+            self._use_flourish(ability_id, name, ability, target, now)
+            return True
+        if dancer.is_samba(ability_id):
+            self._use_samba(ability_id, name, now)
+            return True
+        if dancer.is_jig(ability_id):
+            self._use_jig(ability_id, name, now)
+            return True
+        if ability_id == dancer.PRESTO:
+            self.remove_effect(effects.PRESTO, quiet=True)
+            self.add_effect(effects.PRESTO, duration=30.0)
+            self.queue.append(self.char_status())
+            self.say("Your next step will be enhanced.")
+            return True
+        if ability_id == dancer.NO_FOOT_RISE:
+            # One Finishing Move per merit rank.  The ability is listed at level 75
+            # rather than behind a merit purchase in this server's data, so a character
+            # with no merits still gets one instead of a dead menu entry.
+            rank = max(1, self._dnc_merit(dancer.MERIT_NO_FOOT_RISE))
+            self._award_finishing_moves(rank)
+            self.say("No Foot Rise: %d finishing move%s." % (
+                rank, "" if rank == 1 else "s"))
+            return True
+        if ability_id == dancer.GRAND_PAS:
+            self._grand_pas_uses = 3
+            for recast_id in (221, 222, 226):
+                self.ability_recasts.pop(recast_id, None)
+            self.say("Grand Pas: flourishes are free for three uses.")
+            return True
+        if ability_id == dancer.TRANCE:
+            # The Trance Effect job-point row is 100 TP per rank (2,000 at 20/20).
+            grant = self._dnc_jp("Trance Effect")
+            if grant:
+                self.gain_tp(grant)
+            return True
+        # Saber Dance, Fan Dance, Grand Pas and Contradance are status icons; the
+        # generic ABILITY_EFFECTS layer above already put them up.
+        return ability_id in (dancer.SABER_DANCE, dancer.FAN_DANCE,
+                              dancer.GRAND_PAS, dancer.CONTRADANCE)
+
+    def _use_waltz(self, ability_id: int, ability: dict, ally, now: float) -> None:
+        spec = dancer.waltz(ability_id)
+        contradance = self.has_effect(effects.CONTRADANCE)
+        if not self.has_effect(effects.TRANCE):
+            cost = dancer.waltz_tp_cost(
+                spec, gear_reduction=self._waltz_tp_reduction(),
+                contradance=contradance,
+                contradance_jp=self._dnc_jp("Contradance Effect"))
+            self.spend_tp(cost)
+        me = int(self.char["char_id"])
+        if spec.aoe:
+            center = ally or self
+            targets = [center]
+            party = self.world.party_of(me)
+            if party is not None:
+                for member in party.members:
+                    other = self.world.session_by_char(int(member.char_id))
+                    if other is None or int(other.zone) != int(self.zone):
+                        continue
+                    if other is center or other is self:
+                        if other not in targets:
+                            targets.append(other)
+                        continue
+                    if math.dist(center.pos[:3], other.pos[:3]) <= spec.radius:
+                        targets.append(other)
+            elif self is not center:
+                targets.append(self)
+        else:
+            targets = [ally or self]
+        for target in targets:
+            self._waltz_on(spec, ability, target, now, contradance)
+        if contradance:
+            # Contradance doubles one waltz and is spent by it.
+            self.remove_effect(effects.CONTRADANCE, quiet=True)
+            self.queue.append(self.char_status())
+
+    def _waltz_on(self, spec: "dancer.WaltzSpec", ability: dict, target,
+                  now: float, contradance: bool) -> None:
+        me = int(self.char["char_id"])
+        target_id = int(target.char["char_id"])
+        if spec.cleanse:
+            removed = 0
+            for effect_id in list(target.status_effects):
+                if int(effect_id) in dancer.WALTZABLE_EFFECTS:
+                    target.remove_effect(int(effect_id), quiet=False)
+                    removed = int(effect_id)
+                    break
+            target.queue.append(target.char_status())
+            if target is self:
+                if removed:
+                    self.say("Healing Waltz removes one status effect.")
+                else:
+                    self.say("There is no status effect to remove.")
+            elif removed:
+                self.say("Healing Waltz removes a status effect from %s."
+                         % target.char.get("name", "the target"))
+            return
+        try:
+            caster_chr = int(self.stat_sheet().attributes.get("chr", 0))
+            target_vit = int(target.stat_sheet().attributes.get("vit", 0))
+        except Exception as exc:
+            log.warning("%s waltz stats unavailable: %s", self.addr, exc)
+            caster_chr, target_vit = 0, 0
+        amount = dancer.waltz_amount(
+            spec, caster_chr, target_vit,
+            main_job=int(self.char.get("main_job", 0)),
+            jp_bonus=self._dnc_jp("Waltz Potency"), contradance=contradance)
+        hp = int(target.char.get("hp_current", 0))
+        max_hp = max(1, int(target.char.get("hp", 1) or 1))
+        healed = min(int(amount), max(0, max_hp - hp))
+        if healed <= 0:
+            if target is self:
+                self.say("You are already at full health.")
+            return
+        target.char["hp_current"] = hp + healed
+        action = sub(0x028, packets.battle_action(
+            me, target_id, healed, animation=int(ability.get("animation") or 0),
+            kind=2, message=packets.MESSAGE_SKILL_RECOVERS_HP,
+            category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+            action_id=int(spec.ability_id)))
+        self.queue.append(action)
+        if target is not self:
+            target.queue.append(action)
+        target.queue += [target.char_status(), target.party_member()]
+        if target is not self:
+            self.queue.append(self.party_member())
+        try:
+            self.world.service.save_vitals(
+                int(target.char["id"]), int(target.char["hp_current"]),
+                int(target.char.get("mp_current", 0)))
+        except Exception as exc:
+            log.warning("%s waltz vitals save failed: %s", self.addr, exc)
+
+    def _dnc_physical_hit(self, target, accuracy_bonus: int = 0) -> bool:
+        """Roll a step/flourish hit against the target's (Daze-debuffed) evasion."""
+        try:
+            sheet = self.stat_sheet()
+            enemy = self.world.debuffed_monster(target)
+            rate = combat.hit_rate(
+                accuracy=int(sheet.fighter.accuracy) + int(accuracy_bonus),
+                evasion=int(enemy.evasion),
+                attacker_level=int(sheet.fighter.level),
+                target_level=int(enemy.level), is_pc=True,
+                corrected=combat.level_corrected(int(self.zone)))
+        except Exception as exc:
+            log.warning("%s dancer hit rate unavailable: %s", self.addr, exc)
+            rate = 0.95
+        return float(self.world.rng.random()) < max(0.05, min(0.99, float(rate)))
+
+    def _remove_daze(self, target, family: tuple[int, ...]) -> None:
+        for status in family:
+            target.effect_state.pop(int(status), None)
+            try:
+                target.status_effects.remove(int(status))
+            except ValueError:
+                pass
+
+    def _use_step(self, ability_id: int, name: str, ability: dict, target,
+                  now: float) -> None:
+        spec = dancer.step(ability_id)
+        me = int(self.char["char_id"])
+        presto = self.has_effect(effects.PRESTO)
+        accuracy = 10 + 3 * self._dnc_merit(dancer.MERIT_STEP_ACCURACY)
+        if presto:
+            accuracy += 50
+        if not self._dnc_physical_hit(target, accuracy):
+            self.queue.append(sub(0x028, packets.battle_action(
+                me, int(target.id), 0, animation=int(ability.get("animation") or 0),
+                kind=2, message=0, info=dancer.result_info(ability_id, False),
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                action_id=int(ability_id))))
+            self.say("%s misses." % name)
+            return
+        main_job = int(self.char.get("main_job", 0))
+        max_level = dancer.max_daze(main_job)
+        level, _status = dancer.active_daze(target.effect_state, spec)
+        at_max = level >= max_level
+        removed = 0.0
+        if level:
+            for status in spec.family:
+                state = target.effect_state.get(int(status))
+                if state is not None:
+                    removed = max(removed, max(0.0, float(state.get("until", 0)) - now))
+        new_level = max(1, level) if at_max else min(max_level, level + (5 if presto else 1))
+        duration = dancer.step_duration(self._dnc_jp("Step Duration"), removed)
+        self._remove_daze(target, spec.family)
+        status = dancer.daze_status(spec, new_level)
+        potency = dancer.daze_value(spec, new_level)
+        effect = effects.SpellEffect(status, "debuff", duration,
+                                     power=new_level, potency=potency)
+        self.world.apply_mob_effect(
+            target, effect, self, now, duration=duration, potency=potency)
+        moves = dancer.step_finishing_moves(main_job, presto=presto, daze_at_max=at_max)
+        self._award_finishing_moves(moves)
+        if presto:
+            self.remove_effect(effects.PRESTO, quiet=True)
+            self.queue.append(self.char_status())
+        self.queue.append(sub(0x028, packets.battle_action(
+            me, int(target.id), 0, animation=int(ability.get("animation") or 0),
+            kind=2, message=0, info=dancer.result_info(ability_id, True),
+            category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+            action_id=int(ability_id))))
+        self.say("%s: Daze %d, %d finishing move%s." % (
+            name, new_level, self._finishing_moves(),
+            "" if self._finishing_moves() == 1 else "s"))
+
+    def _use_flourish(self, ability_id: int, name: str, ability: dict, target,
+                      now: float) -> None:
+        spec = dancer.flourish(ability_id)
+        me = int(self.char["char_id"])
+        if self.has_effect(effects.GRAND_PAS):
+            left = max(0, int(getattr(self, "_grand_pas_uses", 3)) - 1)
+            self._grand_pas_uses = left
+            if left <= 0:
+                self.remove_effect(effects.GRAND_PAS, quiet=True)
+                self.queue.append(self.char_status())
+        moves = self._finishing_moves()
+        if ability_id == 204:                       # Animated Flourish
+            used = 2 if moves >= 2 else 1
+            self._spend_finishing_moves(used)
+            ve = (1500 if used >= 2 else 1000) + self._dnc_jp("Flourish I Effect")
+            if target is not None and target.alive:
+                self.world.add_mob_hate(target, me, now, ve=ve)
+            self.say("Animated Flourish: %d volatile enmity." % ve)
+            return
+        if ability_id == 205:                       # Desperate Flourish
+            self._spend_finishing_moves(1)
+            if target is None or not target.alive:
+                return
+            # Flourish I Effect's Desperate clause is +1 physical accuracy per rank.
+            flourish_rank = (JOB_POINT_RANK
+                             if int(self.char.get("main_job", 0)) == dancer.DANCER_JOB
+                             else 0)
+            if not self._dnc_physical_hit(target, flourish_rank):
+                self.queue.append(sub(0x028, packets.battle_action(
+                    me, int(target.id), 0, kind=2, message=0,
+                    info=dancer.result_info(ability_id, False),
+                    category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                    action_id=int(ability_id))))
+                self.say("%s misses." % name)
+                return
+            weight = effects.SpellEffect(effects.WEIGHT, "debuff", 60.0, potency=26)
+            self.world.apply_mob_effect(target, weight, self, now, duration=60.0)
+            self.queue.append(sub(0x028, packets.battle_action(
+                me, int(target.id), 0, kind=2, message=0,
+                info=dancer.result_info(ability_id, True),
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                action_id=int(ability_id))))
+            self.say("Desperate Flourish weighs the target down.")
+            return
+        if ability_id == 207:                       # Violent Flourish
+            self._spend_finishing_moves(1)
+            if target is None or not target.alive:
+                return
+            miss, damage, critical = self.world.player_attack(
+                self, target, accuracy_bonus=100)
+            if not miss and damage > 0:
+                defeated = int(target.hp) - damage <= 0
+                target.hp = max(0, int(target.hp) - damage)
+                self.world.add_damage_hate(target, me, damage, now)
+                self.world._queue_mob_hp(target)
+                self.queue.append(sub(0x028, packets.battle_action(
+                    me, int(target.id), damage, critical=critical,
+                    defeated=defeated, kind=2, message=packets.MESSAGE_DAMAGE,
+                    info=dancer.result_info(ability_id, True),
+                    category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                    action_id=int(ability_id))))
+                if defeated:
+                    self.world.kill_mob(self, target, now)
+                elif float(self.world.rng.random()) < 0.25:
+                    stun = effects.SpellEffect(effects.STUN, "debuff", 2.0)
+                    self.world.apply_mob_effect(target, stun, self, now, duration=2.0)
+            else:
+                self.queue.append(sub(0x028, packets.battle_action(
+                    me, int(target.id), 0, miss=True, kind=2,
+                    message=packets.MESSAGE_ATTACK_MISSES,
+                    info=dancer.result_info(ability_id, False),
+                    category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                    action_id=int(ability_id))))
+            return
+        if ability_id == 206:                       # Reverse Flourish
+            used = min(5, moves, spec.max_moves)
+            self._spend_finishing_moves(used)
+            merit = self._dnc_merit(dancer.MERIT_REVERSE_FLOURISH)
+            tp = dancer.reverse_flourish_tp(
+                used, jp_bonus=self._dnc_jp("Flourish II Effect"), merit_rank=merit)
+            self.gain_tp(tp)
+            self.say("Reverse Flourish: %d TP from %d finishing move%s." % (
+                tp, used, "" if used == 1 else "s"))
+            return
+        if ability_id == 208:                       # Building Flourish
+            used = min(3, moves, spec.max_moves)
+            self._spend_finishing_moves(used)
+            self.remove_effect(effects.BUILDING_FLOURISH, quiet=True)
+            self.add_effect(effects.BUILDING_FLOURISH, duration=60.0, power=used)
+            self.queue.append(self.char_status())
+            self.say("Building Flourish: %d finishing move%s." % (
+                used, "" if used == 1 else "s"))
+            return
+        if ability_id == 209:                       # Wild Flourish
+            self._spend_finishing_moves(2)
+            if target is None or not target.alive:
+                return
+            hit = self._dnc_physical_hit(target, 20)
+            if hit:
+                bound = effects.SpellEffect(effects.CHAINBOUND, "debuff", 10.0)
+                self.world.apply_mob_effect(target, bound, self, now, duration=10.0)
+            self.queue.append(sub(0x028, packets.battle_action(
+                me, int(target.id), 0, kind=2, message=0,
+                info=dancer.result_info(ability_id, hit),
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                action_id=int(ability_id))))
+            self.say("Wild Flourish readies the target for a skillchain."
+                     if hit else "Wild Flourish misses.")
+            return
+        if ability_id in (264, 313, 314):           # Flourishes III
+            need = spec.min_moves
+            if ability_id == 264:
+                used = min(moves, 5)
+            else:
+                used = need
+            self._spend_finishing_moves(used)
+            status = {264: effects.CLIMACTIC_FLOURISH,
+                      313: effects.STRIKING_FLOURISH,
+                      314: effects.TERNARY_FLOURISH}[ability_id]
+            self.remove_effect(status, quiet=True)
+            self.add_effect(status, duration=60.0, power=used)
+            self.queue.append(self.char_status())
+            self.say("%s: %d finishing move%s." % (
+                name, used, "" if used == 1 else "s"))
+            return
+        # A future flourish: spend the minimum so it is not free.
+        self._spend_finishing_moves(spec.min_moves)
+
+    def _use_samba(self, ability_id: int, name: str, now: float) -> None:
+        spec = dancer.samba(ability_id)
+        if not self.has_effect(effects.TRANCE):
+            self.spend_tp(spec.tp_cost)
+        for status in (effects.DRAIN_SAMBA, effects.ASPIR_SAMBA, effects.HASTE_SAMBA):
+            if int(status) != int(spec.status):
+                self.remove_effect(int(status), quiet=True)
+        duration = dancer.samba_duration(spec, self._dnc_jp("Samba Duration"))
+        mods: dict[int, int] = {}
+        if spec.status == effects.HASTE_SAMBA:
+            merit = self._dnc_merit(dancer.MERIT_HASTE_SAMBA)
+            mods[mod.HASTE_ABILITY] = spec.haste + 100 * merit
+        self.remove_effect(int(spec.status), quiet=True)
+        self.add_effect(int(spec.status), duration=duration, power=1, mods=mods)
+        self.queue += [self.char_status(), self.char_stats()]
+        self.say("%s takes hold." % name)
+
+    def _use_jig(self, ability_id: int, name: str, now: float) -> None:
+        jp = self._dnc_jp("Jig Duration")
+        if ability_id == dancer.SPECTRAL_JIG:
+            if self.has_effect(effects.SNEAK):
+                self.say("You are already sneaking.")
+                return
+            duration = dancer.jig_duration(180.0, jp)
+            self.add_effect(effects.SNEAK, duration=duration)
+            self.add_effect(effects.INVISIBLE, duration=duration)
+        else:
+            duration = dancer.jig_duration(dancer.jig_base(ability_id), jp)
+            self.remove_effect(effects.WEIGHT, quiet=True)
+            self.add_effect(effects.QUICKENING, duration=duration, power=20)
+        self.queue.append(self.char_status())
+        self.say("You perform %s." % name)
+
+    def _samba_on_hit(self, damage: int) -> None:
+        """Drain/Aspir Samba's little heal/drain when a melee swing lands."""
+        damage = max(0, int(damage))
+        if damage <= 0:
+            return
+        if self.effect(effects.DRAIN_SAMBA) is not None:
+            heal = max(1, damage * 10 // 100)
+            hp = int(self.char.get("hp_current", 0))
+            healed = min(int(self.char.get("hp", hp)), hp + heal)
+            if healed > hp:
+                self.char["hp_current"] = healed
+                self.queue += [self.char_status(), self.party_member()]
+        if self.effect(effects.ASPIR_SAMBA) is not None:
+            mp = int(self.char.get("mp_current", 0))
+            gain = max(1, damage * 5 // 100)
+            restored = min(int(self.char.get("mp", mp)), mp + gain)
+            if restored > mp:
+                self.char["mp_current"] = restored
+                self.queue += [self.char_status(), self.party_member()]
+
+    def _killer_instinct(self, now: float) -> None:
+        """Killer Instinct: the full buff on the whole party for the caster's duration.
+
+        This server deliberately departs from retail here: every party member in the
+        zone gets the caster's full duration (5:00 with 5/5 merits, the Ankusa/Mst.
+        Helm augment and the Diamond Aspis) and the full +15% damage dealt / -15%
+        damage taken effect, with no 7.9-yalm range check.  The monster-family check
+        is still pending, so the two multipliers apply to every target.  The damage
+        bonus is stored in the effect's power (1500 = +15%) and read by
+        :meth:`World.player_attack`; the damage-taken side is a normal ``DMG``
+        modifier so the stat report and ``damage_taken()`` see it.
+        """
+        rank = 1
+        try:
+            rank = max(1, min(5, int(self.merit_counts().get(
+                merits.KILLER_INSTINCT, 0))))
+        except Exception:
+            rank = 1
+        # Merit rank 1 is the base three minutes; each rank past the first adds 10 s.
+        # The helm augment adds 4 s per rank and the Diamond Aspis adds 25%.  The
+        # helper returns the same value for party on purpose (custom BST change).
+        self_duration, party_duration = self.killer_instinct_duration(rank)
+        me = int(self.char["char_id"])
+        targets = [self]
+        party = self.world.party_of(me)
+        if party is not None:
+            for member in party.members:
+                if int(member.char_id) == me:
+                    continue
+                other = self.world.session_by_char(int(member.char_id))
+                if other is None or int(other.zone) != int(self.zone):
+                    continue
+                if other.dead_until or int(other.char.get("hp_current", 0)) <= 0:
+                    continue
+                # No range check: the whole party gets the buff (custom BST change).
+                targets.append(other)
+        log.info(
+            "%s Killer Instinct rank %d on %d target(s): self %.0f s, party %.0f s",
+            self.addr, rank, len(targets), self_duration, party_duration)
+        for target in targets:
+            # Every target gets the full effect and the full duration; the party copy
+            # is not a reduced version.
+            target.add_effect(
+                effects.KILLER_INSTINCT,
+                duration=self_duration if target is self else party_duration,
+                power=1500, mods={mod.DMG: -1500})
+            if target is self:
+                target.queue.append(target.char_status())
+                continue
+            action = sub(0x028, packets.battle_action(
+                me, int(target.char["char_id"]), int(effects.KILLER_INSTINCT),
+                animation=0, kind=2, message=packets.MESSAGE_MAGIC_GAIN_EFFECT,
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=162))
+            target.queue += [action, target.char_status(), target.party_member()]
+            self.queue.append(self.party_member())
+
+    def _benediction(self, now: float, ability: dict) -> None:
+        """Benediction: full HP, ailment removal and the job-point MP to the party."""
+        me = int(self.char["char_id"])
+        targets = [self]
+        party = self.world.party_of(me)
+        if party is not None:
+            for member in party.members:
+                if int(member.char_id) == me:
+                    continue
+                other = self.world.session_by_char(int(member.char_id))
+                if other is None or int(other.zone) != int(self.zone):
+                    continue
+                if other.dead_until or int(other.char.get("hp_current", 0)) <= 0:
+                    continue
+                if math.dist(self.pos[:3], other.pos[:3]) > 14.0:
+                    continue
+                targets.append(other)
+        mp_percent = job_points.category_total(3, "Benediction Effect")
+        for target in targets:
+            before_hp = int(target.char.get("hp_current", 0))
+            max_hp = max(1, int(target.char.get("hp", 1)))
+            target.char["hp_current"] = max_hp
+            healed = max_hp - before_hp
+            before_mp = int(target.char.get("mp_current", 0))
+            max_mp = max(0, int(target.char.get("mp", 0)))
+            mp_bonus = max_mp * max(0, mp_percent) // 100
+            target.char["mp_current"] = min(max_mp, before_mp + mp_bonus)
+            restored_mp = int(target.char["mp_current"]) - before_mp
+            for effect_id in list(weapon_skill_effects.AILMENTS):
+                target.remove_effect(int(effect_id), quiet=True)
+            action = sub(0x028, packets.battle_action(
+                me, int(target.char["char_id"]), healed,
+                animation=int(ability.get("animation") or 0), kind=2,
+                message=packets.MESSAGE_SKILL_RECOVERS_HP,
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=18))
+            target.queue += [action, target.char_status(), target.party_member()]
+            if target is not self:
+                self.queue.append(action)
+                if restored_mp > 0:
+                    target.queue.append(sub(0x028, packets.battle_action(
+                        me, int(target.char["char_id"]), restored_mp,
+                        animation=0, kind=2,
+                        message=packets.MESSAGE_SKILL_RECOVERS_MP,
+                        category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=18)))
+            try:
+                self.world.service.save_vitals(
+                    int(target.char["id"]), int(target.char["hp_current"]),
+                    int(target.char["mp_current"]))
+            except Exception:
+                pass
+        self.queue.append(self.party_member())
+
+    def _martyr_devotion(self, ability_id: int, ally, now: float) -> None:
+        """Martyr heals double the HP cost; Devotion grants that much MP."""
+        if ally is None:
+            self.say("There is no valid target for that ability.")
+            return
+        hp = int(self.char.get("hp_current", 0))
+        if hp <= 1:
+            self.say("You do not have enough HP.")
+            return
+        sacrifice = max(1, hp * 25 // 100)
+        sacrifice = min(sacrifice, hp - 1)
+        self.char["hp_current"] = hp - sacrifice
+        self.queue += [self.char_status(), self.party_member()]
+        if int(ability_id) == 153:                       # Martyr
+            target_hp = int(ally.char.get("hp_current", 0))
+            max_hp = max(1, int(ally.char.get("hp", 1)))
+            healed = min(sacrifice * 2, max_hp - target_hp)
+            ally.char["hp_current"] = target_hp + max(0, healed)
+            action = sub(0x028, packets.battle_action(
+                int(self.char["char_id"]), int(ally.char["char_id"]), max(0, healed),
+                animation=0, kind=2, message=packets.MESSAGE_SKILL_RECOVERS_HP,
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=153))
+        else:                                           # Devotion
+            target_mp = int(ally.char.get("mp_current", 0))
+            max_mp = max(0, int(ally.char.get("mp", 0)))
+            restored = min(sacrifice, max_mp - target_mp)
+            ally.char["mp_current"] = target_mp + max(0, restored)
+            action = sub(0x028, packets.battle_action(
+                int(self.char["char_id"]), int(ally.char["char_id"]), max(0, restored),
+                animation=0, kind=2, message=packets.MESSAGE_SKILL_RECOVERS_MP,
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=int(ability_id)))
+        self.queue.append(action)
+        if ally is not self:
+            ally.queue.append(action)
+        ally.queue += [ally.char_status(), ally.party_member()]
+        if ally is not self:
+            self.queue.append(self.party_member())
+        self.say("You sacrifice %d HP." % sacrifice)
+        for target in (self, ally):
+            try:
+                self.world.service.save_vitals(
+                    int(target.char["id"]), int(target.char["hp_current"]),
+                    int(target.char.get("mp_current", 0)))
+            except Exception:
+                pass
+
+    def _indi_aura(self, spell: dict, now: float, cast: dict) -> None:
+        """Apply one Indi/Geo aura to its party or enemy targets.
+
+        A Geomancer runs two bubbles -- the Indi- aura around themself and the Geo- aura
+        around the Luopan -- and casting again in the same bubble replaces the last one,
+        so the previous status comes off the party and the monster before the new one
+        lands.  Indi-haste and Geo-frailty coexist; two Indi- auras never do.
+        """
+        name = str(spell.get("name") or "")
+        spec = geomancy.indi_effect(name)
+        if spec is None:
+            return
+        status, mods, hostile = spec
+        bubble = geomancy.bubble(name)
+        me = int(self.char["char_id"])
+        duration = 180.0
+        if hostile:
+            target = self.world.entity_by_id(int(self.zone), int(cast.get("target") or 0))
+            if (target is None or not target.alive) and self.engaged_id:
+                target = self.world.entity_by_id(int(self.zone), int(self.engaged_id))
+            self._clear_geo_aura(bubble, int(status),
+                                 int(target.id) if target is not None else 0)
+            if target is not None and target.alive:
+                self.world.apply_mob_effect(
+                    target, effects.SpellEffect(status, "debuff", duration, potency=10),
+                    self, now, duration=duration)
+                self.say("%s affects %s." % (name, target.name))
+            return
+        self._clear_geo_aura(bubble, int(status), 0)
+        entrusted = int(cast.get("party_target") or 0)
+        if entrusted:
+            other = self.world.session_by_char(entrusted)
+            if other is not None and int(other.zone) == int(self.zone):
+                other.add_effect(status, duration=duration, power=10, mods=mods)
+                other.queue += [other.char_status(), other.party_member()]
+                self.queue.append(sub(0x028, packets.battle_action(
+                    me, int(other.char["char_id"]), int(status), animation=0,
+                    kind=2, message=packets.MESSAGE_MAGIC_GAIN_EFFECT,
+                    category=packets.ACTION_CATEGORY_MAGIC_FINISH,
+                    action_id=int(spell["id"]))))
+                self.queue.append(self.party_member())
+                self.say("%s grants its aura to %s." % (name, other.char.get("name", "the target")))
+                return
+        targets = [self]
+        party = self.world.party_of(me)
+        if party is not None:
+            for member in party.members:
+                if int(member.char_id) == me:
+                    continue
+                other = self.world.session_by_char(int(member.char_id))
+                if other is None or int(other.zone) != int(self.zone):
+                    continue
+                if math.dist(self.pos[:3], other.pos[:3]) > 10.0:
+                    continue
+                targets.append(other)
+        for target in targets:
+            target.add_effect(status, duration=duration, power=10, mods=mods)
+            target.queue.append(target.char_status())
+            action = sub(0x028, packets.battle_action(
+                me, int(target.char["char_id"]), int(status), animation=0, kind=2,
+                message=packets.MESSAGE_MAGIC_GAIN_EFFECT,
+                category=packets.ACTION_CATEGORY_MAGIC_FINISH,
+                action_id=int(spell["id"])))
+            target.queue.append(action)
+            if target is not self:
+                self.queue.append(action)
+        self.queue.append(self.party_member())
+
+    def _clear_geo_aura(self, bubble: str, keep: int, mob_id: int) -> None:
+        """Take this bubble's last aura down before the new cast lands.
+
+        A Geomancer runs two bubbles -- Indi- around themself and Geo- around the Luopan
+        -- and each replaces only itself: Indi-haste and Geo-frailty are up together, but
+        a second Indi- takes the first one off the party.  The party sweep is every member
+        in the zone, not just the ones in range: the old aura has to go even if its owner
+        has walked out of the bubble.
+        """
+        me = int(self.char["char_id"])
+        previous = self.geo_bubble.get(bubble)
+        if previous is not None:
+            previous_status, previous_mob = int(previous[0]), int(previous[1])
+            keep_status, keep_mob = int(keep), int(mob_id or 0)
+            if previous_status != keep_status:
+                for target in self._geo_party():
+                    if target.effect_state.get(previous_status) is not None:
+                        target.remove_effect(previous_status, quiet=True)
+                        target.queue.append(target.char_status())
+            if previous_mob and not (previous_status == keep_status
+                                     and previous_mob == keep_mob):
+                mob = self.world.entity_by_id(int(self.zone), previous_mob)
+                if mob is not None and mob.effect_state.get(previous_status) is not None:
+                    self.world._drop_mob_effect(me, mob, previous_status)
+        self.geo_bubble[bubble] = (int(keep), int(mob_id or 0))
+
+    def _geo_party(self) -> list:
+        """This Geomancer plus every party member in the zone."""
+        me = int(self.char["char_id"])
+        targets = [self]
+        party = self.world.party_of(me)
+        if party is not None:
+            for member in party.members:
+                if int(member.char_id) == me:
+                    continue
+                other = self.world.session_by_char(int(member.char_id))
+                if other is None or int(other.zone) != int(self.zone):
+                    continue
+                targets.append(other)
+        return targets
+
+    def _thf_enmity(self, ability_id: int, ally, now: float) -> None:
+        """Accomplice hands hate to an ally; Collaborator pulls some of theirs."""
+        if ally is None or ally is self:
+            self.say("You need a party member for that.")
+            return
+        entity = None
+        if self.engaged_id:
+            entity = self.world.entity_by_id(int(self.zone), int(self.engaged_id))
+        if entity is None or not entity.alive or not entity.enmity:
+            self.say("You have no enmity to transfer.")
+            return
+        me = int(self.char["char_id"])
+        other = int(ally.char["char_id"])
+        hate = entity.enmity
+        if int(ability_id) == 84:                       # Accomplice
+            amount = int(hate.get(me, 0)) * 25 // 100
+            if amount <= 0:
+                self.say("You have no enmity to transfer.")
+                return
+            hate[me] = max(0, int(hate.get(me, 0)) - amount)
+            hate[other] = int(hate.get(other, 0)) + amount
+        else:                                           # Collaborator
+            amount = int(hate.get(other, 0)) * 25 // 100
+            if amount <= 0:
+                self.say("That party member has no enmity to transfer.")
+                return
+            hate[other] = max(0, int(hate.get(other, 0)) - amount)
+            hate[me] = int(hate.get(me, 0)) + amount
+        entity.enmity_ve[me] = 0
+        entity.enmity_ve[other] = 0
+        self.say("You transfer %d enmity." % amount)
+
+    def _life_cycle(self, now: float) -> None:
+        """Life Cycle: feed the Luopan a quarter of the GEO's current HP.
+
+        The server has no geomancy spell that summons a Luopan yet, so the first use
+        with no pet spawns one; after that the retail HP transfer runs.
+        """
+        pet = getattr(self, "pet_entity", None)
+        if pet is None or not pet.alive:
+            self.world.spawn_pet(self, "luopan", now)
+            return
+        hp = int(self.char.get("hp_current", 0))
+        if hp <= 1:
+            self.say("You do not have enough HP.")
+            return
+        cost = max(1, hp // 4)
+        cost = min(cost, hp - 1)
+        self.char["hp_current"] = hp - cost
+        bonus = 100 + job_points.category_total(21, "Life Cycle Effect")
+        restored = min(int(getattr(pet, "hp_max", 1)) - int(pet.hp), cost * bonus // 100)
+        pet.hp = min(int(getattr(pet, "hp_max", pet.hp)), int(pet.hp) + max(0, restored))
+        self.queue += [self.char_status(), self.party_member()]
+        self.world._queue_mob_hp(pet)
+        self.say("You give %d HP to %s." % (max(0, restored), pet.name))
+
+    def _mending_halation(self, now: float) -> None:
+        """Mending Halation: consume the Luopan to heal the party."""
+        pet = getattr(self, "pet_entity", None)
+        if pet is None or not pet.alive:
+            self.say("You do not have a Luopan.")
+            return
+        level = max(1, min(99, int(getattr(pet, "level", 1))))
+        heal = 7 * level + 1
+        me = int(self.char["char_id"])
+        targets = [self]
+        party = self.world.party_of(me)
+        if party is not None:
+            for member in party.members:
+                if int(member.char_id) == me:
+                    continue
+                other = self.world.session_by_char(int(member.char_id))
+                if other is None or int(other.zone) != int(self.zone):
+                    continue
+                if other.dead_until or int(other.char.get("hp_current", 0)) <= 0:
+                    continue
+                if math.dist(self.pos[:3], other.pos[:3]) > 10.0:
+                    continue
+                targets.append(other)
+        self.world.despawn_pet(pet, now, "mending halation")
+        for target in targets:
+            before = int(target.char.get("hp_current", 0))
+            target.char["hp_current"] = min(
+                int(target.char.get("hp", 1)), before + heal)
+            healed = int(target.char["hp_current"]) - before
+            target.queue += [target.char_status(), target.party_member()]
+            if target is not self:
+                self.queue.append(target.party_member())
+            action = sub(0x028, packets.battle_action(
+                me, int(target.char["char_id"]), max(0, healed),
+                animation=0, kind=2, message=packets.MESSAGE_SKILL_RECOVERS_HP,
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=354))
+            target.queue.append(action)
+            if target is not self:
+                self.queue.append(action)
+        self.say("The Luopan vanishes and mends the party.")
+
+    def _concentric_pulse(self, target, now: float) -> None:
+        """Concentric Pulse: consume the Luopan and deal its HP as damage."""
+        pet = getattr(self, "pet_entity", None)
+        if pet is None or not pet.alive:
+            self.say("You do not have a Luopan.")
+            return
+        amount = max(1, int(pet.hp))
+        self.world.despawn_pet(pet, now, "concentric pulse")
+        if target is None or not target.alive:
+            return
+        amount = min(amount, int(target.hp))
+        target.hp = max(0, int(target.hp) - amount)
+        self.world.add_damage_hate(target, int(self.char["char_id"]), amount, now)
+        self.world._queue_mob_hp(target)
+        self.queue.append(sub(0x028, packets.battle_action(
+            int(self.char["char_id"]), int(target.id), amount, kind=2,
+            message=packets.MESSAGE_DAMAGE,
+            category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=353)))
+        if target.hp <= 0:
+            self.world.kill_mob(self, target, now)
+
+    def _war_party_effect(self, effect_id: int, mods: dict[int, int],
+                          duration: float, action_id: int) -> None:
+        """Warcry/Blood Rage: the same buff on the Warrior's party in range."""
+        me = int(self.char["char_id"])
+        targets = [self]
+        party = self.world.party_of(me)
+        if party is not None:
+            for member in party.members:
+                if int(member.char_id) == me:
+                    continue
+                other = self.world.session_by_char(int(member.char_id))
+                if other is None or int(other.zone) != int(self.zone):
+                    continue
+                if other.dead_until or int(other.char.get("hp_current", 0)) <= 0:
+                    continue
+                if math.dist(self.pos[:3], other.pos[:3]) > 13.9:
+                    continue
+                targets.append(other)
+        for target in targets:
+            target.remove_effect(effects.WARCRY, quiet=True)
+            target.remove_effect(effects.BLOOD_RAGE, quiet=True)
+            target.add_effect(effect_id, duration=duration, mods=mods)
+            if target is self:
+                target.queue.append(target.char_status())
+                continue
+            action = sub(0x028, packets.battle_action(
+                me, int(target.char["char_id"]), int(effect_id),
+                animation=0, kind=2, message=packets.MESSAGE_MAGIC_GAIN_EFFECT,
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=action_id))
+            target.queue += [action, target.char_status(), target.party_member()]
+            self.queue.append(self.party_member())
+
+    def _tame(self, target, now: float) -> None:
+        """Tame: make a mob docile, or set up the next Charm's +10% bonus.
+
+        Retail Tame can miss, only works when the Beastmaster is the sole claimant,
+        and either disengages the mob or leaves it "friendlier" for the next Charm.
+        The server does not carry the client's charmability flag yet, so every live
+        mob is a valid Tame target.
+        """
+        pet = getattr(self, "pet_entity", None)
+        if pet is not None and pet.alive:
+            self.say("You already have a pet.")
+            return
+        if target is None or target.kind != "mob" or not target.alive:
+            self.say("There is no valid target for Tame.")
+            return
+        me = int(self.char["char_id"])
+        others = [int(cid) for cid, hate in target.enmity.items()
+                  if int(cid) != me and int(hate) > 0]
+        if others or (target.engaged_char_id not in (None, me)):
+            self.say("You cannot tame that target.")
+            return
+        # Tame can miss.  The 75% base stands in for LSB's magic-hit-rate roll; the
+        # Totemic Helm's Tame success rate (mod 304) is added on top.  Read the head
+        # from the live equipped map, not the saved outfit: the phase engine's temporary
+        # KI/song swaps mean char_equip can lag by one action.
+        head = int(self.equipped.get(4, (0, 0, 0))[2] or 0)
+        tame_mod = 0
+        if head:
+            try:
+                tame_mod = int(self.world.service.item_mods(head).get(mod.TAME, 0))
+            except Exception:
+                tame_mod = 0
+        if not tame_mod:
+            tame_mod = int(self.combat_mods().get(mod.TAME, 0))
+        chance = 0.75 + tame_mod / 100.0
+        if self.world.rng.random() >= min(1.0, chance):
+            self.say("Tame fails.")
+            return
+        if target.engaged_char_id or target.enmity:
+            target.enmity.clear()
+            target.enmity_ve.clear()
+            target.enmity_decay_at = 0.0
+            target.engaged_char_id = None
+            target.claim_char_id = None
+            target.aggro_announced = False
+            target.next_attack_at = 0.0
+            target.roam_target = None
+            self.world._mob_clear_nav(target)
+            self.world.set_animation(target, 0)
+        else:
+            self.tamed_mob_id = int(target.id)
+        self.say("The %s seems friendlier." % target.name)
+
+    def _gauge(self, target) -> None:
+        """Gauge: report the target's HP and roughly how charmable it is."""
+        pet = getattr(self, "pet_entity", None)
+        if pet is not None and pet.alive:
+            self.say("You already have a pet.")
+            return
+        if target is None or target.kind != "mob" or not target.alive:
+            self.say("There is no valid target for Gauge.")
+            return
+        hp_pct = max(0, min(100, int(target.hp) * 100 // max(1, int(target.hp_max))))
+        chance = 0.5 + job_points.category_total(9, "Charm Success Rate") / 100.0
+        if chance >= 0.75:
+            read = "should be able to be charmed"
+        elif chance >= 0.50:
+            read = "might be able to be charmed"
+        elif chance >= 0.25:
+            read = "would be difficult to charm"
+        elif chance > 0:
+            read = "would be very difficult to charm"
+        else:
+            read = "cannot be charmed"
+        self.say("The %s has %d%% HP and %s." % (target.name, hp_pct, read))
+
+    def _queue_roll_action(self, actor_id: int, fallback_id: int,
+                           fallback_animation: int) -> None:
+        """Send the 0x028 a roll or Double-Up prepared, with its dice value in info.
+
+        ``rolls`` fills ``self.roll_action`` because the result needs the new roll total
+        (or the Double-Up increase); the generic "uses ability" result sent before the
+        handler has no value and made the client's dice animation always show 6.
+        """
+        action = getattr(self, "roll_action", None)
+        self.roll_action = None
+        if action is None:
+            action = {"ability_id": int(fallback_id),
+                      "animation": int(fallback_animation), "info": 0, "value": 0,
+                      "message": packets.MESSAGE_USES_JOB_ABILITY}
+        self.queue.append(sub(0x028, packets.battle_action(
+            int(actor_id), int(actor_id), int(action.get("value") or 0),
+            animation=int(action.get("animation") or 0),
+            message=int(action.get("message") or packets.MESSAGE_USES_JOB_ABILITY),
+            kind=2, category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+            action_id=int(action.get("ability_id") or fallback_id),
+            info=int(action.get("info") or 0))))
 
     def job_ability(self, p: bytes, act_index: int = 0) -> None:
         """C2S 0x01A action 0x09: a job ability.
@@ -5310,7 +9857,9 @@ class ZoneSession:
         "<player> uses <ability>."
 
         Effects are intentionally small: Provoke claims the mob, Meditate and Chakra move
-        TP/HP, Convert swaps HP and MP, and the healing waltzes heal.  The Scholar arts,
+        TP/HP and Convert swaps HP and MP.  The Dancer kit is delegated to
+        ``_dnc_ability``: TP-costed waltzes/sambas, recast-only steps and jigs, party
+        waltz targeting, Daze stack levels and the Finishing Move economy.  The Scholar arts,
         addenda, stratagems and Sublimation put their retail status icons on the bar
         (``effects.ABILITY_EFFECTS``), including the cancels that swap one art for the
         other.  Accession and Perpetuance are spent by the spell they enhance (see
@@ -5319,6 +9868,7 @@ class ZoneSession:
         dead end.  Recasts are tracked by recast id and sent in 0x119.
         """
         if len(p) < 16:
+            log.warning("%s short job ability packet (%d bytes)", self.addr, len(p))
             return
         ability_id = struct.unpack_from("<I", p, 12)[0]
         try:
@@ -5327,9 +9877,11 @@ class ZoneSession:
             log.warning("%s job ability lookup failed: %s", self.addr, exc)
             return
         if ability is None:
+            log.warning("%s unknown job ability id %d", self.addr, ability_id)
             self.say("That job ability does not exist.")
             return
         name = str(ability["name"])
+        log.info("%s job ability %s (%d)", self.addr, name, ability_id)
         now = time.time()
         recast_id = int(ability.get("recast_id") or 0)
         # Sublimation's second use releases its stored MP; the release must work even
@@ -5343,7 +9895,12 @@ class ZoneSession:
             self.queue += [self.char_status(), self.party_member()]
             self.say("Sublimation releases %d MP." % stored)
             return
-        if recast_id and self.ability_recasts.get(recast_id, 0.0) > now:
+        # Two-hour abilities carry recast id 0.  Their cooldown is tracked per ability
+        # (keyed above the ordinary recast ids) so changing jobs does not put the next
+        # job's one-hour on cooldown; 0x119 slot 0 carries the current job's timer.
+        recast_key = (recast_id if recast_id
+                      else TWO_HOUR_RECAST_BASE + int(ability_id))
+        if self.ability_recasts.get(recast_key, 0.0) > now:
             self.say("%s is not ready yet." % name)
             return
 
@@ -5373,6 +9930,26 @@ class ZoneSession:
             if error:
                 self.say(error)
                 return
+        elif int(ability_id) in (153, 154):             # Martyr / Devotion
+            ally, error = self._waltz_target(act_index, ability)
+            if error:
+                self.say(error)
+                return
+            if ally is not self:
+                group = self.world.party_of(int(self.char["char_id"]))
+                if group is None or group.member(int(ally.char["char_id"])) is None:
+                    self.say("That is not a party member.")
+                    return
+        elif int(ability_id) in (84, 236):              # Accomplice / Collaborator
+            ally, error = self._waltz_target(act_index, ability)
+            if error:
+                self.say(error)
+                return
+            if ally is not self:
+                group = self.world.party_of(int(self.char["char_id"]))
+                if group is None or group.member(int(ally.char["char_id"])) is None:
+                    self.say("That is not a party member.")
+                    return
         if dancer.is_dancer_ability(int(ability_id)):
             error = self._dnc_precheck(int(ability_id), target)
             if error:
@@ -5383,11 +9960,44 @@ class ZoneSession:
             target_id = int(ally.char["char_id"])
         else:
             target_id = int(target.id) if target is not None else me
-        self.queue.append(sub(0x028, packets.battle_action(
-            me, target_id, 0, animation=int(ability.get("animation") or 0),
-            message=packets.MESSAGE_USES_JOB_ABILITY, kind=2,
-            category=packets.ACTION_CATEGORY_ABILITY_FINISH,
-            action_id=int(ability_id))))
+        self.roll_action = None
+        roll_ability = rolls.spec(int(ability_id)) is not None
+        double_up = int(ability_id) == rolls.DOUBLE_UP
+        if not (roll_ability or double_up):
+            # Rolls and Double-Up queue their own result after the value is known.
+            self.queue.append(sub(0x028, packets.battle_action(
+                me, target_id, 0, animation=int(ability.get("animation") or 0),
+                message=packets.MESSAGE_USES_JOB_ABILITY, kind=2,
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                action_id=int(ability_id))))
+        # Samurai TP abilities whose only effect is on the next weapon skill.
+        if int(ability_id) == 288:          # Hagakure
+            self._hagakure_until = now + 60.0
+            self._hagakure_tp_bonus = 1000
+            self.say("You gain 400 save TP and 1000 TP Bonus.")
+        elif int(ability_id) == 27:         # Meikyo Shisui
+            self._meikyo_until = now + 30.0
+            self.char["tp"] = TP_MAX
+            self.queue.append(self.party_member())
+            self.say("Your weapon skills cost 1000 TP.")
+        elif int(ability_id) == 230:        # Sekkanoki
+            # The next weapon skill costs 1000 TP and rolls at 1000 TP potency.
+            self._sekkanoki_until = now + 60.0
+        elif int(ability_id) == 149:        # Warrior's Charge
+            self._warriors_charge_until = now + 60.0
+            self._warriors_charge_tp_bonus = 1000
+            self.say("Your next weapon skill gains 1000 TP Bonus.")
+            system_handled = True
+        elif int(ability_id) == 62:         # Third Eye
+            # One anticipation, or three under Seigan (retail: multiple attacks).
+            charges = 3 if self.has_effect(effects.SEIGAN) else 1
+            self.third_eye = {"charges": charges, "until": now + 30.0}
+        elif int(ability_id) == 258:        # Sengikori
+            self._sengikori_until = now + 60.0
+        elif int(ability_id) == 167:        # Shikikoyo
+            self._shikikoyo(act_index, ability, now)
+        elif int(ability_id) == 168:        # Blade Bash
+            self._blade_bash(target, now)
 
         # The arts, the stratagems and Sublimation are status icons in retail, and the
         # client draws them from the 0x037 list.  Put the icon up before the ability's
@@ -5395,10 +10005,12 @@ class ZoneSession:
         applied = effects.ABILITY_EFFECTS.get(int(ability_id))
         fallback = None
         system_handled = False
+        ability_failed = False
         if applied is not None:
             for gone in applied.cancels:
                 self.remove_effect(int(gone), quiet=True)
-            self.add_effect(applied.effect, duration=applied.duration)
+            self.add_effect(applied.effect, duration=applied.duration,
+                            mods=applied.mods or None)
             self.queue.append(self.char_status())
         else:
             fallback = job_points.ability_effect(int(ability_id))
@@ -5419,9 +10031,47 @@ class ZoneSession:
             system_handled = self._dnc_ability(
                 int(ability_id), name, ability, target, ally, now)
 
-        # Rune Fencer Rune Enchantment state.
+        # Rune Fencer rune state.
         if int(ability_id) == 357:
             self.rune_enchantment = True
+            self.runes = list(getattr(self, "runes", []))
+            self.say("Rune Enchantment is active.")
+            system_handled = True
+        elif int(ability_id) in range(358, 366):             # Ignis..Tenebrae
+            if not getattr(self, "rune_enchantment", False):
+                self.say("You must use Rune Enchantment first.")
+            else:
+                runes = list(getattr(self, "runes", []))
+                if len(runes) >= 3:
+                    self.say("You can hold at most three runes.")
+                else:
+                    runes.append(name)
+                    self.runes = runes
+                    self.say("You add the %s rune. (%d/3)" % (name, len(runes)))
+            system_handled = True
+        elif int(ability_id) in (379, 380):                  # Ward / Effusion
+            self.rune_ward = int(ability_id) == 379
+            self.rune_effusion = int(ability_id) == 380
+            self.say("Your runes now favor %s." % ("Ward" if int(ability_id) == 379 else "Effusion"))
+            system_handled = True
+        elif int(ability_id) == 368:                         # Lunge
+            runes = list(getattr(self, "runes", []))
+            if not runes:
+                self.say("You have no runes to lunge with.")
+            elif target is not None and target.alive:
+                amount = 100 + 100 * len(runes)
+                defeated = int(target.hp) - amount <= 0
+                target.hp = max(0, int(target.hp) - amount)
+                self.world.add_damage_hate(target, me, amount, now)
+                self.world._queue_mob_hp(target)
+                self.queue.append(sub(0x028, packets.battle_action(
+                    me, int(target.id), amount, kind=2, message=packets.MESSAGE_DAMAGE,
+                    category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                    action_id=int(ability_id))))
+                if defeated:
+                    self.world.kill_mob(self, target, now)
+                self.runes = []
+                self.say("You lunge with %d runes." % len(runes))
             system_handled = True
 
         # Puppetmaster burden and Geomancer Concentric Pulse.
@@ -5436,24 +10086,22 @@ class ZoneSession:
                 else:
                     pet.burden = max(0, burden - job_points.category_total(
                         18, "Cooldown Effect"))
+                    self.ability_recasts.pop(210, None)
             system_handled = True
-        elif int(ability_id) == 353 and target is not None and target.alive:
-            amount = 100 + job_points.category_total(21, "Concentric Pulse Effect")
-            defeated = int(target.hp) - amount <= 0
-            target.hp = max(0, int(target.hp) - amount)
-            self.world.add_damage_hate(target, me, amount, now)
-            self.world._queue_mob_hp(target)
-            self.queue.append(sub(0x028, packets.battle_action(
-                me, int(target.id), amount, kind=2, message=packets.MESSAGE_DAMAGE,
-                category=packets.ACTION_CATEGORY_ABILITY_FINISH,
-                action_id=int(ability_id))))
-            if defeated:
-                self.world.kill_mob(self, target, now)
+        elif int(ability_id) == 353:                         # Concentric Pulse
+            self._concentric_pulse(target, now)
             system_handled = True
 
-        # Beastmaster Charm and Run Wild.
+        # Beastmaster Killer Instinct and Charm/Run Wild.
+        if int(ability_id) == 162:
+            self._killer_instinct(now)
+            system_handled = True
         if int(ability_id) == 52 and target is not None and target.alive:
             chance = 0.5 + job_points.category_total(9, "Charm Success Rate") / 100.0
+            # Tame leaves the mob friendlier: retail gives the next Charm +10%.
+            if int(self.tamed_mob_id) == int(target.id):
+                chance += 0.10
+            self.tamed_mob_id = 0
             if self.world.rng.random() < chance:
                 pet = self.world.charm_pet(self, target, now)
                 if pet is not None:
@@ -5469,6 +10117,63 @@ class ZoneSession:
                 pet.damage_mult = min(300, int(getattr(pet, "damage_mult", 100)) + 30)
                 self.say("%s runs wild." % pet.name)
                 system_handled = True
+        if int(ability_id) == 252:                           # Restraint
+            self._restraint_bonus = 0
+        if int(ability_id) == 54:                            # Tame
+            self._tame(target, now)
+            system_handled = True
+        elif int(ability_id) == 53:                          # Gauge
+            self._gauge(target)
+            system_handled = True
+
+        if int(ability_id) in (32, 267):                     # Warcry / Blood Rage
+            if int(ability_id) == 32:
+                main = int(self.char.get("main_job") or 0)
+                sub_job = int(self.char.get("sub_job") or 0)
+                level = int(self.char.get("main_level", 1)) if main == 1 else (
+                    int(self.char.get("sub_level", 1)) if sub_job == 1 else 99)
+                pct = ((level + 19) // 4) * 100 // 256
+                self._war_party_effect(
+                    effects.WARCRY, {mod.ATT_PERCENT: pct}, 30.0, int(ability_id))
+            else:
+                self._war_party_effect(
+                    effects.BLOOD_RAGE, {mod.CRIT_HIT_RATE: 2000}, 30.0,
+                    int(ability_id))
+            system_handled = True
+
+        if int(ability_id) in (153, 154):                    # Martyr / Devotion
+            self._martyr_devotion(int(ability_id), ally, now)
+            system_handled = True
+        if int(ability_id) in (84, 236):                     # Accomplice / Collaborator
+            self._thf_enmity(int(ability_id), ally, now)
+            system_handled = True
+        if int(ability_id) == 42:                            # Flee
+            if self.has_effect(effects.QUICKENING):
+                self.say("You are already fleeing.")
+            else:
+                self.add_effect(effects.QUICKENING, duration=30.0, power=20)
+                self.queue.append(self.char_status())
+            system_handled = True
+        elif int(ability_id) == 43:                          # Hide
+            self.add_effect(effects.INVISIBLE, duration=60.0)
+            self.queue.append(self.char_status())
+            self.say("You hide in the shadows.")
+            system_handled = True
+        elif int(ability_id) == 155:                         # Assassin's Charge
+            self._assassin_charge = True
+            self.say("Your next attack will be a critical hit.")
+            system_handled = True
+        elif int(ability_id) == 156:                         # Feint
+            self._feint_until = now + 60.0
+            self.say("Your next attack will weaken the target's evasion.")
+            system_handled = True
+        elif int(ability_id) == 321 and target is not None and target.alive:
+            self.world.apply_mob_effect(
+                target, effects.SpellEffect(effects.EVASION_DOWN, "debuff", 60.0,
+                                            potency=20),
+                self, now, duration=60.0)
+            self.say("You bully the target, lowering its evasion.")
+            system_handled = True
 
         # Thief steals and Corsair recast resets.
         if int(ability_id) == 45 and target is not None and target.alive:  # Mug
@@ -5515,10 +10220,336 @@ class ZoneSession:
                 self.world.kill_mob(self, target, now)
             system_handled = True
 
-        # Puppetmaster and Rune Fencer utility.
-        if int(ability_id) == 266:                           # Tactical Switch
-            self.gain_tp(20 * 20)
+        if int(ability_id) in (345, 346, 347, 355):        # Full Circle / Lasting / Ecliptic / Radial
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive or getattr(pet, "pet_type", "") != "luopan":
+                self.say("You have no Luopan.")
+            elif int(ability_id) == 345:                    # Full Circle
+                ratio = max(0.0, min(1.0, int(pet.hp) / max(1, int(pet.hp_max))))
+                refund = max(0, int(getattr(pet, "geo_mp_cost", 0) or 0) * ratio // 2)
+                mp = int(self.char.get("mp_current", 0))
+                self.char["mp_current"] = min(int(self.char.get("mp", 0)), mp + refund)
+                self.world.despawn_pet(pet, now, "full circle")
+                self.queue += [self.char_status(), self.party_member()]
+                self.say("Your Luopan vanishes; you recover %d MP." % refund)
+            elif int(ability_id) == 346:                    # Lasting Emanation
+                pet.geo_drain = max(1, int(getattr(pet, "geo_drain", 24)) - int(
+                    getattr(pet, "level", 1)) // 14)
+                self.say("Your Luopan consumes HP more slowly.")
+            elif int(ability_id) == 347:                    # Ecliptic Attrition
+                if getattr(pet, "ecliptic", False):
+                    self.say("Ecliptic Attrition is already active.")
+                else:
+                    pet.geo_potency = int(getattr(pet, "geo_potency", 100)) * 125 // 100
+                    pet.geo_drain = int(getattr(pet, "geo_drain", 24)) + int(
+                        getattr(pet, "level", 1)) // 16
+                    pet.ecliptic = True
+                    self.say("Your Luopan's aura is empowered.")
+            else:                                           # Radial Arcana
+                level = int(getattr(pet, "level", 1))
+                restore = 3 * level
+                me = int(self.char["char_id"])
+                targets = [self]
+                group = self.world.party_of(me)
+                if group is not None:
+                    for member in group.members:
+                        other = self.world.session_by_char(int(member.char_id))
+                        if other is not None and int(other.zone) == int(self.zone):
+                            targets.append(other)
+                for target in targets:
+                    mp = int(target.char.get("mp_current", 0))
+                    target.char["mp_current"] = min(
+                        int(target.char.get("mp", 0)), mp + restore)
+                    target.queue += [target.char_status(), target.party_member()]
+                self.world.despawn_pet(pet, now, "radial arcana")
+                self.say("Your Luopan vanishes; the party recovers MP.")
             system_handled = True
+        elif int(ability_id) == 41 and target is not None and target.alive:  # Steal
+            self._steal(target)
+            system_handled = True
+        elif int(ability_id) == 285 and target is not None and target.alive:  # Bounty Shot
+            self._ranged_shot(target, bonus=50)
+            system_handled = True
+        elif int(ability_id) == 56:                          # Scavenge
+            ammo = (17343, 17340, 17312, 17300)             # Bronze/Bullet/Iron/Platinum
+            if self.world.rng.random() < 0.75:
+                item_id = ammo[int(self.world.rng.randrange(len(ammo)))]
+                self.world.service.add_item(int(self.char["id"]), item_id, 1)
+                self.refresh_inventory()
+                item = self.world.service.item(item_id)
+                self.say("You scavenge %s." % (item["name"] if item else "ammunition"))
+            else:
+                self.say("You find nothing.")
+            system_handled = True
+        elif int(ability_id) == 375 and target is not None and target.alive:  # Rayke
+            self.world.apply_mob_effect(
+                target, effects.SpellEffect(effects.RAYKE, "debuff", 30.0),
+                self, now, duration=30.0)
+            self.world.apply_mob_effect(
+                target, effects.SpellEffect(effects.MAGIC_EVASION_DOWN, "debuff", 30.0,
+                                            potency=20),
+                self, now, duration=30.0)
+            self.say("You lower the target's resistance.")
+            system_handled = True
+        elif int(ability_id) == 150 and target is not None and target.alive:  # Tomahawk
+            self.world.apply_mob_effect(
+                target, effects.SpellEffect(effects.TOMAHAWK, "debuff", 60.0),
+                self, now, duration=60.0)
+            self.say("You mark the target with Tomahawk.")
+            system_handled = True
+        elif int(ability_id) == 295:                       # Steady Wing
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no wyvern.")
+            else:
+                power = max(1, int(getattr(pet, "hp_max", 1)) * 30 // 100)
+                pet.effect_state[effects.STONESKIN] = {
+                    "until": now + 300.0, "power": power, "mods": {}}
+                self.world._queue_mob_hp(pet)
+                self.say("Your wyvern gains a steady wing shield.")
+            system_handled = True
+        elif int(ability_id) == 135:                       # Overdrive
+            pet = getattr(self, "pet_entity", None)
+            if pet is not None and pet.alive:
+                pet.overdrive_until = now + 60.0
+                self.say("%s enters overdrive." % pet.name)
+            else:
+                self.say("You have no automaton.")
+            system_handled = True
+        elif int(ability_id) == 336:                       # Fly High
+            self._fly_high_until = now + 30.0
+            for recast_id in (158, 159, 160, 166, 167):
+                self.ability_recasts.pop(recast_id, None)
+            self.say("Your jump recasts are reset.")
+            system_handled = True
+        elif int(ability_id) == 157:                       # Fealty
+            self._fealty = True
+            self.say("Your next status effect will be nullified.")
+            system_handled = True
+        elif int(ability_id) == 393:                       # Spirit Bond
+            self._spirit_bond_until = now + 60.0
+            self.say("You bond with your wyvern.")
+            system_handled = True
+        if int(ability_id) == 328 and target is not None and target.alive:  # Larceny
+            stolen = None
+            for effect_id, state in list(getattr(target, "effect_state", {}).items()):
+                if int(effect_id) in weapon_skill_effects.AILMENTS:
+                    continue
+                stolen = (int(effect_id), state)
+                break
+            if stolen is None:
+                self.say("The target has no effect to steal.")
+            else:
+                effect_id, state = stolen
+                remaining = max(1.0, float(state.get("until", now + 60.0)) - now)
+                self.add_effect(effect_id, duration=remaining,
+                                power=int(state.get("power") or 0),
+                                mods=state.get("mods"))
+                try:
+                    target.effect_state.pop(effect_id, None)
+                except Exception:
+                    pass
+                self.queue.append(self.char_status())
+                self.say("You steal an effect from the target.")
+            system_handled = True
+        elif int(ability_id) == 161 and target is not None and target.alive:  # Feral Howl
+            self.world.apply_mob_effect(
+                target, effects.SpellEffect(effects.STUN, "debuff", 5.0),
+                self, now, duration=5.0)
+            self.say("Your howl terrifies the target.")
+            system_handled = True
+        elif int(ability_id) == 388:                       # Cascade
+            tp = int(self.char.get("tp", 0))
+            bonus = max(0, tp // 10)
+            self.char["tp"] = 0
+            self._cascade_bonus = bonus
+            self.queue.append(self.party_member())
+            self.say("Your next spell gains +%d Magic Damage." % bonus)
+            system_handled = True
+        elif int(ability_id) == 160:                       # Diabolic Eye
+            self._diabolic_until = now + 60.0
+            self.say("Your dark magic is empowered.")
+            system_handled = True
+        elif int(ability_id) == 159:                         # Dark Seal
+            self._dark_seal = True
+            self.say("Your next dark magic spell will be more accurate.")
+            system_handled = True
+        elif int(ability_id) == 158:                       # Chivalry
+            tp = int(self.char.get("tp", 0))
+            mnd = int(self.stat_sheet().attributes.get("mnd", 0))
+            amount = int(tp * 0.05 + tp * 0.0015 * mnd)
+            if amount <= 0:
+                self.say("You have no TP to convert.")
+            else:
+                mp = int(self.char.get("mp_current", 0))
+                self.char["mp_current"] = min(int(self.char.get("mp", 0)), mp + amount)
+                self.char["tp"] = 0
+                self.queue += [self.char_status(), self.party_member()]
+                self.say("You convert %d TP into %d MP." % (tp, amount))
+            system_handled = True
+        elif int(ability_id) == 169:                       # Deep Breathing
+            self._deep_breathing_until = now + 180.0
+            self.say("Your wyvern's next breath is empowered.")
+            system_handled = True
+        elif int(ability_id) == 275:                         # Spontaneity
+            self._spontaneity = True
+            self.say("Your next spell will be instant.")
+            system_handled = True
+        elif int(ability_id) == 272 and target is not None and target.alive:  # Enmity Douse
+            me = int(self.char["char_id"])
+            hate = target.enmity
+            amount = int(hate.get(me, 0))
+            if amount <= 0:
+                self.say("You have no enmity to douse.")
+            else:
+                hate[me] = amount // 2
+                target.enmity_ve[me] = 0
+                self.say("You douse %d enmity." % (amount - amount // 2))
+            system_handled = True
+
+        if int(ability_id) == 392:                         # Crooked Cards
+            self.crooked_cards = True
+            self.say("Your next roll will be one higher.")
+            system_handled = True
+
+        if int(ability_id) == 265 and target is not None and target.alive:  # Libra
+            level = int(getattr(target, "level", 0))
+            hp = int(getattr(target, "hp", 0))
+            hp_max = max(1, int(getattr(target, "hp_max", 1)))
+            self.say("Libra: %s is level %d with %d/%d HP (%d%%)." % (
+                getattr(target, "name", "the target"), level, hp, hp_max,
+                hp * 100 // hp_max))
+            system_handled = True
+
+        if int(ability_id) == 389:                            # Consume Mana
+            mp = int(self.char.get("mp_current", 0))
+            if mp <= 0:
+                self.say("You have no MP to consume.")
+            else:
+                self.char["mp_current"] = 0
+                self._consume_mana_bonus = mp
+                self.queue += [self.char_status(), self.party_member()]
+                self.say("You consume %d MP; your next hit will carry it." % mp)
+            system_handled = True
+
+        if int(ability_id) == 39:                            # Boost
+            self._boost_until = now + 30.0
+            self.say("Your next attack will be stronger.")
+            system_handled = True
+        elif int(ability_id) == 82 and target is not None and target.alive:  # Chi Blast
+            mnd = int(self.stat_sheet().attributes.get("mnd", 0))
+            amount = 100 + mnd * 2
+            defeated = int(target.hp) - amount <= 0
+            target.hp = max(0, int(target.hp) - amount)
+            self.world.add_damage_hate(target, me, amount, now)
+            self.world._queue_mob_hp(target)
+            self.queue.append(sub(0x028, packets.battle_action(
+                me, int(target.id), amount, kind=2, message=packets.MESSAGE_DAMAGE,
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                action_id=int(ability_id))))
+            if defeated:
+                self.world.kill_mob(self, target, now)
+            system_handled = True
+        elif int(ability_id) == 152:                         # Formless Strikes
+            self._formless_until = now + 30.0
+            self.say("Your next attack will ignore defense.")
+            system_handled = True
+
+        # Puppetmaster automaton commands.
+        if int(ability_id) in range(141, 149):               # Fire..Dark Maneuver
+            maneuvers = list(getattr(self, "maneuvers", []))
+            if len(maneuvers) >= 3:
+                self.say("Your automaton can hold at most three maneuvers.")
+            else:
+                maneuvers.append(name)
+                self.maneuvers = maneuvers
+                self.say("You grant the %s maneuver. (%d/3)" % (name, len(maneuvers)))
+            system_handled = True
+        elif int(ability_id) == 138:                         # Deploy
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no automaton.")
+            elif target is None or not target.alive:
+                self.say("There is no target for your automaton.")
+            else:
+                pet.engaged_id = int(target.id)
+                pet.next_attack_at = now + 0.5
+                pet.pet_state = "engage"
+                self.say("%s deploys." % pet.name)
+            system_handled = True
+        elif int(ability_id) == 140:                         # Retrieve
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no automaton.")
+            else:
+                pet.engaged_id = 0
+                pet.next_attack_at = now + 2.0
+                pet.pet_state = "follow"
+                self.say("%s returns." % pet.name)
+            system_handled = True
+        elif int(ability_id) == 310:                         # Deus Ex Automata
+            pet = getattr(self, "pet_entity", None)
+            if pet is not None and pet.alive:
+                self.say("Your automaton is already active.")
+            else:
+                self.world.spawn_pet(self, "automaton", now)
+                self.say("Your automaton rises again.")
+            system_handled = True
+        elif int(ability_id) == 266:                         # Tactical Switch
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no automaton.")
+            else:
+                own = int(self.char.get("tp", 0))
+                pet_tp = int(getattr(pet, "tp", 0))
+                self.char["tp"] = pet_tp
+                pet.tp = own
+                self.queue.append(self.party_member())
+                self.say("You switch TP with %s." % pet.name)
+            system_handled = True
+        elif int(ability_id) == 322:                         # Maintenance
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no automaton.")
+            else:
+                heal = max(1, int(getattr(pet, "hp_max", 1)) // 2)
+                pet.hp = min(int(getattr(pet, "hp_max", pet.hp)), int(pet.hp) + heal)
+                for effect_id in list(getattr(pet, "status_effects", [])):
+                    try:
+                        pet.status_effects.remove(effect_id)
+                    except ValueError:
+                        pass
+                self.world._queue_mob_hp(pet)
+                self.say("You perform maintenance on %s." % pet.name)
+            system_handled = True
+        elif int(ability_id) == 180:                         # Ventriloquy
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no automaton.")
+            elif target is None or not target.alive or not target.enmity:
+                self.say("There is no enmity to transfer.")
+            else:
+                me = int(self.char["char_id"])
+                amount = int(target.enmity.get(me, 0)) // 2
+                target.enmity[me] = max(0, int(target.enmity.get(me, 0)) - amount)
+                target.enmity[int(pet.id)] = int(target.enmity.get(int(pet.id), 0)) + amount
+                self.say("You transfer %d enmity to %s." % (amount, pet.name))
+            system_handled = True
+        elif int(ability_id) == 179:                         # Role Reversal
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no automaton.")
+            else:
+                own = int(self.char.get("hp_current", 0))
+                pet_hp = int(pet.hp)
+                self.char["hp_current"] = min(int(self.char.get("hp", 1)), pet_hp)
+                pet.hp = min(int(getattr(pet, "hp_max", pet.hp)), own)
+                self.queue += [self.char_status(), self.party_member()]
+                self.world._queue_mob_hp(pet)
+                self.say("You reverse roles with %s." % pet.name)
+            system_handled = True
+
+        # Puppetmaster and Rune Fencer utility.
         elif int(ability_id) == 344 and target is not None and target.alive:  # Swipe
             amount = 100 + job_points.category_total(22, "Swipe Effect")
             defeated = int(target.hp) - amount <= 0
@@ -5540,7 +10571,10 @@ class ZoneSession:
 
         # Pet support abilities.
         if int(ability_id) == 349:                           # Life Cycle
-            self.world.spawn_pet(self, "luopan", now)
+            self._life_cycle(now)
+            system_handled = True
+        elif int(ability_id) == 354:                         # Mending Halation
+            self._mending_halation(now)
             system_handled = True
         elif int(ability_id) == 340:                         # Heady Artifice
             pet = getattr(self, "pet_entity", None)
@@ -5562,14 +10596,53 @@ class ZoneSession:
                 self.world._queue_mob_hp(pet)
                 system_handled = True
         elif int(ability_id) == 232:                         # Elemental Siphon
-            mp = int(self.char.get("mp_current", 0))
-            self.char["mp_current"] = min(int(self.char.get("mp", 0)), mp + 100)
-            self.queue += [self.char_status(), self.party_member()]
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no avatar.")
+            else:
+                mp = int(self.char.get("mp_current", 0))
+                gain = 100 + int(getattr(pet, "level", 1)) * 2
+                self.char["mp_current"] = min(int(self.char.get("mp", 0)), mp + gain)
+                self.queue += [self.char_status(), self.party_member()]
+                self.say("You siphon %d MP from %s." % (gain, pet.name))
             system_handled = True
         elif int(ability_id) == 296:                         # Mana Cede
-            mp = int(self.char.get("mp_current", 0))
-            self.char["mp_current"] = min(int(self.char.get("mp", 0)), mp + 100)
-            self.queue += [self.char_status(), self.party_member()]
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no avatar.")
+            else:
+                cost = max(1, int(pet.hp) // 10)
+                pet.hp = max(1, int(pet.hp) - cost)
+                self.world._queue_mob_hp(pet)
+                mp = int(self.char.get("mp_current", 0))
+                gain = min(cost, max(0, int(self.char.get("mp", 0)) - mp))
+                self.char["mp_current"] = mp + gain
+                self.queue += [self.char_status(), self.party_member()]
+                self.say("You cede %d MP through %s." % (gain, pet.name))
+            system_handled = True
+
+        # Summoner avatar commands.
+        if int(ability_id) in (88, 89):
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no avatar.")
+            elif int(ability_id) == 88:                  # Assault
+                if target is None or not target.alive:
+                    self.say("There is no target for your avatar.")
+                else:
+                    pet.engaged_id = int(target.id)
+                    pet.next_attack_at = now + 0.5
+                    pet.pet_state = "engage"
+                    self.say("%s assaults the target." % pet.name)
+            else:                                       # Retreat
+                pet.engaged_id = 0
+                pet.next_attack_at = now + 2.0
+                pet.pet_state = "follow"
+                self.say("%s retreats." % pet.name)
+            system_handled = True
+        elif int(ability_id) == 385:                     # Apogee
+            self._apogee_until = now + 60.0
+            self.say("Your next Blood Pact will be empowered.")
             system_handled = True
 
         # Summoner Blood Pacts act through the active avatar.
@@ -5577,19 +10650,30 @@ class ZoneSession:
             pet = getattr(self, "pet_entity", None)
             if pet is None or not pet.alive:
                 self.say("You have no avatar to use a Blood Pact.")
-            elif int(ability_id) == 91 and target is not None and target.alive:
-                amount = 300 + job_points.category_total(15, "Blood Pact Damage")
-                defeated = int(target.hp) - amount <= 0
-                target.hp = max(0, int(target.hp) - amount)
-                self.world.add_damage_hate(target, int(self.char["char_id"]), amount, now)
-                self.world._queue_mob_hp(target)
-                self.queue.append(sub(0x028, packets.battle_action(
-                    int(pet.id), int(target.id), amount, kind=2,
-                    message=packets.MESSAGE_DAMAGE,
-                    category=packets.ACTION_CATEGORY_ABILITY_FINISH,
-                    action_id=int(ability_id))))
-                if defeated:
-                    self.world.kill_mob(self, target, now)
+            elif int(ability_id) == 91:
+                bp_target = target
+                if (bp_target is None or not bp_target.alive) and self.engaged_id:
+                    bp_target = self.world.entity_by_id(
+                        int(self.zone), int(self.engaged_id))
+                if bp_target is not None and bp_target.alive:
+                    amount = 300 + job_points.category_total(15, "Blood Pact Damage")
+                    if float(getattr(self, "_apogee_until", 0.0)) > now:
+                        amount += 300
+                        self._apogee_until = 0.0
+                    if self.has_effect(effects.ASTRAL_FLOW):
+                        amount *= 2
+                    defeated = int(bp_target.hp) - amount <= 0
+                    bp_target.hp = max(0, int(bp_target.hp) - amount)
+                    self.world.add_damage_hate(
+                        bp_target, int(self.char["char_id"]), amount, now)
+                    self.world._queue_mob_hp(bp_target)
+                    self.queue.append(sub(0x028, packets.battle_action(
+                        int(pet.id), int(bp_target.id), amount, kind=2,
+                        message=packets.MESSAGE_DAMAGE,
+                        category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                        action_id=int(ability_id))))
+                    if defeated:
+                        self.world.kill_mob(self, bp_target, now)
                 system_handled = True
             elif int(ability_id) == 172:
                 pet.hp = min(int(getattr(pet, "hp_max", pet.hp)), int(pet.hp) + 300)
@@ -5597,9 +10681,13 @@ class ZoneSession:
                 system_handled = True
 
         # Dragoon jumps and Ninja Mijin Gakure.
-        if int(ability_id) in (66, 67) and target is not None and target.alive:
-            amount = 200 + job_points.category_total(
-                14, "Jump Effect" if int(ability_id) == 66 else "High Jump Effect")
+        if int(ability_id) in (66, 67, 68, 260, 293, 292) and target is not None and target.alive:
+            jump_base = {66: 200, 67: 200, 68: 300, 260: 300, 293: 400, 292: 500}
+            category = {66: "Jump Effect", 67: "High Jump Effect",
+                        68: "Super Jump Effect", 260: "Spirit Jump Effect",
+                        293: "Soul Jump Effect", 292: "Dragon Breaker Effect"}
+            amount = jump_base[int(ability_id)] + job_points.category_total(
+                14, category[int(ability_id)])
             defeated = int(target.hp) - amount <= 0
             target.hp = max(0, int(target.hp) - amount)
             self.world.add_damage_hate(target, me, amount, now)
@@ -5608,8 +10696,84 @@ class ZoneSession:
                 me, int(target.id), amount, kind=2, message=packets.MESSAGE_DAMAGE,
                 category=packets.ACTION_CATEGORY_ABILITY_FINISH,
                 action_id=int(ability_id))))
+            if int(ability_id) == 68:                     # Super Jump sheds hate
+                hate = target.enmity
+                hate[me] = max(0, int(hate.get(me, 0)) // 2)
+                target.enmity_ve[me] = 0
+            elif int(ability_id) == 293:                  # Soul Jump restores TP
+                self.gain_tp(100)
+            elif int(ability_id) == 292:                  # Dragon Breaker
+                self.world.apply_mob_effect(
+                    target, effects.SpellEffect(effects.ATTACK_DOWN, "debuff", 60.0,
+                                                potency=20),
+                    self, now, duration=60.0)
             if defeated:
                 self.world.kill_mob(self, target, now)
+            system_handled = True
+        elif int(ability_id) == 170 and target is not None and target.alive:  # Angon
+            amount = 50 + job_points.category_total(14, "Angon Effect")
+            defeated = int(target.hp) - amount <= 0
+            target.hp = max(0, int(target.hp) - amount)
+            self.world.add_damage_hate(target, me, amount, now)
+            self.world._queue_mob_hp(target)
+            self.world.apply_mob_effect(
+                target, effects.SpellEffect(effects.DEFENSE_DOWN, "debuff", 60.0,
+                                            potency=25),
+                self, now, duration=60.0)
+            self.queue.append(sub(0x028, packets.battle_action(
+                me, int(target.id), amount, kind=2, message=packets.MESSAGE_DAMAGE,
+                category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                action_id=int(ability_id))))
+            if defeated:
+                self.world.kill_mob(self, target, now)
+            system_handled = True
+        elif int(ability_id) == 318 and target is not None and target.alive:  # Smiting Breath
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no wyvern.")
+            else:
+                amount = 300 + job_points.category_total(14, "Smiting Breath Effect")
+                if float(getattr(self, "_deep_breathing_until", 0.0)) > now:
+                    amount *= 2
+                    self._deep_breathing_until = 0.0
+                defeated = int(target.hp) - amount <= 0
+                target.hp = max(0, int(target.hp) - amount)
+                self.world.add_damage_hate(target, me, amount, now)
+                self.world._queue_mob_hp(target)
+                self.queue.append(sub(0x028, packets.battle_action(
+                    int(pet.id), int(target.id), amount, kind=2,
+                    message=packets.MESSAGE_DAMAGE,
+                    category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                    action_id=int(ability_id))))
+                if defeated:
+                    self.world.kill_mob(self, target, now)
+            system_handled = True
+        elif int(ability_id) == 319:                         # Restoring Breath
+            pet = getattr(self, "pet_entity", None)
+            if pet is None or not pet.alive:
+                self.say("You have no wyvern.")
+            else:
+                heal = 300 + job_points.category_total(14, "Restoring Breath Effect")
+                if float(getattr(self, "_deep_breathing_until", 0.0)) > now:
+                    heal *= 2
+                    self._deep_breathing_until = 0.0
+                self._heal_job_ability(heal)
+                me = int(self.char["char_id"])
+                group = self.world.party_of(me)
+                if group is not None:
+                    for member in group.members:
+                        if int(member.char_id) == me:
+                            continue
+                        other = self.world.session_by_char(int(member.char_id))
+                        if other is None or int(other.zone) != int(self.zone):
+                            continue
+                        if math.dist(self.pos[:3], other.pos[:3]) > 10.0:
+                            continue
+                        before = int(other.char.get("hp_current", 0))
+                        other.char["hp_current"] = min(
+                            int(other.char.get("hp", 1)), before + heal)
+                        other.queue += [other.char_status(), other.party_member()]
+                self.say("Your wyvern restores the party's HP.")
             system_handled = True
         elif int(ability_id) == 28 and target is not None and target.alive:  # Mijin Gakure
             amount = 500 + job_points.category_total(13, "Mijin Gakure Effect")
@@ -5664,46 +10828,89 @@ class ZoneSession:
                 action_id=int(ability_id))))
             if defeated:
                 self.world.kill_mob(self, target, now)
+            if int(ability_id) == 46:                    # Shield Bash
+                if self.world.rng.random() < 0.70:
+                    self.world.apply_mob_effect(
+                        target, effects.SpellEffect(effects.STUN, "debuff", 5.0),
+                        self, now, duration=5.0)
             system_handled = True
 
-        # Corsair rolls and their commands.
-        if rolls.spec(int(ability_id)) is not None:
-            system_handled = rolls.apply(self, int(ability_id), self.world.rng, now)
-        elif ability_id == rolls.DOUBLE_UP:                   # Double-Up
-            system_handled = rolls.double_up(self, self.world.rng)
+        # Corsair rolls and their commands.  They own their own refusal lines ("busted",
+        # "no active roll", "too late to Double-Up"), so the generic "You use ..." fallback
+        # must not add a second message when one of them refuses.
+        if roll_ability:
+            rolls.apply(self, int(ability_id), self.world.rng, now,
+                        animation=int(ability.get("animation") or 0))
+            self._queue_roll_action(me, int(ability_id),
+                                    int(ability.get("animation") or 0))
+            system_handled = True
+        elif double_up:                                       # Double-Up
+            target_roll = rolls.newest(self)
+            roll_id = roll_animation = 0
+            if target_roll is not None:
+                roll_id = next((aid for aid, spec in rolls.ROLLS.items()
+                                if int(spec.status) == int(target_roll.status)), 0)
+                try:
+                    roll_animation = int(
+                        self.world.service.job_ability(roll_id)["animation"] or 0)
+                except Exception:
+                    roll_animation = 0
+            success = rolls.double_up(self, self.world.rng, now,
+                                      animation=roll_animation, ability_id=roll_id)
+            if success:
+                self._queue_roll_action(me, int(ability_id),
+                                        int(ability.get("animation") or 0))
+            else:
+                # The client still sends the ability; answer with the retail check
+                # message instead of a fake Double-Up animation and no effect.
+                ability_failed = True
+                self.queue.append(sub(0x028, packets.battle_action(
+                    me, me, 0, message=packets.MESSAGE_NO_ELIGIBLE_ROLL,
+                    kind=2, category=packets.ACTION_CATEGORY_ABILITY_FINISH,
+                    action_id=int(ability_id), info=0)))
+            system_handled = True
         elif ability_id == rolls.SNAKE_EYE:                   # Snake Eye
             self.snake_eye = True
             system_handled = True
             self.say("Your next roll will be an 11.")
         elif ability_id == rolls.FOLD:                        # Fold
-            system_handled = rolls.fold(self)
+            rolls.fold(self)
+            system_handled = True
 
         # Pet calls and commands.  The pet itself follows and fights in World.
-        if ability_id == 85:                                 # Call Beast
-            self.world.spawn_pet(self, "beast", now)
+        if ability_id in (85, 387):                          # Call Beast / Bestial Loyalty
+            self._call_jug(int(ability_id), now)
+            system_handled = True
         elif ability_id == 61:                               # Call Wyvern
             self.world.spawn_pet(self, "wyvern", now)
+            system_handled = True
         elif ability_id == 136:                              # Activate
             self.world.spawn_pet(self, "automaton", now)
-        elif ability_id in (90, 87, 139):                    # Release/Dismiss/Deactivate
+            system_handled = True
+        elif ability_id in (71, 90, 87, 139):               # Leave/Release/Dismiss/Deactivate
             pet = getattr(self, "pet_entity", None)
             if pet is not None:
                 self.world.despawn_pet(pet, now, "released")
+                self.say("Your pet leaves." if ability_id == 71 else "%s is released." % pet.name)
+            system_handled = True
         elif ability_id in (69, 72, 251):                    # Fight/Sic/Ready
             pet = getattr(self, "pet_entity", None)
             if pet is not None:
                 pet.pet_state = "fight"
                 self.say("%s is ready to fight." % pet.name)
+            system_handled = True
         elif ability_id == 70:                               # Heel
             pet = getattr(self, "pet_entity", None)
             if pet is not None:
                 pet.pet_state = "follow"
                 self.say("%s heels." % pet.name)
+            system_handled = True
         elif ability_id == 73:                               # Stay
             pet = getattr(self, "pet_entity", None)
             if pet is not None:
                 pet.pet_state = "stay"
                 self.say("%s stays." % pet.name)
+            system_handled = True
 
         # The handful of abilities with a visible state change.
         if ability_id == 35 and target is not None:          # Provoke
@@ -5723,16 +10930,20 @@ class ZoneSession:
                 "<IIHH", me, int(target.id), int(self.char.get("targid", 0x400)), 0)))
             self.queue.append(self.char_update(packets.SEND_HP))
         elif ability_id == 18:                               # Benediction
-            self.char["hp_current"] = int(self.char["hp"])
-            self.char["mp_current"] = int(self.char.get("mp", 0))
-            self.queue += [self.char_status(), self.party_member()]
+            self._benediction(now, ability)
+            system_handled = True
         elif ability_id == 38:                               # Chakra
             heal = max(1, int(self.char["hp"]) // 4)
             heal += job_points.category_total(2, "Chakra Effect")
             self._heal_job_ability(heal)
         elif ability_id == 63:                               # Meditate
-            self.gain_tp(1000 + job_points.category_total(12, "Meditate Effect"))
-            self.queue.append(self.party_member())
+            # Retail: 200 TP a tick for five ticks (1000 total) as a Samurai main, and
+            # 120 a tick to 600 as a sub job.  The job-point row adds 5 a tick.
+            main = int(self.char.get("main_job") or 0) == 12
+            per = (200 if main else 120) + (
+                job_points.category_total(12, "Meditate Effect") if main else 0)
+            self.meditate = {"per": per, "cap": 1000 if main else 600, "total": 0,
+                             "ticks": 5, "next": now + 3.0}
         elif ability_id == 83:                               # Convert
             hp = int(self.char.get("hp_current", 0))
             mp = int(self.char.get("mp_current", 0))
@@ -5754,27 +10965,41 @@ class ZoneSession:
                 self.char["mp_current"] = min(
                     max_mp, int(self.char.get("mp_current", 0)) + gain)
                 self.queue += [self.char_stats(), self.char_status()]
-        elif ability_id in (190, 191, 192, 193, 311):        # Curing Waltz I..V
-            heal = max(1, int(self.char["hp"]) * (8 + ability_id % 10) // 100)
-            heal += job_points.category_total(19, "Waltz Potency")
-            self._heal_job_ability(heal)
-        elif ability_id in (194, 195, 262):                  # Healing/Divine Waltz
-            self._heal_job_ability(max(1, int(self.char["hp"]) // 10))
-        elif ability_id in (24, 78, 225, 281, 282):
-            # Familiar, Sic, Reward, Call Beast, Snarl, Spur, Run Wild: these act on a
-            # pet, and Fanxi has no pet model yet.  The use still plays so the menu is not
-            # a dead end, and the line says why nothing else happened.
-            self.say("You have no pet for %s." % name)
+        elif ability_id in (24, 225, 281):
+            # Familiar, Snarl and Spur still need their real pet effects.  Reward and
+            # Run Wild are handled above; they must not fall through to this message.
+            pet = getattr(self, "pet_entity", None)
+            if pet is not None and pet.alive:
+                self.say("%s is not implemented yet." % name)
+            else:
+                self.say("You have no pet for %s." % name)
         elif applied is None and fallback is None and not system_handled:
             # An ability that put up an icon needs no "You use ..." line: the 0x028
             # above already prints it, and retail only shows the one.
             self.say("You use %s." % name)
 
-        if recast_id:
-            recast = max(0, int(ability.get("recast") or 0))
+        recast = max(0, int(ability.get("recast") or 0))
+        if (recast_id or recast) and not ability_failed:
             if fallback is not None:
                 recast = max(0, recast - int(fallback.get("recast_bonus") or 0))
-            if int(ability_id) == 310:                       # Deus Ex Automata
+            # The Master job-point gift ("★Master!") shortens every one-hour
+            # ability's recast by 15 minutes.  It is stored on the gift table as
+            # modifier 996 and applies to the shared two-hour slot.
+            master_minutes = int(job_points.gift_totals(
+                int(self.char.get("main_job") or 0))["mods"].get(
+                    mod.ONE_HOUR_RECAST, 0))
+            if master_minutes and recast >= 3600:
+                recast = max(0, recast - master_minutes * 60)
+            if (dancer.is_flourish(int(ability_id))
+                    and self.has_effect(effects.GRAND_PAS)):
+                recast = 0
+            elif int(ability_id) == 97:                       # Phantom Roll
+                recast = max(0, recast - int(
+                    self.combat_mods().get(mod.PHANTOM_ROLL, 0)))
+            elif int(ability_id) in (66, 67, 68, 260, 293) and float(
+                    getattr(self, "_fly_high_until", 0.0)) > time.time():
+                recast = 10
+            elif int(ability_id) == 310:                     # Deus Ex Automata
                 recast = max(0, recast - job_points.category_total(
                     18, "Deus Ex Automata Recast"))
             elif int(ability_id) == 272:                     # Enmity Douse
@@ -5791,10 +11016,10 @@ class ZoneSession:
                 if self.has_effect(effects.TRANCE):
                     recast = min(recast, 6)
                 if self.has_effect(effects.FAN_DANCE):
-                    fan_rank = int(self.merit_counts().get(dancer.MERIT_FAN_DANCE, 0))
+                    fan_rank = self._dnc_merit(dancer.MERIT_FAN_DANCE)
                     if fan_rank:
                         recast = recast * max(0, 100 - 5 * fan_rank) // 100
-            self.ability_recasts[recast_id] = now + recast
+            self.ability_recasts[recast_key] = now + recast
             self.queue.append(self.abil_recast())
         try:
             self.world.service.save_vitals(
@@ -5802,6 +11027,63 @@ class ZoneSession:
                 int(self.char.get("mp_current", 0)))
         except Exception:
             pass
+
+    def _ammo_jug(self) -> tuple[dict, int, int, int] | None:
+        """The Call Beast jug equipped in ammo: (catalogue row, container, slot, item id)."""
+        entry = self.equipped.get(3)          # equip kind 3 is ammo
+        if not entry:
+            return None
+        container, slot, item_id = (int(entry[0]), int(entry[1]), int(entry[2]))
+        row = jugpets.for_item(item_id)
+        if row is None:
+            return None
+        return row, container, slot, item_id
+
+    def _consume_ammo_jug(self, item_id: int, container: int, slot: int) -> None:
+        """Call Beast eats one jug from the equipped stack.
+
+        The slot update is the same 0x020 item-use sends, and an emptied stack also
+        clears the ammo slot so the client does not keep drawing a jug the server no
+        longer has.  The phase engine's restore set can equip the normal ammo right
+        after the action result.
+        """
+        try:
+            consumed = self.world.service.consume_inventory_slot(
+                int(self.char["id"]), container, slot)
+        except Exception as exc:
+            log.warning("%s jug consume failed: %s", self.addr, exc)
+            return
+        if consumed is None:
+            return
+        left = int(consumed["quantity"])
+        self.queue.append(sub(0x020, packets.item_attr(
+            item_id if left else 0, left, container, slot)))
+        self.queue.append(self.container_sync())
+        if left <= 0:
+            self.equipped.pop(3, None)
+            self.queue.append(sub(0x050, struct.pack("<BBBx", 0, 3, 0)))
+            self.note_equipment_change()
+
+    def _call_jug(self, ability_id: int, now: float) -> bool:
+        """Call Beast (85) or Bestial Loyalty (387) with the ammo jug's pet.
+
+        Retail picks the pet from the jug's subskill; the generated catalogue carries
+        that mapping.  Call Beast spends the jug, Bestial Loyalty keeps it.  A missing
+        jug is reported before the pet spawn so the player knows why nothing happened.
+        """
+        found = self._ammo_jug()
+        if found is None:
+            self.say("You must equip a Call Beast jug in your ammo slot.")
+            return False
+        row, container, slot, item_id = found
+        pet = self.world.spawn_pet(self, spec=jugpets.spec(row), now=now)
+        if pet is None:
+            return False
+        pet.pet_jug_item = item_id
+        self.pet_jug_item = item_id
+        if int(ability_id) == 85:             # Call Beast spends the jug
+            self._consume_ammo_jug(item_id, container, slot)
+        return True
 
     def _heal_job_ability(self, amount: int) -> None:
         """Add HP (capped at the maximum) and keep the client's gauges in step."""
@@ -5835,12 +11117,122 @@ class ZoneSession:
             spec, main_job=main_job, main_level=main_level, mods=char_mods,
             skill=skill, light_arts=light_arts, tabula_rasa=tabula_rasa,
             light_arts_jp_rank=JOB_POINT_RANK, enhancing=enhancing,
-            perpetuance=perpetuance, white_enhancing=white_enhancing)
+            perpetuance=perpetuance, white_enhancing=white_enhancing, name=name)
         tick = effects.buff_tick(
             spec, main_job=main_job, main_level=main_level, mods=char_mods,
             light_arts=light_arts, tabula_rasa=tabula_rasa)
-        power = effects.buff_power(spec, char_mods)
+        if effects.is_enspell(int(spec.effect)):
+            power = self._enspell_starting_charge(spec, name)
+        else:
+            power = effects.buff_power(spec, char_mods)
         return duration, tick, power, perpetuance
+
+    def _enspell_starting_charge(self, spec: "effects.SpellEffect", name: str) -> int:
+        """The value an en-spell stores when it lands.
+
+        Tier I stores the base damage for the whole buff: retail freezes it at cast, so
+        the midcast set's Enhancing Magic skill is what counts.  Tier II stores zero
+        because its base is recalculated from the current skill every round and the
+        stored number is the hidden attack-round counter.  Enlight/Endark store their
+        decaying charge, which comes from Divine or Dark Magic skill instead.
+        """
+        tier = effects.enspell_tier(int(spec.effect))
+        if tier == 2:
+            return 0
+        skills, _base = self.effective_skills()
+        if tier == 3:
+            skill_id = (packets.SKILL_DIVINE if effects.enspell_element(int(spec.effect)) == 7
+                        else packets.SKILL_DARK)
+            return combat.enlight_potency(
+                int(skills.get(skill_id, 0)), tier=effects.tier_of(name))
+        return combat.enspell_potency(int(skills.get(packets.SKILL_ENHANCING, 0)))
+
+    def _party_spell_target(self, act_index: int):
+        """The party member selected with the client's sub-target cursor.
+
+        The 0x01A act index is the target's targid.  Players are not ZoneEntity rows,
+        so ``entity_by_targid`` cannot see them; the party roster carries the targid
+        the caster's client displays.  Self is always 0x400 in the caster's own view.
+        """
+        if not act_index:
+            return None
+        me = int(self.char["char_id"])
+        if int(act_index) in (TARGID, int(getattr(self, "targid", 0) or 0)):
+            return self
+        party = self.world.party_of(me)
+        if party is None:
+            return None
+        for member in party.members:
+            if int(member.char_id) == me or int(member.targid) != int(act_index):
+                continue
+            other = self.world.session_by_char(int(member.char_id))
+            if other is None or int(other.zone) != int(self.zone):
+                return None
+            if other.dead_until or int(other.char.get("hp_current", 0)) <= 0:
+                return None
+            if math.dist(self.pos[:3], other.pos[:3]) > 25.0:
+                return None
+            return other
+        return None
+
+    def _heal_target(self, target, spell: dict, cast: dict) -> None:
+        """Apply a finished Cure to ``target`` and refresh both clients."""
+        me = int(self.char["char_id"])
+        hp = int(target.char.get("hp_current", 0))
+        maximum = int(target.char.get("hp", hp))
+        healed = min(maximum, hp + int(cast.get("amount") or 0))
+        target.char["hp_current"] = healed
+        action = sub(0x028, packets.battle_action(
+            me, int(target.char["char_id"]), healed - hp,
+            animation=spell_animation(spell), kind=0,
+            message=packets.MESSAGE_MAGIC_RECOVERS_HP, info=0,
+            category=packets.ACTION_CATEGORY_MAGIC_FINISH,
+            action_id=int(spell["id"])))
+        self.queue.append(action)
+        if target is self:
+            self.queue += [self.char_status(), self.party_member()]
+        else:
+            target.queue += [action, target.char_status(), target.party_member()]
+            self.queue.append(self.party_member())
+        try:
+            self.world.service.save_vitals(
+                int(target.char["id"]), healed, int(target.char.get("mp_current", 0)))
+        except Exception:
+            pass
+        if self.resting:
+            self.stop_resting()
+
+    def _buff_target(self, target, spell: dict, now: float,
+                     spec: "effects.SpellEffect") -> None:
+        """Apply a finished enhancing buff to one party member."""
+        me = int(self.char["char_id"])
+        duration, tick, power, perpetuance = self._buff_values(spell, spec)
+        if effects.is_enspell(int(spec.effect)):
+            # Only one en-spell is active at a time, and a recast starts the tier II
+            # counter over instead of carrying the old one across.  En-spells are
+            # self-targeted, so the list being cleared is the caster's own.
+            for effect_id in effects.ENSPELL_IDS:
+                target.remove_effect(int(effect_id), quiet=True)
+        target.add_effect(spec.effect, duration=duration, power=power,
+                          potency=spec.potency, tick=tick, icon=spec.icon,
+                          mods=spec.mods)
+        if perpetuance:
+            self.remove_effect(effects.PERPETUANCE, quiet=True)
+        action = sub(0x028, packets.battle_action(
+            me, int(target.char["char_id"]), int(spec.effect),
+            animation=spell_animation(spell), kind=0,
+            message=packets.MESSAGE_MAGIC_GAIN_EFFECT, info=0,
+            category=packets.ACTION_CATEGORY_MAGIC_FINISH,
+            action_id=int(spell["id"])))
+        self.queue.append(action)
+        if target is self:
+            self.queue.append(self.char_status())
+        else:
+            target.queue += [action, target.char_status()]
+            if perpetuance:
+                self.queue.append(self.char_status())
+        if self.resting:
+            self.stop_resting()
 
     def resolve_self_spell(self, spell: dict, now: float,
                            spec: "effects.SpellEffect | None" = None) -> None:
@@ -5895,22 +11287,7 @@ class ZoneSession:
             self.say("%s finds no fallen player to target." % name)
             return
         if spec is not None and spec.kind == "buff":
-            duration, tick, power, perpetuance = self._buff_values(spell, spec)
-            self.add_effect(spec.effect, duration=duration, power=power,
-                            potency=spec.potency, tick=tick, icon=spec.icon,
-                            mods=spec.mods)
-            if perpetuance:
-                # Perpetuance lasts for one white enhancing spell, not its full minute.
-                # The buff list below already carries the removal to the client.
-                self.remove_effect(effects.PERPETUANCE, quiet=True)
-            self.queue.append(sub(0x028, packets.battle_action(
-                me, me, int(spec.effect), animation=spell_animation(spell), kind=0,
-                message=packets.MESSAGE_MAGIC_GAIN_EFFECT, info=0,
-                category=packets.ACTION_CATEGORY_MAGIC_FINISH,
-                action_id=int(spell["id"]))))
-            self.queue.append(self.char_status())
-            if self.resting:
-                self.stop_resting()
+            self._buff_target(self, spell, now, spec)
             return
         # A support spell with no tracked effect: finish it without a damage result.
         self.queue.append(sub(0x028, packets.battle_action(
@@ -5945,29 +11322,194 @@ class ZoneSession:
             targets.append(other)
         return targets
 
+    def _song_values(self, spell: dict, spec: "effects.SpellEffect"
+                     ) -> tuple[float, int, dict[int, int]]:
+        """(duration, tick, mods) for one song from the caster's live state."""
+        name = str(spell["name"])
+        mods = self.combat_mods()
+        soul_voice = self.has_effect(effects.SOUL_VOICE)
+        marcato = self.has_effect(effects.MARCATO) and not soul_voice
+        duration = effects.song_duration(
+            spec, name=name, mods=mods,
+            troubadour=self.has_effect(effects.TROUBADOUR),
+            soul_voice=soul_voice, marcato=marcato,
+            clarion=self.has_effect(effects.CLARION_CALL),
+            tenuto=self.has_effect(effects.TENUTO),
+            flat_seconds=self.song_duration_flat(name))
+        effect_mods, tick = effects.song_potency_values(
+            name, spec, mods, soul_voice=soul_voice, marcato=marcato,
+            flat_bonus=self.song_flat_bonus(name))
+        return duration, tick, effect_mods
+
+    def song_flat_bonus(self, name: str) -> int:
+        """The flat points a song gets from Bard group-1 merits and its job-point row.
+
+        Retail adds these after the +Song percentage and before Soul Voice/Marcato:
+        Minuet +1 a merit rank and +20 from the job-point row, Minne +2 a rank and
+        +20, Madrigal +1 a rank, Requiem +60 on its DoT.
+        """
+        if int(self.char.get("main_job") or 0) != 10:
+            return 0
+        family = effects.song_family(name)
+        if family not in ("minuet", "minne", "madrigal"):
+            return 0
+        counts = self.merit_counts()
+        merit_id = {
+            "minuet": merits.MINUET_EFFECT,
+            "minne": merits.MINNE_EFFECT,
+            "madrigal": merits.MADRIGAL_EFFECT,
+        }.get(family)
+        bonus = 0
+        if merit_id is not None:
+            entry = merits.MERITS.get(int(merit_id))
+            if entry is not None:
+                per_rank, max_ranks = int(entry[3]), int(entry[2])
+                ranks = max(0, min(int(counts.get(int(merit_id), 0)), max_ranks))
+                bonus += ranks * per_rank
+        category = {"minuet": "Minuet Effect", "minne": "Minne Effect"}.get(family)
+        if category:
+            bonus += job_points.category_total(10, category)
+        return bonus
+
+    def equipped_range_item(self) -> int:
+        """The item id in the ranged slot, or 0 when the query fails."""
+        try:
+            weapons = self.world.service.equipped_weapons(int(self.char["id"]))
+            return int((weapons.get(2) or {}).get("item_id") or 0)
+        except Exception:
+            return 0
+
+    def _song_limit(self) -> int:
+        """The number of party songs this caster's instrument can maintain."""
+        skill = 0
+        try:
+            weapons = self.world.service.equipped_weapons(int(self.char["id"]))
+            skill = int((weapons.get(2) or {}).get("skill") or 0)
+        except Exception as exc:
+            log.debug("%s song instrument lookup failed: %s", self.addr, exc)
+        return effects.song_slots(
+            int(self.char.get("main_job", 0)), skill, self.combat_mods(),
+            clarion=self.has_effect(effects.CLARION_CALL))
+
+    def _apply_song(self, spell: dict, spec: "effects.SpellEffect", *,
+                    duration: float, tick: int, mods: dict[int, int],
+                    limit: int, now: float) -> bool:
+        """Put one song on this target, enforcing song slots and overwrite rules.
+
+        Songs are keyed by spell identity, not by their shared status icon.  Victory
+        March and Advancing March both draw icon 214, and Paeon I/II/III all draw 195,
+        but each is a different song and takes its own slot.  Only a second cast of the
+        same song refreshes/replaces that song.
+
+        Retail does not let the same song refresh while more than its **base**
+        duration remains, and a new song replaces the active song with the least
+        time left.  The caller has already rolled the caster's duration/potency, so
+        the same numbers land on every target.
+        """
+        effect_id = int(spec.effect)          # icon / action-result effect id
+        key = effects.song_key(int(spell["id"]))  # one state per song, not per icon
+        base = float(spec.duration)
+        existing = self.effect(key)
+        if existing is not None and existing.get("song"):
+            if float(existing.get("until", 0.0)) - now >= base:
+                return False
+        songs = [(int(eid), state) for eid, state in self.effect_state.items()
+                 if state.get("song") and float(state.get("until", 0.0)) > now]
+        if (existing is None or not existing.get("song")) and len(songs) >= int(limit):
+            if not songs:
+                return False
+            victim_id, _state = min(
+                songs, key=lambda item: (
+                    float(item[1].get("until", 0.0)),
+                    float(item[1].get("song_cast_at", 0.0))))
+            self.remove_effect(victim_id, quiet=True)
+        self.add_effect(
+            key, duration=duration, tick=tick, mods=mods, icon=effect_id,
+            song_base=base, song_name=str(spell["name"]), song_cast_at=now,
+            song_effect=effect_id)
+        return True
+
+    def song_targets(self, now: float, cast: dict | None) -> list:
+        """Who a song lands on: the party radius, or one member under Pianissimo.
+
+        Retail's Pianissimo narrows the next song to the party member it was cast on;
+        the other party songs stay a radius around the bard.
+        """
+        targets = self._accession_targets(now)
+        if cast is None or not self.has_effect(effects.PIANISSIMO):
+            return targets
+        wanted = int(cast.get("party_target") or 0)
+        if not wanted:
+            return targets
+        chosen = [t for t in targets if int(t.char["char_id"]) == wanted]
+        return chosen or targets
+
     def resolve_song_spell(self, spell: dict, now: float,
-                            spec: "effects.SpellEffect") -> None:
+                            spec: "effects.SpellEffect", cast: dict | None = None) -> None:
         """Land one bard song on the caster and their nearby party.
 
         Songs are party buffs in retail; before this they only touched the caster
         because the self-cast path had no party spread.  The range is the same ten
-        yalms Accession uses, which is also the client's party-song radius.
+        yalms Accession uses, which is also the client's party-song radius.  Each
+        target enforces its own song slots, and the caster's instrument (plus
+        Clarion Call) decides how many those are.
         """
         me = int(self.char["char_id"])
-        duration, tick, power, _perpetuance = self._buff_values(spell, spec)
+        duration, tick, mods = self._song_values(spell, spec)
+        limit = self._song_limit()
         animation = spell_animation(spell)
-        mods = dict(spec.mods)
-        if int(self.char.get("main_job", 0)) == 10:  # Bard job-point song rows
-            if int(spec.effect) == 197:  # Minne
-                mods[mod.DEF] = int(mods.get(mod.DEF, 0)) + job_points.category_total(
-                    10, "Minne Effect")
-            elif int(spec.effect) == 198:  # Minuet
-                mods[mod.ATT] = int(mods.get(mod.ATT, 0)) + job_points.category_total(
-                    10, "Minuet Effect")
+        self_applied = False
+        for target in self.song_targets(now, cast):
+            applied = target._apply_song(
+                spell, spec, duration=duration, tick=tick, mods=mods,
+                limit=limit, now=now)
+            if applied and effects.song_family(str(spell["name"])) == "hymnus":
+                # Hymnus is the party's Reraise; the song icon stays on 218 and the
+                # raise rides a separate effect so death can consume it.
+                target.add_effect(effects.RERAISE, duration=duration)
+            if target is self:
+                self_applied = applied
+            action = sub(0x028, packets.battle_action(
+                me, int(target.char["char_id"]),
+                int(spec.effect) if applied else 0,
+                animation=animation, kind=0,
+                message=(packets.MESSAGE_MAGIC_GAIN_EFFECT if applied
+                         else packets.MESSAGE_MAGIC_NO_EFFECT), info=0,
+                category=packets.ACTION_CATEGORY_MAGIC_FINISH,
+                action_id=int(spell["id"])))
+            self.queue.append(action)
+            if target is not self:
+                target.queue += [action, target.char_status()]
+        # Tenuto, Marcato and Pianissimo are spent by the next song even when the
+        # target's slots refuse it.  Soul Voice, Troubadour, Nightingale and
+        # Clarion Call keep their own clocks.
+        for effect_id in (effects.TENUTO, effects.MARCATO, effects.PIANISSIMO):
+            if self.has_effect(effect_id):
+                self.remove_effect(effect_id, quiet=True)
+        self.queue.append(self.char_status())
+        if not self_applied:
+            self.say("Your song did not take hold.")
+        if self.resting:
+            self.stop_resting()
+
+    def resolve_area_buff(self, spell: dict, now: float,
+                          spec: "effects.SpellEffect") -> None:
+        """Land a self-centered -ga/-ra buff on the party around the caster.
+
+        The client data marks Hastega/Protectra/Shellra as target=self with an area
+        shape, so the ordinary self-cast path would only touch the caster.  Apply the
+        same rolled duration and mods to every live party member inside the spell's
+        area, with a per-recipient action so each client draws its own icon.
+        """
+        me = int(self.char["char_id"])
+        duration, tick, power, perpetuance = self._buff_values(spell, spec)
+        if perpetuance:
+            self.remove_effect(effects.PERPETUANCE, quiet=True)
+        animation = spell_animation(spell)
         for target in self._accession_targets(now):
             target.add_effect(spec.effect, duration=duration, power=power,
                               potency=spec.potency, tick=tick, icon=spec.icon,
-                              mods=mods)
+                              mods=spec.mods)
             action = sub(0x028, packets.battle_action(
                 me, int(target.char["char_id"]), int(spec.effect),
                 animation=animation, kind=0,
@@ -5997,13 +11539,6 @@ class ZoneSession:
         self.remove_effect(effects.ACCESSION, quiet=True)
         animation = spell_animation(spell)
         mods = dict(spec.mods)
-        if int(self.char.get("main_job", 0)) == 10:  # Bard job-point song rows
-            if int(spec.effect) == 197:  # Minne
-                mods[mod.DEF] = int(mods.get(mod.DEF, 0)) + job_points.category_total(
-                    10, "Minne Effect")
-            elif int(spec.effect) == 198:  # Minuet
-                mods[mod.ATT] = int(mods.get(mod.ATT, 0)) + job_points.category_total(
-                    10, "Minuet Effect")
         for target in self._accession_targets(now):
             target.add_effect(spec.effect, duration=duration, power=power,
                               potency=spec.potency, tick=tick, icon=spec.icon,
@@ -6026,7 +11561,16 @@ class ZoneSession:
             return
         act = struct.unpack_from("<H", p, 4)[0]
         if act == TARGID:
-            self.queue += [self.char_update(), self.char_status()]
+            if self.zone_loaded:
+                # A mid-session self request follows the Data page's reload.  Answer with
+                # the General block and status, never the full spawn: its name/model blocks
+                # reset the client's own player entity into the green-name/NPC state that
+                # cannot act until a relog.
+                self.queue += [self.char_update(packets.SEND_HP), self.char_status()]
+            else:
+                # During the zone-in the client may not have the self entity yet; the full
+                # spawn is the packet that creates it.
+                self.queue += [self.char_update(), self.char_status()]
             return
         entity = self.world.entity_by_targid(self.zone, act)
         if entity is not None:
@@ -6040,6 +11584,10 @@ class ZoneSession:
             return
         self.char["tp"] = tp
         self.queue.append(self.party_member())
+        # Diagnostic: the client's TP bar and the party window both read this value; if
+        # the bar is stuck at zero while swings land, this line says whether the server
+        # gained TP at all (and how much it queued for the client).
+        log.info("%s TP %d -> %d (+%d)", self.addr, current, tp, int(tenths))
 
     def spend_tp(self, tenths: int) -> int:
         """Pay an ability's TP cost and refresh the bar; returns what was actually paid."""
@@ -6065,6 +11613,16 @@ class ZoneSession:
         phalanx = self.effect_state.get(effects.PHALANX)
         if phalanx is not None and amount > 0:
             amount = max(0, amount - int(phalanx.get("power", 0)))
+        # Dragoon Spirit Bond shares half of incoming damage with the Wyvern.
+        pet = getattr(self, "pet_entity", None)
+        if (amount > 0 and pet is not None and pet.alive
+                and float(getattr(self, "_spirit_bond_until", 0.0)) > time.time()):
+            share = amount // 2
+            pet.hp = max(0, int(pet.hp) - share)
+            amount -= share
+            self.world._queue_mob_hp(pet)
+            if int(pet.hp) <= 0:
+                pet.alive = False
         self.char["hp_current"] = max(0, int(self.char.get("hp_current", self.char["hp"])) - int(amount))
         self.queue += [self.char_status(), self.party_member()]
         # Retail also pays TP for damage taken, scaled to how much of your HP the hit took.
@@ -6074,16 +11632,52 @@ class ZoneSession:
         except Exception:
             pass
         if int(self.char["hp_current"]) <= 0:
-            self.dead_until = time.time() + 6.0
-            self.engaged_id = None
-            self.engaged_targid = 0
-            self.despawn_trusts()
-            self.queue.append(self.char_update(packets.SEND_HP))
-            self.say("You have been defeated. You recover in a moment.")
+            self.hit_zero_hp(time.time())
+
+    def hit_zero_hp(self, now: float) -> None:
+        """0 HP: Reraise brings the character back, otherwise the short recovery.
+
+        Reraise (and Goddess's Hymnus) restores 10% of max HP and half the lost
+        experience the next time the character is raised; this server's death is the
+        six-second recovery, so the effect is consumed here.
+        """
+        self.engaged_id = None
+        self.engaged_targid = 0
+        self.despawn_trusts()
+        # A song's Reraise is keyed by spell identity (a song slot), not by the effect
+        # id, so look for either shape.
+        reraise_key: int | None = None
+        reraise = self.effect_state.get(effects.RERAISE)
+        if reraise is not None:
+            reraise_key = effects.RERAISE
+        else:
+            for key, state in list(self.effect_state.items()):
+                if int(state.get("song_effect") or 0) == effects.RERAISE:
+                    reraise_key = int(key)
+                    reraise = state
+                    break
+        if (reraise_key is not None and reraise is not None
+                and float(reraise.get("until") or 0.0) > now):
+            self.remove_effect(reraise_key, quiet=True)
+            self.char["hp_current"] = max(1, int(self.char.get("hp", 1)) // 10)
+            self.dead_until = 0.0
+            self.queue += [self.char_status(), self.char_stats(),
+                           self.char_update(packets.SEND_HP)]
+            self.say("Reraise raises you.")
             try:
-                self.world.service.record_death(self.char["id"])
+                self.world.service.save_vitals(int(self.char["id"]),
+                                               int(self.char["hp_current"]),
+                                               int(self.char.get("mp_current", 0)))
             except Exception:
                 pass
+            return
+        self.dead_until = now + 6.0
+        self.queue.append(self.char_update(packets.SEND_HP))
+        self.say("You have been defeated. You recover in a moment.")
+        try:
+            self.world.service.record_death(int(self.char["id"]))
+        except Exception:
+            pass
 
     def tick_regen(self, now: float) -> None:
         """Apply Auto Refresh/Auto Regen (and gear Refresh/Regen) once per 3 seconds.
@@ -6144,8 +11738,44 @@ class ZoneSession:
             log.warning("%s regen tick save failed: %s", self.addr, exc)
 
     def tick(self, now: float) -> None:
+        # The gear burst has settled (or waited out EQUIP_SYNC_MAX_DELAY): send what the
+        # outfit changed.  This is the deferred half of note_equipment_change(); the
+        # 0x050 echoes and the outfit save went out as the datagrams were read.
+        if self.equipment_changed and now >= self.equip_sync_at:
+            self.flush_equipment()
+        if (self._commands_pending
+                and now >= self._commands_sent_at + EQUIP_COMMANDS_MIN_GAP):
+            # The deferred command-data rewrite: the burst has settled, send the final list.
+            message = self.char_commands()
+            self._sync_sent[0x0AC] = self._sync_signature(message)
+            self._commands_sent_at = now
+            self._commands_pending = False
+            self.queue.append(message)
         if self.sleeping:
             return
+        if self.meditate is not None and now >= float(self.meditate["next"]):
+            state = self.meditate
+            gain = min(int(state["per"]), max(0, int(state["cap"]) - int(state["total"])))
+            if gain:
+                self.gain_tp(gain)
+                state["total"] = int(state["total"]) + gain
+            state["ticks"] = int(state["ticks"]) - 1
+            state["next"] = now + 3.0
+            if int(state["ticks"]) <= 0 or int(state["total"]) >= int(state["cap"]):
+                self.meditate = None
+        if self.pending_mount is not None and now >= self.pending_mount[1]:
+            mount_id, _at = self.pending_mount
+            self.pending_mount = None
+            self.set_mount(mount_id, announce=False)
+        # A quiet zone sends nothing on its own: no mob moved, no party vital changed,
+        # nobody walked past.  The client still sends its 0x015 about once a second and
+        # reads the server's silence as a dead link, so a General-only 0x00D goes out as a
+        # keepalive whenever nothing else has for IDLE_HEARTBEAT seconds.  It also acks
+        # the client's packet stream, which is what its own window is waiting on.
+        if (self.logged_in and not self.zoning and not self.gone and self.zone_loaded
+                and now - max(self.last_sent_at, self.idle_heartbeat_at) >= IDLE_HEARTBEAT):
+            self.idle_heartbeat_at = now
+            self.queue.append(self.char_update(packets.SEND_HP))
         if (self.logged_in and not self.zoning and self.entities_sent
                 and now >= self.next_entity_sync):
             self.next_entity_sync = now + 1.0
@@ -6154,6 +11784,16 @@ class ZoneSession:
                 and now >= self.next_player_sync):
             self.next_player_sync = now + 0.25
             self.sync_players()
+        # Another client only learns where this character stands from the 0x00D the
+        # movement handler broadcasts, so a stationary character sends nothing.  A box
+        # that zoned in while the leader walked -- and was still loading when those
+        # packets went by -- keeps the copy it spawned with, believes the leader is
+        # still at the warp anchor, and stands still until the leader moves again.
+        # One position refresh a second lets a late observer converge on its own.
+        if (self.logged_in and not self.zoning and self.zone_loaded and self.entities_sent
+                and not self.moving and now >= self.next_position_refresh):
+            self.next_position_refresh = now + 1.0
+            self.world.broadcast_player(self, packets.SEND_POSITION, moving=False)
         if self.abilities_retries and now >= self.abilities_retries[0]:
             self.abilities_retries.pop(0)
             # Re-assert the equipped set first.  The client rebuilds the Abilities menu
@@ -6164,15 +11804,26 @@ class ZoneSession:
             # The Job Abilities list is built from the job info block as well; a 0x01B
             # that arrived before the menu existed leaves it empty even when 0x0AC has
             # the bits.  Send it again with the command and recast data.
-            self.queue += [sub(0x0AA, SPELL_BITS), self.job_info(),
+            self.queue += [sub(0x0AA, self.spell_bits()), self.job_info(),
                            self.char_feats(), self.char_abilities(), self.char_commands(),
                            self.char_skills(), self.abil_recast()]
             log.info("%s re-sent equipment and command data (%d retries left)", self.addr,
                      len(self.abilities_retries))
+        if (self.live_state_notice is not None and self.zone_loaded
+                and now >= self.live_state_notice_at):
+            self._announce_live_state()
         self.resolve_casting(now)
         self.tick_player_effects(now)
         self.tick_rest(now)
         self.tick_regen(now)
+        # The state a reconnect gets back: buffs, food and ability cooldowns.  Comparing
+        # the payload catches every path that mutates it (a song, a shadow spent, a
+        # Stoneskin pool, an ability's recast) without a touch call at each one, and the
+        # row is only written when the payload actually changed.
+        if (self.logged_in and not self.zoning and self.zone_loaded
+                and (self.live_state_signature is None
+                     or now >= self.live_state_checked_at + LIVE_STATE_SAVE_INTERVAL)):
+            self.save_live_state(now=now)
         if (not getattr(self, "sweep_started", False) and self.logged_in and self.zone_loaded
                 and os.environ.get("FANXI_SG_SWEEP")):
             self.sweep_started = True
@@ -6226,8 +11877,8 @@ class ZoneSession:
                              entity.name)
         # If the client stops sending packets mid-zone, it may be sitting in a
         # client-side event lock.  Cancel the event and release controls once.
-        if (self.logged_in and self.zone_loaded and now - self.last_packet_at > 8.0
-                and now - self.last_release_at > 8.0):
+        if (self.logged_in and self.zone_loaded and now - self.last_packet_at > 150.0
+                and now - self.last_release_at > 150.0):
             self.last_release_at = now
             self.cancel_event(self.current_event_id)
             self.queue.append(sub(0x052, bytes(4)))
@@ -6296,12 +11947,13 @@ class ZoneSession:
         # Diagnostic: one line a second while engaged, showing which branch would run.
         if now - getattr(self, "engage_log_at", 0.0) >= 1.0:
             self.engage_log_at = now
-            log.info("%s engage: id=%#x found=%s alive=%s gap=%s next_in=%.2f hp=%s",
+            log.info("%s engage: id=%#x found=%s alive=%s gap=%s next_in=%.2f hp=%s tp=%s",
                      self.addr, int(self.engaged_id), entity is not None,
                      getattr(entity, "alive", None),
                      "n/a" if entity is None else "%.1f" % entity.distance_to(*self.pos[:3]),
                      -1.0 if entity is None else self.next_attack_at - now,
-                     "n/a" if entity is None else getattr(entity, "hp", None))
+                     "n/a" if entity is None else getattr(entity, "hp", None),
+                     int(self.char.get("tp", 0)))
         if entity is None or not entity.alive:
             # The target died or left: drop the stance, or the character keeps its weapon
             # out (and the client keeps the attack animation) forever.
@@ -6312,6 +11964,22 @@ class ZoneSession:
             # Retail loses the target past 30 yalms.
             self.disengage("You lose sight of the target.")
             return
+        # A monster another party has claimed cannot be attacked: the client draws it pink
+        # and refuses to swing, while this loop would keep landing hits on it.  The claim
+        # can move to another party mid-fight (a box's Trust pulling what this character
+        # engaged), which left the player unable to attack or disengage while the server
+        # kept swinging.  Once the claim is not this character or its party, the fight is
+        # over for this client.
+        claim = int(getattr(entity, "claim_char_id", 0)
+                    or getattr(entity, "engaged_char_id", 0) or 0)
+        me = int(self.char["char_id"])
+        if claim and claim != me:
+            mine = self.world.group_id(me)
+            same_party = bool(mine) and mine == self.world.group_id(claim)
+            if not same_party:
+                log.info("%s disengage: %s is claimed by %#x", self.addr, entity.name, claim)
+                self.disengage("That monster is claimed by another party.")
+                return
         if gap > MELEE_RANGE:
             # Engaged but out of reach: keep the target, swing once we are close enough.
             # Retail does not drop the engagement just because the mob is far away -- you
@@ -6357,13 +12025,31 @@ class ZoneSession:
                          int(sheet.fighter.mods.get(mod.QUADRUPLE_ATTACK, 0)))
             for _ in range(hits):
                 result = self._resolve_swing(entity, sheet, off_hand=off_hand,
-                                             hp_left=hp_left)
+                                             hp_left=hp_left, first_swing=not results)
                 results.append(result)
                 if result["defeated"]:
                     break
                 if not result["miss"]:
-                    hp_left = max(0, hp_left - result["damage"])
-        self.queue_action(entity.id, results=results)
+                    hp_left = max(0, hp_left - result["damage"]
+                                  - int(result.get("enspell_damage") or 0))
+            # Zanshin: a miss is followed by one more swing with that hand, and while
+            # Hasso is up a landed hit gets the same chance at a quarter of the rate.
+            zanshin = max(0, int(sheet.fighter.mods.get(mod.ZANSHIN, 0)))
+            last = results[-1] if results else None
+            if (zanshin and last is not None and not last["defeated"]
+                    and len(results) < combat.MAX_ATTACKS_PER_ROUND):
+                chance = zanshin / 100.0
+                if not last["miss"]:
+                    chance = chance / 4.0 if self.has_effect(effects.HASSO) else 0.0
+                if chance and self.world.rng.random() < chance:
+                    extra = self._resolve_swing(entity, sheet, off_hand=off_hand,
+                                                hp_left=hp_left, first_swing=False)
+                    extra["animation"] = int(last.get("animation", 0))
+                    results.append(extra)
+                    if not extra["miss"]:
+                        hp_left = max(0, hp_left - extra["damage"]
+                                      - int(extra.get("enspell_damage") or 0))
+        self.queue_action(entity.id, results=results, broadcast=True)
         for result in results:
             self._apply_swing(entity, sheet, now, result)
         self.next_attack_at = now + sheet.attack_delay_ms / 1000.0
@@ -6376,15 +12062,107 @@ class ZoneSession:
             triple=int(mods.get(mod.TRIPLE_ATTACK, 0)),
             quadruple=int(mods.get(mod.QUADRUPLE_ATTACK, 0)))
 
+    def _enspell_hit(self, entity, sheet, *, off_hand: bool = False,
+                     first_swing: bool = True) -> dict | None:
+        """Roll the active en-spell for one landed swing and advance its state.
+
+        Tier I procs on every landed swing of the round, tier II only on the round's
+        first swing, and Enlight/Endark decay by one point per hit.  The stored
+        ``power`` means the cast-time base for tier I, the hidden round counter for
+        tier II and the remaining charge for tier III, so it is written back here.
+        """
+        effect_id = 0
+        for candidate in self.effect_state:
+            if effects.is_enspell(candidate):
+                effect_id = int(candidate)
+        state = self.effect_state.get(effect_id)
+        if effect_id <= 0 or state is None:
+            return None
+        tier = effects.enspell_tier(effect_id)
+        element = effects.enspell_element(effect_id)
+        if tier == 2 and not first_swing:
+            return None
+        skills, _base = self.effective_skills()
+        if tier == 3:
+            skill_id = packets.SKILL_DIVINE if element == 7 else packets.SKILL_DARK
+        else:
+            skill_id = packets.SKILL_ENHANCING
+        skill = int(skills.get(skill_id, 0))
+        bonus, percent = self._enspell_gear_bonus(sheet, off_hand=off_hand)
+        merit = 0
+        if tier in (1, 2) and int(self.char.get("main_job") or 0) == effects.RED_MAGE:
+            # Red Mage group 2 "En-spell damage": five ranks, three points each.
+            merit = int(self.merit_counts().get(0x0914, 0)) * 3
+        composure = (tier in (1, 2) and 1 <= element <= 6
+                     and int(self.char.get("main_job") or 0) == effects.RED_MAGE
+                     and self.has_effect(effects.COMPOSURE))
+        stored = int(state.get("power", 0))
+        damage, following = combat.enspell_hit(
+            tier=tier, skill=skill, element=element, potency=stored, counter=stored,
+            bonus=bonus, percent=percent, merit=merit, composure=composure,
+            target_mods=self.world.monster_debuff_mods(entity))
+        if tier == 3 and following <= 0:
+            # The last charge was just spent: the effect wears off after this hit.
+            self.remove_effect(effect_id)
+            self.queue.append(self.char_status())
+        else:
+            state["power"] = following
+        return {"damage": int(damage), "element": element, "tier": tier}
+
+    def _enspell_gear_bonus(self, sheet, *, off_hand: bool) -> tuple[int, int]:
+        """(flat, percent) "Sword enhancement spell damage" for the swinging hand.
+
+        Non-weapon gear applies to both hands, but a weapon's own line applies only to
+        that weapon.  ``combat_mods`` is the whole outfit, so subtract the *other*
+        main/sub item's line from the total; that is the rule LandSandBoat implements
+        per hit.  ``equipped_item_mods`` is used rather than ``item_mods`` so a
+        Dynamis-Divergence percent line on the other weapon (Crocea Mors path C) is
+        excluded too.
+        """
+        mods = sheet.fighter.mods
+        bonus = int(mods.get(mod.ENSPELL_DMG_BONUS, 0))
+        percent = int(mods.get(mod.ENSPELL_DMG_PCT, 0))
+        other_kind = stats.SLOT_MAIN if off_hand else stats.SLOT_SUB
+        try:
+            weapons = self.world.service.equipped_weapons(int(self.char["id"]))
+        except Exception as exc:
+            log.warning("%s equipped weapons unavailable: %s", self.addr, exc)
+            weapons = {}
+        item_id = int((weapons.get(other_kind) or {}).get("item_id") or 0)
+        if item_id:
+            try:
+                other = self.world.service.equipped_item_mods(
+                    int(self.char["id"]), item_id)
+            except Exception as exc:
+                log.warning("%s item %d mods unavailable: %s", self.addr, item_id, exc)
+                other = {}
+            bonus -= int(other.get(mod.ENSPELL_DMG_BONUS, 0))
+            percent -= int(other.get(mod.ENSPELL_DMG_PCT, 0))
+        return max(0, bonus), max(0, percent)
+
     def _resolve_swing(self, entity, sheet, *, off_hand: bool = False,
-                       hp_left: int | None = None) -> dict:
-        """Roll one hand of an attack round; 0 main hand, 1 off hand."""
+                       hp_left: int | None = None, first_swing: bool = True) -> dict:
+        """Roll one hand of an attack round; 0 main hand, 1 off hand.
+
+        The en-spell is part of the same result: the additional-effect block carries
+        its element and damage, and its damage counts towards whether this round kills.
+        A hit that already drops the target does not also roll one.
+        """
         miss, damage, critical = self.world.player_attack(self, entity, off_hand=off_hand)
         remaining = entity.hp if hp_left is None else int(hp_left)
-        defeated = (not miss) and remaining - damage <= 0
-        return {"damage": damage, "miss": miss, "critical": critical,
-                "defeated": defeated, "animation": 1 if off_hand else 0,
-                "off_hand": bool(off_hand)}
+        enspell = None
+        if not miss and remaining - damage > 0:
+            enspell = self._enspell_hit(entity, sheet, off_hand=off_hand,
+                                        first_swing=first_swing)
+        enspell_damage = int(enspell["damage"]) if enspell is not None else 0
+        defeated = (not miss) and remaining - damage - enspell_damage <= 0
+        result = {"damage": damage, "miss": miss, "critical": critical,
+                  "defeated": defeated, "animation": 1 if off_hand else 0,
+                  "off_hand": bool(off_hand), "enspell_damage": enspell_damage}
+        if enspell is not None and enspell_damage > 0:
+            result.update(add_effect=int(enspell["element"]), add_value=enspell_damage,
+                          add_message=packets.MESSAGE_ADD_EFFECT_ADDITIONAL_DAMAGE)
+        return result
 
     def _apply_swing(self, entity, sheet, now: float, result: dict) -> None:
         """Apply one resolved swing: hate, HP, TP and the kill after its action."""
@@ -6400,12 +12178,16 @@ class ZoneSession:
                 self.queue.append(self.char_status())
         self.world.wake_mob(entity)
         entity.hp = max(0, entity.hp - damage)
+        # En-spell damage lands on the same swing, after the physical hit.  It is not a
+        # second source of hate: retail's en-spell damage adds no enmity of its own.
+        entity.hp = max(0, entity.hp - int(result.get("enspell_damage") or 0))
         self.queue_entity(entity, packets.SEND_HP)
         store_tp = int(sheet.fighter.mods.get(mod.STORETP, 0))
         # Each hand pays TP from its own weapon delay; a Double/Triple/Quadruple extra
         # swing pays the same as a normal hit with that hand.
         self.gain_tp(combat.tp_gain(
             sheet.tp_per_hit(off_hand=bool(result.get("off_hand"))), store_tp))
+        self._samba_on_hit(damage)
         if result["defeated"]:
             self.world.kill_mob(self, entity, now)
 
@@ -6476,11 +12258,20 @@ class ZoneSession:
         c = self.char
         if self.style_locked():
             model = self._style_models()
+            # Weapons are the exception to the locked look: a main/sub swap has to show
+            # the piece that is actually equipped.  This is what makes a two-handed main
+            # becoming a one-handed main plus a shield draw both new models instead of
+            # keeping the old weapon (the shield used to show only because its locked
+            # model was zero and fell through to the real gear below).  Armour and the
+            # ranged slot stay locked.
+            current = self._current_models()
+            for kind in WEAPON_STYLE_SLOTS:
+                model[kind] = current[kind]
             # A zero model would draw the naked default for that slot; fall back to the
             # real gear so a character saved before a slot was locked still looks whole.
             for kind in STYLE_SLOTS:
                 if not model[kind]:
-                    model[kind] = self._current_models()[kind]
+                    model[kind] = current[kind]
         else:
             model = self._current_models()
         return [character_design.raw_face(c) | (c["race"] << 8), model[4] + 0x1000,
@@ -6503,7 +12294,23 @@ class ZoneSession:
         log.info("%s design -> %s", self.addr, blueprint.get("label", "?"))
 
     def item_max(self) -> Msg:
-        return sub(0x01C, packets.item_max())
+        """Container capacities, with an empty cosmetic wardrobe left unavailable.
+
+        Wardrobe 8 (container 16) is cosmetic-only and starts empty on this server.  The
+        equipment window remembers the last storage the player picked; advertising an
+        empty wardrobe lets it reopen on that bag, where every item row is blank because
+        there is nothing to list.  A zero usable size makes the client skip the bag and
+        fall back to Inventory.  The moment the wardrobe holds an item it is advertised
+        normally again.
+        """
+        unavailable = ()
+        try:
+            if not any(int(item["container"]) == 16
+                       for item in self.world.service.inventory(self.char["id"])):
+                unavailable = (16,)
+        except Exception as exc:
+            log.warning("%s wardrobe check failed: %s", self.addr, exc)
+        return sub(0x01C, packets.item_max(disabled=unavailable))
 
     def login_packet(self) -> Msg:
         c = self.char
@@ -6512,7 +12319,7 @@ class ZoneSession:
         b = bytearray(0x100)
         struct.pack_into("<IHBbfff", b, 0x00, c["char_id"], TARGID, 0, (int(rot) + 128) % 256 - 128, x, y, z)
         hpp = gauge_percent(c.get("hp_current", c["hp"]), c["hp"])
-        struct.pack_into("<BBBB", b, 0x18, c["speed"], 40, hpp, 0)
+        struct.pack_into("<BBBB", b, 0x18, self.own_speed(), 40, hpp, 0)
         struct.pack_into("<I", b, 0x1C, (self.female() * 128 + (1 << c["size"])) << 8)
         struct.pack_into("<I", b, 0x24, 0x0100)
         struct.pack_into("<IIII", b, 0x2C, self.zone, 0, now, now - VANA_EPOCH + self.world.clock)
@@ -6612,10 +12419,13 @@ class ZoneSession:
         c = self.char
         b = bytearray(0x6C)
         sheet = self.stat_sheet()
+        level = int(c["main_level"])
+        # 99 is the Master Level band: no EXP bar, the 0x64/0x68 Exemplar block instead.
+        exp = 0 if level >= 99 else int(c.get("exp", 0)) & 0x7FFF
+        exp_next = 0 if level >= 99 else int(c.get("exp_next", 1000)) & 0x7FFF
         struct.pack_into("<iiBBBBhh", b, 0, int(sheet.max_hp), int(sheet.max_mp),
                          c["main_job"], c["main_level"], c["sub_job"],
-                         c["sub_level"], int(c.get("exp", 0)) & 0x7FFF,
-                         int(c.get("exp_next", 1000)) & 0x7FFF)
+                         c["sub_level"], exp, exp_next)
         # 0x10 is the seven base attributes and 0x1E is the gear adjustment to each, both
         # signed 16-bit.  The client draws base and adjustment as separate columns, so a
         # stat of 120 with +40 of gear is packed as 120 and 40, not as 160.
@@ -6630,6 +12440,16 @@ class ZoneSession:
             for name in order])
         # 0x2C is Attack and Defense, which is what the character menu prints.
         struct.pack_into("<hh", b, 0x2C, int(sheet.attack), int(sheet.defense))
+        # 0x30 is def_elem[8], the eight element orbs under Attack/Defense in the
+        # equipment menu.  They are the character's elemental magic evasion -- the
+        # "Fire+20" line on a tooltip -- and the client only draws what this packet
+        # carries, so an unfilled block reads as zero for every element no matter what
+        # the gear says.  The mods dict already holds gear, augments, traits, job
+        # points, buffs and food merged, which is the same total retail's getMod()
+        # reports.  Values are signed: Demon's Ring +1 is Light-20 Dark+13.
+        struct.pack_into("<8h", b, 0x30, *[
+            max(-32768, min(32767, int(sheet.fighter.mods.get(mod_id, 0))))
+            for mod_id in mod.ELEMENTAL_MEVA])
         nation = int(c.get("nation") or 0)
         rank_column = ("rank_sandoria", "rank_bastok", "rank_windurst")[nation % 3]
         rank = max(1, min(10, int(c.get(rank_column) or 1)))
@@ -6652,12 +12472,13 @@ class ZoneSession:
         main_entry = jobs.get(int(c["main_job"])) or (0, 0)
         main_master = int(main_entry[1]) if len(main_entry) > 1 else 0
         b[0x60] = c["main_job"] & 0xFF
-        b[0x61] = max(0, min(50, main_master))
+        b[0x61] = max(0, min(MASTER_LEVEL_MAX, main_master))
         b[0x62] = 1
         struct.pack_into("<I", b, 0x64, max(0, int(c.get("exemplar_points") or 0)))
         # At Master Level 50 the HUD's "Next M.Level" is zero; below the cap it is the
         # 30,000-point bar to the next level.
-        struct.pack_into("<I", b, 0x68, 0 if main_master >= 50 else EXEMPLAR_PER_LEVEL)
+        struct.pack_into("<I", b, 0x68, 0 if main_master >= MASTER_LEVEL_MAX
+                         else EXEMPLAR_PER_LEVEL)
         return sub(0x061, b)
 
     def effective_skills(self) -> tuple[dict[int, int], dict[int, int]]:
@@ -6746,70 +12567,243 @@ class ZoneSession:
                 result[mod_id] = result.get(mod_id, 0) + int(value)
         return result
 
+    def _stance_mods(self, trait_mods: dict[int, int]) -> list[tuple[str, dict[int, int]]]:
+        """The stat rows a two-handed stance adds on top of its status effect.
+
+        Hasso's effect is an icon only, and Desperate Blows is a trait rather than a
+        buff, so neither is part of ``effect_state``.  Both are job-ability haste, and
+        both only apply while a two-handed weapon is out.  Returning them as labelled
+        rows lets ``stat_sources`` put them under Job abilities, which is also the
+        source ``combat_mods`` sums: the launcher's report and the swing can never
+        disagree about the ability-haste pool again.
+        """
+        if not (self.has_effect(effects.HASSO) or self.has_effect(effects.LAST_RESORT)):
+            return []
+        if self._main_weapon_skill() not in combat.TWO_HANDED_SKILLS:
+            return []
+        out: list[tuple[str, dict[int, int]]] = []
+        if self.has_effect(effects.HASSO):
+            # +STR (SAM level / 7, cap 14), +10 Accuracy and +10% job-ability haste
+            # while a two-handed weapon is out.
+            level = int(self.char.get("main_level", 1))
+            out.append(("Hasso", {mod.STR: min(14, level // 7), mod.ACC: 10,
+                                  mod.HASTE_ABILITY: 1000}))
+        if self.has_effect(effects.LAST_RESORT):
+            # Desperate Blows: the trait row is 1500 (15%) at DRK45; each merit rank
+            # adds 2%.  It is ability haste, not equipment haste, so it belongs here.
+            haste = max(0, int(trait_mods.get(mod.DESPERATE_BLOWS, 0)))
+            if int(self.char.get("main_job", 0)) == 8:      # Dark Knight
+                haste += 200 * int(self.merit_counts().get(0x09C6, 0))
+            if haste:
+                out.append(("Desperate Blows", {mod.HASTE_ABILITY: haste}))
+        return out
+
+    def stat_sources(self, detailed: bool = False) -> dict[str, dict]:
+        """The modifier layers that make up ``combat_mods``, kept apart.
+
+        ``combat_mods`` sums these rows, so a source the launcher shows cannot be one the
+        swing omits.  ``detailed`` adds the per-equipped-item rows for the launcher's
+        checkparam-style report; combat uses the cheaper aggregated gear query.
+        """
+        char = self.char
+        main_job = int(char.get("main_job") or 0)
+        status = list(self.status_effects)
+        effects_state = {
+            int(effect_id): {
+                **state,
+                "mods": {int(key): int(value)
+                         for key, value in (state.get("mods") or {}).items()},
+            }
+            for effect_id, state in list(self.effect_state.items())
+        }
+        food = dict(self.food)
+        food["mods"] = {int(key): int(value)
+                        for key, value in (food.get("mods") or {}).items()}
+
+        def add(target: dict[int, int], values) -> None:
+            for mod_id, value in values.items():
+                target[int(mod_id)] = target.get(int(mod_id), 0) + int(value)
+
+        sources: dict[str, dict] = {}
+
+        # --- gear -------------------------------------------------------------------------
+        gear_mods: dict[int, int] = {}
+        gear_entries: list[dict] = []
+        if detailed:
+            try:
+                for row in self.world.service.equipped_slot_mods(int(char["id"])):
+                    mods = {int(key): int(value)
+                            for key, value in (row.get("mods") or {}).items()}
+                    add(gear_mods, mods)
+                    gear_entries.append({
+                        "label": "%s — %s" % (
+                            stat_report.EQUIP_KIND_LABELS.get(int(row.get("kind", -1)),
+                                                            "Slot"),
+                            row.get("name") or "Item"),
+                        "mods": mods,
+                        "augments": str(row.get("augments") or ""),
+                        "kind": int(row.get("kind", -1)),
+                        "item_id": int(row.get("item_id") or 0),
+                    })
+            except Exception as exc:
+                log.warning("%s equipment rows unavailable: %s", self.addr, exc)
+        if not gear_mods:
+            try:
+                gear_mods = dict(self.world.service.equipped_mods(int(char["id"])))
+            except Exception as exc:
+                log.warning("%s equipment stats unavailable: %s", self.addr, exc)
+                gear_mods = {}
+        sources["gear"] = {"label": stat_report.SOURCE_LABELS["gear"],
+                           "mods": gear_mods, "entries": gear_entries}
+
+        # --- job traits (JT) --------------------------------------------------------------
+        trait_mods: dict[int, int] = {}
+        trait_entries: list[dict] = []
+        for trait in self.job_traits():
+            mods = {int(mod_id): int(value) for mod_id, value in trait.mods}
+            add(trait_mods, mods)
+            trait_entries.append({"label": "%s (rank %d)" % (
+                str(trait.name).title(), trait.rank), "mods": mods})
+        sources["traits"] = {"label": stat_report.SOURCE_LABELS["traits"],
+                             "mods": trait_mods, "entries": trait_entries}
+
+        # --- job points and gifts --------------------------------------------------------
+        # Permanent gifts and passive categories are always on; the ability-conditional
+        # categories (a song or a job ability switching a job-point row on) stay in this
+        # source too, so the JA row below names only an ability's own status effect.
+        jp_mods = {int(key): int(value)
+                   for key, value in job_points.combat_mods(main_job).items()}
+        jp_entries: list[dict] = []
+        if jp_mods:
+            jp_entries.append({"label": stat_report.SOURCE_LABELS["job_points"],
+                               "mods": jp_mods})
+        for source in job_points.conditional_sources(main_job, status):
+            mods = {int(key): int(value) for key, value in source.get("mods", {}).items()}
+            if not mods:
+                continue
+            add(jp_mods, mods)
+            jp_entries.append({"label": "%s (job point)" % (
+                str(source.get("name") or "Job point")), "mods": mods})
+        sources["job_points"] = {
+            "label": stat_report.SOURCE_LABELS["job_points"],
+            "mods": jp_mods,
+            "entries": jp_entries,
+        }
+
+        # --- job abilities (JA) ----------------------------------------------------------
+        ja_mods: dict[int, int] = {}
+        ja_entries: list[dict] = []
+        buff_mods: dict[int, int] = {}
+        buff_entries: list[dict] = []
+        for effect_id, state in effects_state.items():
+            if effect_id == effects.FOOD:
+                continue
+            mods = dict(state.get("mods") or {})
+            # Enlight and Endark give Accuracy/Attack equal to the charge they have left.
+            if effect_id in (effects.ENLIGHT, effects.ENDARK):
+                mod_id = mod.ACC if effect_id == effects.ENLIGHT else mod.ATT
+                power = max(0, int(state.get("power") or 0))
+                if power:
+                    mods[mod_id] = int(mods.get(mod_id, 0)) + power
+            if not mods:
+                continue
+            ability = job_points.ability_name_for_status(effect_id)
+            label = ability or stat_report.effect_label(effect_id, state)
+            entry = {"label": label, "mods": mods}
+            if ability:
+                add(ja_mods, mods)
+                ja_entries.append(entry)
+            else:
+                add(buff_mods, mods)
+                buff_entries.append(entry)
+        # Hasso and Desperate Blows are stances whose status effect carries no stat
+        # mods, so they are not in the effect rows above.  Put them in the same JA
+        # source the report reads, not in ``combat_mods`` after the sources are
+        # summed: otherwise the report's sheet (and its attack interval) silently
+        # disagrees with the swing that actually happens.
+        for label, stance_mods in self._stance_mods(trait_mods):
+            add(ja_mods, stance_mods)
+            ja_entries.append({"label": label, "mods": stance_mods})
+        sources["job_abilities"] = {"label": stat_report.SOURCE_LABELS["job_abilities"],
+                                    "mods": ja_mods, "entries": ja_entries}
+        sources["buffs"] = {"label": stat_report.SOURCE_LABELS["buffs"],
+                            "mods": buff_mods, "entries": buff_entries}
+
+        # --- food -------------------------------------------------------------------------
+        food_mods = dict(food["mods"])
+        sources["food"] = {
+            "label": stat_report.SOURCE_LABELS["food"],
+            "mods": food_mods,
+            "entries": ([{"label": food.get("name") or "Food", "mods": food_mods}]
+                        if food_mods else []),
+        }
+
+        # --- merits -----------------------------------------------------------------------
+        merit_mods: dict[int, int] = {}
+        counts = self.merit_counts()
+        for merit_id, mod_id in ((0x0040, mod.HP), (0x0042, mod.MP)):
+            count = int(counts.get(merit_id, 0))
+            entry = merits.MERITS.get(merit_id)
+            if count > 0 and entry is not None:
+                merit_mods[mod_id] = merit_mods.get(mod_id, 0) + count * int(entry[3])
+        # Multi-attack merits belong to their own job and only count while that job's
+        # trait is active: a Warrior's Double Attack Rate does not follow a Ninja main,
+        # and a support-job Warrior keeps only the trait itself.
+        for merit_id, job, mod_id in ((0x0188, 1, mod.DOUBLE_ATTACK),
+                                      (0x02c8, 6, mod.TRIPLE_ATTACK),
+                                      (0x0444, 12, mod.STORETP)):
+            if main_job != job or not trait_mods.get(mod_id):
+                continue
+            count = int(counts.get(merit_id, 0))
+            entry = merits.MERITS.get(merit_id)
+            if count > 0 and entry is not None:
+                merit_mods[mod_id] = merit_mods.get(mod_id, 0) + count * int(entry[3])
+        sources["merits"] = {
+            "label": stat_report.SOURCE_LABELS["merits"],
+            "mods": merit_mods,
+            "entries": ([{"label": stat_report.SOURCE_LABELS["merits"],
+                          "mods": merit_mods}] if merit_mods else []),
+        }
+        return sources
+
     def combat_mods(self) -> dict[int, int]:
-        """Gear, job-trait, buff, food and HP/MP-merit modifiers, merged.
+        """Gear, job-trait, buff, food, stance and merit modifiers, merged.
 
         Traits use the same modifier ids as gear, so adding them here means every stat
         the sheet already derives (Attack, Defense, Accuracy, Evasion, maximum HP/MP and
         the damage-taken family) sees them.  If the equipment query fails the traits are
         still applied rather than losing the passives as well.  Every spell that reads
         ``mods`` -- damage, healing, duration, potency -- sees this same merged dict.
+
+        This is a plain sum of :meth:`stat_sources`; Hasso and Desperate Blows are rows
+        inside that source, not additions here, so the launcher's report is built from
+        exactly the same modifiers.
         """
         mods: dict[int, int] = {}
-        try:
-            mods = dict(self.world.service.equipped_mods(int(self.char["id"])))
-        except Exception as exc:
-            log.warning("%s equipment stats unavailable: %s", self.addr, exc)
-        traits = self.trait_mods()
-        for mod_id, value in traits.items():
-            mods[int(mod_id)] = int(mods.get(int(mod_id), 0)) + int(value)
-        # Every job's fully-spent job-point layer: gift stats and the permanent
-        # category stats.  Ability-conditional categories are handled by their hooks.
-        main_job = int(self.char.get("main_job") or 0)
-        for mod_id, value in job_points.combat_mods(main_job).items():
-            mods[int(mod_id)] = int(mods.get(int(mod_id), 0)) + int(value)
-        # The handful of categories that are only live while their ability is up.
-        for mod_id, value in job_points.conditional_mods(
-                main_job, self.status_effects).items():
-            mods[int(mod_id)] = int(mods.get(int(mod_id), 0)) + int(value)
-        # Temporary buffs such as Protect and Haste use the same modifier ids.
-        for state in self.effect_state.values():
-            for mod_id, value in (state.get("mods") or {}).items():
-                mods[int(mod_id)] = int(mods.get(int(mod_id), 0)) + int(value)
-        # Food is the same kind of source; it has no status-effect mods of its own, so
-        # item_use() keeps its modifier dict on the session.
-        for mod_id, value in (self.food.get("mods") or {}).items():
-            mods[int(mod_id)] = int(mods.get(int(mod_id), 0)) + int(value)
-        # Bought HP/MP merits are part of the maximum too.  Without this, a zone-in,
-        # gear change or job change recomputes the sheet and silently drops them.
-        counts = self.merit_counts()
-        for merit_id, mod_id in ((0x0040, mod.HP), (0x0042, mod.MP)):
-            count = int(counts.get(merit_id, 0))
-            entry = merits.MERITS.get(merit_id)
-            if count > 0 and entry is not None:
-                mods[mod_id] = int(mods.get(mod_id, 0)) + count * int(entry[3])
-        # Multi-attack merits belong to their own job and only count while that job's
-        # trait is active: a Warrior's Double Attack Rate does not follow a Ninja main,
-        # and a support-job Warrior keeps only the trait itself.
-        for merit_id, job, mod_id in ((0x0188, 1, mod.DOUBLE_ATTACK),
-                                      (0x02c8, 6, mod.TRIPLE_ATTACK)):
-            if int(self.char.get("main_job", 0)) != job or not traits.get(mod_id):
-                continue
-            count = int(counts.get(merit_id, 0))
-            entry = merits.MERITS.get(merit_id)
-            if count > 0 and entry is not None:
-                mods[mod_id] = int(mods.get(mod_id, 0)) + count * int(entry[3])
+        for source in self.stat_sources().values():
+            for mod_id, value in (source.get("mods") or {}).items():
+                mods[int(mod_id)] = mods.get(int(mod_id), 0) + int(value)
         return mods
 
-    def stat_sheet(self):
+    def _main_weapon_skill(self) -> int:
+        """The equipped main weapon's skill id (0 when the query fails)."""
+        try:
+            weapons = self.world.service.equipped_weapons(int(self.char["id"]))
+        except Exception:
+            return 0
+        return int((weapons.get(0) or {}).get("skill") or 0)
+
+    def stat_sheet(self, mods: dict[int, int] | None = None):
         """The character's combat stats: base attributes, gear, Attack, Defense, Acc, Eva.
 
         Built fresh on every call.  It is two indexed queries over the equipped set plus
         some arithmetic, and building it beats caching it: the cache would have to be
         invalidated by equipment, level, merits and gear skill bonuses, and a stale stat
-        sheet is a bug that shows up as mysterious damage.
+        sheet is a bug that shows up as mysterious damage.  The report passes in the
+        merged source dict so its sheet is built from exactly the rows it displays.
         """
-        mods = self.combat_mods()
+        if mods is None:
+            mods = self.combat_mods()
         weapons: dict[int, dict] = {}
         try:
             weapons = self.world.service.equipped_weapons(int(self.char["id"]))
@@ -6824,7 +12818,8 @@ class ZoneSession:
                                 skill=int(row.get("skill") or 0),
                                 dmg=int(row.get("dmg") or 0),
                                 delay=int(row.get("delay") or 0),
-                                ilvl_skill=int(row.get("ilvl_skill") or 0))
+                                ilvl_skill=int(row.get("ilvl_skill") or 0),
+                                item_level=int(row.get("item_level") or 0))
 
         skill_values, _base = self.effective_skills()
         sub_row = weapons.get(stats.SLOT_SUB) or {}
@@ -6832,9 +12827,45 @@ class ZoneSession:
             self.char, mods, skill_values,
             weapon_of(stats.SLOT_MAIN), weapon_of(stats.SLOT_SUB),
             shield_size=int(sub_row.get("shield_size") or 0),
-            # Only the job trait lets the off hand swing; gear "Dual Wield +" just
-            # lowers the delay once the trait is there.
-            dual_wield=self.trait_mods().get(mod.DUAL_WIELD, 0) > 0)
+            # Two one-handed weapons both swing; the Dual Wield trait only lowers
+            # the round's delay (mod.DUAL_WIELD is inside ``mods`` already).
+            ranged_weapon=weapon_of(stats.SLOT_RANGED),
+            ammo=weapon_of(stats.SLOT_AMMO))
+
+    def stat_report(self) -> dict:
+        """The live checkparam-style sheet: final stats with every source behind them.
+
+        The launcher polls this through the HTTP API.  It uses the same source rows as
+        ``combat_mods`` and builds the sheet from their merged result, so the numbers the
+        player reads are the ones this session swings, casts and takes damage with.
+        """
+        char = dict(self.char)
+        sources = self.stat_sources(detailed=True)
+        mods: dict[int, int] = {}
+        for source in sources.values():
+            for mod_id, value in (source.get("mods") or {}).items():
+                mods[int(mod_id)] = mods.get(int(mod_id), 0) + int(value)
+        sheet = self.stat_sheet(mods=mods)
+        race = int(char.get("race", 1) or 1)
+        main_job = int(char.get("main_job", 1) or 1)
+        main_level = int(char.get("main_level", 1) or 1)
+        sub_job = int(char.get("sub_job", 0) or 0)
+        sub_level = int(char.get("sub_level", 0) or 0)
+        base_attributes = base_stats.base_stats(
+            race, main_job, main_level, sub_job, sub_level)
+        base_hp = base_stats.base_hp(race, main_job, main_level, sub_job, sub_level)
+        base_mp = base_stats.base_mp(race, main_job, main_level, sub_job, sub_level)
+        return stat_report.build_report(
+            character=char,
+            sources=sources,
+            mods=mods,
+            sheet=sheet,
+            base_attributes=base_attributes,
+            base_hp=base_hp,
+            base_mp=base_mp,
+            food=dict(self.food),
+            updated=time.time(),
+        )
 
     def char_skills(self) -> Msg:
         # 0x062 CLISTATUS2: 31 command recasts (uint32), then 64 skill values (uint16).
@@ -6930,6 +12961,11 @@ class ZoneSession:
         carries "Adds weapon skill" (item_mods 355), so the skill is usable only while
         that item is equipped.  Those rows have a negative skill_level, which the
         skill-type filter above skips; this adds the ones the current outfit grants.
+
+        Weapon skills that retail restricts to a main job (the relic/mythic/empyrean
+        rows and the merit weapon skills) are filtered by ``weapon_skill_jobs``.  The
+        skill value alone would otherwise offer a Corsair every Sword and Marksmanship
+        skill in the game once the weapon skill is mastered.
         """
         try:
             caps, _base = self.effective_skills()
@@ -6982,9 +13018,11 @@ class ZoneSession:
         # Campaign Battle skills need a Campaign weapon and a Campaign zone.  The data
         # import gives them skill_level 0 like a quested skill, which would otherwise
         # advertise Uriel Blade, Glory Slash and Tartarus Torpor at 350 skill.
+        main_job = int(self.char.get("main_job") or 0)
         return sorted(
             ws_id for ws_id in ids
-            if not self._is_campaign_weapon_skill(ws_id))
+            if not self._is_campaign_weapon_skill(ws_id)
+            and weapon_skill_jobs.allowed(ws_id, main_job))
 
     def _is_campaign_weapon_skill(self, ws_id: int) -> bool:
         try:
@@ -7042,6 +13080,18 @@ class ZoneSession:
         except Exception as exc:
             log.warning("%s job ability recasts unavailable: %s", self.addr, exc)
             abilities = []
+        # Slot 0 is retail's two-hour ("Special") recast: the current main job's
+        # one-hour ability (recast id 0).  A ready one is still a zero timer rather
+        # than an absent row.  The per-ability cooldowns live above the byte-sized
+        # ordinary recast ids, so changing jobs does not carry the last job's timer.
+        special_id = next(
+            (int(row["id"]) for row in abilities
+             if int(row.get("recast_id") or 0) == 0
+             and int(row.get("recast") or 0) > 0), 0)
+        special_ready = float(self.ability_recasts.get(
+            TWO_HOUR_RECAST_BASE + special_id, 0.0)) if special_id else 0.0
+        special_left = int(special_ready - now + 0.999) if special_ready > now else 0
+        struct.pack_into("<HBBHH", body, 0, max(0, special_left), 0, 0, 0, 0)
         for ability in abilities:
             recast_id = int(ability.get("recast_id") or 0)
             if recast_id <= 0 or recast_id > 0xFF or recast_id in seen:
@@ -7235,9 +13285,37 @@ class ZoneSession:
         struct.pack_into("<HH", b, 0, 3, 220)
         return sub(0x063, b)
 
+    def effect_mod_total(self, mod_id: int) -> int:
+        """The summed value of one modifier across the active status effects.
+
+        Only the roll path needs this today, and it must not build a full stat sheet:
+        ``char_status`` is sent on every gear swap and every buff change.
+        """
+        total = 0
+        for state in self.effect_state.values():
+            total += int((state.get("mods") or {}).get(int(mod_id), 0) or 0)
+        return total
+
+    def own_speed(self) -> int:
+        """The speed byte the client gets, with Bolter's Roll applied.
+
+        Bolter's Roll is additive movement speed after the normal multipliers and
+        caps at +60%; the client reads the byte from 0x037 Flags1 and the 0x00D
+        General block, so both use this value.
+        """
+        base = max(1, int(self.char.get("speed", 50) or 50))
+        percent = max(0, min(60, self.effect_mod_total(
+            mod.MOVE_SPEED_BOLTERS_ROLL)))
+        return max(1, min(255, base + base * percent // 100))
+
     def char_status(self) -> Msg:
         c = self.char
-        b = bytearray(0x5C)
+        # 0x78 total: the 0x60-byte packet retail has always sent, plus the fields the
+        # client grew in later updates.  The mount block lives at the end of those
+        # (mount_id at body 0x6F, total 0x73); a shorter packet cannot carry it, and the
+        # untouched extension bytes are zeros, which every one of those fields reads as
+        # its default.
+        b = bytearray(0x74)
         # 0xFF means "no status effect" in every slot.  A zeroed slot is status effect 0,
         # which the client treats as an active effect (and locks the character).
         b[0:32] = b"\xff" * 32
@@ -7259,11 +13337,40 @@ class ZoneSession:
             b[mask] = (b[mask] & ~(3 << shift)) | (((effect >> 8) & 3) << shift)
         hp = int(c["hp"])
         hpp = gauge_percent(c.get("hp_current", hp), hp)
-        flags0 = (self.female() << 8) | ((c["size"] & 3) << 11) | (hpp << 16)
-        flags1 = (c["speed"] & 0xFFF) | (40 << 17)
+        ridden = mounts.by_id(self.mount_id)
+        if ridden is not None and mounts.MOUNTED_EFFECT not in self.status_effects[:32]:
+            # The client knows a rider by the Mounted status effect (252), not by the
+            # mount id alone: put it in the first icon slot that is free.  It is a packet
+            # effect only, not a real buff — no timer, no icon, nothing to wear off.
+            for slot in range(32):
+                if b[slot] == 0xFF and ((b[0x48 + slot // 4] >> (2 * (slot % 4))) & 3) == 0:
+                    b[slot] = mounts.MOUNTED_EFFECT & 0xFF
+                    break
+        # Flags0: Gender in bit 8, GraphSize in bits 11-12, Chocobo_Index in bits 13-15
+        # (1 is the ordinary chocobo seat; it is what tells mount 0 apart from on foot),
+        # hpp in bits 16-23.
+        chocobo_index = ridden.chocobo_index() if ridden else 0
+        flags0 = ((self.female() << 8) | ((c["size"] & 3) << 11)
+                  | ((chocobo_index & 7) << 13) | (hpp << 16))
+        flags1 = (self.own_speed() & 0xFFF) | (40 << 17)
         struct.pack_into("<III", b, 0x20, c["char_id"], flags0, flags1)
         struct.pack_into("<II", b, 0x38, 60 * 360, int(time.time()) - VANA_EPOCH + self.world.clock + 360)
         b[0x54] = 0x10
+        # Mog Wardrobes 3-8 are gated on this byte, not on the 0x01C capacities: the client
+        # only offers (and only lists) a paid wardrobe whose bit is set here.  Leaving it
+        # zero made the equipment window treat Wardrobes 3-8 as unavailable and draw their
+        # items blank, while Wardrobes 1-2 (not gated) listed normally.  Windower reads the
+        # same bits for its ...get_items().enabled.  0x01 = Wardrobe 3, 0x02 = 4, 0x08 = 5,
+        # 0x10 = 6, 0x20 = 7, 0x40 = 8; 0x04 is not a wardrobe.
+        b[0x5C] = 0x7B
+        # server_status (0x2C) is the character's animation, the very byte 0x00D carries at
+        # 0x1B: the mount when riding, 1 while the weapon is drawn, else 0.  It used to be
+        # 0 on foot, which sheathed an engaged player's weapon on every packet - the gear
+        # swap's own 0x037 killed the stance its 0x00D had just drawn.
+        b[0x2C] = self.own_animation() & 0xFF
+        # mount_id: the client's mount id, 0 while on foot.  A mount 0 (chocobo) ride is
+        # told apart by Chocobo_Index above, which is why this byte alone works.
+        b[0x6F] = (ridden.id if ridden else 0) & 0xFF
         return sub(0x037, b)
 
     def status_icons(self) -> Msg:
@@ -7296,6 +13403,26 @@ class ZoneSession:
                                  ((vana + remaining) * 60) & 0xFFFFFFFF)
         return sub(0x063, b)
 
+    def own_animation(self) -> int:
+        """This character's own animation byte, as the client is told it.
+
+        The same value rides two packets: the self ``0x00D`` at body ``0x1B`` and
+        ``0x037``'s ``server_status`` at body ``0x2C``.  It has to be the same number in
+        both, because the client reads it as the local player's pose and applies each
+        packet as it arrives: a status packet that said 0 while the character was engaged
+        sheathed the weapon, and the next stance refresh (``0x00D`` = 1) drew it again.
+        Every gear swap sends a ``0x037`` in its follow-up (``equipment_sync``), so a 0
+        there was a sheathe/draw flap per batch - the "disengage, then the packet
+        re-engages me" loop.
+
+        Mounted overrides the stance: 5 draws the chocobo and 85 the other mounts, and
+        the rider's own client learns the ride from this byte (see docs/mounts.md).
+        """
+        ridden = mounts.by_id(self.mount_id)
+        if ridden is not None:
+            return ridden.animation()
+        return 1 if self.engaged_id else 0
+
     def player_body(self, mask: int = packets.SEND_CHAR_SPAWN, *, targid: int | None = None,
                     moving: bool | None = None) -> bytes:
         """Body of a 0x00D player-entity packet.
@@ -7325,11 +13452,30 @@ class ZoneSession:
                          int(rot) & 255, x, y, z)
         struct.pack_into("<I", b, 0x14, flags0)
         hpp = gauge_percent(c.get("hp_current", c["hp"]), c["hp"])
-        # 0x1B is the entity animation: 1 is the drawn-weapon battle stance, 0 is idle.
-        animation = 1 if self.engaged_id else 0
-        struct.pack_into("<BBBB", b, 0x18, c["speed"], 40, hpp, animation)
-        struct.pack_into("<I", b, 0x1C, ((c["size"] & 3) << 9) | (self.female() << 15))
+        ridden = mounts.by_id(self.mount_id)
+        # 0x1B is the entity animation: 1 is the drawn-weapon battle stance, 0 is idle and
+        # 5/85 tell the client to draw a chocobo or a mount under the character.  It is
+        # the same byte 0x037 carries at 0x2C (own_animation).
+        animation = self.own_animation()
+        struct.pack_into("<BBBB", b, 0x18, self.own_speed(), 40, hpp, animation)
+        # Flags1: GraphSize in bits 9-10, ChocoboIndex in bits 5-7.  ChocoboIndex is how
+        # other clients tell a rider from someone standing there when the mount is the
+        # personal chocobo: mount id 0 has to look different from "no mount" in Flags6,
+        # and index 1 is the client's ordinary chocobo seat.
+        chocobo_index = ridden.chocobo_index() if ridden else 0
+        struct.pack_into("<I", b, 0x1C, ((c["size"] & 3) << 9) | ((chocobo_index & 7) << 5)
+                         | (self.female() << 15))
+        if ridden is not None:
+            # CustomProperties (body 0x30): the Noble Chocobo is told apart from a plain
+            # one by the second word; every other mount leaves both clear.
+            struct.pack_into("<II", b, 0x30, *ridden.custom_properties())
         b[0x3F] = 10
+        # Flags6 (body 0x40, the last field of the General block): GateId in its low four
+        # bits and the mount id in bits 4-11.  The client's 0x00D handler copies those
+        # eight bits into the player entity's MountId, and the model under the rider is
+        # whichever mount the id names.
+        if ridden is not None:
+            struct.pack_into("<I", b, 0x40, (ridden.id & 0xFF) << 4)
         struct.pack_into("<9H", b, 0x44, *self.looks())
         b[0x56:0x66] = cstr(c["name"], 16)
         if int(mask) == packets.SEND_HP:
@@ -7454,6 +13600,7 @@ class ZoneSession:
                 log.info("%s out %03X %d bytes", self.addr,
                          struct.unpack_from("<H", message, 0)[0] & 0x1FF, len(message))
             body.extend(message)
+            self._note_sent_sync(message)
             zone_out = zone_out or message.zone_out
             return True
 
@@ -7485,14 +13632,42 @@ class ZoneSession:
         data, nbits = self.world.huff.compress(bytes(body))
         return data, nbits, zone_out
 
-    def resend(self, use_base: bool = False) -> bytes:
-        """Re-send the last packet, optionally under the pre-zone-change key."""
+    def seal_last(self, key: bytes) -> bytes:
+        """The last plaintext packet sealed under ``key`` (the zone-in copy)."""
         if self.last_plain is None:
             return b""
         out = bytearray(self.last_plain)
         struct.pack_into("<H", out, 2, self.client_id)
         struct.pack_into("<I", out, 8, int(time.time()))
-        key = self.base_key if use_base and self.base_key is not None else bytes(self.key)
         self.world.zone_cipher_for(key).run(out, HDR, (len(out) - HDR) // 4 & ~1, True)
-        self.last_sent_at = time.time()
         return bytes(out)
+
+    def resend(self, use_base: bool = False) -> bytes:
+        """Re-send the last packet, optionally under the pre-zone-change key."""
+        if self.last_plain is None:
+            return b""
+        key = self.base_key if use_base and self.base_key is not None else bytes(self.key)
+        out = self.seal_last(key)
+        self.last_sent_at = time.time()
+        return out
+
+    def zone_in_copies(self, primary: bytes | None = None) -> list[bytes]:
+        """The zone-in sealed under every key other than the one already sent.
+
+        The client keeps whichever key it advanced to; sending the same packet under the
+        whole sequence means a missed or reordered 0x00B can no longer strand it on the
+        "Downloading" screen.  The packet id and body are identical, so the client acks
+        the one it opens and drops the rest (their MD5 does not verify).
+        """
+        if self.last_plain is None or self.zone_loaded:
+            return []
+        primary = bytes(primary) if primary is not None else (
+            bytes(self.key) if self.key is not None else b"")
+        copies: list[bytes] = []
+        for key in reversed(self.key_history):
+            if key == primary:
+                continue
+            copies.append(self.seal_last(key))
+            if len(copies) >= KEY_HISTORY:
+                break
+        return [packet for packet in copies if packet]

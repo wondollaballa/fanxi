@@ -244,10 +244,7 @@ async fn port_in_game(port: u16) -> bool {
     else {
         return false;
     };
-    state
-        .get("login_status")
-        .and_then(Value::as_u64)
-        == Some(2)
+    state.get("login_status").and_then(Value::as_u64) == Some(2)
 }
 
 /// Split local games into "kill" and "keep" lists. Anything that answers `state` with
@@ -336,8 +333,7 @@ async fn terminate_games(games: &[LocalGame]) -> Vec<String> {
 
 /// A targeted cleanup for one account: keep anything in game, kill stale copies.
 pub async fn stop_local_orphans(account: &str) -> Vec<String> {
-    let (kill, mut notes) =
-        collect_local_orphans(Some(account), Duration::ZERO, &[]).await;
+    let (kill, mut notes) = collect_local_orphans(Some(account), Duration::ZERO, &[]).await;
     notes.extend(terminate_games(&kill).await);
     notes
 }
@@ -376,10 +372,7 @@ async fn reap_registry(grace: Duration) -> Vec<String> {
             continue;
         }
         let user = entry_user(&entry);
-        let tunnel_pid = entry
-            .get("tunnel_pid")
-            .and_then(Value::as_u64)
-            .unwrap_or(0) as u32;
+        let tunnel_pid = entry.get("tunnel_pid").and_then(Value::as_u64).unwrap_or(0) as u32;
         if tunnel_pid > 0 {
             terminate(tunnel_pid);
             tokio::time::sleep(Duration::from_millis(300)).await;
@@ -403,7 +396,10 @@ pub async fn wait_local_gone(account: &str, timeout: Duration) {
     let deadline = tokio::time::Instant::now() + timeout;
     while tokio::time::Instant::now() < deadline {
         let games = local_games();
-        if !games.iter().any(|game| user_matches(&game.account, account)) {
+        if !games
+            .iter()
+            .any(|game| user_matches(&game.account, account))
+        {
             return;
         }
         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -497,7 +493,6 @@ fn force_kill(pid: u32) {
 
 #[cfg(not(unix))]
 fn force_kill(_pid: u32) {}
-
 
 /// Force cleanup: stop every copy of the account, including a healthy one and a stale
 /// registry/tunnel. This is what the explicit **Force relaunch** button uses.
@@ -634,15 +629,35 @@ mod tests {
             headless: true,
         };
         let grace = Duration::from_secs(120);
-        assert!(local_keep_note(&game, grace, &[4242], true).unwrap().contains("tracked"));
-        assert!(local_keep_note(&game, grace, &[], true).unwrap().contains("in game"));
-        let young = LocalGame { age_secs: 10, ..game.clone() };
-        assert!(local_keep_note(&young, grace, &[], false).unwrap().contains("starting"));
+        assert!(
+            local_keep_note(&game, grace, &[4242], true)
+                .unwrap()
+                .contains("tracked")
+        );
+        assert!(
+            local_keep_note(&game, grace, &[], true)
+                .unwrap()
+                .contains("in game")
+        );
+        let young = LocalGame {
+            age_secs: 10,
+            ..game.clone()
+        };
+        assert!(
+            local_keep_note(&young, grace, &[], false)
+                .unwrap()
+                .contains("starting")
+        );
         assert!(local_keep_note(&game, grace, &[], false).is_none());
-        let visible = LocalGame { headless: false, ..game.clone() };
-        assert!(local_keep_note(&visible, grace, &[], false)
-            .unwrap()
-            .contains("visible"));
+        let visible = LocalGame {
+            headless: false,
+            ..game.clone()
+        };
+        assert!(
+            local_keep_note(&visible, grace, &[], false)
+                .unwrap()
+                .contains("visible")
+        );
     }
 
     #[test]

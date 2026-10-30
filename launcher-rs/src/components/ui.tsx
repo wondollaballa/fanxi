@@ -4,7 +4,12 @@ import type {
   ReactNode,
   SelectHTMLAttributes,
 } from "react";
-import { AlertTriangle, Check, Loader2, X } from "lucide-react";
+import { AlertTriangle, Check, ChevronLeft, ChevronRight, Loader2, X } from "lucide-react";
+import { formatNumber } from "../lib/format";
+import {
+  TABLE_PAGE_SIZES,
+  type TablePageSize,
+} from "../lib/pagination";
 
 export function cn(...names: Array<string | false | null | undefined>): string {
   return names.filter(Boolean).join(" ");
@@ -154,6 +159,80 @@ export function Spinner({ label }: { label?: string }) {
       <Loader2 className="spin" size={16} />
       {label && <span>{label}</span>}
     </span>
+  );
+}
+
+export function TablePager({
+  page,
+  pageCount,
+  pageSize,
+  total,
+  onPageChange,
+  onPageSizeChange,
+  label = "Table pages",
+}: {
+  page: number;
+  pageCount: number;
+  pageSize: TablePageSize;
+  total: number;
+  onPageChange: (page: number) => void;
+  onPageSizeChange: (size: TablePageSize) => void;
+  label?: string;
+}) {
+  const first = total === 0 ? 0 : (page - 1) * pageSize + 1;
+  const last = Math.min(total, page * pageSize);
+  return (
+    <nav className="table-pager" aria-label={label}>
+      <span className="table-pager-info" aria-live="polite">
+        {total === 0 ? (
+          "No rows"
+        ) : (
+          <>
+            Showing {formatNumber(first)}–{formatNumber(last)} of {formatNumber(total)}
+          </>
+        )}
+      </span>
+      <div className="table-pager-controls">
+        <label className="table-pager-size">
+          <span>Rows per page</span>
+          <Select
+            className="table-pager-select"
+            value={pageSize}
+            onChange={(event) => onPageSizeChange(Number(event.target.value) as TablePageSize)}
+            aria-label="Rows per page"
+          >
+            {TABLE_PAGE_SIZES.map((size) => (
+              <option key={size} value={size}>
+                {size}
+              </option>
+            ))}
+          </Select>
+        </label>
+        <div className="table-pager-buttons">
+          <button
+            type="button"
+            className="table-pager-step"
+            disabled={page <= 1}
+            onClick={() => onPageChange(page - 1)}
+            aria-label="Previous page"
+          >
+            <ChevronLeft size={15} />
+          </button>
+          <span className="table-pager-page">
+            Page {formatNumber(page)} of {formatNumber(pageCount)}
+          </span>
+          <button
+            type="button"
+            className="table-pager-step"
+            disabled={page >= pageCount}
+            onClick={() => onPageChange(page + 1)}
+            aria-label="Next page"
+          >
+            <ChevronRight size={15} />
+          </button>
+        </div>
+      </div>
+    </nav>
   );
 }
 

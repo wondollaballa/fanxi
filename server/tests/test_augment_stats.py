@@ -12,7 +12,8 @@ sys.path.insert(0, str(ROOT / "server"))
 from support import make_service  # noqa: E402
 
 from fanxi_server.game import (  # noqa: E402
-    augment_stats, augments, capes, limbus, modifiers as mod, oboro, odyssey, unity,
+    augment_stats, augments, capes, limbus, modifiers as mod, oboro, odyssey, sinister,
+    unity,
 )
 
 REVELATION = (24122, 24125, 24128, 24131, 24134)  # head, body, hands, legs, feet
@@ -46,6 +47,13 @@ class AugmentParserTest(unittest.TestCase):
         self.assertEqual(augment_stats.parse_line("Phys. dmg. limit +5%"),
                          {mod.DAMAGE_LIMITP: 5})
 
+    def test_sword_enhancement_spell_damage_is_flat_or_percent(self):
+        """Limbus carries the flat line; Oboro's path C weapons carry the multiplier."""
+        self.assertEqual(augment_stats.parse_line("Sword enhancement spell damage+8"),
+                         {mod.ENSPELL_DMG_BONUS: 8})
+        self.assertEqual(augment_stats.parse_line("Sword enhancement spell damage +500%"),
+                         {mod.ENSPELL_DMG_PCT: 500})
+
     def test_cape_slot_lines(self):
         self.assertEqual(augment_stats.parse_line("Eva.+20 /Mag. Eva.+20"),
                          {mod.EVA: 20, mod.MEVA: 20})
@@ -53,6 +61,37 @@ class AugmentParserTest(unittest.TestCase):
                          {mod.MACC: 20, mod.MAGIC_DAMAGE: 20})
         self.assertEqual(augment_stats.parse_line("Accuracy+20 Attack+20"),
                          {mod.ACC: 20, mod.ATT: 20})
+
+    def test_song_spellcasting_time(self):
+        self.assertEqual(augment_stats.parse_line("Song spellcasting time -15%"),
+                         {mod.SONG_SPELLCASTING_TIME: 15})
+        self.assertEqual(augment_stats.parse_line("Song casting time -10%"),
+                         {mod.SONG_SPELLCASTING_TIME: 10})
+
+    def test_haste_is_stored_in_hundredths(self):
+        self.assertEqual(augment_stats.parse_line("Haste+3%"), {mod.HASTE_GEAR: 300})
+
+    def test_oboro_path_c_song_cast_is_read(self):
+        entry = oboro.get(21576)  # Bard's Knife, path C
+        path = next(candidate for candidate in entry["paths"]
+                    if candidate["key"] == "C")
+        self.assertEqual(augment_stats.parse_rows(path["augments"]),
+                         {mod.SONG_SPELLCASTING_TIME: 15})
+
+    def test_describe_augments_for_a_standard_cape(self):
+        block = bytes.fromhex("02037349E04C000000000000000000000000000000000000")
+        self.assertEqual(
+            augment_stats.describe_augments(28636, block),
+            '"Regen" potency+10, Enh. Mag. eff. dur.+10%')
+
+    def test_describe_augments_for_a_bundle(self):
+        entry = oboro.get(21576)
+        path = next(candidate for candidate in entry["paths"]
+                    if candidate["key"] == "C")
+        block = augments.bundle("C", 25, 2, int(path["bundle"]), rp=25150, curve=0)
+        self.assertEqual(
+            augment_stats.describe_augments(21576, block),
+            'Song spellcasting time -15% | Song effects: "Double Attack"+2%')
 
     def test_sch_regen_augments(self):
         # 0x173 is flat HP/tick; 0x4E0 is the separate augment-duration multiplier.
@@ -92,6 +131,9 @@ class AugmentParserTest(unittest.TestCase):
         for augment_id in capes.TABLE:
             for value in range(0, 32):
                 rows.add(capes.slot_text({"id": augment_id, "value": value}))
+        for entry in sinister.entries():
+            for row in entry["rows"]:
+                rows.add(sinister.row_text(row))
         rows.update(augment_stats.UNMODELLED_LINES)
         for line in rows:
             if line in augment_stats.UNMODELLED_LINES:
@@ -174,12 +216,28 @@ class EquippedAugmentTest(unittest.TestCase):
         diff = self.augment_diff([(9, 27509, unity.encode(27509))])
         self.assertEqual(diff, {mod.DEF: 30, mod.HP: 200})
 
+    def test_kentarch_belt_rank_15_piece(self):
+        diff = self.augment_diff([(10, 28413, unity.encode(28413))])
+        self.assertEqual(diff, {mod.STR: 10, mod.DEX: 10})
+
+    def test_sailfi_belt_rank_15_piece(self):
+        diff = self.augment_diff([(10, 28428, unity.encode(28428))])
+        self.assertEqual(diff, {mod.STR: 15, mod.DOUBLE_ATTACK: 5})
+
     def test_odyssey_path_picks_its_own_rows(self):
         # Nyame Helm path C: Mag.Atk.Bns.+35, Magic Damage+30, Mag. Acc.+10
         # (the "Magic burst damage II" row is not modelled yet).
         block = augments.bundle("C", 30, 3, 448)
         diff = self.augment_diff([(4, 23761, block)])
         self.assertEqual(diff, {mod.MATT: 35, mod.MAGIC_DAMAGE: 30, mod.MACC: 10})
+
+    def test_oboro_path_c_sword_carries_the_enspell_and_elemental_ws_multipliers(self):
+        # Crocea Mors path C: "Sword enhancement spell damage"+500% and
+        # "Elemental weapon skill damage"+100%.
+        block = augments.bundle("C", 25, 2, 63)
+        diff = self.augment_diff([(0, 21627, block)])
+        self.assertEqual(diff, {mod.ENSPELL_DMG_PCT: 500,
+                                mod.ELEMENTAL_WS_DAMAGE: 100})
 
     def test_cape_build_reaches_the_sheet(self):
         diff = self.augment_diff([(15, 26258, capes.encode("tp", "NIN"))])

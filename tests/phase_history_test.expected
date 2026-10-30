@@ -1,0 +1,10 @@
+[harness] = 1
+--- the weaponskill set goes on with the held action
+[harness] = WS.Blitz 78 true
+[harness] = WS.Blitz true
+--- the result closes the window and keeps it in the history
+[harness] = nil
+[harness] = WS.Blitz false true
+--- a second action appends to the history, newest first
+[harness] = 2
+[harness] = true false WS.Blitz

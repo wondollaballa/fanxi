@@ -1,6 +1,6 @@
 --[[
     Fanxi GearSwap library — Onedough BRD
-    Updated 2026-10-22 13:03:58
+    Updated 2026-10-29 22:51:47
     The launcher writes sets back to this file; the first copy is kept as a .bak.
     Source: /Users/wondochoung/Documents/GitHub/fanxi/gearswap/BRD.lua
 
@@ -8,138 +8,24 @@
     to add a variant, copy an existing set and give it a new path.
 ]]
 
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-
--- Limbus Rank 30 builds: the top tier of all five families, one copy
--- per augment choice a set needs (TP, weaponskill, fast cast, tank).
--- Generated from data/limbus_r30.json by tools/gen_limbus_r30.py.
-local limbus = {
-    duty = {
-        tp = {
-            head = { name = "Duty Crown", augments = {'"Store TP"+7'} },
-            body = { name = "Duty Cyclas", augments = {'"Store TP"+8'} },
-            hands = { name = "Duty Gauntlets", augments = {'"Store TP"+6'} },
-            legs = { name = "Duty Flanchard", augments = {'"Store TP"+7'} },
-            feet = { name = "Duty Sollerets", augments = {'"Store TP"+6'} },
-        },
-        ws = {
-            head = { name = "Duty Crown", augments = {"Accuracy+30 Mag. Acc+30"} },
-            body = { name = "Duty Cyclas", augments = {"Accuracy+30 Mag. Acc+30"} },
-            hands = { name = "Duty Gauntlets", augments = {"Accuracy+30 Mag. Acc+30"} },
-            legs = { name = "Duty Flanchard", augments = {"Accuracy+30 Mag. Acc+30"} },
-            feet = { name = "Duty Sollerets", augments = {"Accuracy+30 Mag. Acc+30"} },
-        },
-    },
-    revelation = {
-        tp = {
-            head = { name = "Revelation Masque", augments = {'"Double Attack"+7%'} },
-            body = { name = "Revelation Plate.", augments = {'"Double Attack"+8%'} },
-            hands = { name = "Revelation Gaunt.", augments = {'"Double Attack"+6%'} },
-            legs = { name = "Revelation Brais", augments = {'"Double Attack"+7%'} },
-            feet = { name = "Revelation Sab.", augments = {'"Double Attack"+6%'} },
-        },
-        ws = {
-            head = { name = "Revelation Masque", augments = {"Physical Damage Limit+6%"} },
-            body = { name = "Revelation Plate.", augments = {"Physical Damage Limit+7%"} },
-            hands = { name = "Revelation Gaunt.", augments = {"Physical Damage Limit+5%"} },
-            legs = { name = "Revelation Brais", augments = {"Physical Damage Limit+6%"} },
-            feet = { name = "Revelation Sab.", augments = {"Physical Damage Limit+5%"} },
-        },
-    },
-    sworn = {
-        ta = {
-            head = { name = "Sworn Crown", augments = {'"Triple Attack"+6%'} },
-            body = { name = "Sworn Platemail", augments = {'"Triple Attack"+8%'} },
-            hands = { name = "Sworn Gauntlets", augments = {'"Triple Attack"+7%'} },
-            legs = { name = "Sworn Brais", augments = {'"Triple Attack"+6%'} },
-            feet = { name = "Sworn Sabatons", augments = {'"Triple Attack"+7%'} },
-        },
-        phalanx = {
-            head = { name = "Sworn Crown", augments = {'"Phalanx" received +4'} },
-            body = { name = "Sworn Platemail", augments = {'"Phalanx" received +6'} },
-            hands = { name = "Sworn Gauntlets", augments = {'"Phalanx" received +5'} },
-            legs = { name = "Sworn Brais", augments = {'"Phalanx" received +4'} },
-            feet = { name = "Sworn Sabatons", augments = {'"Phalanx" received +5'} },
-        },
-        acc = {
-            head = { name = "Sworn Crown", augments = {"Accuracy+30 Mag. Acc+30"} },
-            body = { name = "Sworn Platemail", augments = {"Accuracy+30 Mag. Acc+30"} },
-            hands = { name = "Sworn Gauntlets", augments = {"Accuracy+30 Mag. Acc+30"} },
-            legs = { name = "Sworn Brais", augments = {"Accuracy+30 Mag. Acc+30"} },
-            feet = { name = "Sworn Sabatons", augments = {"Accuracy+30 Mag. Acc+30"} },
-        },
-    },
-    indomitable = {
-        cast = {
-            head = { name = "Indom. Petasos", augments = {'"Magic Atk. Bonus"+28'} },
-            body = { name = "Indomitable Coat", augments = {'"Magic Atk. Bonus"+32'} },
-            hands = { name = "Indom. Gloves", augments = {'"Magic Atk. Bonus"+30'} },
-            legs = { name = "Indom. Tonban", augments = {'"Magic Atk. Bonus"+28'} },
-            feet = { name = "Indom. Sabots", augments = {'"Magic Atk. Bonus"+30'} },
-        },
-    },
-    clemency = {
-        tp = {
-            head = { name = "Clemen. Somen", augments = {'"Quadruple Attack"+4%'} },
-            body = { name = "Clemen. Hara.", augments = {'"Quadruple Attack"+6%'} },
-            hands = { name = "Clemency Kote", augments = {'"Quadruple Attack"+5%'} },
-            legs = { name = "Clem. Haidate", augments = {'"Quadruple Attack"+4%'} },
-            feet = { name = "Clem. Sune-Ate", augments = {'"Quadruple Attack"+5%'} },
-        },
-        ws = {
-            head = { name = "Clemen. Somen", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-            body = { name = "Clemen. Hara.", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-            hands = { name = "Clemency Kote", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-            legs = { name = "Clem. Haidate", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-            feet = { name = "Clem. Sune-Ate", augments = {"Accuracy+30 Rng. Acc.+30 Mag. Acc.+30"} },
-        },
-    },
-}
-
-local capes = {
-    maccfc = { name = "Intarabus's Cape", augments = {"CHR+20", "Mag. Acc+20 /Mag. Dmg.+20", "Mag. Acc.+10", '"Fast Cast"+10', "Damage taken-5%"} },
-    pdt = { name = "Intarabus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Phys. dmg. taken-10%"} },
-    mdt = { name = "Intarabus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Mag. Evasion+10", "Enmity-10", "Magic dmg. taken-10%"} },
-    maxhp = { name = "Intarabus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "HP+20", "Enmity-10", "Damage taken-5%"} },
-    dt = { name = "Intarabus's Cape", augments = {"HP+60", "Eva.+20 /Mag. Eva.+20", "Evasion+10", "Enmity-10", "Damage taken-5%"} },
-    tp = { name = "Intarabus's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "Accuracy+10", '"Store TP"+10', "Phys. dmg. taken-10%"} },
-    dexws = { name = "Intarabus's Cape", augments = {"DEX+20", "Accuracy+20 Attack+20", "DEX+10", "Weapon skill damage +10%", "Damage taken-5%"} },
-    chrws = { name = "Intarabus's Cape", augments = {"CHR+20", "Accuracy+20 Attack+20", "CHR+10", "Weapon skill damage +10%", "Damage taken-5%"} },
-}
-
 function get_sets()
     sets = {}
     sets.engaged = {}
     sets.enmity = {}
     sets.idle = {}
     sets.JA = {}
+    sets.Limbus = {}
     sets.midcast = {}
     sets.Odyssey = {}
     sets.precast = {}
     sets.weaponset = {}
     sets.WS = {}
+    sets.engaged.dw = {}
 
     -- ===== JA =====
     sets.JA["Clarion Call"] = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Fili Hongreline +3",
@@ -147,10 +33,11 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = capes.tp,
+        back = "Intarabus's Cape",
     }
     sets.JA.Marcato = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Brioso Justaucorps +4",
@@ -158,10 +45,11 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = capes.tp,
+        back = "Intarabus's Cape",
     }
     sets.JA.Nightingale = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Brioso Justaucorps +4",
@@ -169,10 +57,11 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = capes.tp,
+        back = "Intarabus's Cape",
     }
     sets.JA.Pianissimo = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Brioso Justaucorps +4",
@@ -180,10 +69,11 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = capes.tp,
+        back = "Intarabus's Cape",
     }
     sets.JA["Soul Voice"] = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Bihu Justaucorps +4",
@@ -191,10 +81,11 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = capes.tp,
+        back = "Intarabus's Cape",
     }
     sets.JA.Troubadour = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         head = "Brioso Roundlet +4",
         body = "Bihu Justaucorps +4",
@@ -202,7 +93,23 @@ function get_sets()
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
         neck = "Bard's Charm +2",
-        back = capes.tp,
+        back = "Intarabus's Cape",
+    }
+
+    -- ===== Limbus =====
+    sets.Limbus.revelation_tp = {
+        head = "Revelation Masque",
+        body = "Revelation Plate.",
+        hands = "Revelation Gaunt.",
+        legs = "Revelation Brais",
+        feet = "Revelation Sab.",
+    }
+    sets.Limbus.revelation_ws = {
+        head = "Revelation Masque",
+        body = "Revelation Plate.",
+        hands = "Revelation Gaunt.",
+        legs = "Revelation Brais",
+        feet = "Revelation Sab.",
     }
 
     -- ===== Odyssey =====
@@ -241,6 +148,7 @@ function get_sets()
     -- ===== WS =====
     sets.WS.Evisceration = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         ammo = "Aurgelmir Orb +1",
         head = "Nyame Helm",
         body = "Nyame Mail",
@@ -253,10 +161,11 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = capes.dexws,
+        back = "Intarabus's Cape",
     }
     sets.WS.Exenterator = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         ammo = "Aurgelmir Orb +1",
         head = "Nyame Helm",
         body = "Nyame Mail",
@@ -269,26 +178,28 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = capes.dexws,
+        back = "Intarabus's Cape",
     }
     sets.WS["Mordant Rime"] = {
         main = "Carnwenhan",
-        ammo = "Aurgelmir Orb +1",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
+        sub = "Crepuscular Knife",
+        range = "Linos",
+        head = "Revelation Masque",
+        body = "Bihu Justaucorps +4",
+        hands = "Revelation Gaunt.",
         legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Fotia Gorget",
-        waist = "Fotia Belt",
-        ear1 = "Moonshade Earring",
-        ear2 = "Cessance Earring",
+        feet = "Revelation Sab.",
+        neck = "Bard's Charm +2",
+        waist = "Sailfi Belt +1",
+        ear1 = "Hoxne Earring",
+        ear2 = "Alabaster Earring",
         ring1 = "Epaminondas's Ring",
-        ring2 = "Begrudging Ring",
-        back = capes.chrws,
+        ring2 = "Metamorph Ring +1",
+        back = "Intarabus's Cape",
     }
     sets.WS["Rudra's Storm"] = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         ammo = "Aurgelmir Orb +1",
         head = "Nyame Helm",
         body = "Nyame Mail",
@@ -301,12 +212,64 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Begrudging Ring",
-        back = capes.dexws,
+        back = "Intarabus's Cape",
+    }
+    sets.WS["Ruthless Stroke"] = {
+        main = "Mpu Gandring",
+        sub = "Centovente",
+        range = "Linos",
+        head = "Revelation Masque",
+        body = "Bihu Justaucorps +4",
+        hands = "Revelation Gaunt.",
+        legs = "Nyame Flanchard",
+        feet = "Nyame Sollerets",
+        neck = "Bard's Charm +2",
+        waist = "Kentarch Belt +1",
+        ear1 = "Moonshade Earring",
+        ear2 = "Hoxne Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Sroda Ring",
+        back = "Alabaster Mantle",
+    }
+    sets.WS["Savage Blade"] = {
+        main = "Naegling",
+        sub = "Centovente",
+        range = "Linos",
+        head = "Revelation Masque",
+        body = "Bihu Justaucorps +4",
+        hands = "Revelation Gaunt.",
+        legs = "Nyame Flanchard",
+        feet = "Nyame Sollerets",
+        neck = "Bard's Charm +2",
+        waist = "Sailfi Belt +1",
+        ear1 = "Moonshade Earring",
+        ear2 = "Hoxne Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Sroda Ring",
+        back = "Intarabus's Cape",
     }
 
     -- ===== engaged =====
+    sets.engaged.TP = {
+        main = "Mpu Gandring",
+        sub = "Centovente",
+        range = "Linos",
+        head = "Bunzi's Hat",
+        body = "Fili Hongreline +3",
+        hands = "Revelation Gaunt.",
+        legs = "Revelation Brais",
+        feet = "Revelation Sab.",
+        neck = "Bard's Charm +2",
+        waist = "Reiki Yotai",
+        ear1 = "Dedition Earring",
+        ear2 = "Brutal Earring",
+        ring1 = "Petrov Ring",
+        ring2 = "Chirich Ring +1",
+        back = "Null Shawl",
+    }
     sets.engaged.acc = {
         main = "Carnwenhan",
+        sub = "Gleti's Knife",
         range = "Loughnashade",
         ammo = "Aurgelmir Orb +1",
         head = "Nyame Helm",
@@ -320,10 +283,28 @@ function get_sets()
         ear2 = "Cessance Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = capes.tp,
+        back = "Intarabus's Cape",
+    }
+    sets.engaged.dw.tp = {
+        main = "Carnwenhan",
+        sub = "Centovente",
+        range = "Linos",
+        head = "Bunzi's Hat",
+        body = "Revelation Plate.",
+        hands = "Revelation Gaunt.",
+        legs = "Revelation Brais",
+        feet = "Revelation Sab.",
+        neck = "Bard's Charm +2",
+        waist = "Reiki Yotai",
+        ear1 = "Brutal Earring",
+        ear2 = "Dedition Earring",
+        ring1 = "Chirich Ring +1",
+        ring2 = "Petrov Ring",
+        back = "Intarabus's Cape",
     }
     sets.engaged.hybrid = {
         main = "Carnwenhan",
+        sub = "Gleti's Knife",
         range = "Loughnashade",
         ammo = "Aurgelmir Orb +1",
         head = "Nyame Helm",
@@ -337,24 +318,24 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.tp,
+        back = "Intarabus's Cape",
     }
     sets.engaged.tp = {
         main = "Carnwenhan",
-        range = "Loughnashade",
-        ammo = "Aurgelmir Orb +1",
-        head = "Brioso Roundlet +4",
-        body = limbus.revelation.tp.body,
+        sub = "Centovente",
+        range = "Linos",
+        head = "Bunzi's Hat",
+        body = "Revelation Plate.",
         hands = "Bihu Cuffs +4",
-        legs = limbus.revelation.tp.legs,
-        feet = limbus.revelation.tp.feet,
+        legs = "Revelation Brais",
+        feet = "Revelation Sab.",
         neck = "Bard's Charm +2",
         waist = "Windbuffet Belt +1",
-        ear1 = "Cessance Earring",
+        ear1 = "Brutal Earring",
         ear2 = "Dedition Earring",
         ring1 = "Rajas Ring",
         ring2 = "Petrov Ring",
-        back = capes.tp,
+        back = "Intarabus's Cape",
     }
 
     -- ===== enmity =====
@@ -368,14 +349,10 @@ function get_sets()
         back = "Rhapsode's Cape",
     }
 
-    -- ===== Limbus Rank 30 sets =================================
-    sets.Limbus = {}  -- container: every top-tier Limbus build this job can wear
-    sets.Limbus.revelation_tp = { head = limbus.revelation.tp.head, body = limbus.revelation.tp.body, hands = limbus.revelation.tp.hands, legs = limbus.revelation.tp.legs, feet = limbus.revelation.tp.feet }
-    sets.Limbus.revelation_ws = { head = limbus.revelation.ws.head, body = limbus.revelation.ws.body, hands = limbus.revelation.ws.hands, legs = limbus.revelation.ws.legs, feet = limbus.revelation.ws.feet }
-
     -- ===== idle =====
     sets.idle.dt = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Brioso Roundlet +4",
@@ -389,10 +366,11 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.dt,
+        back = "Intarabus's Cape",
     }
     sets.idle.maxhp = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Nyame Helm",
@@ -406,10 +384,11 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.maxhp,
+        back = "Intarabus's Cape",
     }
     sets.idle.mdt = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Nyame Helm",
@@ -423,10 +402,11 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.mdt,
+        back = "Intarabus's Cape",
     }
     sets.idle.movement = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Brioso Roundlet +4",
@@ -444,6 +424,7 @@ function get_sets()
     }
     sets.idle.pdt = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Nyame Helm",
@@ -457,10 +438,11 @@ function get_sets()
         ear2 = "Odnowa Earring +1",
         ring1 = "Defending Ring",
         ring2 = "Gelatinous Ring +1",
-        back = capes.pdt,
+        back = "Intarabus's Cape",
     }
     sets.idle.refresh = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Brioso Roundlet +4",
@@ -474,10 +456,11 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Chirich Ring +1",
         ring2 = "Stikini Ring +1",
-        back = capes.maccfc,
+        back = "Intarabus's Cape",
     }
     sets.idle.town = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         ammo = "Staunch Tathlum +1",
         head = "Brioso Roundlet +4",
@@ -497,6 +480,7 @@ function get_sets()
     -- ===== midcast =====
     sets.midcast.Singing = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         ammo = "Pemphredo Tathlum",
         head = "Brioso Roundlet +4",
@@ -504,30 +488,301 @@ function get_sets()
         hands = "Brioso Cuffs +4",
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
-        neck = "Bard's Charm +2",
+        neck = "Aoidos' Matinee",
         waist = "Eschan Stone",
         ear1 = "Enchntr. Earring +1",
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = capes.maccfc,
+        back = "Intarabus's Cape",
     }
-    sets.midcast["Singing Duration"] = {
+    sets.midcast.Song = {
         main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongAria = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongCarol = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Mousai Gages +1",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongDuration = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongEnfeeble = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
         range = "Loughnashade",
         ammo = "Pemphredo Tathlum",
         head = "Brioso Roundlet +4",
-        body = "Bihu Justaucorps +4",
+        body = "Brioso Justaucorps +4",
         hands = "Brioso Cuffs +4",
         legs = "Brioso Cannions +4",
         feet = "Brioso Slippers +4",
-        neck = "Bard's Charm +2",
+        neck = "Mnbw. Whistle +1",
         waist = "Eschan Stone",
         ear1 = "Enchntr. Earring +1",
         ear2 = "Digni. Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Kishar Ring",
-        back = capes.maccfc,
+        back = "Rhapsode's Cape",
+    }
+    sets.midcast.SongEtude = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Mousai Turban +1",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongHonor = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Marsyas",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongLullaby = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Pemphredo Tathlum",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Brioso Cuffs +4",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Rhapsode's Cape",
+    }
+    sets.midcast.SongMadrigal = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongMambo = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Mou. Crackows +1",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongMarch = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongMinne = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Mou. Seraweels +1",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongMinuet = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongPaeon = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Brioso Roundlet +4",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongPotency = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Fili Hongreline +3",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.midcast.SongThrenody = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Pemphredo Tathlum",
+        head = "Fili Calot +3",
+        body = "Mou. Manteel +1",
+        hands = "Fili Manchettes +3",
+        legs = "Inyanga Shalwar +2",
+        feet = "Brioso Slippers +4",
+        neck = "Mnbw. Whistle +1",
+        waist = "Plat. Mog. Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Digni. Earring",
+        ring1 = "Stikini Ring +1",
+        ring2 = "Kishar Ring",
+        back = "Rhapsode's Cape",
     }
 
     -- ===== precast =====
@@ -544,13 +799,103 @@ function get_sets()
         ear2 = "Loquac. Earring",
         ring1 = "Kishar Ring",
         ring2 = "Rahab Ring",
-        back = capes.maccfc,
+        back = "Intarabus's Cape",
+    }
+    sets.precast.FCBardSong = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Brioso Justaucorps +4",
+        hands = "Brioso Cuffs +4",
+        legs = "Brioso Cannions +4",
+        feet = "Bihu Slippers +4",
+        neck = "Aoidos' Matinee",
+        waist = "Witful Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Loquac. Earring",
+        ring1 = "Kishar Ring",
+        ring2 = "Rahab Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.precast.FCHonor = {
+        main = "Carnwenhan",
+        range = "Marsyas",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Brioso Justaucorps +4",
+        hands = "Brioso Cuffs +4",
+        legs = "Brioso Cannions +4",
+        feet = "Bihu Slippers +4",
+        neck = "Aoidos' Matinee",
+        waist = "Witful Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Loquac. Earring",
+        ring1 = "Kishar Ring",
+        ring2 = "Rahab Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.precast.Song = {
+        main = "Carnwenhan",
+        sub = "Genbu's Shield",
+        range = "Loughnashade",
+        ammo = "Staunch Tathlum +1",
+        head = "Fili Calot +3",
+        body = "Brioso Justaucorps +4",
+        hands = "Brioso Cuffs +4",
+        legs = "Brioso Cannions +4",
+        feet = "Bihu Slippers +4",
+        neck = "Aoidos' Matinee",
+        waist = "Witful Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Loquac. Earring",
+        ring1 = "Kishar Ring",
+        ring2 = "Rahab Ring",
+        back = "Intarabus's Cape",
+    }
+    sets.precast.Spell = {
+        ammo = "Staunch Tathlum +1",
+        head = "Brioso Roundlet +4",
+        body = "Brioso Justaucorps +4",
+        hands = "Leyline Gloves",
+        legs = "Brioso Cannions +4",
+        feet = "Brioso Slippers +4",
+        neck = "Orunmila's Torque",
+        waist = "Witful Belt",
+        ear1 = "Enchntr. Earring +1",
+        ear2 = "Loquac. Earring",
+        ring1 = "Kishar Ring",
+        ring2 = "Rahab Ring",
+        back = "Intarabus's Cape",
     }
 
     -- ===== weaponset =====
+    sets.weaponset.CarnwenhanGleti = {
+        main = "Carnwenhan",
+        sub = "Gleti's Knife",
+        range = "Loughnashade",
+    }
+    sets.weaponset["Mpu-Cento"] = {
+        main = "Mpu Gandring",
+        sub = "Centovente",
+    }
     sets.weaponset.MpuGandring = {
         main = "Mpu Gandring",
         sub = "Genbu's Shield",
+    }
+    sets.weaponset["MpuGandring-Carnwenhan"] = {
+        main = "Mpu Gandring",
+        sub = "Carnwenhan",
+    }
+    sets.weaponset["Naegling-Cento"] = {
+        main = "Naegling",
+        sub = "Centovente",
+    }
+    sets.weaponset.TauretGleti = {
+        main = "Tauret",
+        sub = "Gleti's Knife",
+        range = "Loughnashade",
     }
 end
 

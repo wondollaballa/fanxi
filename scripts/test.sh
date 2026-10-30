@@ -11,6 +11,18 @@ echo "== tools"
 python3 tools/gen_oboro.py --check
 python3 tests/verify_install_test.py
 python3 tests/chat_complete_test.py
+echo "== hud labels"
+python3 tests/spell_names_test.py
+echo "== hud cooldowns"
+python3 tests/hud_cool_test.py
+echo "== magic bag"
+python3 tests/magic_bag_test.py
+echo "== corsair pickers"
+python3 tests/cor_hud_test.py
+echo "== trust actions"
+python3 tests/trust_hud_test.py
+echo "== battle waltzes"
+python3 tests/dancer_waltz_test.py
 echo "== syntax"
 python3 -m compileall -q server/fanxi_server tools/make_brand_assets.py
 echo "OK"

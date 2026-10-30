@@ -1,16 +1,17 @@
 """Dancer's job abilities: TP costs, waltz potency, Daze steps and finishing moves.
 
-Dancer is a TP job.  A step, waltz or samba spends TP up front, and a flourish spends
-the Finishing Moves earned by steps.  The old layer treated every dance as free and
-made Curing Waltz a percentage of the caster's maximum HP, which is why a waltz looked
-like a second Benediction.  The numbers here are retail's:
+A waltz or samba spends TP up front, and a flourish spends the Finishing Moves earned
+by steps.  Steps and jigs are recast-only in this server.  The old layer treated every
+dance as free and made Curing Waltz a percentage of the caster's maximum HP, which is
+why a waltz looked like a second Benediction.  The numbers here are retail's except for
+the free steps:
 
 * Curing Waltz I-V cost 200/350/500/650/800 TP and restore
   ``floor((caster CHR + target VIT) * M + B + 2 * Waltz Potency ranks)`` HP, with M
   halved for a subbed Dancer (BG-wiki "Category:Waltz" and LandSandBoat's
   ``scripts/globals/job_utils/dancer.lua``).
-* Steps cost 100 TP, apply one of the four Daze families at a level from 1 to 10
-  (5 for a subbed Dancer) and grant Finishing Moves.
+* Steps apply one of the four Daze families at a level from 1 to 10 (5 for a subbed
+  Dancer) and grant Finishing Moves; they have only a recast, no TP cost.
 * Flourishes consume Finishing Moves; Reverse Flourish converts them back into TP.
 
 The module holds data and pure arithmetic only.  ``zone.py`` owns the packets, the
@@ -27,7 +28,9 @@ from . import effects
 DANCER_JOB = 19
 # TP is stored in the client's 0..3000 units (1000 is the 100% shown on the bar).
 TP_MAX = 3000
-STEP_TP_COST = 100
+# Steps and jigs are recast-only in this server's Dancer design.  Waltzes and sambas are
+# the TP-costed abilities, which is what the HUD's TP gate reads.
+STEP_TP_COST = 0
 
 # Base finishing moves, plus 2 per "Maximum Finishing Moves Bonus" job-point gift.  The
 # server applies every job-point gift, so a Dancer main can hold 5 + 2 + 2 = 9.
@@ -91,10 +94,15 @@ def waltz(ability_id: int) -> WaltzSpec | None:
     return WALTZES.get(int(ability_id))
 
 
-def waltz_tp_cost(spec: WaltzSpec, *, contradance: bool = False,
-                  contradance_jp: int = 0) -> int:
-    """TP a waltz costs.  Contradance's job-point row cuts it by 3% per rank."""
-    cost = int(spec.tp_cost)
+def waltz_tp_cost(spec: WaltzSpec, *, gear_reduction: int = 0,
+                  contradance: bool = False, contradance_jp: int = 0) -> int:
+    """TP a waltz costs after "Waltz TP Cost" gear and a Contradance discount.
+
+    LandSandBoat's ``waltz_cost`` modifier is stored in 5-TP units and the script
+    subtracts ``mod * 10``, so Desultor Tassets (-50 TP) is mod value 5.  Contradance's
+    job-point row then takes 3% per rank off the remainder.
+    """
+    cost = int(spec.tp_cost) - max(0, int(gear_reduction))
     if contradance:
         cost = cost * max(10, 100 - min(90, int(contradance_jp))) // 100
     return max(0, cost)
@@ -273,7 +281,7 @@ class SambaSpec:
     base_duration: float
     # HP/MP drained as a percentage of the damage the samba-augmented hit deals.
     on_hit_percent: int = 0
-    haste: int = 0       # HASTE_GEAR units: 500 is 5%
+    haste: int = 0       # HASTE_ABILITY units: 500 is 5%
 
 
 SAMBAS: dict[int, SambaSpec] = {

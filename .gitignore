@@ -14,13 +14,24 @@ data/*
 # Walkable zone grids are derived from the player's own game files (never commit them)
 data/nav/
 !data/skills.json
+!data/exp_table.json
 !data/job_points.json
+!data/spell_levels.json
+!data/song_potency.json
 !data/job_ability_status.json
 !data/weapon_skills.json
 !data/skillchains.json
+!data/weapon_skill_properties.json
 !data/limbus_r30.json
 !data/odyssey_r30.json
 !data/oboro_r25.json
+!data/nolan_mezzotint.json
+!data/oseem_glyptics.json
+!data/skirmish.json
+!data/temenos_r30.json
+!data/moonshade.json
+!data/magian.json
+!data/jug_pets.json
 tools/data/
 *.db
 *.db-wal

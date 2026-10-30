@@ -22,6 +22,7 @@
 
 #include "complete.h"
 #include "host.h"
+#include "typeahead.h"
 #include "plat.h"
 
 #define CHAT_MODE 207
@@ -341,6 +342,21 @@ static int addon_command(char w[][256], int n, int kind_hint)
     return 1;
 }
 
+/* `index` in its own chat colour slot, then a space: a cell of the //hint colors sheet. */
+static size_t hint_swatch(char* out, size_t cap, size_t at, int index)
+{
+    if (index < 1 || index > 511 || index == 256 || at + 8 >= cap)
+        return at;
+    out[at++] = (char)(index < 256 ? 0x1F : 0x1E);
+    out[at++] = (char)(index & 0xFF);
+    at += (size_t)snprintf(out + at, cap - at, "%d", index);
+    out[at++] = (char)0x1E;
+    out[at++] = 0x01;
+    out[at++] = ' ';
+    out[at] = 0;
+    return at;
+}
+
 static int host_command(const char* line)
 {
     int dbl = line[0] == '/' && line[1] == '/';
@@ -469,6 +485,112 @@ static int host_command(const char* line)
         chatf("%s", rest(body, 1));
         return 1;
     }
+    if (dbl && !strcasecmp(c, "help") && n > 1)
+    {
+        /* //help <command>: its syntax line, the arguments coloured.  A word this table does not
+         * know falls through to the server, which prints the whole list as before. */
+        const char* usage = xi_command_usage(w[1]);
+        if (!usage)
+            return 0;
+        char line[512];
+        xi_command_usage_colored(w[1], line, sizeof line);
+        const char* title = xi_command_title(w[1]);
+        if (title)
+            chatf("%s: %s", line, title);
+        else
+            chatf("%s", line);
+        return 1;
+    }
+    if (dbl && !strcasecmp(c, "hint"))
+    {
+        int state = -1;
+        if (n > 2 && !strcasecmp(w[1], "color"))
+        {
+            char* end = NULL;
+            long v = strtol(w[2], &end, 0);
+            if (!end || *end || !typeahead_colour((int)v))
+            {
+                chatf("hint: a colour is 1-255 (0x1F slots) or 257-511 (0x1E slots); "
+                      "//hint colors shows them");
+                return 1;
+            }
+            char swatch[32];
+            hint_swatch(swatch, sizeof swatch, 0, typeahead_colour_index());
+            chatf("hint: suggestion colour %s", swatch);
+            return 1;
+        }
+        if (n > 2 && !strcasecmp(w[1], "caret"))
+        {
+            int on = !strcasecmp(w[2], "on");
+            int off = !strcasecmp(w[2], "off");
+            if (!on && !off)
+                return chatf("hint: caret on|off"), 1;
+            typeahead_caret_after_code(on);
+            chatf("hint: caret %s the colour code; type a command to see the suggestion.",
+                  on ? "after" : "on");
+            return 1;
+        }
+        if (n > 1 && !strcasecmp(w[1], "colors"))
+        {
+            /* Each number drawn in its own slot: scan for a quiet grey and //hint color it. */
+            int first = n > 2 ? (int)strtol(w[2], NULL, 0) : 1;
+            if (first < 1)
+                first = 1;
+            for (int row = 0; row < 2; ++row)
+            {
+                char line[512];
+                size_t at = 0;
+                line[0] = 0;
+                for (int i = 0; i < 16; ++i)
+                {
+                    int index = first + row * 16 + i;
+                    if (index > 511)
+                        break;
+                    at = hint_swatch(line, sizeof line, at, index);
+                }
+                if (line[0])
+                    chatf("%s", line);
+            }
+            return 1;
+        }
+        if (n > 1 && !strcasecmp(w[1], "on"))
+            state = 1;
+        else if (n > 1 && !strcasecmp(w[1], "off"))
+            state = 0;
+        if (state >= 0)
+        {
+            xi_chat_hint(state);
+            if (state)
+                chatf("hint: typeahead on; Tab, Enter or a space takes the suggestion.");
+            else
+                chatf("hint: typeahead off.");
+            return 1;
+        }
+        if (n > 1 && !strcasecmp(w[1], "probe"))
+        {
+            /* The colour probe: the input line reads the chat log's 0x1E/0x1F pairs, which is what
+             * lets the suggestion live in the line itself.  Kept for a client whose renderer
+             * differs (a new retail build) and for showing the two slots. */
+            static const char SAMPLE[] = "//invite "
+                "\x1F\x05" "[subs | all | team | " "\x1F\x06" "<name>" "\x1F\x05" "]" "\x1E\x01";
+            /* Two placements, because the input line colours text differently around the caret:
+             * probe leaves the caret before the colour code (what the typeahead does today),
+             * probe 2 leaves it after the code (what moving the caret past the code would do). */
+            int after = n > 2 && w[2][0] == '2';
+            xi_chat_probe_at(SAMPLE, after ? 11 : 9);
+            chatf("hint: press Enter to open the chat line; the sample is in it (Esc closes it).");
+            if (after)
+                chatf("hint: caret after the colour code: the argument should be orange.");
+            else
+                chatf("hint: caret before the colour code: the argument may come out white.");
+            return 1;
+        }
+        char swatch[32];
+        hint_swatch(swatch, sizeof swatch, 0, typeahead_colour_index());
+        chatf("%s: %s", xi_command_usage("hint"), xi_command_title("hint"));
+        chatf("hint: typeahead is %s; suggestion colour %s", xi_chat_hint_on() ? "on" : "off", swatch);
+        return 1;
+    }
     if (dbl && !strcasecmp(c, "wait"))
         return 1; /* only meaningful in scripts and send_command chains */
     if (dbl && !strcasecmp(c, "config"))
@@ -492,10 +614,29 @@ static int host_command(const char* line)
 
 /* --- routing ---------------------------------------------------------------------------------- */
 
+/* A typed line with the input line's colour pairs taken out: the typeahead leaves them in the
+ * buffer when a suggestion is submitted by a path that does not come through keys.c's Enter hook
+ * (the numpad's Enter, a pad button).  An element icon (EF 1F) is text, not a colour pair. */
+static const char* plain_line(const char* in, char* out, size_t cap)
+{
+    size_t o = 0;
+    for (size_t i = 0; in[i] && o + 1 < cap;)
+    {
+        unsigned char b = (unsigned char)in[i];
+        if ((b == 0x1E || b == 0x1F) && in[i + 1] && (i == 0 || (unsigned char)in[i - 1] != 0xEF))
+            i += 2;
+        else
+            out[o++] = in[i++];
+    }
+    out[o] = 0;
+    return out;
+}
+
 int xi_command(const char* in, int mode, int injected)
 {
     static int depth;
-    const char* line = in;
+    char clean[2048];
+    const char* line = plain_line(in, clean, sizeof clean);
     while (*line == ' ' || *line == '\t')
         ++line;
     if (!*line)

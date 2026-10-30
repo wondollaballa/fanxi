@@ -72,6 +72,9 @@ pub struct LauncherConfig {
     pub limit_main_fps: bool,
     /// The window every visible client opens at: mode, size and interface scale (display.rs).
     pub game_display: GameDisplay,
+    /// The display the launcher window and the game open on: a monitor id from display.rs.
+    /// Empty is the main display.
+    pub monitor: String,
     pub last_page: String,
     /// The character the launcher's tenant bar has selected. It may belong to the main
     /// account or to one of its sub-account boxes, so it is separate from `character_id`
@@ -99,6 +102,7 @@ impl Default for LauncherConfig {
             auto_login: true,
             limit_main_fps: false,
             game_display: GameDisplay::default(),
+            monitor: String::new(),
             last_page: "home".to_string(),
             tenant_character_id: None,
             accounts: Vec::new(),
@@ -135,6 +139,7 @@ impl LauncherConfig {
         }
         config.api_url = config.api_url.trim().trim_end_matches('/').to_string();
         config.game_display = config.game_display.sanitized();
+        config.monitor = config.monitor.trim().to_string();
         config.load_legacy_account();
         config
     }
@@ -376,6 +381,8 @@ pub struct ConfigView {
     pub game_width: u32,
     pub game_height: u32,
     pub game_ui_scale: f64,
+    /// The display the launcher window and the game open on; empty is the main display.
+    pub monitor: String,
     pub last_page: String,
     pub signed_in: bool,
     pub accounts: Vec<AccountView>,
@@ -400,6 +407,7 @@ impl From<&LauncherConfig> for ConfigView {
             game_width: config.game_display.width,
             game_height: config.game_display.height,
             game_ui_scale: config.game_display.ui_scale,
+            monitor: config.monitor.clone(),
             last_page: config.last_page.clone(),
             signed_in: !config.token.is_empty(),
             accounts: config
@@ -627,8 +635,18 @@ mod tests {
     }
 
     #[test]
+    fn config_view_exposes_the_chosen_display() {
+        let mut config = temp_config();
+        assert_eq!(ConfigView::from(&config).monitor, "");
+        config.monitor = "Monitor #29451".to_string();
+        let value = serde_json::to_value(ConfigView::from(&config)).unwrap();
+        assert_eq!(value["monitor"], "Monitor #29451");
+    }
+
+    #[test]
     fn an_older_launcher_json_gets_the_default_game_window() {
-        let config: LauncherConfig = serde_json::from_str(r#"{"api_url":"http://127.0.0.1:8080"}"#).unwrap();
+        let config: LauncherConfig =
+            serde_json::from_str(r#"{"api_url":"http://127.0.0.1:8080"}"#).unwrap();
         assert_eq!(config.game_display, GameDisplay::default());
     }
 

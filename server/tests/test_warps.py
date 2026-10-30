@@ -4,6 +4,7 @@ from __future__ import annotations
 import json
 import struct
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -213,6 +214,7 @@ class WarpCommandTest(unittest.TestCase):
         session.pos = list(self.world.zones.position(int(zone)))
         session.load_zone_entities()
         session.zone_loaded = True
+        session.last_packet_at = time.time()
         self.world.sessions[addr] = session
         return session
 
@@ -306,6 +308,127 @@ class WarpCommandTest(unittest.TestCase):
         self.assertIn(0x00B, types)
         self.assertNotIn(0x00D, types)
 
+    def test_a_warp_is_handed_off_even_when_the_server_thinks_the_box_is_there(self):
+        """The server's position can be the anchor while the client is at the zone spawn.
+
+        The old same-spot shortcut skipped the warp exactly then, so the box stayed yards
+        away and only a moving anchor (spamming the command while walking) got it moved.
+        """
+        self.session.zone = 100
+        self.session.pos = [10.0, 20.0, 30.0, 128]
+        self.sub_session.zone = 100
+        self.sub_session.pos = [10.0, 20.0, 30.0, 128]  # server already believes this
+        self.sub_session.zoning = False
+        self.sub_session.zone_loaded = True
+        self.sub_session.queue.clear()
+
+        self.session.command(["warp", "all", "me"])
+
+        self.assertTrue(self.sub_session.zoning)
+        types = [struct.unpack_from("<H", message, 0)[0] & 0x1FF
+                 for message in self.sub_session.queue]
+        self.assertIn(0x00B, types)
+
+    def test_a_box_still_logging_in_joins_the_team_anchor_when_it_arrives(self):
+        """A relaunching box is not in the session list yet; it joins on its zone-in.
+
+        Without the anchor the box landed at its saved spot and only a second
+        ``//warp all me`` moved it — the 45-second "it finally clicked" report.
+        """
+        third = self.service.create_sub_account(
+            self.account["id"], {"character": {"name": "Thirdbox", "race": 1}})
+        self.session.zone = 100
+        self.session.pos = [10.0, 20.0, 30.0, 128]
+        self.session.queue.clear()
+
+        self.session.command(["warp", "all", "me"])
+        self.assertIsNotNone(self.world.team_anchor)
+
+        # The box finishes logging in in another zone, after the command.
+        late = self.make_session(third["character"], ("127.0.0.1", 1210), 246)
+        late.pos = [1.0, 2.0, 3.0, 4]
+        late.zoning = False
+        late.zone_loaded = True
+        self.assertTrue(self.world.join_team_anchor(late))
+        self.assertEqual(int(late.zone), 100)
+        self.assertEqual(late.pos, [10.0, 20.0, 30.0, 128])
+        self.assertTrue(late.zoning)
+
+    def test_a_main_teleport_brings_the_family_boxes(self):
+        """A survival guide, home point or warp spell moves the boxes with the leader."""
+        self.session.zone = 100
+        self.session.pos = [10.0, 20.0, 30.0, 128]
+        self.sub_session.zone = 100
+        self.sub_session.pos = [1.0, 2.0, 3.0, 4]
+        self.sub_session.zoning = False
+        self.sub_session.zone_loaded = True
+
+        self.session.change_zone(101, [7.0, 8.0, 9.0, 64])
+        self.world.advance(time.time())
+
+        self.assertEqual(int(self.sub_session.zone), 101)
+        self.assertEqual(self.sub_session.pos, [7.0, 8.0, 9.0, 64])
+        self.assertTrue(self.sub_session.zoning)
+
+    def test_a_sub_teleport_does_not_move_the_main(self):
+        self.session.zone = 100
+        self.session.pos = [10.0, 20.0, 30.0, 128]
+        self.sub_session.zone = 100
+        self.sub_session.pos = [1.0, 2.0, 3.0, 4]
+        self.sub_session.zoning = False
+        self.sub_session.zone_loaded = True
+        self.session.zoning = False
+
+        self.sub_session.change_zone(101, [7.0, 8.0, 9.0, 64])
+
+        self.assertEqual(int(self.session.zone), 100)
+        self.assertFalse(self.session.zoning)
+
+    def test_a_no_op_warp_is_skipped_only_after_the_client_reports_its_position(self):
+        """Before the first position packet the server only knows where it sent the box."""
+        self.sub_session.zone = 100
+        self.sub_session.pos = [10.0, 20.0, 30.0, 128]
+        self.sub_session.zoning = False
+        self.sub_session.zone_loaded = True
+        self.sub_session.position_seen = True
+        self.assertFalse(self.sub_session.change_zone(100, [10.0, 20.0, 30.0, 128]))
+        self.assertFalse(self.sub_session.zoning)
+
+        self.sub_session.position_seen = False
+        self.assertTrue(self.sub_session.change_zone(100, [10.0, 20.0, 30.0, 128]))
+        self.assertTrue(self.sub_session.zoning)
+
+    def test_warp_all_me_zones_the_whole_team_in_one_tick(self):
+        """Every box gets its own 0x00B in the same tick.
+
+        Measured live: five boxes from command to all-in-world in 4.5 s.  The old queue
+        spaced them three seconds apart, and a first-load gate measured 11.8 s because it
+        serialized a load the clients can overlap.
+        """
+        second = self.service.create_sub_account(
+            self.account["id"], {"character": {"name": "Secondbox", "race": 1}})
+        second_session = self.make_session(
+            second["character"], ("127.0.0.1", 1203), 246)
+        targets = [self.sub_session, second_session]
+        self.session.zone = 100
+        self.session.pos = [10.0, 20.0, 30.0, 128]
+        for target in targets:
+            target.zone = 100
+            target.pos = [1.0, 2.0, 3.0, 4]
+            target.zoning = False
+            target.zone_loaded = True
+            target.queue.clear()
+
+        self.session.command(["warp", "all", "me"])
+        self.assertIn("Warped 2 characters to you in West Ronfaure.", chats(self.session))
+        self.assertEqual([target.pos for target in targets],
+                         [[1.0, 2.0, 3.0, 4], [1.0, 2.0, 3.0, 4]])
+
+        self.world.advance(time.time())
+        self.assertEqual([target.pos for target in targets],
+                         [[10.0, 20.0, 30.0, 128], [10.0, 20.0, 30.0, 128]])
+        self.assertTrue(all(target.zoning for target in targets))
+
     def test_warp_call_brings_one_family_character(self):
         # The single-target form the launcher fires when a box comes back from a relog.
         self.session.zone = 100
@@ -350,6 +473,74 @@ class WarpCommandTest(unittest.TestCase):
         self.session.command(["warp", "call", "Fanxi"])
         self.assertIn("That is you.", chats(self.session))
 
+    def test_a_repeated_pull_to_the_same_anchor_does_not_zone_again(self):
+        # The launcher's auto-pull can arrive just after the box has been handed back to
+        # the leader's spot.  A second 0x00B there is the re-zone loop that kept a box out
+        # of the world, and advanced its zone key every fifteen seconds.
+        self.session.zone = 100
+        self.session.pos = [10.0, 20.0, 30.0, 128]
+        self.sub_session.zone = 100
+        self.sub_session.pos = [1.0, 2.0, 3.0, 4]
+        self.sub_session.zoning = False
+        self.sub_session.zone_loaded = True
+        self.sub_session.queue.clear()
+
+        self.session.command(["warp", "call", "Tinybox"])
+        self.assertTrue(self.sub_session.zoning)
+
+        # The box finishes the hand-off on the anchor; the next poll calls it again
+        # before its first position packet can prove where the client really is.
+        self.sub_session.zoning = False
+        self.sub_session.zone_loaded = True
+        self.sub_session.pos = [10.0, 20.0, 30.0, 128]
+        self.sub_session.queue.clear()
+        self.session.queue.clear()
+
+        self.session.command(["warp", "call", "Tinybox"])
+
+        self.assertFalse(self.sub_session.zoning)
+        types = [struct.unpack_from("<H", message, 0)[0] & 0x1FF
+                 for message in self.sub_session.queue]
+        self.assertNotIn(0x00B, types)
+        self.assertIn("Tinybox is already with you in West Ronfaure.", chats(self.session))
+
+        # The guard is not permanent: a call after the window still hands the box off.
+        self.sub_session.warped_to = (100, [10.0, 20.0, 30.0, 128], time.time() - 200.0)
+        self.sub_session.queue.clear()
+        self.session.queue.clear()
+        self.session.command(["warp", "call", "Tinybox"])
+        self.assertTrue(self.sub_session.zoning)
+
+    def test_mh_out_brings_a_family_box_outside(self):
+        # A headless box has no Mog House menu: //mh out does what the menu would, from
+        # the server, using the box's own city door.
+        self.sub_session.char["moghouse"] = 1
+        self.sub_session.zone = 100
+        self.sub_session.zoning = False
+        self.sub_session.zone_loaded = True
+        self.sub_session.queue.clear()
+
+        self.session.command(["mh", "out"])
+
+        self.assertEqual(int(self.sub_session.char["moghouse"]), 0)
+        self.assertTrue(self.sub_session.zoning)
+        types = [struct.unpack_from("<H", message, 0)[0] & 0x1FF
+                 for message in self.sub_session.queue]
+        self.assertIn(0x00B, types)
+        self.assertEqual(self.sub_session.pos, self.sub_session.moghouse_door(100))
+
+    def test_warp_all_me_inside_the_mog_house_is_refused(self):
+        # The leader's anchor inside is the interior origin, not a place to hand a box.
+        self.session.char["moghouse"] = 1
+        self.sub_session.zoning = False
+        self.sub_session.queue.clear()
+        self.session.queue.clear()
+
+        self.session.command(["warp", "all", "me"])
+
+        self.assertFalse(self.sub_session.zoning)
+        self.assertIn("Mog House", " ".join(chats(self.session)))
+
     def test_warp_call_refuses_another_account(self):
         other = self.service.register("other", "password123").account
         other_character = self.service.create_character(
@@ -379,7 +570,8 @@ class WarpCommandTest(unittest.TestCase):
 
         self.session.queue.clear()
         self.session.command(["warp", "all", "me"])
-        self.assertIn("No other characters in your team are online.", chats(self.session))
+        self.assertTrue(any("No other characters in your team are online" in line
+                            for line in chats(self.session)))
         self.assertEqual(self.sub_session.zone, 246)
 
         self.sub_session.sleeping = False

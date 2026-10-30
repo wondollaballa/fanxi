@@ -1,0 +1,9 @@
+# Two queued 0x050s for one equipment slot must leave as one packet, the latest
+# (host/addons/hooks.c).  A set queued while the previous one was still pending used to send
+# both changes for the slot in the same buffer, so the client re-ran its equipment update twice.
+# Run by tests/gear_queue_test.sh.
+frames 1
+load control
+frames 2
+lua control xi.packets.inject(true, string.char(0x50,4,0,0,1,4,0,0)) xi.packets.inject(true, string.char(0x50,4,0,0,2,4,8,0)) return 0
+packet_out 0a00000000000000

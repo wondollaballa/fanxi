@@ -1,0 +1,36 @@
+{
+  "item_id": 11697,
+  "name": "Moonshade Earring",
+  "source": "https://www.bg-wiki.com/ffxi/Moonshade_Earring",
+  "note": "Wings of the Goddess mission reward (Lest We Forget). One augment is chosen from each of the two sets and both live in the earring's standard five-slot block. The ids and values are the ones LandSandBoat's 54_Lest_We_Forget.lua hands to addItem, so the block the card writes is the block retail writes.",
+  "sets": [
+    {
+      "key": "first",
+      "label": "Augment Set 1",
+      "options": [
+        { "key": "acc", "id": 23, "value": 3 },
+        { "key": "attack", "id": 25, "value": 3 },
+        { "key": "racc", "id": 27, "value": 3 },
+        { "key": "ratt", "id": 29, "value": 3 },
+        { "key": "macc", "id": 35, "value": 3 },
+        { "key": "mab", "id": 133, "value": 3 },
+        { "key": "hp", "id": 1, "value": 24 },
+        { "key": "mp", "id": 9, "value": 24 }
+      ]
+    },
+    {
+      "key": "second",
+      "label": "Augment Set 2",
+      "options": [
+        { "key": "regain", "id": 59, "value": 0 },
+        { "key": "refresh", "id": 60, "value": 0 },
+        { "key": "dmg_bonus", "id": 352, "value": 4 },
+        { "key": "tp_bonus", "id": 353, "value": 4 },
+        { "key": "max_macc", "id": 350, "value": 2 },
+        { "key": "quick_magic", "id": 351, "value": 2 },
+        { "key": "counter", "id": 145, "value": 2 },
+        { "key": "resist", "id": 61, "value": 4 }
+      ]
+    }
+  ]
+}

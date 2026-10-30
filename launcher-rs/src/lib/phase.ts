@@ -55,9 +55,21 @@ export type SpellCategoryKey =
   | "nuke_mab"
   | "nuke_mdmg"
   | "helix_magic"
-  | "helix_duration";
+  | "helix_duration"
+  | "enspells"
+  | "song_duration"
+  | "song_potency"
+  | "song_aeonic"
+  | "song_prime";
 
-export type SpellGroupKey = "enfeebles" | "enhancing" | "curing" | "nuking" | "helix";
+export type SpellGroupKey =
+  | "enfeebles"
+  | "enhancing"
+  | "enspells"
+  | "curing"
+  | "nuking"
+  | "helix"
+  | "songs";
 
 export type SpellMode = {
   key: string;
@@ -120,6 +132,22 @@ export const SPELL_GROUPS: SpellGroup[] = [
         short: "Dur",
         category: "buff_duration",
         detail: "Duration set for every Enhancing Magic spell.",
+      },
+    ],
+  },
+  {
+    key: "enspells",
+    label: "Enspells",
+    short: "Ensp",
+    defaultMode: "damage",
+    modes: [
+      {
+        key: "damage",
+        label: "Enspell damage",
+        short: "Dmg",
+        category: "enspells",
+        detail:
+          "Enhancing Magic Skill / MND set for casting Enfire, Enblizzard, Enaero, Enstone, Enthunder and Enwater.",
       },
     ],
   },
@@ -189,6 +217,28 @@ export const SPELL_GROUPS: SpellGroup[] = [
       },
     ],
   },
+  {
+    key: "songs",
+    label: "Bard songs",
+    short: "Song",
+    defaultMode: "duration",
+    modes: [
+      {
+        key: "duration",
+        label: "Song duration",
+        short: "Dur",
+        category: "song_duration",
+        detail: "Duration set for every Bard song.",
+      },
+      {
+        key: "potency",
+        label: "Song potency",
+        short: "Pot",
+        category: "song_potency",
+        detail: "All Songs / song-family potency set for every Bard song.",
+      },
+    ],
+  },
 ];
 
 export const DEFAULT_SPELL_MODES: Record<SpellGroupKey, string> = Object.fromEntries(
@@ -203,6 +253,7 @@ export type PhaseConfig = {
   kite: string;
   rest: string;
   precast: string;
+  precastSong: string;
   midcast: string;
   defaultWs: string;
   defaultJa: string;
@@ -215,6 +266,8 @@ export type PhaseConfig = {
   jaOverrides: Record<string, string>;
   /** spell id (string) -> set path */
   spellOverrides: Record<string, string>;
+  /** song spell id (string) -> { pre, mid } set paths */
+  songOverrides: Record<string, { pre: string; mid: string }>;
   /** spell category key -> one set for every spell the host puts in that category */
   spellCategoryOverrides: Record<string, string>;
   /** spell group key -> the mode whose set is worn */
@@ -238,6 +291,7 @@ export const DEFAULT_PHASE_CONFIG: PhaseConfig = {
   kite: "",
   rest: "",
   precast: "",
+  precastSong: "",
   midcast: "",
   defaultWs: "",
   defaultJa: "",
@@ -247,12 +301,26 @@ export const DEFAULT_PHASE_CONFIG: PhaseConfig = {
   wsOverrides: {},
   jaOverrides: {},
   spellOverrides: {},
+  songOverrides: {},
   spellCategoryOverrides: {},
   spellModes: { ...DEFAULT_SPELL_MODES },
 };
 
 function text(value: unknown, fallback = ""): string {
   return typeof value === "string" ? value : fallback;
+}
+
+function songOverrideMap(value: unknown): Record<string, { pre: string; mid: string }> {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return {};
+  const out: Record<string, { pre: string; mid: string }> = {};
+  for (const [key, item] of Object.entries(value as Record<string, unknown>)) {
+    if (!item || typeof item !== "object" || Array.isArray(item)) continue;
+    const entry = item as Record<string, unknown>;
+    const pre = text(entry.pre);
+    const mid = text(entry.mid);
+    if (pre || mid) out[key] = { pre, mid };
+  }
+  return out;
 }
 
 function objectMap(value: unknown): Record<string, string> {
@@ -264,7 +332,58 @@ function objectMap(value: unknown): Record<string, string> {
   return out;
 }
 
-function normalizeSpellModes(
+/** Conventional library paths for each spell category, in preference order. */
+const SPELL_CATEGORY_FALLBACKS: Record<SpellCategoryKey, string[]> = {
+  enfeebles_macc: ["midcast.Enfeebling Magic"],
+  enfeebles_duration: ["midcast.Enfeebling Magic"],
+  buff_potency: ["midcast.Enhancing Magic"],
+  buff_duration: ["midcast.EnhancingDuration", "midcast.Enhancing Magic"],
+  cure_potency: ["midcast.Cure", "midcast.Healing Magic"],
+  cure_cast: ["midcast.Healing Magic"],
+  nuke_mab: ["midcast.Elemental Magic"],
+  nuke_mdmg: ["midcast.Elemental Magic"],
+  helix_magic: ["midcast.Elemental Magic"],
+  helix_duration: [],
+  enspells: ["midcast.Enspell", "midcast.EnhancingSkill"],
+  song_duration: ["midcast.SongDuration", "midcast.Song", "midcast.Singing"],
+  song_potency: ["midcast.SongPotency", "midcast.Song", "midcast.Singing"],
+  song_aeonic: ["midcast.SongHonor", "midcast.SongDuration", "midcast.Song"],
+  song_prime: ["midcast.SongAria", "midcast.SongDuration", "midcast.Song"],
+};
+
+/**
+ * Point each category at the conventional set when the saved path is missing. A path that exists
+ * is left alone, so a player's deliberate pick is never replaced. Missing paths with no
+ * conventional fallback are dropped, which lets the host fall back to the spell's skill set.
+ */
+export function reconcileSpellCategoryOverrides(
+  overrides: Record<string, string>,
+  setPaths: Iterable<string>,
+): { overrides: Record<string, string>; changed: boolean } {
+  const paths = new Set(setPaths);
+  const next = { ...overrides };
+  let changed = false;
+  for (const [category, fallbacks] of Object.entries(SPELL_CATEGORY_FALLBACKS) as [
+    SpellCategoryKey,
+    string[],
+  ][]) {
+    const current = next[category];
+    if (current && paths.has(current)) continue;
+    const fallback = fallbacks.find((path) => paths.has(path));
+    if (fallback) {
+      if (current !== fallback) {
+        next[category] = fallback;
+        changed = true;
+      }
+    } else if (current) {
+      delete next[category];
+      changed = true;
+    }
+  }
+  return { overrides: next, changed };
+}
+
+export function normalizeSpellModes(
   savedModes: Record<string, string>,
   overrides: Record<string, string>,
 ): Record<string, string> {
@@ -309,6 +428,7 @@ export function loadPhaseConfig(): PhaseConfig {
     kite: text(saved.kite),
     rest: text(saved.rest),
     precast: text(saved.precast),
+    precastSong: text(saved.precastSong),
     midcast: text(saved.midcast),
     defaultWs: text(saved.defaultWs),
     defaultJa: text(saved.defaultJa),
@@ -326,6 +446,7 @@ export function loadPhaseConfig(): PhaseConfig {
     wsOverrides: objectMap(saved.wsOverrides),
     jaOverrides: objectMap(saved.jaOverrides),
     spellOverrides: objectMap(saved.spellOverrides),
+    songOverrides: songOverrideMap(saved.songOverrides),
     spellCategoryOverrides,
     spellModes: normalizeSpellModes(objectMap(saved.spellModes), spellCategoryOverrides),
   };
@@ -350,6 +471,7 @@ export function phaseOptions(config: PhaseConfig): Record<string, unknown> {
     kite: config.kite || null,
     rest: config.rest || null,
     precast: config.precast || null,
+    precast_song: config.precastSong || null,
     midcast: config.midcast || null,
     default_ws: config.defaultWs || null,
     default_ja: config.defaultJa || null,
@@ -357,6 +479,7 @@ export function phaseOptions(config: PhaseConfig): Record<string, unknown> {
     ws_overrides: config.wsOverrides,
     ja_overrides: config.jaOverrides,
     spell_overrides: config.spellOverrides,
+    song_overrides: config.songOverrides,
     spell_category_overrides: config.spellCategoryOverrides,
     spell_modes: config.spellModes,
   };

@@ -8,11 +8,14 @@ from server.fanxi_server.game import odyssey
 class OdysseyTest(unittest.TestCase):
     def test_every_odyssey_item_is_present(self):
         entries = odyssey.entries()
-        self.assertEqual(len(entries), 27)
-        armour = [e for e in entries if e["set"] != "Odyssey weapon"]
+        self.assertEqual(len(entries), 60)
+        armour = [e for e in entries
+                  if e["set"] not in ("Odyssey weapon", "Odyssey accessory")]
         weapons = [e for e in entries if e["set"] == "Odyssey weapon"]
-        self.assertEqual(len(armour), 20)
-        self.assertEqual(len(weapons), 7)
+        accessories = [e for e in entries if e["set"] == "Odyssey accessory"]
+        self.assertEqual(len(armour), 35)
+        self.assertEqual(len(weapons), 15)
+        self.assertEqual(len(accessories), 10)
 
     def test_nyame_has_four_paths(self):
         helm = odyssey.find("nyame helm")[0]
@@ -34,14 +37,35 @@ class OdysseyTest(unittest.TestCase):
         self.assertTrue(all(e["set"] == "Odyssey weapon" for e in odyssey.find("weapon")))
         self.assertEqual(odyssey.find("nope"), [])
 
+    def test_bunzi_set_is_present(self):
+        hat = odyssey.find("bunzi's hat")[0]
+        self.assertEqual(hat["id"], 23760)
+        self.assertEqual(hat["set"], "Bunzi's Attire Set")
+        self.assertEqual(hat["bundle"], 433)
+        self.assertEqual(hat["paths"]["Rank 30"], [
+            "Attack+30 Magic Damage+30", '"Store TP"+8',
+            "Accuracy+15 Mag. Acc.+15", "Quadruple Attack +3%",
+        ])
+        self.assertEqual(odyssey.bundle_for("Bunzi's Hat"), 433)
+        self.assertEqual(odyssey.bundle_for("Bunzi's Chopper"), 399)
+
+    def test_odyssey_accessories(self):
+        sash = odyssey.find("obstin")[0]
+        self.assertEqual(sash["id"], 26363)
+        self.assertEqual(sash["set"], "Odyssey accessory")
+        self.assertEqual(sash["bundle"], 467)
+        self.assertEqual(sash["paths"]["Rank 30"], [
+            "Magic Accuracy+15", "Enfb. mag. skill+15", "Enmity-5"])
+        self.assertEqual(odyssey.bundle_for("Schere Earring"), 464)
+
     def test_bundles_are_known_for_every_item(self):
         entries = odyssey.entries()
         for entry in entries:
             if entry["bundles"]:
                 self.assertEqual(sorted(entry["bundles"]), ["A", "B", "C", "D"])
-                self.assertTrue(all(390 <= int(i) <= 460 for i in entry["bundles"].values()))
+                self.assertTrue(all(390 <= int(i) <= 467 for i in entry["bundles"].values()))
             else:
-                self.assertTrue(390 <= int(entry["bundle"]) <= 460, entry["name"])
+                self.assertTrue(390 <= int(entry["bundle"]) <= 467, entry["name"])
 
     def test_bundle_lookup(self):
         self.assertEqual(odyssey.bundle_for("Nyame Helm", "A"), 438)

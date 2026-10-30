@@ -17,5 +17,6 @@
 
 ## Red Mage
 
-- **Quick Magic** now has a 5% base chance plus the job-point row, and a proc finishes
-  the cast on the next tick with a `Quick Magic!` chat line.
+- **Quick Magic** has a 5% base chance.  A proc finishes the cast on the next tick with
+  a `Quick Magic!` chat line and refunds its job-point row: 2% of the spell's MP cost
+  per rank (40% at rank 20), matching LandSandBoat's "MP consumption -2%" comment.

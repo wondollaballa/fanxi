@@ -21,7 +21,7 @@ import type {
   WarpPoint,
 } from "../types";
 import { backend, LauncherError } from "../lib/api";
-import { jobAbbr, jobName, ZONES } from "../lib/format";
+import { characterJobLabel, serverPosition, ZONES } from "../lib/format";
 import {
   Badge,
   Button,
@@ -129,6 +129,8 @@ export function WarpsPage({
     return names;
   }, [session.account.username, team, tenant]);
 
+  const livePort = liveInstance?.port ?? null;
+
   const familyOnline = useMemo(
     () =>
       instances.filter(
@@ -145,13 +147,35 @@ export function WarpsPage({
     data?.character.zone_name ??
     ZONES[currentZone] ??
     (currentZone ? `Zone ${currentZone}` : "Unknown zone");
-  const position = livePosition ?? data?.character.position ?? null;
+  // The client reports x/y as the ground plane and z as height; the saved warp rows and the
+  // coordinate labels already use the server's x, y (height), z (ground).
+  const position = livePosition
+    ? serverPosition(livePosition)
+    : data?.character.position ?? null;
   const rotation = livePosition?.heading ?? data?.character.position.rot ?? null;
   const isLive = liveInstance !== null;
   /** A live process can still be at the character-select screen; commands and marks need a
    * character actually in the world. */
   const inGame = Boolean(isLive && liveState?.player && liveState.zone?.id);
   const isActing = busy !== null;
+
+  // A mark made, renamed or deleted here should show up on the in-game Zoning page at once.
+  // The launcher's periodic sync also covers it, but this is the screen where the change happens.
+  // Wait for the character to be in world: the addon resets its HUD (and the pushed marks) when
+  // the default login HUD becomes the real character's file.
+  useEffect(() => {
+    if (!data || livePort === null || selectedId === null || !inGame) return;
+    if (Number(data.character.id) !== selectedId) return;
+    void backend
+      .sendHud(livePort, {
+        warp_marks: data.warps.map((warp) => ({
+          slot: warp.slot,
+          alias: warp.alias,
+          zone_name: warp.zone_name,
+        })),
+      })
+      .catch(() => undefined);
+  }, [data, livePort, selectedId, inGame]);
 
   const visibleWarps = useMemo(() => {
     const query = search.trim().toLowerCase();
@@ -176,18 +200,13 @@ export function WarpsPage({
         const state = await backend.controlState(liveInstance.port);
         const where = state.player?.position;
         const zone = state.zone?.id;
-        if (
-          zone &&
-          where &&
-          typeof where.x === "number" &&
-          typeof where.y === "number" &&
-          typeof where.z === "number"
-        ) {
+        const wire = serverPosition(where);
+        if (zone && wire) {
           payload.zone = zone;
-          payload.x = where.x;
-          payload.y = where.y;
-          payload.z = where.z;
-          payload.rot = where.heading ?? 0;
+          payload.x = wire.x;
+          payload.y = wire.y;
+          payload.z = wire.z;
+          payload.rot = where?.heading ?? 0;
         }
       } catch {
         // The server's last saved position is still a useful mark; keep going.
@@ -215,7 +234,7 @@ export function WarpsPage({
     try {
       await backend.sendCommand(
         liveInstance.port,
-        `//warp ${target === "all" ? "all" : "me"} ${warp.slot}`,
+        `/!warp ${target === "all" ? "all" : "me"} ${warp.slot}`,
       );
       const label = warpLabel(warp);
       notify(
@@ -237,7 +256,7 @@ export function WarpsPage({
     if (!selectedCharacter || !liveInstance || !inGame || isActing) return;
     setBusy("warp-team");
     try {
-      await backend.sendCommand(liveInstance.port, "//warp all me");
+      await backend.sendCommand(liveInstance.port, "/!warp all me");
       const others = Math.max(0, familyOnline.length - 1);
       notify(
         others > 0
@@ -353,9 +372,7 @@ export function WarpsPage({
             <strong>{selectedCharacter?.name ?? "No character"}</strong>
             <span>
               {selectedCharacter
-                ? `${jobAbbr(Number(selectedCharacter.main_job))} · ${jobName(
-                    Number(selectedCharacter.main_job),
-                  )} Lv ${selectedCharacter.main_level ?? "?"}`
+                ? characterJobLabel(selectedCharacter)
                 : "Pick a character to manage"}
             </span>
           </div>

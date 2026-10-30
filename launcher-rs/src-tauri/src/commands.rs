@@ -17,6 +17,7 @@ use crate::display::{self, GameDisplay, WindowMode};
 use crate::error::{AppError, AppResult};
 use crate::game;
 use crate::gear::{self, GearItem, JobInfo};
+use crate::gear_stats;
 use crate::icons;
 
 pub struct AppState {
@@ -63,6 +64,7 @@ pub struct Bootstrap {
     pub game_dir: Option<String>,
     pub host64: Option<String>,
     pub gearswap_dir: Option<String>,
+    pub gearswap_config: Option<Value>,
     pub version: String,
 }
 
@@ -211,6 +213,18 @@ pub async fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> AppResult<
         }
     }
 
+    let gearswap_config = if !config.token.is_empty() {
+        match api.gearswap_settings(&config.token).await {
+            Ok(value) => value
+                .get("config")
+                .cloned()
+                .filter(|value| value.is_object()),
+            Err(_) => None,
+        }
+    } else {
+        None
+    };
+
     let repo = game::resolve_repo_root_for(&config);
     if config.repo_root.trim().is_empty() {
         if let Some(root) = repo.as_ref() {
@@ -234,6 +248,7 @@ pub async fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> AppResult<
         game_dir: game_dir.map(|path| path.to_string_lossy().into_owned()),
         host64: host64.map(|path| path.to_string_lossy().into_owned()),
         gearswap_dir: gearswap.map(|path| path.to_string_lossy().into_owned()),
+        gearswap_config,
         version: env!("CARGO_PKG_VERSION").to_string(),
     })
 }
@@ -503,22 +518,55 @@ pub async fn character_data(state: State<'_, AppState>, character_id: i64) -> Ap
 }
 
 #[tauri::command]
+pub async fn character_bags(state: State<'_, AppState>, character_id: i64) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.character_bags(&config.token, character_id).await
+}
+
+#[tauri::command]
+pub async fn character_magic_bag(state: State<'_, AppState>, character_id: i64) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.character_magic_bag(&config.token, character_id).await
+}
+
+#[tauri::command]
+pub async fn character_stats(state: State<'_, AppState>, character_id: i64) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.character_stats(&config.token, character_id).await
+}
+
+#[tauri::command]
 pub async fn character_data_action(
     state: State<'_, AppState>,
     character_id: i64,
     action: String,
     payload: Option<Value>,
 ) -> AppResult<Value> {
-    const ACTIONS: [&str; 9] = [
+    const ACTIONS: [&str; 12] = [
         "merits",
         "job-points",
         "mastery-rank",
         "gil",
         "home-points",
         "key-items",
+        "mounts",
         "currencies",
         "armory",
+        "items",
         "progress",
+        "ascension",
     ];
     if !ACTIONS.contains(&action.as_str()) {
         return Err(AppError::Validation(format!(
@@ -545,21 +593,27 @@ pub async fn search_armory(
     character_id: i64,
     query: String,
     kind: Option<String>,
+    scope: Option<String>,
+    category: Option<String>,
 ) -> AppResult<Value> {
     let config = state.config.lock().await.clone();
     if config.token.is_empty() {
         return Err(AppError::Validation("sign in first".to_string()));
     }
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
-    api.search_armory(&config.token, character_id, &query, kind.as_deref())
-        .await
+    api.search_armory(
+        &config.token,
+        character_id,
+        &query,
+        kind.as_deref(),
+        scope.as_deref(),
+        category.as_deref(),
+    )
+    .await
 }
 
 #[tauri::command]
-pub async fn character_warps(
-    state: State<'_, AppState>,
-    character_id: i64,
-) -> AppResult<Value> {
+pub async fn character_warps(state: State<'_, AppState>, character_id: i64) -> AppResult<Value> {
     let config = state.config.lock().await.clone();
     if config.token.is_empty() {
         return Err(AppError::Validation("sign in first".to_string()));
@@ -653,6 +707,7 @@ pub async fn select_tenant(
 
 #[tauri::command]
 pub async fn save_settings(
+    app: AppHandle,
     state: State<'_, AppState>,
     api_url: String,
     game_dir: String,
@@ -666,6 +721,7 @@ pub async fn save_settings(
     game_width: u32,
     game_height: u32,
     game_ui_scale: f64,
+    monitor: String,
 ) -> AppResult<ConfigView> {
     let mut config = state.config.lock().await;
     let display = GameDisplay {
@@ -710,12 +766,20 @@ pub async fn save_settings(
     config.auto_login = auto_login;
     config.limit_main_fps = limit_main_fps;
     config.game_display = display.sanitized();
+    config.monitor = monitor.trim().to_string();
     config.save()?;
-    Ok(ConfigView::from(&*config))
+    let view = ConfigView::from(&*config);
+    drop(config);
+    // Show the choice now rather than at the next start: the window the player just asked to
+    // move is the one in front of them. A display that is not attached leaves it where it is.
+    if let Err(error) = display::place_launcher_window(&app, &view.monitor) {
+        tracing::warn!(%error, "cannot move the launcher window to the chosen display");
+    }
+    Ok(view)
 }
 
-/// The displays attached to this machine. Settings uses their work area for "Fit this display"
-/// and to cap the resolution presets at what the monitor can show.
+/// The displays attached to this machine. Settings lists them in the Display picker and uses the
+/// chosen one's work area for "Fit this display" and to cap the resolution presets.
 #[tauri::command]
 pub fn display_info(app: AppHandle) -> display::DisplayInfo {
     display::info(&app)
@@ -840,7 +904,15 @@ async fn spawn_launch(
     let character = data.get("character").cloned().unwrap_or(fallback_character);
     let mut instances = state.instances.lock().await;
     instances
-        .launch(config, account, character, &client, &login_token, &game_dir, headless)
+        .launch(
+            config,
+            account,
+            character,
+            &client,
+            &login_token,
+            &game_dir,
+            headless,
+        )
         .await
 }
 
@@ -1030,15 +1102,12 @@ async fn run_remote_boxes(
             command.arg("--only").arg(only);
         }
     }
-    let output = tokio::time::timeout(
-        std::time::Duration::from_secs(180),
-        command.output(),
-    )
-    .await
-    .map_err(|_| AppError::Control("the remote box helper timed out".to_string()))?
-    .map_err(|error| {
-        AppError::Control(format!("could not run scripts/linux_boxes.py: {error}"))
-    })?;
+    let output = tokio::time::timeout(std::time::Duration::from_secs(180), command.output())
+        .await
+        .map_err(|_| AppError::Control("the remote box helper timed out".to_string()))?
+        .map_err(|error| {
+            AppError::Control(format!("could not run scripts/linux_boxes.py: {error}"))
+        })?;
     let stdout = String::from_utf8_lossy(&output.stdout).trim().to_string();
     let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
     let text = if stderr.is_empty() {
@@ -1128,7 +1197,12 @@ fn view_in_game(view: &InstanceView) -> bool {
 async fn reap_before_headless(state: &State<'_, AppState>) -> Vec<String> {
     let tracked: Vec<u32> = {
         let instances = state.instances.lock().await;
-        instances.views().into_iter().filter(|view| view.alive).map(|view| view.pid).collect()
+        instances
+            .views()
+            .into_iter()
+            .filter(|view| view.alive)
+            .map(|view| view.pid)
+            .collect()
     };
     let notes = boxes::reap_orphans_for_launch(&tracked).await;
     if !notes.is_empty() {
@@ -1146,10 +1220,7 @@ async fn refresh_view(state: &State<'_, AppState>, account: &str) -> Option<Inst
 }
 
 /// The helper finished, but give the tunnel a moment to appear in the launcher's attach list.
-async fn attach_remote_view(
-    state: &State<'_, AppState>,
-    account: &str,
-) -> AppResult<InstanceView> {
+async fn attach_remote_view(state: &State<'_, AppState>, account: &str) -> AppResult<InstanceView> {
     for _ in 0..20 {
         if let Some(view) = refresh_view(state, account).await {
             return Ok(view);
@@ -1211,9 +1282,10 @@ async fn launch_remote_party(
     state: &State<'_, AppState>,
     config: &LauncherConfig,
 ) -> AppResult<LaunchAllResult> {
-    let _guard = state.remote.try_lock().map_err(|_| {
-        AppError::Control("a remote box operation is already running".to_string())
-    })?;
+    let _guard = state
+        .remote
+        .try_lock()
+        .map_err(|_| AppError::Control("a remote box operation is already running".to_string()))?;
     let _reaped = reap_before_headless(&state).await;
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     let value = api.sub_accounts(&config.token).await?;
@@ -1330,9 +1402,7 @@ pub async fn launch_headless_party(state: State<'_, AppState>) -> AppResult<Laun
             .and_then(Value::as_str)
             .unwrap_or("?")
             .to_string();
-        let character_id = sub
-            .pointer("/character/id")
-            .and_then(value_i64);
+        let character_id = sub.pointer("/character/id").and_then(value_i64);
         if refresh_view(&state, &account)
             .await
             .map(|view| view_in_game(&view))
@@ -1605,9 +1675,10 @@ pub async fn launch_remote_team(state: State<'_, AppState>) -> AppResult<String>
             "set the remote Linux host in Settings first".to_string(),
         ));
     }
-    let _guard = state.remote.try_lock().map_err(|_| {
-        AppError::Control("a remote box operation is already running".to_string())
-    })?;
+    let _guard = state
+        .remote
+        .try_lock()
+        .map_err(|_| AppError::Control("a remote box operation is already running".to_string()))?;
     let reaped = reap_before_headless(&state).await;
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     let value = api.sub_accounts(&config.token).await?;
@@ -1864,6 +1935,263 @@ pub async fn relaunch_instance(state: State<'_, AppState>, port: u16) -> AppResu
     }
 }
 
+/// The control addon reports the client's own axes: x and y are the ground plane and z is
+/// height. The server's `//pos` and `//zone` take x, y (height), z (ground), so forwarding a
+/// position unchanged puts a box at (x, ground, height) — hundreds of yalms above the world
+/// and outside every entity list. Fourdough sat at 515.9 height instead of -27.1 this way.
+fn server_position(position: &Value) -> Option<[f64; 3]> {
+    let x = position.get("x").and_then(Value::as_f64)?;
+    let y = position.get("y").and_then(Value::as_f64)?;
+    let z = position.get("z").and_then(Value::as_f64)?;
+    if !x.is_finite() || !y.is_finite() || !z.is_finite() {
+        return None;
+    }
+    Some([x, z, y])
+}
+
+/// `//zone` with the leader's position in the server's order. A zone hand-off also refreshes
+/// the client's entity table, which a same-zone `//pos` does not.
+fn zone_command(zone: u64, position: &Value) -> AppResult<String> {
+    let [x, y, z] = server_position(position)
+        .ok_or_else(|| AppError::Control("the leader has no usable position yet".to_string()))?;
+    Ok(format!("//zone {zone} {x:.3} {y:.3} {z:.3}"))
+}
+
+fn near_position(a: &Value, b: &Value) -> bool {
+    let Some([ax, ay, az]) = server_position(a) else {
+        return false;
+    };
+    let Some([bx, by, bz]) = server_position(b) else {
+        return false;
+    };
+    (ax - bx).hypot(ay - by) < 5.0 && (az - bz).abs() < 5.0
+}
+
+/// Wait for a restarted client to be in a loaded zone. `pid` is the local process only: an
+/// attached Linux box has a remote pid that this machine cannot signal-check.
+async fn await_loaded(
+    port: u16,
+    pid: Option<u32>,
+    timeout: std::time::Duration,
+) -> AppResult<Value> {
+    let client = ControlClient::new(port);
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        if let Some(pid) = pid {
+            if !boxes::pid_alive(pid) {
+                return Err(AppError::Control(format!(
+                    "the client on control port {port} exited"
+                )));
+            }
+        }
+        if let Ok(state) = client.state().await {
+            if state.get("login_status").and_then(Value::as_u64) == Some(2)
+                && state.pointer("/zone/id").and_then(Value::as_u64).is_some()
+            {
+                return Ok(state);
+            }
+        }
+        let _ = client
+            .call(
+                "keys",
+                json!({"keys": ["enter"], "hold_ms": 100}),
+                std::time::Duration::from_secs(2),
+            )
+            .await;
+        if tokio::time::Instant::now() >= deadline {
+            return Err(AppError::Control(format!(
+                "the client on control port {port} did not reach a zone in {} s",
+                timeout.as_secs()
+            )));
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+/// Wait until the box is in the leader's zone and near the leader's *current* spot. The
+/// leader may move while the box relogs, so the live position is read again each tick.
+async fn await_anchor(
+    port: u16,
+    zone: u64,
+    leader_port: u16,
+    fallback_position: &Value,
+    timeout: std::time::Duration,
+) -> bool {
+    let client = ControlClient::new(port);
+    let leader = ControlClient::new(leader_port);
+    let deadline = tokio::time::Instant::now() + timeout;
+    loop {
+        let leader_state = leader.state().await.ok();
+        let target_zone = leader_state
+            .as_ref()
+            .and_then(|state| state.pointer("/zone/id"))
+            .and_then(Value::as_u64)
+            .unwrap_or(zone);
+        let target_position = leader_state
+            .as_ref()
+            .and_then(|state| state.pointer("/player/position"))
+            .cloned()
+            .unwrap_or_else(|| fallback_position.clone());
+        if let Ok(follower) = client.state().await {
+            let at_zone = follower.pointer("/zone/id").and_then(Value::as_u64) == Some(target_zone)
+                && follower.pointer("/player/position").is_some();
+            let at_position = follower
+                .pointer("/player/position")
+                .map(|position| near_position(position, &target_position))
+                .unwrap_or(false);
+            if at_zone && at_position {
+                return true;
+            }
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return false;
+        }
+        tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    }
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FixFollowerResult {
+    pub account: String,
+    pub name: String,
+    pub port: u16,
+    pub leader: String,
+    pub zone: String,
+    pub message: String,
+}
+
+/// The Follow card's Fix button: kill the box, relaunch the same character, then zone it to
+/// its line leader and re-apply follow.
+///
+/// This is the manual escape hatch for a box that stays `waiting` after the automatic
+/// recovery gave up. A client whose entity table never saw the leader — or that a bad
+/// recovery left out of range — needs a new process, not another position packet. The
+/// launcher owns the launch token, so it can relog; a remote box is restarted by the same
+/// helper that started it.
+#[tauri::command]
+pub async fn fix_follower(
+    state: State<'_, AppState>,
+    port: u16,
+    leader_port: u16,
+) -> AppResult<FixFollowerResult> {
+    if port == leader_port {
+        return Err(AppError::Validation(
+            "a box cannot be fixed onto itself".to_string(),
+        ));
+    }
+    let config = state.config.lock().await.clone();
+    // Read the leader before the restart, while the follower is still the old process.
+    let (leader_name, leader_zone, leader_zone_name, leader_position, leader_client) = {
+        let leader_client = { state.instances.lock().await.control_for(leader_port)? };
+        let leader = leader_client.state().await?;
+        if leader.get("login_status").and_then(Value::as_u64) != Some(2) {
+            return Err(AppError::Control(
+                "the line leader is not in game yet".to_string(),
+            ));
+        }
+        let name = leader
+            .pointer("/player/name")
+            .and_then(Value::as_str)
+            .filter(|name| !name.trim().is_empty())
+            .unwrap_or("the leader")
+            .to_string();
+        let zone = leader
+            .pointer("/zone/id")
+            .and_then(Value::as_u64)
+            .ok_or_else(|| AppError::Control("the leader is not in a zone yet".to_string()))?;
+        let zone_name = leader
+            .pointer("/zone/name")
+            .and_then(Value::as_str)
+            .map(str::to_string)
+            .unwrap_or_else(|| format!("zone {zone}"));
+        let position = leader
+            .pointer("/player/position")
+            .cloned()
+            .ok_or_else(|| AppError::Control("the leader has no position yet".to_string()))?;
+        if server_position(&position).is_none() {
+            return Err(AppError::Control(
+                "the leader has no usable position yet".to_string(),
+            ));
+        }
+        (name, zone, zone_name, position, leader_client)
+    };
+    let line = zone_command(leader_zone, &leader_position)?;
+
+    let (account, remote, headless, character_id, name) = {
+        let instances = state.instances.lock().await;
+        let view = instances
+            .views()
+            .into_iter()
+            .find(|view| view.port == port)
+            .ok_or_else(|| AppError::Control(format!("no client on control port {port}")))?;
+        (
+            view.account,
+            view.remote,
+            view.headless,
+            view.character.get("id").and_then(value_i64),
+            view.name,
+        )
+    };
+    let sub_id = find_sub_id(&config, &account).await?;
+
+    let view = if remote {
+        let _guard = state.remote.try_lock().map_err(|_| {
+            AppError::Control("a remote box operation is already running".to_string())
+        })?;
+        let id = sub_id.ok_or_else(|| {
+            AppError::Validation(format!("@{account} is not a sub-account of this launcher"))
+        })?;
+        run_remote_boxes(&config, "restart", Some(&id.to_string())).await?;
+        attach_remote_view(&state, &account).await?
+    } else {
+        {
+            let mut instances = state.instances.lock().await;
+            instances.stop(port).await?;
+        }
+        match sub_id {
+            Some(id) => launch_sub_with_config(&state, &config, id, character_id, headless).await?,
+            None => launch_with_config(&state, &config, &account, character_id).await?,
+        }
+    };
+    let local_pid = (!view.remote && view.pid > 0).then_some(view.pid);
+    let loaded = await_loaded(view.port, local_pid, std::time::Duration::from_secs(90)).await?;
+    // The registry entry can lag behind the character that actually signed in; the live state
+    // is what the server's `//warp call` resolves.
+    let name = loaded
+        .pointer("/player/name")
+        .and_then(Value::as_str)
+        .filter(|value| !value.trim().is_empty())
+        .map(str::to_string)
+        .unwrap_or(name);
+
+    let client = ControlClient::new(view.port);
+    client.command(&line).await?;
+    let wait = std::time::Duration::from_secs(25);
+    let mut anchored =
+        await_anchor(view.port, leader_zone, leader_port, &leader_position, wait).await;
+    if !anchored {
+        // The first zone after a relog can still be settling; the server-side call is the same
+        // hand-off from the leader's side and works across zones without coordinates.
+        let _ = leader_client.command(&format!("//warp call {name}")).await;
+        anchored = await_anchor(view.port, leader_zone, leader_port, &leader_position, wait).await;
+    }
+    if !anchored {
+        return Err(AppError::Control(format!(
+            "{name} relaunched but did not join {leader_name} in {leader_zone_name}"
+        )));
+    }
+    client.follow(true, Some(&leader_name), 1.0).await?;
+    Ok(FixFollowerResult {
+        account,
+        name: name.clone(),
+        port: view.port,
+        leader: leader_name.clone(),
+        zone: leader_zone_name.clone(),
+        message: format!("{name} was relaunched and zoned to {leader_name} in {leader_zone_name}."),
+    })
+}
+
 #[tauri::command]
 pub async fn stop_instance(state: State<'_, AppState>, port: u16) -> AppResult<()> {
     let sleep = {
@@ -1971,6 +2299,32 @@ pub async fn send_command(state: State<'_, AppState>, port: u16, line: String) -
 
 /// Change the in-game ability/spell HUD (the control addon's `hud` command). The payload is
 /// passed through so the Control room can toggle, re-layout or start edit mode in one call.
+/// Load the account's GearSwap/phase configuration from the game database.
+#[tauri::command]
+pub async fn gearswap_settings(state: State<'_, AppState>) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation(
+            "sign in to load GearSwap settings".to_string(),
+        ));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.gearswap_settings(&config.token).await
+}
+
+/// Replace the account's GearSwap/phase configuration in the game database.
+#[tauri::command]
+pub async fn save_gearswap_settings(state: State<'_, AppState>, config: Value) -> AppResult<Value> {
+    let current = state.config.lock().await.clone();
+    if current.token.is_empty() {
+        return Err(AppError::Validation(
+            "sign in to save GearSwap settings".to_string(),
+        ));
+    }
+    let api = ApiClient::new(&current.api_url, current.api_insecure)?;
+    api.save_gearswap_settings(&current.token, config).await
+}
+
 #[tauri::command]
 pub async fn send_hud(state: State<'_, AppState>, port: u16, patch: Value) -> AppResult<Value> {
     if !patch.is_object() {
@@ -1980,6 +2334,22 @@ pub async fn send_hud(state: State<'_, AppState>, port: u16, patch: Value) -> Ap
     }
     let client = { state.instances.lock().await.control_for(port)? };
     client.hud(patch).await
+}
+
+/// The Battle hub: state, saved profiles, assignments and start/stop.  `args` is the addon's
+/// `battle` payload (`action` plus profile/name/role fields), so the page can add fields without
+/// another Rust command.
+#[tauri::command]
+pub async fn battle(state: State<'_, AppState>, port: u16, args: Value) -> AppResult<Value> {
+    if !args.is_object() {
+        return Err(AppError::Validation(
+            "the battle payload must be an object".to_string(),
+        ));
+    }
+    let client = { state.instances.lock().await.control_for(port)? };
+    client
+        .call("battle", args, std::time::Duration::from_secs(15))
+        .await
 }
 
 #[tauri::command]
@@ -2113,6 +2483,21 @@ pub async fn gear_item_ids(
 }
 
 #[tauri::command]
+pub async fn gear_item_stats(
+    state: State<'_, AppState>,
+    port: u16,
+    items: Vec<gear_stats::GearStatRequest>,
+) -> AppResult<Vec<gear_stats::GearItemStats>> {
+    let client = { state.instances.lock().await.control_for(port)? };
+    let code = gear_stats::item_query_code(&items);
+    let reply = client.lua(&code).await?;
+    Ok(gear_stats::build_stats(
+        &items,
+        &gear_stats::parse_lua_reply(&reply),
+    ))
+}
+
+#[tauri::command]
 pub async fn clear_icon_cache() -> AppResult<usize> {
     icons::clear_cache()
 }
@@ -2163,18 +2548,26 @@ pub async fn gear_load_file(
     load_gear_file(&state, port, Path::new(&path), None).await
 }
 
+/// The text of a GearSwap library, read where the launcher can see it. A client on another machine
+/// has none of the launcher's files, so a plan and an import carry the library's own text.
+fn read_library_source(path: &Path) -> AppResult<String> {
+    std::fs::read_to_string(path)
+        .map_err(|error| AppError::Validation(format!("cannot read {}: {error}", path.display())))
+}
+
 async fn load_gear_file(
     state: &State<'_, AppState>,
     port: u16,
     path: &Path,
     known_job: Option<String>,
 ) -> AppResult<GearLibrary> {
+    let source = read_library_source(path)?;
     let client = { state.instances.lock().await.control_for(port)? };
     let raw = client
-        .gearswap(&path.to_string_lossy())
+        .gearswap_source(&source, &path.to_string_lossy())
         .await
         .map_err(|error| {
-            AppError::Control(format!("could not read {}: {error}", path.display()))
+            AppError::Control(format!("could not load {}: {error}", path.display()))
         })?;
     let sets_tree = raw.get("sets").cloned().unwrap_or(Value::Null);
     let sets = gear::flatten_sets(&sets_tree);
@@ -2191,6 +2584,10 @@ async fn load_gear_file(
                     name: abbr.clone(),
                     abbr,
                     level: 0,
+                    sub_job_id: 0,
+                    sub_name: String::new(),
+                    sub_abbr: String::new(),
+                    sub_level: 0,
                     character: String::new(),
                 })
             }
@@ -2256,10 +2653,17 @@ pub async fn gear_phase(
     movement: Option<String>,
     options: Option<Value>,
 ) -> AppResult<Value> {
+    // The launcher owns the library file, so the plan carries its text: a client on another
+    // machine cannot read the launcher's path, and a local one reads the same text anyway.
+    let source = match path.as_deref() {
+        Some(value) => Some(read_library_source(Path::new(value))?),
+        None => None,
+    };
     let client = { state.instances.lock().await.control_for(port)? };
     client
         .phase(
             path.as_deref(),
+            source.as_deref(),
             enabled,
             engaged.as_deref(),
             idle_town.as_deref(),
@@ -2642,5 +3046,43 @@ mod tests {
         let starting = view(2, Some(false), 10);
         assert!(view_in_game(&starting));
         assert!(!view_orphaned(&starting));
+    }
+
+    #[test]
+    fn a_client_position_is_converted_to_the_server_axis_order() {
+        // The control addon reports the client's ground plane as x/y and height as z.
+        let client = json!({"x": 102.396, "y": 515.919, "z": -27.149});
+        assert_eq!(server_position(&client), Some([102.396, -27.149, 515.919]));
+        assert_eq!(
+            zone_command(4, &client).unwrap(),
+            "//zone 4 102.396 -27.149 515.919"
+        );
+        assert!(server_position(&json!({"x": 1.0, "y": null, "z": 2.0})).is_none());
+    }
+
+    #[test]
+    fn near_position_compares_the_ground_plane_and_height() {
+        let leader = json!({"x": 102.0, "y": 516.0, "z": -27.0});
+        let follower = json!({"x": 104.0, "y": 516.5, "z": -27.4});
+        assert!(near_position(&leader, &follower));
+        let far = json!({"x": 102.0, "y": 516.0, "z": -400.0});
+        assert!(!near_position(&leader, &far));
+    }
+
+    #[test]
+    fn a_library_is_read_where_the_launcher_can_see_it() {
+        let folder = std::env::temp_dir().join(format!("fanxi-gear-source-{}", std::process::id()));
+        std::fs::create_dir_all(&folder).unwrap();
+        let file = folder.join("SCH.lua");
+        std::fs::write(&file, "sets = { idle = { body = 'X' } }\n").unwrap();
+        let source = read_library_source(&file).unwrap();
+        assert_eq!(source, "sets = { idle = { body = 'X' } }\n");
+        // A file that is not on this machine is a launcher error naming the path, not a control
+        // round trip to a client that cannot read it either.
+        let missing = folder.join("NIN.lua");
+        let error = read_library_source(&missing).unwrap_err();
+        assert!(error.to_string().contains("cannot read"));
+        assert!(error.to_string().contains("NIN.lua"));
+        std::fs::remove_dir_all(&folder).ok();
     }
 }

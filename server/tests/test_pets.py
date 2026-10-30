@@ -50,7 +50,10 @@ class PetSpecTest(unittest.TestCase):
                             hp_max=3000, hp=3000, owner_char_id=1, damage_mult=100)
         body = packets.entity_update(entity)
         self.assertEqual(int.from_bytes(body[44:48], "little"), spec.model << 16)
-        self.assertEqual(body[52:68].split(b"\0", 1)[0], spec.name.encode("ascii"))
+        # Packet offset 0x34 (body 0x30), the same slot LandSandBoat writes a spawnable's
+        # name into.  The four bytes are the name, not a zeroed prefix.
+        self.assertEqual(body[48:64].split(b"\0", 1)[0], spec.name.encode("ascii"))
+        self.assertNotEqual(body[48:52], bytes(4))
         self.assertEqual(body[36] & 0x44, 0x44)
 
 

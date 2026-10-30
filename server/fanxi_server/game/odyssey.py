@@ -14,26 +14,34 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[3]
 PATH = ROOT / "data" / "odyssey_r30.json"
+EXTRA = ROOT / "data" / "odyssey_extra_r30.json"
 _cache: dict | None = None
+
+
+def _read(path: Path) -> dict:
+    try:
+        return json.loads(path.read_text())
+    except (OSError, ValueError):
+        return {}
 
 
 def data() -> dict:
     global _cache
     if _cache is None:
-        try:
-            _cache = json.loads(PATH.read_text())
-        except (OSError, ValueError):
-            _cache = {"sets": {}, "weapons": {}}
+        merged = {"sets": {}, "weapons": {}, "accessories": []}
+        for path in (PATH, EXTRA):
+            part = _read(path)
+            merged["sets"].update(part.get("sets", {}))
+            merged["weapons"].update(part.get("weapons", {}))
+            merged["accessories"].extend(part.get("accessories", []))
+        _cache = merged
     return _cache
 
 
 def entries() -> list[dict]:
     """Every Odyssey item, with its Rank 30 rows keyed by path."""
     out: list[dict] = []
-    for set_key in ("nyame", "sakpata", "gleti", "agwu"):
-        group = data().get("sets", {}).get(set_key)
-        if not group:
-            continue
+    for group in data().get("sets", {}).values():
         for piece in group["pieces"].values():
             rows = piece["augments"]
             paths = {path: rows[path] for path in ("A", "B", "C", "D")} if "R30" not in rows \
@@ -47,6 +55,11 @@ def entries() -> list[dict]:
                     "set": "Odyssey weapon", "slot": weapon["slot"],
                     "paths": {"Rank 30": weapon["augments"]},
                     "bundles": None, "bundle": weapon.get("bundle")})
+    for item in data().get("accessories", []):
+        out.append({"name": item["name"], "id": int(item["item_id"]),
+                    "set": "Odyssey accessory", "slot": item.get("slot") or "",
+                    "paths": {"Rank 30": item["augments"]},
+                    "bundles": None, "bundle": item.get("bundle")})
     return out
 
 

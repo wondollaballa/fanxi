@@ -419,6 +419,10 @@ x86_64**, reachable at `100.83.60.18` (Tailscale) and `192.168.7.201` (LAN).
   `~/.fanxi-linux-boxes.json`), so the Control room lists six rows and the existing command, gear,
   follow and stop paths use them unchanged. A remote restart keeps the same tunnel port, so
   `attach_linux` now refreshes the recorded pid instead of ignoring the existing row.
+- **Gear and GearSwap work on the remote boxes.** The launcher reads a job library (or an imported
+  file) itself and sends its text over the control port, with the path only naming it; the old
+  `gearswap {path}` alone failed because the Linux host has no `/Users/...`. A job change on such a
+  box is covered by the launcher re-reading the new job's library and pushing the plan again.
 - **Launch headless team** in the launcher's Team page starts the main locally and runs the helper's
   `restart` action for the five subs, then attaches and opens the Control room. Only boxes that are
   not in game are restarted; a healthy team and a pressed-twice button are no-ops. Per-box

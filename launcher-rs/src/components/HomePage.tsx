@@ -20,7 +20,9 @@ import type {
 } from "../types";
 import {
   characterJob,
+  characterJobLabel,
   formatDuration,
+  jobName,
   nationName,
   prettyDate,
   raceName,
@@ -76,6 +78,8 @@ export function HomePage({
         ...character,
         ...(live?.job ? { main_job: live.job } : {}),
         ...(live?.level ? { main_level: live.level } : {}),
+        ...(live?.sub_job !== undefined ? { sub_job: live.sub_job } : {}),
+        ...(live?.sub_level !== undefined ? { sub_level: live.sub_level } : {}),
         ...(liveZoneId ? { zone: liveZoneId } : {}),
       }
     : null;
@@ -119,11 +123,19 @@ export function HomePage({
               <div className="hero-level">
                 <div>
                   <span>Main job</span>
-                  <strong>{characterJob(shown)}</strong>
+                  <strong title={characterJobLabel(shown)}>
+                    {shown.main_job
+                      ? `${jobName(shown.main_job)}${shown.main_level ? ` ${shown.main_level}` : ""}`
+                      : "—"}
+                  </strong>
                 </div>
                 <div>
-                  <span>Level</span>
-                  <strong>{shown.main_level ?? "—"}</strong>
+                  <span>Support job</span>
+                  <strong title={shown.sub_job ? jobName(shown.sub_job) : "No support job"}>
+                    {shown.sub_job
+                      ? `${jobName(shown.sub_job)}${shown.sub_level ? ` ${shown.sub_level}` : ""}`
+                      : "None"}
+                  </strong>
                 </div>
                 <div>
                   <span>Gil</span>

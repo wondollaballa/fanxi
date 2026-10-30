@@ -16,6 +16,28 @@ import item_models  # noqa: E402
 
 ARMOR = ("head", "body", "hands", "legs", "feet")
 
+# Prime weapon families: (stages 2-4 item ids, Non AG model), (iLvl 119 III id, Stage 5
+# model).  The Stage 5 DAT is the Non AG weapon plus the client's afterglow `aura` block;
+# it is the same "AG" look the Relic/Mythic/Empyrean iLvl 119 forms already use.
+PRIME_FAMILIES = {
+    "Varga Purnikawa": ((21532, 21533, 21534), 475, 21535, 474),
+    "Mpu Gandring": ((21587, 21588, 21589), 907, 21590, 918),
+    "Caliburnus": ((21643, 21644, 21645), 908, 21646, 919),
+    "Helheim": ((21649, 21651, 21652), 909, 21653, 920),
+    "Spalirisos": ((21727, 21728, 21729), 910, 21730, 921),
+    "Laphria": ((21782, 21783, 21784), 911, 21785, 922),
+    "Foenaria": ((21834, 21835, 21836), 913, 21837, 924),
+    "Gae Buide": ((21888, 21889, 21890), 912, 21891, 923),
+    "Dokoku": ((21929, 21930, 21931), 914, 21932, 925),
+    "Kusanagi": ((21983, 21984, 21985), 915, 21986, 926),
+    "Lorg Mor": ((21998, 22000, 22001), 916, 22002, 927),
+    "Opashoro": ((22103, 22104, 22105), 917, 22106, 928),
+    "Pinaka": ((22156, 22157, 22158), 148, 22163, 151),
+    "Earp": ((22160, 22161, 22162), 149, 22164, 152),
+    "Loughnashade": ((22304, 22305, 22306), 150, 22307, 153),
+    "Duban": ((26492, 26493, 26494), 675, 26495, 676),
+}
+
 
 class ItemModelTest(unittest.TestCase):
     def setUp(self):
@@ -44,6 +66,37 @@ class ItemModelTest(unittest.TestCase):
             row = self.db.one("SELECT model FROM items WHERE item_id = ?", (item_id,))
             self.assertIsNotNone(row, item_id)
             self.assertEqual(int(row["model"]), model, item_id)
+
+    def test_gleti_knife_uses_its_own_dagger_model(self):
+        """Migration 121: 513 is Kannagi's katana; the client's knife is 877."""
+        row = self.db.one("SELECT model FROM items WHERE item_id = 21567")
+        self.assertEqual(int(row["model"]), 877)
+        lookup = self.db.one("SELECT model FROM item_models WHERE item_id = 21567")
+        self.assertEqual(int(lookup["model"]), 877)
+        self.assertEqual(item_models.catalog()[21567], 877)
+
+    def test_prime_weapons_use_their_stage_five_afterglow_model(self):
+        """Migration 125: the 119 III forms carry the model with the afterglow aura.
+
+        Retail keeps two looks per Prime weapon.  The Non AG model (907-917, 475, 148-150,
+        675) is the black relic-style weapon; the Stage 5 model is that weapon plus the
+        client's `aura` particle block, the purple glow every other ultimate weapon's
+        "119 AG" model has.  The server sends whichever model `items.model` holds, so the
+        item and the lookup must agree on the Stage 5 id for iLvl 119 III.
+        """
+        for name, (earlier, non_ag, final, afterglow) in PRIME_FAMILIES.items():
+            for item_id in earlier:
+                item = self.db.one("SELECT model FROM items WHERE item_id = ?", (item_id,))
+                self.assertIsNotNone(item, (name, item_id))
+                self.assertEqual(int(item["model"]), non_ag, (name, item_id))
+                self.assertEqual(item_models.catalog()[item_id], non_ag, (name, item_id))
+            item = self.db.one("SELECT model FROM items WHERE item_id = ?", (final,))
+            self.assertIsNotNone(item, (name, final))
+            self.assertEqual(int(item["model"]), afterglow, (name, final))
+            lookup = self.db.one("SELECT model FROM item_models WHERE item_id = ?", (final,))
+            self.assertIsNotNone(lookup, (name, final))
+            self.assertEqual(int(lookup["model"]), afterglow, (name, final))
+            self.assertEqual(item_models.catalog()[final], afterglow, (name, final))
 
     def test_every_armour_slot_has_a_model(self):
         """Every armour item has a Grap model, the Limbus Rank 30 pieces included.

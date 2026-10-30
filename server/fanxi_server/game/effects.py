@@ -13,21 +13,28 @@ A spell in neither still finishes; it just does not put an icon on anything.
 """
 from __future__ import annotations
 
+import json
 import math
+import re
 from collections.abc import Mapping
 from dataclasses import dataclass, field
+from pathlib import Path
 
 from . import modifiers as mod
 from .spell_effects import STATUS_SPELLS
 
 # --- effect ids ----------------------------------------------------------------------------
 
+# Corsair's bust is a real status (LandSandBoat id 309): it keeps the icon on the bar
+# and blocks every new Phantom Roll until Fold, zoning or death clears it.
+BUST = 309
 SLEEP = 2
 POISON = 3
 PARALYSIS = 4
 BLINDNESS = 5
 SILENCE = 6
 PETRIFICATION = 7
+DISEASE = 8
 STUN = 10
 BIND = 11
 TRIPLE_SHOT = 467
@@ -35,6 +42,9 @@ WEIGHT = 12
 SLOW = 13
 PLAGUE = 31
 HASTE = 33
+# Flurry (581) is the ranged-attack speed buff; it is its own status, so it sits beside
+# Haste instead of being a tier of it.
+FLURRY = 581
 BLINK = 36
 STONESKIN = 37
 AQUAVEIL = 39
@@ -55,6 +65,13 @@ SNEAK = 71
 RERAISE = 113
 PHALANX = 116
 FOOD = 251
+# The conquest family: region buffs that belong to the nation/expansion rather than to
+# a job.  A job change removes the buff layer but leaves these in place (LandSandBoat's
+# status_effects.yaml gives them ``no_cancel``/``influence`` and no ``on_jobchange``).
+SIGNET = 253
+SANCTION = 256
+SIGIL = 268
+IONIS = 512
 DIA = 134
 BIO = 135
 # One icon covers every Helix: the effect is the DoT, not the element.
@@ -62,9 +79,23 @@ HELIX = 186
 # Long-tail spells the LandSandBoat tables stop short of; see SWEPT_EXTRAS below.
 REQUIEM = 192
 PAEON = 195
+BALLAD = 196
 ENDARK = 288
 KLIMAFORM = 407
 ENLIGHT = 274
+# The elemental en-spells: tier I (Enfire..Enwater), then their level-50+ IIs.
+ENFIRE = 94
+ENBLIZZARD = 95
+ENAERO = 96
+ENSTONE = 97
+ENTHUNDER = 98
+ENWATER = 99
+ENFIRE_II = 277
+ENBLIZZARD_II = 278
+ENAERO_II = 279
+ENSTONE_II = 280
+ENTHUNDER_II = 281
+ENWATER_II = 282
 REGAIN = 170
 ENMITY_DOWN = 291
 # Song effects whose spells LandSandBoat's song table does not list (the trust songs).
@@ -74,6 +105,7 @@ SERENADE = 208
 FUGUE = 211
 RHAPSODY = 212
 ARIA = 213
+MARCH = 214
 # The debuff family weapon skills use, from LandSandBoat's status_effects.yaml ids.
 CHOKE = 130
 INT_DOWN = 140
@@ -92,6 +124,12 @@ STORE_TP = 227
 ENMITY_BOOST = 289
 SUBTLE_BLOW_PLUS = 290
 MIGAWARI = 471
+# Weapon-skill aftermath.  The buff itself is one effect id; the tier is carried by the
+# icon (the client's AFTERMATH_LV1/2/3), exactly as the reference server does it.
+AFTERMATH = 273
+AFTERMATH_LV1 = 270
+AFTERMATH_LV2 = 271
+AFTERMATH_LV3 = 272
 # Passive Trust auras.  Retail gives each walking-Geomancy Trust a COLURE_ACTIVE effect
 # whose sub-effect is one of these ids and whose sub-icon is the matching GEO bubble.
 # They stack with the player's own Haste/Refresh/Regen, which is why a Trust's Haste is
@@ -267,8 +305,21 @@ def _white_magic() -> dict[str, SpellEffect]:
         "stoneskin": SpellEffect(STONESKIN, "buff", 300, power=100),
         "blink": SpellEffect(BLINK, "buff", 300, power=2),
         "aquaveil": SpellEffect(AQUAVEIL, "buff", 600),
-        "haste": SpellEffect(HASTE, "buff", 180, mods={mod.HASTE_GEAR: 1500}),
-        "haste ii": SpellEffect(HASTE, "buff", 300, mods={mod.HASTE_GEAR: 3000}),
+        "haste": SpellEffect(HASTE, "buff", 180, mods={mod.HASTE_MAGIC: 1500}),
+        "haste ii": SpellEffect(HASTE, "buff", 300, mods={mod.HASTE_MAGIC: 3000}),
+        # The self-centered -ga/-ra line: the icon and duration come from the generated
+        # table, but these carry the same stat mods as their single-target versions.
+        "hastega": SpellEffect(HASTE, "buff", 180, mods={mod.HASTE_MAGIC: 1500}),
+        "protectra": SpellEffect(PROTECT, "buff", 1800, mods={mod.DEF_PERCENT: 10}),
+        "protectra ii": SpellEffect(PROTECT, "buff", 1800, mods={mod.DEF_PERCENT: 15}),
+        "protectra iii": SpellEffect(PROTECT, "buff", 1800, mods={mod.DEF_PERCENT: 20}),
+        "protectra iv": SpellEffect(PROTECT, "buff", 1800, mods={mod.DEF_PERCENT: 25}),
+        "protectra v": SpellEffect(PROTECT, "buff", 1800, mods={mod.DEF_PERCENT: 30}),
+        "shellra": SpellEffect(SHELL, "buff", 1800),
+        "shellra ii": SpellEffect(SHELL, "buff", 1800),
+        "shellra iii": SpellEffect(SHELL, "buff", 1800),
+        "shellra iv": SpellEffect(SHELL, "buff", 1800),
+        "shellra v": SpellEffect(SHELL, "buff", 1800),
         # Regen is one minute at every tier except Regen (75 s); the old table had
         # Regen II/III at 90/120 s and 10/15 HP, which is not what retail casts.
         "regen": SpellEffect(REGEN, "buff", 75, tick=5),
@@ -386,16 +437,350 @@ def _song_tier(name: str) -> int:
     return 1
 
 
+# BG-wiki's per-Song+ song tables (data/song_potency.json), keyed by the song name with
+# every non-alphanumeric character dropped: the client's names have no apostrophes
+# ("Knights Minne V") and the wiki's do ("Knight's Minne V").  Each entry is
+# stat -> (first Song+ level, values), so values[i] is the value at that level + i.
+SONG_POTENCY_PATH = Path(__file__).resolve().parents[3] / "data" / "song_potency.json"
+_SONG_KEY_RE = re.compile(r"[^a-z0-9]")
+
+# Which modifier a table stat writes and how (haste and the damage limit are stored in
+# hundredths, everything else as a plain number).
+SONG_STAT_MOD: dict[str, tuple[int, int]] = {
+    "attack": (mod.ATT, 1), "ratt": (mod.RATT, 1),
+    "acc": (mod.ACC, 1), "racc": (mod.RACC, 1),
+    "defense": (mod.DEF, 1), "mdef": (mod.MDEF, 1),
+    "evasion": (mod.EVA, 1), "macc": (mod.MACC, 1),
+    "str": (mod.STR, 1), "dex": (mod.DEX, 1), "vit": (mod.VIT, 1),
+    "agi": (mod.AGI, 1), "int": (mod.INT, 1), "mnd": (mod.MND, 1), "chr": (mod.CHR, 1),
+    "haste": (mod.HASTE_MAGIC, 100),
+    "damage_limit": (mod.DAMAGE_LIMITP, 100),
+}
+# Scherzo's "-x% damage taken" is its own multiplier in retail, not part of the capped
+# PDT/DT family (which stops at 50%): it writes the uncapped pair instead.
+SONG_DAMAGE_REDUCTION = (mod.UDMGPHYS, mod.UDMGMAGIC)
+# Carol's row is elemental resistance: the client models it with the element's *_MEVA id.
+CAROL_ELEMENTS: dict[str, int] = {
+    "fire": mod.FIRE_MEVA, "ice": mod.ICE_MEVA, "wind": mod.WIND_MEVA,
+    "earth": mod.EARTH_MEVA, "lightning": mod.THUNDER_MEVA, "water": mod.WATER_MEVA,
+    "light": mod.LIGHT_MEVA, "dark": mod.DARK_MEVA,
+}
+# The Carol II spells have a wiki table but no generated status entry, so they are built
+# from the table here.
+SONG_TABLE_ONLY: dict[str, tuple[int, str, float]] = {
+    "fire carol ii": (216, "buff", 120.0), "ice carol ii": (216, "buff", 120.0),
+    "wind carol ii": (216, "buff", 120.0), "earth carol ii": (216, "buff", 120.0),
+    "lightning carol ii": (216, "buff", 120.0), "water carol ii": (216, "buff", 120.0),
+    "light carol ii": (216, "buff", 120.0), "dark carol ii": (216, "buff", 120.0),
+}
+# Table stats that are a tick (refresh/regen/dot) rather than a modifier.
+SONG_STAT_TICK = frozenset({"refresh", "regen", "dot"})
+# The stat a family's Bard group-1 merit and job-point row add to, after the percentage.
+SONG_FLAT_STATS: dict[str, tuple[str, ...]] = {
+    "minuet": ("attack", "ratt"),
+    "minne": ("defense",),
+    "madrigal": ("acc",),
+}
+
+
+def _song_key(name: str) -> str:
+    return _SONG_KEY_RE.sub("", str(name).casefold())
+
+
+def _load_song_potency() -> dict[str, dict[str, tuple[int, list[float]]]]:
+    try:
+        raw = json.loads(SONG_POTENCY_PATH.read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    out: dict[str, dict[str, tuple[int, list[float]]]] = {}
+    for name, stats in (raw.get("songs") or {}).items():
+        entries: dict[str, tuple[int, list[float]]] = {}
+        for stat, pair in (stats or {}).items():
+            try:
+                start, values = int(pair[0]), [float(value) for value in pair[1]]
+            except (TypeError, ValueError, IndexError):
+                continue
+            if values:
+                entries[str(stat)] = (start, values)
+        if entries:
+            out[_song_key(name)] = entries
+    return out
+
+
+SONG_POTENCY = _load_song_potency()
+
+
+def carol_mods(name: str, mods: dict[int, int]) -> dict[int, int]:
+    """Move a Carol's resistance row from MDEF to the matching element's MEVA id."""
+    key = _song_key(name)
+    for element, mod_id in CAROL_ELEMENTS.items():
+        if key.startswith(element):
+            value = int(mods.pop(mod.MDEF, 0))
+            if value:
+                mods[mod_id] = value
+            break
+    return mods
+
+
+def song_table_value(name: str, stat: str, mods: Mapping[int, int]) -> int:
+    """One stat of a song's table at the caster's Song+ level (0 when it has no row).
+
+    The monster keeps a few song effects by hand: Threnody's Magic Evasion down and
+    Elegy's attack-speed slow are read from the mob's own effect state, not from the
+    caster's modifiers.
+    """
+    values = SONG_POTENCY.get(_song_key(name), {}).get(stat)
+    if values is None:
+        return 0
+    start, numbers = values
+    index = max(0, min(len(numbers) - 1, song_potency_bonus(name, mods) - int(start)))
+    return int(round(numbers[index]))
+
+
+def _song_potency_at(entries: Mapping[str, tuple[int, list[float]]],
+                     song_plus: int) -> tuple[dict[int, int], int]:
+    """(mods, tick) for one song at one Song+ level, clamped to the table's columns."""
+    mods: dict[int, int] = {}
+    tick = 0
+    for stat, (start, values) in entries.items():
+        index = max(0, min(len(values) - 1, int(song_plus) - int(start)))
+        value = values[index]
+        mapped = SONG_STAT_MOD.get(stat)
+        if mapped is not None:
+            mod_id, scale = mapped
+            mods[mod_id] = int(round(value * scale))
+        elif stat == "damage_reduction":
+            amount = -int(round(value * 100))
+            for mod_id in SONG_DAMAGE_REDUCTION:
+                mods[mod_id] = mods.get(mod_id, 0) + amount
+        elif stat in SONG_STAT_TICK:
+            tick += int(round(value))
+    return mods, max(0, tick)
+
+
+SONG_FAMILY_MOD: dict[str, int] = {
+    "minne": mod.MINNE_EFFECT,
+    "minuet": mod.MINUET_EFFECT,
+    "paeon": mod.PAEON_EFFECT,
+    "requiem": mod.REQUIEM_EFFECT,
+    "threnody": mod.THRENODY_EFFECT,
+    "madrigal": mod.MADRIGAL_EFFECT,
+    "mambo": mod.MAMBO_EFFECT,
+    "lullaby": mod.LULLABY_EFFECT,
+    "etude": mod.ETUDE_EFFECT,
+    "ballad": mod.BALLAD_EFFECT,
+    "march": mod.MARCH_EFFECT,
+    "finale": mod.FINALE_EFFECT,
+    "carol": mod.CAROL_EFFECT,
+    "mazurka": mod.MAZURKA_EFFECT,
+    "elegy": mod.ELEGY_EFFECT,
+    "prelude": mod.PRELUDE_EFFECT,
+    "hymnus": mod.HYMNUS_EFFECT,
+    "virelai": mod.VIRELAI_EFFECT,
+    "scherzo": mod.SCHERZO_EFFECT,
+}
+# Soul Voice and Marcato only extend these songs.  Every other party song gets a
+# potency (or accuracy) boost, not a longer timer.
+SONG_DURATION_DOUBLED = frozenset({"hymnus", "mazurka", "scherzo"})
+# The two instrument-granted songs.  The values are the item ids that unlock them.
+INSTRUMENT_SONGS: dict[str, frozenset[int]] = {
+    "honor march": frozenset({21398}),                    # Marsyas (Aeonic)
+    "aria of passion": frozenset({22304, 22305, 22306, 22307}),  # Loughnashade stages
+}
+_ETUDE_STATS = {
+    "sinewy": mod.STR, "herculean": mod.STR,
+    "dextrous": mod.DEX, "uncanny": mod.DEX,
+    "vivacious": mod.VIT, "vital": mod.VIT,
+    "quick": mod.AGI, "swift": mod.AGI,
+    "learned": mod.INT, "sage": mod.INT,
+    "spirited": mod.MND, "logical": mod.MND,
+    "enchanting": mod.CHR, "bewitching": mod.CHR,
+}
+
+
+# Songs in one family share a status icon (all marches are 214, all Paeons 195).
+# Store each distinct song under its own internal key so the same icon can be active
+# more than once, as retail does for Victory + Advancing March or Paeon I + II.
+SONG_EFFECT_BASE = 0x10000
+
+
+def song_key(spell_id: int) -> int:
+    """A stable internal effect-state key for one spell, independent of its icon."""
+    return SONG_EFFECT_BASE + int(spell_id)
+
+
+def song_family(name: str) -> str | None:
+    """The song line a name belongs to ("minuet", "scherzo", ...), or None."""
+    key = " ".join(str(name).casefold().replace("'", "").split())
+    if key.startswith("honor march"):
+        return "march"
+    for family in SONG_FAMILY_MOD:
+        if family in key:
+            return family
+    if "aria" in key:
+        return "aria"
+    return None
+
+
+def song_potency_bonus(name: str, mods: Mapping[int, int]) -> int:
+    """The total "+N" a song gets from All Songs and its family's Song+ gear."""
+    family = song_family(name)
+    family_mod = SONG_FAMILY_MOD.get(family or "")
+    return max(0, int(mods.get(mod.ALL_SONGS_EFFECT, 0))
+               + (int(mods.get(family_mod, 0)) if family_mod else 0))
+
+
+def song_duration_percent(name: str | None, mods: Mapping[int, int]) -> int:
+    """A song's duration bonus: the 454 lines plus 10% for every Song+ point.
+
+    BG-wiki's Song page is explicit: "Song+ potency gear increases duration by 10%
+    per 1 Song+", additive with the "Song duration +N%" lines.  That is what makes
+    Loughnashade (All songs +4) worth +40% and Mnbw. Whistle +1 (+3) +30% even
+    though neither carries a duration line.  The family row only counts for its own
+    song family, so March+1 lengthens March and nothing else.
+    """
+    percent = int(mods.get(mod.SONG_DURATION_BONUS, 0))
+    if name:
+        percent += 10 * song_potency_bonus(name, mods)
+    return percent
+
+
+def song_potency_values(name: str, spec: SpellEffect, mods: Mapping[int, int], *,
+                        soul_voice: bool = False, marcato: bool = False,
+                        flat_bonus: int = 0) -> tuple[dict[int, int], int]:
+    """(effect mods, tick) for one song after Song+ gear, merits/job points and Soul Voice.
+
+    The Song+ level (All Songs plus the family row) indexes the song's own row in
+    ``SONG_POTENCY``, so every family scales the way BG-wiki lists it.  ``flat_bonus``
+    is that family's Bard group-1 merit plus job-point row, which retail adds after the
+    percentage and before Soul Voice/Marcato.  Soul Voice doubles every affected song
+    except Scherzo/Hymnus/Mazurka, whose duration is doubled instead (see
+    ``song_duration``); Marcato is a 1.5x effect and never stacks with Soul Voice.
+    """
+    family = song_family(name)
+    bonus = song_potency_bonus(name, mods)
+    entries = SONG_POTENCY.get(_song_key(name))
+    if entries:
+        out, tick = _song_potency_at(entries, bonus)
+        if family == "carol":
+            out = carol_mods(name, out)
+        if flat_bonus:
+            for stat in SONG_FLAT_STATS.get(family or "", ()):
+                mapped = SONG_STAT_MOD.get(stat)
+                if mapped is None:
+                    continue
+                mod_id, scale = mapped
+                out[mod_id] = out.get(mod_id, 0) + int(flat_bonus) * scale
+    else:
+        # A family with no table row keeps the old hand-written model.
+        out = dict(spec.mods)
+        tick = int(spec.tick)
+        if family in ("minne",):
+            out[mod.DEF] = int(out.get(mod.DEF, 0)) + bonus
+        elif family in ("minuet", "mambo"):
+            out[mod.ATT] = int(out.get(mod.ATT, 0)) + bonus
+        elif family == "madrigal":
+            out[mod.ACC] = int(out.get(mod.ACC, 0)) + bonus
+        elif family == "prelude":
+            out[mod.RACC] = int(out.get(mod.RACC, 0)) + bonus
+        elif family == "march":
+            out[mod.HASTE_MAGIC] = int(out.get(mod.HASTE_MAGIC, 0)) + 100 * bonus
+        elif family == "carol":
+            out[mod.MDEF] = int(out.get(mod.MDEF, 0)) + bonus
+        elif family == "etude":
+            stat = next((value for key, value in _ETUDE_STATS.items()
+                         if key in str(name).casefold()), None)
+            if stat is not None:
+                out[stat] = int(out.get(stat, 0)) + bonus
+        elif family in ("ballad", "paeon", "requiem"):
+            tick += bonus
+
+    multiplier = 1.0
+    if soul_voice and family not in ("scherzo", "aria"):
+        multiplier = 2.0
+    elif marcato and not soul_voice and family not in ("scherzo", "aria"):
+        multiplier = 1.5
+    if multiplier != 1.0:
+        out = {int(key): int(round(value * multiplier)) for key, value in out.items()}
+        tick = int(round(tick * multiplier))
+    return out, max(0, tick)
+
+
+def song_duration(spec: SpellEffect, *, name: str, mods: Mapping[int, int],
+                  troubadour: bool = False, soul_voice: bool = False,
+                  marcato: bool = False, clarion: bool = False,
+                  tenuto: bool = False, base: float | None = None,
+                  flat_seconds: float = 0.0) -> float:
+    """A song's timer after gear, Soul Voice/Marcato and the JP duration rows.
+
+    The gear percentage is the 454 lines plus 10% per Song+ point
+    (:func:`song_duration_percent`).  Troubadour doubles the total after gear and
+    the duration-doubling abilities; the Clarion Call/Tenuto/Marcato job-point
+    seconds are added last.  Soul Voice and Marcato do not stack, so Marcato's row
+    is skipped while Soul Voice is up.
+    """
+    duration = float(spec.duration if base is None else base)
+    duration *= 1.0 + song_duration_percent(name, mods) / 100.0
+    # Flat seconds (Lullaby's job-point row) are part of the base timer, so Troubadour
+    # doubles them: retail's "increase effect duration by 1 second" is added to the
+    # sleep itself, not to the doubled total.
+    duration += max(0.0, float(flat_seconds))
+    family = song_family(name)
+    if family in SONG_DURATION_DOUBLED:
+        if soul_voice:
+            duration *= 2.0
+        elif marcato:
+            duration *= 1.5
+    if troubadour:
+        duration *= 2.0
+    if clarion:
+        duration += 40.0
+    if tenuto:
+        duration += 40.0
+    if marcato and not soul_voice:
+        duration += 20.0
+    return max(0.0, duration)
+
+
+def song_slots(main_job: int, instrument_skill: int, mods: Mapping[int, int], *,
+               clarion: bool = False) -> int:
+    """How many party buff songs one target may keep.
+
+    No instrument (or a Bard support job) is one song; a Bard main with an instrument
+    starts at two, Daurdabla/Loughnashade add two, and Clarion Call adds the fifth.
+    """
+    if int(main_job) != 10:
+        return 1
+    if int(instrument_skill) not in (41, 42):
+        return 1
+    limit = 2 + int(mods.get(mod.MAXIMUM_SONGS_BONUS, 0))
+    if clarion:
+        limit += 1
+    return max(1, min(5, limit))
+
+
+def required_instrument(name: str) -> frozenset[int] | None:
+    """The item ids that unlock an instrument-granted song, or None."""
+    return INSTRUMENT_SONGS.get(" ".join(str(name).casefold().split()))
+
+
 def _bard_songs() -> dict[str, SpellEffect]:
     """Give the bard song families their actual stat/tick values.
 
-    ``STATUS_SPELLS`` already supplies the icon and duration; this layer adds the
-    per-tier effect the party reads.  It is deliberately small and data-driven: a song
-    family with no number here still lands its icon.
+    ``STATUS_SPELLS`` supplies the icon and duration; ``data/song_potency.json``
+    (BG-wiki's per-Song+ tables) supplies the numbers at Song+ 0.  A family with no
+    table row keeps the old rough model so the icon still lands with something.
     """
     out: dict[str, SpellEffect] = {}
     for name, base in STATUS_SPELLS.items():
         folded = " ".join(str(name).casefold().split())
+        effect, kind, duration, _base_tick = base
+        entries = SONG_POTENCY.get(_song_key(name))
+        if entries:
+            mods, tick = _song_potency_at(entries, 0)
+            out[folded] = SpellEffect(effect, kind, duration, tick=tick,
+                                      mods=carol_mods(folded, mods))
+            continue
         tier = _song_tier(folded)
         if "victory march" in folded:
             tier = 2
@@ -403,7 +788,6 @@ def _bard_songs() -> dict[str, SpellEffect]:
             tier = 2
         elif "dragonfoe mambo" in folded:
             tier = 2
-        effect, kind, duration, _base_tick = base
         mods: dict[int, int] = {}
         tick = 0
         if "minne" in folded:
@@ -413,22 +797,35 @@ def _bard_songs() -> dict[str, SpellEffect]:
         elif "madrigal" in folded:
             mods[mod.ACC] = 5 * tier
         elif "march" in folded:
-            mods[mod.HASTE_GEAR] = 3 * tier
+            mods[mod.HASTE_MAGIC] = 300 * tier
         elif "ballad" in folded:
-            mods[mod.REFRESH] = tier
+            tick = tier
         elif "paeon" in folded:
-            mods[mod.REGEN] = tier
+            tick = tier
         elif "requiem" in folded:
             tick = tier
         elif "prelude" in folded:
             mods[mod.RACC] = 5 * tier
         elif "carol" in folded:
             mods[mod.MDEF] = 2 * tier
+        elif "etude" in folded:
+            stat = next((value for key, value in _ETUDE_STATS.items()
+                         if key in folded), None)
+            if stat is None:
+                continue
+            mods[stat] = 10
         elif "threnody" in folded:
             continue
         else:
             continue
         out[folded] = SpellEffect(effect, kind, duration, tick=tick, mods=mods)
+    for name, (effect, kind, duration) in SONG_TABLE_ONLY.items():
+        entries = SONG_POTENCY.get(_song_key(name))
+        if not entries:
+            continue
+        mods, tick = _song_potency_at(entries, 0)
+        out[name] = SpellEffect(effect, kind, duration, tick=tick,
+                                mods=carol_mods(name, mods))
     return out
 
 
@@ -436,15 +833,61 @@ SPELLS: dict[str, SpellEffect] = {}
 SPELLS.update(_status_spells())     # every spell with an icon ...
 SPELLS.update(SWEPT_EXTRAS)         # ... the long tail LSB does not table ...
 SPELLS.update(_bard_songs())        # ... real song potency on top of the icons ...
+# The instrument-granted songs are not in the base spell migration; they share the
+# March/Aria status icons with Victory March and Protected Aria respectively, and take
+# their numbers from the same Song+ tables.
+# Magic Finale has no status of its own: the dispel is the whole spell.
+SPELLS["magic finale"] = SpellEffect(0, "special", 0)
+
+_honor_mods, _honor_tick = _song_potency_at(SONG_POTENCY.get("honormarch", {}), 0)
+SPELLS["honor march"] = SpellEffect(MARCH, "buff", 120, mods=_honor_mods, tick=_honor_tick)
+_aria_mods, _aria_tick = _song_potency_at(SONG_POTENCY.get("ariaofpassion", {}), 0)
+SPELLS["aria of passion"] = SpellEffect(ARIA, "buff", 120, mods=_aria_mods, tick=_aria_tick)
 SPELLS.update(_ninjutsu())          # ... then the curated mechanics win over both
 SPELLS.update(_black_magic())
 SPELLS.update(_white_magic())
 SPELLS.update(_helix())
 
 
+def _enfeebles() -> dict[str, SpellEffect]:
+    """The enfeebles whose potency is a stat debuff, not just an icon.
+
+    LandSandBoat's icon table carries Frazzle and Distract with their status ids but no
+    potency, which made both spells land as invisible no-ops: the monster got effect 404
+    or 148 with ``potency=0`` and ``monster_debuff_mods``/``debuffed_monster`` had nothing
+    to subtract.  These are the retail caps at a level-99 caster with strong enfeebling
+    gear (BG Wiki: Frazzle and Distract cap at -35/-50/-130).
+    The five-minute duration is the post-2017 value.
+    """
+    return {
+        "frazzle": SpellEffect(MAGIC_EVASION_DOWN, "debuff", 300, potency=35),
+        "frazzle ii": SpellEffect(MAGIC_EVASION_DOWN, "debuff", 300, potency=50),
+        "frazzle iii": SpellEffect(MAGIC_EVASION_DOWN, "debuff", 300, potency=130),
+        "distract": SpellEffect(EVASION_DOWN, "debuff", 300, potency=35),
+        "distract ii": SpellEffect(EVASION_DOWN, "debuff", 300, potency=50),
+        "distract iii": SpellEffect(EVASION_DOWN, "debuff", 300, potency=130),
+    }
+
+
+SPELLS.update(_enfeebles())
+
+
 def for_spell(name: str) -> SpellEffect | None:
     """The effect a spell name applies, or None when it is damage/healing only."""
     return SPELLS.get(" ".join(str(name).casefold().split()))
+
+
+# Self-centered party buffs.  The client marks these target=self with an area shape;
+# the server reads the name because the spell row only carries the target bit.
+AREA_PARTY_BUFFS = frozenset({
+    "hastega",
+    "protectra", "protectra ii", "protectra iii", "protectra iv", "protectra v",
+    "shellra", "shellra ii", "shellra iii", "shellra iv", "shellra v",
+})
+
+
+def is_area_party_buff(name: str) -> bool:
+    return " ".join(str(name or "").casefold().split()) in AREA_PARTY_BUFFS
 
 
 def is_buff(effect: SpellEffect | None) -> bool:
@@ -491,12 +934,46 @@ def icon_for(effect_id: int, icon: int = 0, power: int = 0) -> int:
 # --- enhancing duration and Regen potency --------------------------------------------------
 
 SCHOLAR = 20
+RED_MAGE = 5
 ENFEEBLING_SKILL = 35
 DARK_MAGIC_SKILL = 37
 NINJUTSU_SKILL = 39
 SONG_SKILLS = frozenset({40, 41, 42})
 # Enfire..Enwater and their tier IIs carry the En-spell duration line.
-ENSPELL_EFFECTS = frozenset(range(94, 100)) | frozenset(range(277, 283))
+ENSPELL_EFFECTS = frozenset({
+    ENFIRE, ENBLIZZARD, ENAERO, ENSTONE, ENTHUNDER, ENWATER,
+    ENFIRE_II, ENBLIZZARD_II, ENAERO_II, ENSTONE_II, ENTHUNDER_II, ENWATER_II,
+})
+# Every en-spell: (tier, element) by status-effect id.  Tier I is 94..99 (fire..water),
+# tier II is 277..282, and Enlight/Endark are a decaying tier of their own.  The element
+# number is the client's own order (1 fire .. 6 water, 7 light, 8 dark), which is also
+# the 0x028 additional-effect proc kind.
+ENSPELLS = {
+    ENFIRE: (1, 1), ENBLIZZARD: (1, 2), ENAERO: (1, 3),
+    ENSTONE: (1, 4), ENTHUNDER: (1, 5), ENWATER: (1, 6),
+    ENFIRE_II: (2, 1), ENBLIZZARD_II: (2, 2), ENAERO_II: (2, 3),
+    ENSTONE_II: (2, 4), ENTHUNDER_II: (2, 5), ENWATER_II: (2, 6),
+    ENLIGHT: (3, 7),   # Enlight / Enlight II
+    ENDARK: (3, 8),    # Endark / Endark II
+}
+ENSPELL_IDS = frozenset(ENSPELLS)
+
+
+def enspell_tier(effect_id: int) -> int:
+    """1 for Enfire..Enwater, 2 for their IIs, 3 for Enlight/Endark, else 0."""
+    entry = ENSPELLS.get(int(effect_id))
+    return entry[0] if entry is not None else 0
+
+
+def enspell_element(effect_id: int) -> int:
+    """The en-spell's element (1 fire .. 8 dark), or 0 when it is not one."""
+    entry = ENSPELLS.get(int(effect_id))
+    return entry[1] if entry is not None else 0
+
+
+def is_enspell(effect_id: int) -> bool:
+    return int(effect_id) in ENSPELLS
+
 # Perpetuance affects white enhancing magic only.  Blaze/Ice/Shock Spikes share the
 # Enhancing Magic skill but are black magic, so they keep their base duration.
 BLACK_ENHANCING = frozenset({"blaze spikes", "ice spikes", "shock spikes"})
@@ -544,6 +1021,7 @@ def buff_duration(
     enhancing: bool = False,
     perpetuance: bool = False,
     white_enhancing: bool = False,
+    name: str | None = None,
 ) -> float:
     """The duration retail gives one enhancing buff.
 
@@ -573,7 +1051,7 @@ def buff_duration(
     if int(skill) == NINJUTSU_SKILL:
         duration += float(mods.get(mod.NINJUTSU_DURATION, 0))
     elif int(skill) in SONG_SKILLS:
-        duration *= 1.0 + int(mods.get(mod.SONG_DURATION_BONUS, 0)) / 100.0
+        duration *= 1.0 + song_duration_percent(name, mods) / 100.0
     if enhancing:
         duration += float(mods.get(mod.ENH_MAGIC_DURATION_FLAT, 0))
         duration *= 1.0 + int(mods.get(mod.ENH_MAGIC_DURATION, 0)) / 100.0
@@ -584,7 +1062,7 @@ def buff_duration(
 
 
 def debuff_duration(spec: SpellEffect, *, skill: int,
-                    mods: Mapping[int, int]) -> float:
+                    mods: Mapping[int, int], name: str | None = None) -> float:
     """An enfeebling/dark/ninjutsu/song spell's duration before the Magic Accuracy roll."""
     duration = float(spec.duration)
     if int(skill) == ENFEEBLING_SKILL:
@@ -595,7 +1073,7 @@ def debuff_duration(spec: SpellEffect, *, skill: int,
     elif int(skill) == NINJUTSU_SKILL:
         duration += float(mods.get(mod.NINJUTSU_DURATION, 0))
     elif int(skill) in SONG_SKILLS:
-        duration *= 1.0 + int(mods.get(mod.SONG_DURATION_BONUS, 0)) / 100.0
+        duration *= 1.0 + song_duration_percent(name, mods) / 100.0
     return max(0.0, duration)
 
 
@@ -780,6 +1258,25 @@ PERPETUANCE = 469
 IMMANENCE = 470
 # Non-Scholar ability statuses used by the job-point conditional layer.
 MIGHTY_STRIKES = 44
+INVINCIBLE = 50
+PERFECT_DODGE = 49
+FLY_HIGH = 503
+RAMPART = 623
+MAX_HP_BOOST_STATUS = 88
+SANGE = 352
+RAYKE = 571
+TOMAHAWK = 805
+CONVERGENCE = 355
+DIFFUSION = 356
+STEALTH_SHOT = 350
+FLASHY_SHOT = 351
+COLLIMATED_FERVOR = 517
+ENTRUST = 584
+MAJESTY = 621
+PFLUG = 533
+VALIANCE = 535
+LIEMENT = 537
+BATTUTA = 570
 HUNDRED_FISTS = 46
 MANAFONT = 47
 CHAINSPELL = 48
@@ -789,6 +1286,7 @@ AGGRESSOR = 58
 FOCUS = 59
 DODGE = 60
 WARCRY = 68
+BLOOD_RAGE = 460
 DIVINE_SEAL = 78
 ELEMENTAL_SEAL = 79
 MANAWELL = 229
@@ -817,6 +1315,7 @@ MARCATO = 231
 CLARION_CALL = 499
 NIGHTINGALE = 347
 TROUBADOUR = 348
+KILLER_INSTINCT = 349
 DRAIN_SAMBA = 368
 ASPIR_SAMBA = 369
 HASTE_SAMBA = 370
@@ -864,6 +1363,8 @@ MANA_WALL = 437
 SENTINEL = 62
 PALISADE = 478
 BLOOD_WEAPON = 51
+SOULEATER = 63
+LAST_RESORT = 64
 SOUL_ENSLAVEMENT = 497
 NETHER_VOID = 439
 DOUBLE_SHOT = 433
@@ -873,6 +1374,8 @@ DECOY_SHOT = 482
 PERFECT_COUNTER = 436
 FOOTWORK = 406
 COUNTERSTANCE = 61
+HASSO = 353
+SEIGAN = 354
 KONZEN_ITTAI = 320
 
 
@@ -883,6 +1386,8 @@ class AbilityEffect:
     effect: int
     duration: float = 60.0
     cancels: tuple[int, ...] = ()
+    # Persistent modifiers the ability's own effect contributes while it is up.
+    mods: dict[int, int] = field(default_factory=dict)
 
 
 # Keyed by the ``job_abilities`` row id.  Durations are the retail ones: the arts and the
@@ -923,28 +1428,46 @@ ABILITY_EFFECTS: dict[int, AbilityEffect] = {
     # The job-point conditional layer needs the ability icon on the bar.  The base
     # ability's own stat mods are still modelled by the ability's own handler; these
     # entries exist so the matching category bonus can be active for their duration.
-    16: AbilityEffect(MIGHTY_STRIKES, 30.0),
+    16: AbilityEffect(MIGHTY_STRIKES, 45.0),
+    22: AbilityEffect(INVINCIBLE, 30.0),
+    21: AbilityEffect(PERFECT_DODGE, 30.0),
+    92: AbilityEffect(RAMPART, 30.0, mods={mod.DMG: -10}),
+    151: AbilityEffect(MAX_HP_BOOST_STATUS, 180.0, mods={mod.HPP: 20}),
+    171: AbilityEffect(SANGE, 60.0, mods={mod.RACC: 20}),
+    165: AbilityEffect(STEALTH_SHOT, 60.0, mods={mod.ENMITY: -5}),
+    348: AbilityEffect(COLLIMATED_FERVOR, 60.0),
+    386: AbilityEffect(ENTRUST, 60.0),
+    166: AbilityEffect(FLASHY_SHOT, 60.0, mods={mod.RATT: 10, mod.ENMITY: 50}),
+    175: AbilityEffect(CONVERGENCE, 60.0),
+    176: AbilityEffect(DIFFUSION, 60.0),
+    394: AbilityEffect(MAJESTY, 60.0, mods={mod.CURE_POTENCY_II: 20}),
+    369: AbilityEffect(PFLUG, 120.0, mods={mod.MEVA: 20}),
+    371: AbilityEffect(VALIANCE, 180.0, mods={mod.DMG: -10}),
+    376: AbilityEffect(BATTUTA, 90.0, mods={mod.EVA: 20}),
+    373: AbilityEffect(LIEMENT, 10.0, mods={mod.DMG: -15}),
+    336: AbilityEffect(FLY_HIGH, 30.0),
     17: AbilityEffect(HUNDRED_FISTS, 30.0),
     19: AbilityEffect(MANAFONT, 30.0),
     20: AbilityEffect(CHAINSPELL, 30.0),
-    31: AbilityEffect(BERSERK, 180.0),
-    32: AbilityEffect(WARCRY, 60.0),
-    33: AbilityEffect(DEFENDER, 180.0),
-    34: AbilityEffect(AGGRESSOR, 180.0),
+    31: AbilityEffect(BERSERK, 180.0,
+                      mods={mod.ATT_PERCENT: 35, mod.DEF_PERCENT: -25}),
+    33: AbilityEffect(DEFENDER, 180.0,
+                      mods={mod.DEF_PERCENT: 35, mod.ATT_PERCENT: -25}),
+    34: AbilityEffect(AGGRESSOR, 180.0, mods={mod.ACC: 25, mod.EVA: -25}),
     36: AbilityEffect(FOCUS, 60.0),
     37: AbilityEffect(DODGE, 60.0),
     74: AbilityEffect(DIVINE_SEAL, 60.0),
     75: AbilityEffect(ELEMENTAL_SEAL, 60.0),
     245: AbilityEffect(AFFLATUS_SOLACE, 7200.0, (AFFLATUS_MISERY,)),
     246: AbilityEffect(AFFLATUS_MISERY, 7200.0, (AFFLATUS_SOLACE,)),
-    247: AbilityEffect(COMPOSURE, 7200.0),
+    247: AbilityEffect(COMPOSURE, 7200.0, mods={mod.ENH_MAGIC_DURATION: 50}),
     254: AbilityEffect(MANA_WALL, 30.0),
     269: AbilityEffect(IMPETUS, 60.0),
     270: AbilityEffect(DIVINE_CARESS, 60.0),
     271: AbilityEffect(SACROSANCTITY, 60.0),
     273: AbilityEffect(MANAWELL, 60.0),
     274: AbilityEffect(SABOTEUR, 60.0),
-    323: AbilityEffect(BRAZEN_RUSH, 60.0),
+    323: AbilityEffect(BRAZEN_RUSH, 30.0, mods={mod.DOUBLE_ATTACK: 100}),
     325: AbilityEffect(ASYLUM, 30.0),
     326: AbilityEffect(SUBTLE_SORCERY, 60.0),
     327: AbilityEffect(STYMIE, 60.0),
@@ -957,13 +1480,22 @@ ABILITY_EFFECTS: dict[int, AbilityEffect] = {
     227: AbilityEffect(FOOTWORK, 60.0),
     253: AbilityEffect(PERFECT_COUNTER, 60.0),
     320: AbilityEffect(KONZEN_ITTAI, 60.0),
-    25: AbilityEffect(SOUL_VOICE, 30.0),
+    25: AbilityEffect(SOUL_VOICE, 180.0),
     163: AbilityEffect(NIGHTINGALE, 60.0),
     164: AbilityEffect(TROUBADOUR, 60.0),
     229: AbilityEffect(PIANISSIMO, 60.0),
     283: AbilityEffect(TENUTO, 60.0),
     284: AbilityEffect(MARCATO, 60.0),
-    332: AbilityEffect(CLARION_CALL, 60.0),
+    332: AbilityEffect(CLARION_CALL, 180.0),
+    # Warding Circle's retail timer is three minutes and Yaegasumi's 45 seconds.
+    64: AbilityEffect(117, 180.0),
+    # Killer Instinct's icon; the handler extends it with the merit ranks and adds
+    # the pet-correlation damage bonuses.  Base duration is three minutes.
+    162: AbilityEffect(KILLER_INSTINCT, 180.0),
+    334: AbilityEffect(501, 45.0),
+    # Hasso and Seigan are five-minute stances that overwrite each other.
+    173: AbilityEffect(HASSO, 300.0, cancels=(SEIGAN,)),
+    174: AbilityEffect(SEIGAN, 300.0, cancels=(HASSO,)),
     # 120 s base plus the 20 Samba Duration ranks (+2 s each); Haste Samba is 90 s.
     184: AbilityEffect(DRAIN_SAMBA, 160.0),
     185: AbilityEffect(DRAIN_SAMBA, 160.0),
@@ -990,15 +1522,22 @@ ABILITY_EFFECTS: dict[int, AbilityEffect] = {
     367: AbilityEffect(SWORDPLAY, 60.0),
     370: AbilityEffect(EMBOLDEN, 60.0),
     378: AbilityEffect(ODYLLIC_SUBTERFUGE, 60.0),
-    226: AbilityEffect(RETALIATION, 60.0),
-    252: AbilityEffect(RESTRAINT, 60.0),
+    226: AbilityEffect(RETALIATION, 180.0),
+    252: AbilityEffect(RESTRAINT, 300.0),
     324: AbilityEffect(INNER_STRENGTH, 60.0),
     254: AbilityEffect(MANA_WALL, 60.0),
-    48: AbilityEffect(SENTINEL, 60.0),
+    48: AbilityEffect(SENTINEL, 30.0, mods={mod.DEF_PERCENT: 25}),
     278: AbilityEffect(PALISADE, 60.0),
     23: AbilityEffect(BLOOD_WEAPON, 60.0),
     330: AbilityEffect(SOUL_ENSLAVEMENT, 60.0),
     256: AbilityEffect(NETHER_VOID, 60.0),
+    # Souleater's accuracy line is +25 while it is up; the HP-to-damage conversion is
+    # applied per landed hit in ``World.player_attack``.
+    49: AbilityEffect(SOULEATER, 60.0, mods={mod.ACC: 25}),
+    # Last Resort is +25% Attack / -25% Defense for three minutes.  Desperate Blows
+    # turns its trait value into job-ability haste while this is up (``combat_mods``).
+    51: AbilityEffect(LAST_RESORT, 180.0,
+                    mods={mod.ATT_PERCENT: 25, mod.DEF_PERCENT: -25}),
     257: AbilityEffect(DOUBLE_SHOT, 60.0),
     286: AbilityEffect(DECOY_SHOT, 60.0),
     301: AbilityEffect(TRIPLE_SHOT, 60.0),

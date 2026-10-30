@@ -8,6 +8,7 @@
  *   item(id)                 item_by_name(name [, lang])     item_ids()
  *   item_icon(id)            -> dib, width, height, bpp, name   (DIB: BITMAPINFOHEADER onward)
  *   item_icon_rgba(id)       -> rgba, width, height              (top-down RGBA8)
+ *   map_rgba(id)             -> rgba, width, height              (a zone's map DAT, top-down RGBA8)
  *   spell(index)             spell_by_name(name [, lang])    spell_ids()
  *   ability(id)              ability_by_name(name [, lang])  ability_by_recast(id)  ability_ids()
  *   status(id)               status_by_index(index)          status_ids()
@@ -272,6 +273,24 @@ static int l_menu_icon_rgba(lua_State* L)
     uint8_t* rgba = NULL;
     int w = 0, h = 0;
     if (!res_menu_icon_rgba(check_id(L, 1), &rgba, &w, &h) || !rgba)
+    {
+        free(rgba);
+        lua_pushnil(L);
+        return 1;
+    }
+    lua_pushlstring(L, (const char*)rgba, (size_t)w * (size_t)h * 4);
+    free(rgba);
+    lua_pushnumber(L, w);
+    lua_pushnumber(L, h);
+    return 3;
+}
+
+/* A zone's map image: rgba, width, height, or nil.  The Battle HUD turns it into a texture. */
+static int l_map_rgba(lua_State* L)
+{
+    uint8_t* rgba = NULL;
+    int w = 0, h = 0;
+    if (!res_map_rgba(check_id(L, 1), &rgba, &w, &h) || !rgba)
     {
         free(rgba);
         lua_pushnil(L);
@@ -713,6 +732,7 @@ int xi_res_open(lua_State* L)
         {"item_icon", l_item_icon},
         {"item_icon_rgba", l_item_icon_rgba},
         {"menu_icon_rgba", l_menu_icon_rgba},
+        {"map_rgba", l_map_rgba},
         {"trust_face_rgba", l_trust_face_rgba},
         {"sc_icon_rgba", l_sc_icon_rgba},
         {"spell", l_spell},

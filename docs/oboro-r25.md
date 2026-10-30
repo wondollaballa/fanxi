@@ -78,8 +78,13 @@ client is running, so the tooltip and the stat sheet update immediately.
 `FanxiService.equipped_mods()` reads the block back through
 `augment_stats`: Musa Path C is `"Regen" potency +25`, `"Cure"`
 potency +25% and `"Fast Cast"+10%`, and Path A/B turn on Store TP or
-Subtle Blow II.  The chance-based rows (double damage, follow-up attack)
-are in the client table but not modelled by the server yet.
+Subtle Blow II.  Bard's Knife Path C's `Song spellcasting time -15/-20/-25%`
+now feeds `SONG_SPELLCASTING_TIME` too.  The RDM sword Path C line
+`Elemental weapon skill damage +50/75/100%` feeds `ELEMENTAL_WS_DAMAGE`; it is a
+multiplier on the fTP part of a magical weapon skill (Seraph Blade, Sanguine Blade),
+so a Rank 25 Crocea Mors doubles those skills.  The `"Song effects: Double Attack"`
+row and the chance-based rows (double damage, follow-up attack) are in the
+client table but not modelled by the server yet.
 
 Migration `0120_oboro_augments.sql` removes the old static Musa Path C
 `item_mods` rows and writes the real R25 Path C block onto every Musa

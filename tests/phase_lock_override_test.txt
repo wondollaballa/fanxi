@@ -1,0 +1,47 @@
+# A locked action gets its own armour precast/midcast set temporarily, then the original
+# gear and the lock are put back (host/addons/phase.c).  The weapon slots stay pinned
+# through a job ability and through a weaponskill: the WS uses the hand that is on, and
+# only its armour set is worn.  Full lock and per-slot locks are both covered.
+frames 2
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=9, sets={{{1,0,0},{2,1,0},{3,4,0}},{{10,0,0},{11,4,0}},{{12,0,0},{13,4,0}}}, names={'idle','pre','mid'}, idle=1, town=1, rules={{category=9, action=200, pre=2, mid=3}}} return xi.phase.status().sets
+echo --- wear the idle set
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- full lock holds it
+lua control return xi.phase.lock(true), xi.phase.status().locked
+echo --- a locked job ability gets its armour pre set, but not the locked weapon
+packet_out 1a0000000000000000000900c800
+echo --- the next buffer releases the action with its armour mid set
+packet_out 1a0001000000000000000200000000
+echo --- the result restores the armour and keeps the lock
+packet_in 28000000000403020100183200000000
+packet_out 1a0002000000000000000200000000
+lua control return xi.phase.status().locked
+echo --- slot locks: the pinned main stays, the head still swaps and comes back
+lua control return xi.phase.lock(false), xi.phase.status().locked
+lua control local s = xi.phase.status().lockedSlots return xi.phase.lock_slots(17) and tostring(#s) .. ':' .. tostring(s[1]) .. ':' .. tostring(s[2]) or 'none'
+packet_out 1a0002000000000000000900c800
+packet_out 1a0001000000000000000200000000
+packet_in 28000000000403020100183200000000
+packet_out 1a0003000000000000000200000000
+lua control local s = xi.phase.status().lockedSlots return tostring(#s) .. ':' .. tostring(s[1]) .. ':' .. tostring(s[2])
+echo --- a manual pinned sub stays on through a job ability
+lua control xi.phase.lock_slots(0) return xi.phase.status().lockedSlots
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=9, sets={{{3,4,0}},{{22,1,8},{24,4,8}}}, names={'idle','ki'}, idle=1, town=1, rules={{category=9, action=200, pre=2}}} return xi.phase.status().sets
+lua control local e = xi.phase.apply() return e and #e or 0
+lua control return xi.phase.remember(1, 0, 51)
+lua control local s = xi.phase.status().lockedSlots return xi.phase.lock_slots(2) and (tostring(#s) .. ':' .. tostring(s[1])) or 'none'
+packet_out 1a0003000000000000000900c800
+packet_out 1a0001000000000000000200000000
+packet_in 28000000000403020100183200000000
+packet_out 1a0002000000000000000200000000
+lua control local s = xi.phase.status().lockedSlots return tostring(#s) .. ':' .. tostring(s[1])
+echo --- a weaponskill keeps the pinned sub and wears only its armour
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=9, sets={{{3,4,0}},{{22,1,8},{24,4,8}}}, names={'idle','ws'}, idle=1, town=1, rules={{category=7, action=100, pre=2}}} return xi.phase.status().sets
+lua control local e = xi.phase.apply() return e and #e or 0
+lua control return xi.phase.remember(1, 0, 51)
+lua control local s = xi.phase.status().lockedSlots return xi.phase.lock_slots(2) and (tostring(#s) .. ':' .. tostring(s[1])) or 'none'
+packet_out 1a0003000000000000000700640000
+packet_out 1a0001000000000000000200000000
+packet_in 280000001e04030201010c190000000000000000000040400000000000190000000000
+packet_out 1a0002000000000000000200000000
+lua control local s = xi.phase.status().lockedSlots return tostring(#s) .. ':' .. tostring(s[1])

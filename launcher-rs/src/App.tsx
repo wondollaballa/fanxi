@@ -18,6 +18,7 @@ import { backend, LauncherError } from "./lib/api";
 import { JOB_ABBRS, inWorld, serverSaysOffline } from "./lib/format";
 import { buildTenants, resolveTenant } from "./lib/tenant";
 import {
+  PHASE_CONFIG_KEY,
   loadPhaseConfig,
   loadPhaseEnabled,
   phaseOptions,
@@ -33,6 +34,7 @@ import { TeamPage } from "./components/TeamPage";
 import { ControlPage } from "./components/ControlPage";
 import { WarpsPage } from "./components/WarpsPage";
 import { GearPage } from "./components/GearPage";
+import { BattlePage } from "./components/BattlePage";
 import { DataPage } from "./components/DataPage";
 import { TenantBar } from "./components/TenantBar";
 import { SettingsPage } from "./components/SettingsPage";
@@ -53,14 +55,27 @@ const AUTO_WARP_SETTLE_MS = 6000;
 /** How long a relaunch stays armed while its client is stopped and started again. */
 const AUTO_WARP_ARM_WINDOW_MS = 10 * 60_000;
 
+/**
+ * Never warps the same box twice inside this window.
+ *
+ * A box that is still loading can report `login_status == 2` for a poll or two before its
+ * zone-in is acknowledged. Pulling it again in that window starts a second hand-off and
+ * advances its zone key mid-load, which is how a box ended up looping on "Downloading".
+ */
+const AUTO_WARP_COOLDOWN_MS = 90_000;
+
+/** The live job's three-letter abbreviation from a control `state`, or "" when it is not known. */
+function liveJobAbbr(state: unknown): string {
+  const job = Number((state as { player?: { job?: number } } | null)?.player?.job ?? 0);
+  return job >= 1 && job <= JOB_ABBRS.length ? JOB_ABBRS[job - 1] : "";
+}
+
 // The plan's library is stored from the last session. When the character logs in on another
 // job, a job-named default (gearswap/NIN.lua) has to follow the live job, or the first push
 // would keep the old job's sets until the Gear page is opened.
 async function libraryForLiveJob(library: string, state: unknown): Promise<string> {
-  const player = (state as { player?: { job?: number } } | null)?.player;
-  const job = Number(player?.job ?? 0);
-  if (!(job >= 1 && job <= JOB_ABBRS.length)) return library;
-  const abbr = JOB_ABBRS[job - 1];
+  const abbr = liveJobAbbr(state);
+  if (!abbr) return library;
   const base = library.split(/[/\\]/).pop() ?? "";
   if (!/^[A-Za-z]{3}\.lua$/.test(base)) return library; // an imported custom library stays
   if (base.toLowerCase() === `${abbr.toLowerCase()}.lua`) return library;
@@ -119,6 +134,12 @@ export default function App() {
   const [gearSwapOn, setGearSwapOn] = useState(loadPhaseEnabled);
   /** Latest switch value for async pushes that started before a toggle. */
   const gearSwapOnRef = useRef(gearSwapOn);
+  /** Seed the server-side config from localStorage only once per session. */
+  const gearswapSeeded = useRef(false);
+  /** Last time each live client was sent its saved //warp marks, keyed port:character:zone. */
+  const warpSyncAt = useRef<Map<string, number>>(new Map());
+  /** Whether each port was in world on the previous poll, so a login or zone-in forces a resend. */
+  const warpWorld = useRef<Map<number, boolean>>(new Map());
   const toastTimer = useRef<number | null>(null);
   const initialPageDone = useRef(false);
 
@@ -150,6 +171,20 @@ export default function App() {
   }, [gearSwapOn]);
 
   const applyBootstrap = useCallback((value: Bootstrap) => {
+    // The server's gearswap_settings row is the durable copy. Cache it in localStorage
+    // before rendering GearPage or the autostart effect, which read that key synchronously.
+    if (value.gearswapConfig && typeof value.gearswapConfig === "object") {
+      localStorage.setItem(PHASE_CONFIG_KEY, JSON.stringify(value.gearswapConfig));
+    } else if (value.session && !gearswapSeeded.current) {
+      // First run against a server that has no saved configuration yet: migrate the
+      // launcher's existing localStorage config into the account's DB row.
+      gearswapSeeded.current = true;
+      void backend
+        .saveGearswapSettings(loadPhaseConfig() as unknown as Record<string, unknown>)
+        .catch(() => {
+          gearswapSeeded.current = false;
+        });
+    }
     setBoot(value);
     setSession(value.session);
   }, []);
@@ -161,6 +196,63 @@ export default function App() {
       // A closed game or a control port that is still starting is not fatal.
     }
   }, []);
+
+  // The in-game Zoning page draws the character's saved //warp places. The control addon cannot
+  // read the server's table, so the launcher looks the rows up and pushes them through the same
+  // hud command as the window switches. Once a minute is enough for a rename made on the Warps
+  // page to reach the game, and keeps the extra API traffic to one row per box.
+  const syncHudWarps = useCallback(async (list: InstanceView[]) => {
+    if (!session) return;
+    const now = Date.now();
+    for (const instance of list) {
+      const world = instance.alive && inWorld(instance);
+      const wasWorld = warpWorld.current.get(instance.port) ?? false;
+      warpWorld.current.set(instance.port, world);
+      if (!world) continue;
+      if (!wasWorld) {
+        // A login or zone-in rebuilds the addon's lists. Drop this port's timestamps so the marks
+        // go back immediately, even when the character relogs into the same zone.
+        for (const key of [...warpSyncAt.current.keys()]) {
+          if (key.startsWith(`${instance.port}:`)) warpSyncAt.current.delete(key);
+        }
+      }
+      const characterId = Number(instance.character?.id ?? 0);
+      if (!characterId) continue;
+      // A zone hand-off replaces the addon's lists when the new zone's player block appears, so
+      // include the zone in the key and push again after a zoning instead of waiting out the
+      // cooldown with an empty Zoning page.
+      const zoneId = Number(instance.state?.zone?.id ?? 0);
+      const key = `${instance.port}:${characterId}:${zoneId}`;
+      if (now - (warpSyncAt.current.get(key) ?? 0) < 60_000) continue;
+      warpSyncAt.current.set(key, now);
+      try {
+        const data = await backend.characterWarps(characterId);
+        await backend.sendHud(instance.port, {
+          warp_marks: data.warps.map((warp) => ({
+            slot: warp.slot,
+            alias: warp.alias,
+            zone_name: warp.zone_name,
+          })),
+        });
+      } catch {
+        // The client may still be zoning, or its control port may be starting. The next poll
+        // retries after the cooldown; the HUD keeps the marks it already has.
+      }
+    }
+  }, [session]);
+
+  // A new session may reuse a control port number, and the addon starts with an empty Zoning
+  // list at the login screen. Forget the old account's sync clocks so the first in-world poll
+  // sends the new character's marks.
+  useEffect(() => {
+    warpSyncAt.current.clear();
+    warpWorld.current.clear();
+  }, [session?.account.username]);
+
+  useEffect(() => {
+    if (!session) return;
+    void syncHudWarps(instances);
+  }, [instances, session, syncHudWarps]);
 
   const loadTeam = useCallback(async () => {
     if (!session) {
@@ -199,7 +291,7 @@ export default function App() {
       .bootstrap()
       .then((value) => {
         if (cancelled) return;
-        setBoot(value);
+        applyBootstrap(value);
         setSession(value.config.autoLogin ? value.session : null);
         backend.buildLog().then((lines) => !cancelled && setBuildLog(lines)).catch(() => undefined);
         if (value.session && value.config.autoLogin) {
@@ -224,12 +316,14 @@ export default function App() {
   // client that appears - not only while the Gear page happens to be open. Turning the master
   // switch off has to reach the hosts that already have a plan, not merely stop new pushes.
   const phasePushed = useRef<Set<number>>(new Set());
+  const phasePushedJob = useRef<Map<number, string>>(new Map());
   const phaseTries = useRef<Map<number, number>>(new Map());
   const phaseRepush = useRef<Set<number>>(new Set());
   const phaseOffSent = useRef<Set<number>>(new Set());
   useEffect(() => {
     const alive = new Set(instances.filter((item) => item.alive).map((item) => item.port));
     for (const port of phasePushed.current) if (!alive.has(port)) phasePushed.current.delete(port);
+    for (const port of phasePushedJob.current.keys()) if (!alive.has(port)) phasePushedJob.current.delete(port);
     for (const port of phaseTries.current.keys()) if (!alive.has(port)) phaseTries.current.delete(port);
     for (const port of phaseRepush.current) if (!alive.has(port)) phaseRepush.current.delete(port);
     for (const port of phaseOffSent.current) if (!alive.has(port)) phaseOffSent.current.delete(port);
@@ -238,6 +332,7 @@ export default function App() {
       // Hard stop: clear each host's plan, pending state and session overrides, not just our
       // copy. A client that is still signing in is disabled again once it appears.
       phasePushed.current.clear();
+      phasePushedJob.current.clear();
       phaseTries.current.clear();
       phaseRepush.current.clear();
       for (const port of alive) {
@@ -260,6 +355,19 @@ export default function App() {
     const idleField = config.idleField;
     const movement = config.movement;
     const options = phaseOptions(config);
+    // The host keeps the sets a plan was built from, so a new job needs a new plan, and only the
+    // launcher has the new job's library (an attached box has no checkout). Re-arm the push when
+    // the live job no longer matches the one the plan was built for.
+    for (const port of phasePushed.current) {
+      const pushedJob = phasePushedJob.current.get(port);
+      const view = instances.find((item) => item.port === port);
+      const liveJob = liveJobAbbr(view?.state);
+      if (pushedJob && liveJob && liveJob !== pushedJob) {
+        phasePushed.current.delete(port);
+        phasePushedJob.current.delete(port);
+        phaseTries.current.delete(port);
+      }
+    }
     for (const port of alive) {
       if (phasePushed.current.has(port)) continue;
       if ((phaseTries.current.get(port) ?? 0) >= 60) continue;
@@ -294,6 +402,7 @@ export default function App() {
           }
           if (!status?.player || !(status.rules ?? 0)) return;
           phasePushed.current.add(port);
+          phasePushedJob.current.set(port, liveJobAbbr(state));
           // The first push can land while the client is still filling its bags, which leaves a
           // plan that wears only some of a set. A second push a few seconds later is complete.
           if (!phaseRepush.current.has(port)) {
@@ -382,6 +491,7 @@ export default function App() {
   const autoWarpArmed = useRef<Map<string, number>>(new Map());
   const autoWarpStatus = useRef<Map<string, number>>(new Map());
   const autoWarpInGameSince = useRef<Map<string, number>>(new Map());
+  const autoWarpSentAt = useRef<Map<string, number>>(new Map());
   const autoWarpSending = useRef(false);
 
   useEffect(() => {
@@ -414,10 +524,26 @@ export default function App() {
       }
       autoWarpInGameSince.current.delete(key);
       // 0 is "no character block" (game.h): the client is out of the world, not zoning.
-      if (status === 0 && previous === 2) autoWarpArmed.current.set(key, now);
+      // Only arm when the server's live roster says the character is really gone.  A
+      // normal zone change and a `//warp call` both drop the client's own status to 0
+      // for a poll or two while the server still has the session; arming on that made
+      // the auto-warp pull the same box every time it came back, which is the loop that
+      // kept re-zoning a box (and advancing its zone key) every 15 seconds.
+      if (status === 0 && previous === 2 && instance.serverOnline === false) {
+        autoWarpArmed.current.set(key, now);
+      }
     }
 
     if (autoWarpSending.current || autoWarpArmed.current.size === 0) return;
+    // A server restart or a batch relaunch arms every box at once.  Pulling each of them
+    // with its own //warp call sent all five zone changes inside the same second, and the
+    // contention lost a box mid-hand-off.  A team-level event is recovered with the
+    // server's own //warp all me, which hands the boxes out three seconds apart; the
+    // single-box auto-pull is only for one box that dropped on its own.
+    if (autoWarpArmed.current.size > 1) {
+      autoWarpArmed.current.clear();
+      return;
+    }
     const leaderKey = session.account.username.toLowerCase();
     const leader =
       alive.find((instance) => instance.account.toLowerCase() === leaderKey && inGame(instance)) ??
@@ -428,14 +554,22 @@ export default function App() {
       if (instance.port === leader.port || !autoWarpArmed.current.has(key) || !inGame(instance)) {
         return false;
       }
+      // A box that has only just been pulled must not be pulled again: a second 0x00B
+      // lands while it is still loading and moves its zone key under it.  Drop the arm
+      // instead of holding it, so it cannot fire a surprise warp a minute later.
+      if (now - (autoWarpSentAt.current.get(key) ?? 0) < AUTO_WARP_COOLDOWN_MS) {
+        autoWarpArmed.current.delete(key);
+        return false;
+      }
       return now - (autoWarpInGameSince.current.get(key) ?? now) >= AUTO_WARP_SETTLE_MS;
     });
     if (!due) return;
 
     autoWarpArmed.current.delete(due.account.toLowerCase());
+    autoWarpSentAt.current.set(due.account.toLowerCase(), now);
     autoWarpSending.current = true;
     void backend
-      .sendCommand(leader.port, `//warp call ${due.name}`)
+      .sendCommand(leader.port, `/!warp call ${due.name}`)
       .then(() => notify(`Pulled ${due.name} to ${leader.name}`, "info"))
       .catch((error) => notify(messageOf(error), "error"))
       .finally(() => {
@@ -1008,6 +1142,7 @@ export default function App() {
     gameWidth: number;
     gameHeight: number;
     gameUiScale: number;
+    monitor: string;
   }) {
     const next = await backend.saveSettings(input);
     setBoot((current) => (current ? { ...current, config: next } : current));
@@ -1152,6 +1287,8 @@ export default function App() {
       <ControlPage
         config={boot.config}
         session={session}
+        team={team}
+        tenant={tenant}
         instances={instances}
         onLaunch={launch}
         onStop={stop}
@@ -1216,6 +1353,7 @@ export default function App() {
         onTogglePhase={() => setGearSwap(!gearSwapOnRef.current)}
       />
     ),
+    battle: <BattlePage instances={instances} tenant={tenant} notify={notify} />,
     news: <NewsPage publicView={boot.public} onRefresh={() => void refreshAll()} />,
     settings: (
       <SettingsPage

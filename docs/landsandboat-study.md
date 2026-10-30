@@ -103,8 +103,9 @@ Useful behaviours from the study:
 Fanxi implements the shape, not the full simulation: a main-hand swing (plus an off-hand
 swing when dual wielding), a simple hit/crit roll, one target, 8-yalm aggro, 30-yalm
 disengage, 5-yalm roam, 20–25 s respawn, one hate total per player (no VE decay), a small
-spell set with enfeebles and DoTs, and Provoke/weapon skills. Claim, linking and TP moves
-are still missing. The packet flow is real; the combat math is deliberately small.
+spell set with enfeebles and DoTs, and Provoke/weapon skills. Monster TP moves now use
+LandSandBoat's family lists (migration 0148); claim, linking and per-script move effects are
+still approximated. The packet flow is real; the combat math is deliberately small.
 
 ## 4. The action packet
 

@@ -28,7 +28,7 @@ a server that belong to the same project:
 > addon host are ported from a working native build. The Fanxi launcher, server and database are
 > new and functional: sign-in, character creation, launch hand-off, lobby and zone-in work end to
 > end. The world is now a small original vertical slice: NPCs, a shop, a hunt quest, roaming
-> monsters, basic melee combat, EXP/levels, inventory and respawns. It is not a full retail world
+> monsters, melee and monster TP-move combat, EXP/levels, inventory and respawns. It is not a full retail world
 > yet; the boundary is documented in [docs/world.md](docs/world.md).
 
 ## Quick start
@@ -73,7 +73,7 @@ In the launcher:
 You start in Port Jeuno. Cumetouflaix, the NPC beside the arrival point, starts **Pest
 Control**; the port's merchants (Gekko sells Potions) open shops. Say `//zone 100` to visit the
 West Ronfaure camp, fight three Orcish Fodder, then return to Cumetouflaix. `//entities`, `//heal`,
-`//where` and `//help` are available in chat.
+`//where`, `//mount` (and `//mount party` for the team) and `//help` are available in chat.
 
 The launcher's default server is `http://127.0.0.1:8080`. Everything can live on one machine, or
 the server can run elsewhere and the launcher can point at it in **Settings**.
@@ -96,6 +96,9 @@ processes and control ports — and the UI never sees a stored token. It:
 - saves `//warp` places and can mark, rename, delete and warp to them from the **Warps** page,
   alone or with every online character on the account and its sub-accounts, and has a **Warp
   team to me** button that calls the whole team to the selected character;
+- has an in-game **Mount HUD** with a picture of every mount the client knows: pick one and press
+  **Mount** or **Mount party**, or type `//mount <name>` / `//mount party`. *Mount party* gives
+  every box in the sub team its own random mount; see [docs/mounts.md](docs/mounts.md);
 - tells a live client from a live character: a box that lost its zone session shows **orphaned**
   or **logged out** with **Reconcile** / **Relaunch** instead of a green row, **Reconcile N**
   restarts every stale box after a server restart, and a box that comes back from a relog is
@@ -149,17 +152,23 @@ move, change zones and talk/attack. Its small world adds:
 - click-to-talk dialogue and the persistent **Pest Control** hunt quest;
 - basic melee combat with `0x028` action packets, HP updates, EXP, gil and level-ups;
 - an 80-slot inventory with gil, Potions and starter swords;
-- a Storage Slip command (`//storage store|grab <job|all>`) reachable from any zone, which moves
-  only gear a slip accepts off the character entirely and puts it back when you need it;
-- a hidden 9999-item locker (`//locker store|grab|list <all|ammo|back|jsecapes|materials|name>`) for the
+- a job-aware storage command (`//storage organize | store <job|all> | grab <job|all> | list`)
+  reachable from any zone: everything the current job cannot equip leaves the bags, a slip where
+  one accepts the item and the hidden 9,999-slot locker where none does, and the job's own set is
+  pulled back into the Mog Wardrobes. `//job` runs the same organizer, so only the active job's
+  gear is out and no mule is needed;
+- a hidden 9,999-slot locker (`//locker store|grab|list <all|ammo|back|jsecapes|materials|name>`) for the
   198 Ambuscade JSE cape builds, ammo, crafting materials and everything else a slip does
   not accept;
 - working-stock auto-refill: `//stock` keeps a visible stack of ninjutsu tools, pet food and Dawn
   Mulsum in the inventory, pulling from the hidden locker when they are used;
+- a dropped link keeps your buffs and ability cooldowns: the reconnect restores the song list
+  and the recast timers from the server, then tells you what it held
+  ([details](docs/world.md#recovering-a-dropped-client));
 - monster death, rewards and respawn.
 
 Server commands: `//zone`, `//warp`, `//invite`, `//makeparty`, `//pos`, `//where`, `//entities`,
-`//trust`, `//heal`, `//time`, `//storage`, `//locker`, `//stock`, `//help`. `//warp` marks your own
+`//trust`, `//heal`, `//time`, `//storage`, `//locker`, `//recycle`, `//bags`, `//stock`, `//help`. `//warp` marks your own
 camps (`//warp mark [alias]`) and returns to them by number or alias (`//warp me 1`, `//warp all 1`
 for your sub-account boxes); `//warp all me` calls the whole online team to your current spot, and
 `//warp call <name>` calls one box — the launcher sends that by itself when a relogged box is back
@@ -303,6 +312,7 @@ is done by the launcher (or `python3 tools/setup.py` for the full macOS app bund
 - [Architecture](docs/architecture.md) — components, data flow, ports, trust boundaries
 - [Retail client data](docs/retail-data.md) — where the data comes from, patching it with PlayOnline, and importing the result
 - [Launcher](docs/launcher.md) — settings, build, troubleshooting
+- [Battle hub](docs/battle.md) — camps, formations, pulling, healing and the automation rules
 - [Character design](docs/character-design.md) — in-game model changes, the Design page and preview captures
 - [Server](docs/server.md) — API reference, deployment, admin operations
 - [Database](docs/database.md) — schema, migrations, backup and restore

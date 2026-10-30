@@ -1,0 +1,18 @@
+# The gear page has to show a weaponskill's set even though the set is only on between the held
+# action and its result (host/addons/phase.c).  A poll cannot catch that window, so the engine
+# records it: the status names the action set while it is on and keeps the recent windows.
+# Run by tests/phase_history_test.sh.
+frames 2
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=9, sets={{{1,0,0},{2,0,0}},{{3,0,0},{4,0,0}}}, names={'engaged','WS.Blitz'}, engage=1, idle=1, town=1, rules={{category=7, action=78, pre=2, mid=2}}} return xi.phase.status().rules
+echo --- the weaponskill set goes on with the held action
+packet_out 1a00000000000000000007004e00
+lua control local s = xi.phase.status() return s.actionSet .. ' ' .. tostring(s.actionId) .. ' ' .. tostring(s.actionMs >= 0)
+lua control local h = xi.phase.status().history[1] return h.set .. ' ' .. tostring(h.active)
+echo --- the result closes the window and keeps it in the history
+packet_in 280000000004030201008c1300000000
+lua control local s = xi.phase.status() return tostring(s.actionSet)
+lua control local h = xi.phase.status().history[1] return h.set .. ' ' .. tostring(h.active) .. ' ' .. tostring(h.ms >= 0)
+echo --- a second action appends to the history, newest first
+packet_out 1a00010000000000000007004e00
+lua control local s = xi.phase.status() return #s.history
+lua control local s = xi.phase.status() return tostring(s.history[1].active) .. ' ' .. tostring(s.history[2].active) .. ' ' .. s.history[2].set

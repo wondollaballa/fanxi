@@ -8,6 +8,7 @@ from pathlib import Path
 
 from support import make_service
 
+from fanxi_server.game import packets
 from fanxi_server.game.world import World
 from fanxi_server.game.zone import ZoneSession
 
@@ -50,8 +51,10 @@ class CharacterDataTest(unittest.TestCase):
         self.service.set_mastery_rank(self.character["id"], 4)
         self.service.set_gil(self.character["id"], 987654)
         self.service.top_off_merits(self.character["id"])
+        self.service.save_merit_layout(self.character["id"], {0x0180: 5})
         self.session.queue.clear()
         self.session.reload_character()
+        self.assertEqual(self.session.merit_counts()[0x0180], 5)
         self.assertEqual(self.session.char["mastery_rank"], 4)
         self.assertEqual(self.session.char["gil"], 987654)
         kinds = {packet_kind(message) for message in self.session.queue}
@@ -59,6 +62,58 @@ class CharacterDataTest(unittest.TestCase):
         self.assertIn(0x063, kinds)   # merits / job points
         self.assertIn(0x055, kinds)   # key-item bitmaps
         self.assertIn(0x020, kinds)   # the inventory, including the gil row
+
+    def test_reload_sends_no_self_entity_update(self):
+        """A reload must not queue any self 0x00D.
+
+        The client asks for its own entity after a reload (C2S 0x016/0x017 for targid
+        0x400), and the full-spawn reply to that request carries the name and model
+        blocks that reset the player entity (green name, no menus until a relog).  The
+        vitals the Data page can change already ride 0x061, 0x037 and 0x0DF; the reload
+        has no reason to poke the entity at all.
+        """
+        self.session.queue.clear()
+        self.session.reload_character()
+        kinds = [packet_kind(message) for message in self.session.queue]
+        self.assertIn(0x061, kinds)   # stats / max HP and MP
+        self.assertIn(0x037, kinds)   # status/HP
+        self.assertIn(0x0DF, kinds)   # party member HP/MP/TP
+        self.assertNotIn(0x00D, kinds)
+
+    def test_mid_session_self_entity_request_does_not_respawn(self):
+        """The post-reload self request gets the General block, never the full spawn."""
+        self.session.zone_loaded = True
+        request = bytearray(20)
+        struct.pack_into("<HHH", request, 0, 0x017, 0x0A, 0)
+        struct.pack_into("<H", request, 4, 0x400)
+        self.session.queue.clear()
+        self.session.request_entity(bytes(request))
+        kinds = [packet_kind(message) for message in self.session.queue]
+        self.assertIn(0x037, kinds)
+        updates = [message for message in self.session.queue
+                   if packet_kind(message) == 0x00D]
+        self.assertEqual(len(updates), 1)
+        body = updates[0][4:]
+        self.assertEqual(len(body), 0x44)
+        self.assertEqual(body[6], packets.SEND_HP)
+        self.assertFalse(body[6] & packets.SEND_NAME)
+        self.assertFalse(body[6] & packets.SEND_MODEL)
+
+    def test_zone_in_self_entity_request_still_spawns_the_player(self):
+        """Before the zone-in finishes the full spawn is what creates the self entity."""
+        request = bytearray(8)
+        struct.pack_into("<HHH", request, 0, 0x016, 0x04, 0)
+        struct.pack_into("<H", request, 4, 0x400)
+        self.session.zone_loaded = False
+        self.session.queue.clear()
+        self.session.request_entity(bytes(request))
+        updates = [message for message in self.session.queue
+                   if packet_kind(message) == 0x00D]
+        self.assertEqual(len(updates), 1)
+        body = updates[0][4:]
+        self.assertEqual(len(body), 0x68)
+        self.assertTrue(body[6] & packets.SEND_NAME)
+        self.assertTrue(body[6] & packets.SEND_MODEL)
 
     def test_snapshot_reports_the_same_values(self):
         self.service.set_mastery_rank(self.character["id"], 3)
@@ -77,6 +132,7 @@ class CharacterDataTest(unittest.TestCase):
         self.assertTrue(data["trusts"]["summoning"])
         self.assertEqual(self.db.scalar("SELECT COUNT(*) FROM trusts"), 122)
         self.assertEqual(self.service.trust(896)["job"], 4)
+        self.assertEqual(self.service.trust(896)["species"], 297)   # Tarutaru
         self.assertEqual(self.service.trust(896)["model"], 3000)
         self.assertEqual(len(self.service.trust_spells(896, 99)), 30)
         self.assertEqual(len(self.service.trust_spells(898, 1)), 1)
@@ -135,6 +191,61 @@ class CharacterDataTest(unittest.TestCase):
         self.assertEqual(decoded["path"], "C")
         self.assertEqual(decoded["rank"], 30)
         self.assertEqual(decoded["index"], 448)
+
+    def test_unity_belt_is_offered_in_the_rp_card(self):
+        """A purchased Unity +1 piece must reach the Data page's RP list."""
+        self.service.add_item(self.character["id"], 28413, 1)
+        data = self.service.character_data(self.character["id"])
+        item = next(row for row in data["augments"] if row["item_id"] == 28413)
+        self.assertEqual(item["name"], "Kentarch Belt +1")
+        self.assertEqual(item["kind"], "unity")
+        self.assertEqual(item["set"], "Unity +1")
+        self.assertEqual(item["slot_name"], "waist")
+        self.assertIsNone(item["current"])
+        self.assertEqual(len(item["paths"]), 1)
+        path = item["paths"][0]
+        self.assertEqual(path["key"], "A")
+        self.assertEqual(path["rank"], 15)
+        self.assertEqual(path["bundle"], 355)
+        self.assertEqual(path["augments"], ["STR+10", "DEX+10"])
+
+        from fanxi_server.game import augment_gear, augments
+        augment_gear.cap(self.service, self.character["id"],
+                         item["container"], item["slot"], "A")
+        row = next(row for row in self.service.inventory(self.character["id"])
+                   if int(row["item_id"]) == 28413)
+        decoded = augments.decode(row["extra"])
+        self.assertEqual(decoded["rank"], 15)
+        self.assertEqual(decoded["index"], 355)
+
+    def test_armory_purchase_refreshes_the_rp_card(self):
+        """The Armory snapshot must already carry the new Unity belt."""
+        self.service.top_off_gil(self.character["id"])
+        for item_id, name, bundle, augments in (
+                (28413, "Kentarch Belt +1", 355, ["STR+10", "DEX+10"]),
+                (28428, "Sailfi Belt +1", 292, ["STR +15", "Double Attack +5%"])):
+            added = self.service.armory_add(self.character["id"], item_id, 1)
+            self.assertEqual(added["item_id"], item_id)
+            data = self.service.character_data(self.character["id"])
+            item = next(row for row in data["augments"] if row["item_id"] == item_id)
+            self.assertEqual(item["name"], name)
+            self.assertEqual(item["kind"], "unity")
+            self.assertEqual(item["paths"][0]["bundle"], bundle)
+            self.assertEqual(item["paths"][0]["augments"], augments)
+            self.assertTrue(next(row for row in data["purchases"]
+                                 if row["item_id"] == item_id)["owned"])
+
+    def test_bunzi_hat_purchase_reaches_the_rp_card(self):
+        self.service.top_off_gil(self.character["id"])
+        self.service.armory_add(self.character["id"], 23760, 1)
+        data = self.service.character_data(self.character["id"])
+        item = next(row for row in data["augments"] if row["item_id"] == 23760)
+        self.assertEqual(item["name"], "Bunzi's Hat")
+        self.assertEqual(item["set"], "Bunzi's Attire Set")
+        self.assertEqual(item["kind"], "odyssey")
+        self.assertIsNone(item["current"])
+        self.assertEqual(item["paths"][0]["bundle"], 433)
+        self.assertIn('"Store TP"+8', item["paths"][0]["augments"])
 
     def test_register_all_home_points_is_idempotent(self):
         self.service.register_all_home_points(self.character["id"])

@@ -13,6 +13,10 @@ The mirror is expected to contain ``mobs/<zone>.yaml`` and ``regions/<zone>.yaml
 (``mobs.yaml`` / ``regions.yaml`` as published under data/zones/<zone>/).  A spawn's zone
 comes from its mob id, so no name matching is needed: zone = (mobid >> 12) & 0xFFF.
 
+``skill_list_id`` is copied from each template too; migration 0148 imports the moves
+those ids name (tools/import_lsb_mobskills.py).  Run this importer only against a schema
+that already has the column, or the INSERT will fail.
+
 Spawns without a usable position (no "at" and a region we have no polygon for) are
 dropped rather than dumped at the origin.
 
@@ -197,13 +201,14 @@ def main():
             cursor = conn.execute(
                 "INSERT INTO monster_templates (name, model, size, level_min, level_max, hp, mp,"
                 " attack, defense, accuracy, evasion, attack_delay_ms, aggro, links, roam_radius,"
-                " respawn_seconds, name_prefix, behavior, content_tag)"
-                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                " respawn_seconds, name_prefix, behavior, content_tag, skill_list_id)"
+                " VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                 (name, model, size, max(1, low), max(1, high), hp, info["mp"],
                  5 + high * 2, max(1, high // 2), 75 + high, 10 + high,
                  int(info["delay"] * 1000 / 60) if info["delay"] else 3000,
                  info["aggro"], info["links"], DEFAULT_ROAM,
-                 info["respawn"] or DEFAULT_RESPAWN, info["name_prefix"], "roam", None))
+                 info["respawn"] or DEFAULT_RESPAWN, info["name_prefix"], "roam", None,
+                 int(definition.get("skill_list_id") or 0)))
             template_ids[(zone, key)] = cursor.lastrowid
         conn.executemany(
             "INSERT INTO monster_spawns (template_id, zone, targid, name, pos_x, pos_y, pos_z, rot,"

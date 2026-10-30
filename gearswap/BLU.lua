@@ -588,6 +588,24 @@ function get_sets()
         back = capes.ws_str,
     }
 
+    sets.WS["Imperator"] = {
+        main = "Caliburnus",
+        sub = "Genbu's Shield",
+        ammo = "Aurgelmir Orb +1",
+        head = odyssey.B.helm,
+        body = odyssey.B.mail,
+        hands = odyssey.B.gauntlets,
+        legs = odyssey.B.flanchard,
+        feet = odyssey.B.sollerets,
+        neck = "Rep. Plat. Medal",
+        waist = "Fotia Belt",
+        ear1 = "Moonshade Earring",
+        ear2 = "Cessance Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Metamorph Ring +1",
+        back = capes.ws_str,
+    }
+
     -- ===== JA =================================================
     sets.JA = {}  -- container: job abilities below
     sets.JA["Azure Lore"] = {

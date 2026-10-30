@@ -21,8 +21,8 @@ Stun, Petrify and Bind stop the monster, Slow and Weight move its timer, and Acc
 Attack, Defense, Evasion, Magic Def., Magic Evasion, INT and Critical Hit Evasion Down
 feed the hit-rate and damage paths.  Magic Atk. Down is stored but inert because
 monsters never cast, and Silence is inert because they have no spells.  A skill whose
-only effect is an aftermath (Empyrean/Relic/Mythic) still lands its damage; aftermath
-is not modelled.
+only effect is a Relic/Mythic/Empyrean aftermath still lands its damage; those aftermaths
+are not modelled here.  Prime aftermath lives in :mod:`prime_weapons`.
 """
 from __future__ import annotations
 
@@ -150,7 +150,8 @@ def _table() -> dict[str, WeaponSkillEffect]:
     """Weapon-skill name -> its extra behaviour.
 
     Names are the ``weapon_skills`` display names folded with ``casefold``; a skill that
-    is not here is a pure damage skill (or only an aftermath, which is not modelled).
+    is not here is a pure damage skill (or only a Relic/Mythic/Empyrean aftermath, which
+    is not modelled here; Prime aftermath lives in :mod:`prime_weapons`).
     """
     return {
         # --- hand-to-hand ---------------------------------------------------------------
@@ -184,7 +185,8 @@ def _table() -> dict[str, WeaponSkillEffect]:
         "death blossom": WeaponSkillEffect(
             statuses=_statuses(Status(effects.MAGIC_EVASION_DOWN, (60, 60, 60),
                                      power=10))),
-        "sanguine blade": WeaponSkillEffect(hp_from_damage=(0.5, 0.75, 1.0)),
+        # Adoulin drain is 50% / 100% / 160%, not the pre-Adoulin 50/75/100.
+        "sanguine blade": WeaponSkillEffect(hp_from_damage=(0.5, 1.0, 1.6)),
         "uriel blade": WeaponSkillEffect(
             statuses=_statuses(Status(effects.FLASH, (15, 15, 15), potency=20))),
         "glory slash": WeaponSkillEffect(

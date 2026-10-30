@@ -51,10 +51,19 @@ class WeaponSkillData:
     attack_varies: tuple[float, ...] = ()
     # Fraction of the target's Defense ignored by TP (``ignoredDefense``).
     ignored_defense: tuple[float, ...] = ()
-    # A magic-damage skill; the physical path is still used until that path exists.
+    # A pure magic-damage skill.  Retail resolves these through the magical formula
+    # (WSC plus the weapon-level base, multiplied by fTP, then dSTAT/Magic Damage and
+    # the magic damage multipliers), never through pDIF.
     magic: bool = False
-    # A hybrid physical/magic skill (its magic component is not modelled yet).
+    # A hybrid physical/magic skill.  The physical hits resolve first; ZoneSession then
+    # adds the magic half from the physical total (LandSandBoat's hybrid formula).
     hybrid: bool = False
+    # Element for elemental affinity and the resistance term: fire/ice/wind/earth/
+    # thunder/water/light/dark.  Empty when the skill is non-elemental.
+    element: str = ""
+    # Retail's dSTAT term for a magical skill: (stat, multiplier, cap).  It is added
+    # after the fTP multiplier, not inside it.  A cap of 0 means uncapped.
+    dstat: tuple[str, float, int] = ()
     # The three resonance properties, in LandSandBoat's order:
     # (primary, secondary, tertiary), each an SC_* id (0 = none).
     sc: tuple[int, int, int] = (0, 0, 0)
@@ -96,6 +105,23 @@ class WeaponSkillData:
                 total += int(int(attributes.get(stat, 0)) * coefficient)
         return total
 
+    def dstat_for(self, attributes: dict[str, int],
+                  target_attributes: dict[str, int]) -> int:
+        """The stat-difference term retail adds after the fTP multiplier.
+
+        Seraph Blade and Seraph Strike have dSTAT 0.  Sanguine Blade is published as
+        ``(player INT - target INT) * 2``, uncapped.  A skill without a published
+        dSTAT adds nothing rather than guessing a different stat.
+        """
+        if not self.dstat:
+            return 0
+        stat, multiplier, cap = self.dstat
+        value = int((int(attributes.get(stat, 0))
+                     - int(target_attributes.get(stat, 0))) * float(multiplier))
+        if cap:
+            value = max(-int(cap), min(int(cap), value))
+        return value
+
 
 @lru_cache(maxsize=1)
 def _skillchain_table() -> dict[int, tuple[int, int, int]]:
@@ -117,6 +143,14 @@ def _table() -> dict[int, WeaponSkillData]:
         log.warning("weapon skill table unavailable (%s); using the generic fTP curve", exc)
         return {}
     properties = _skillchain_table()
+
+    def dstat(row: dict) -> tuple[str, float, int]:
+        data = row.get("dstat")
+        if not isinstance(data, dict) or not data.get("stat"):
+            return ()
+        return (str(data["stat"]), float(data.get("mult", 1.0)),
+                int(data.get("cap", 0) or 0))
+
     table: dict[int, WeaponSkillData] = {}
     for key, row in document.items():
         try:
@@ -133,6 +167,8 @@ def _table() -> dict[int, WeaponSkillData]:
                 ignored_defense=tuple(float(value) for value in row.get("ignored_defense", ())),
                 magic=bool(row.get("magic", False)),
                 hybrid=bool(row.get("hybrid", False)),
+                element=str(row.get("element", "") or ""),
+                dstat=dstat(row),
                 sc=properties.get(int(key), (0, 0, 0)),
             )
         except (TypeError, ValueError) as exc:

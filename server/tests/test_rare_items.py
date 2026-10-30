@@ -71,6 +71,16 @@ class RareItemTest(unittest.TestCase):
         self.add(10795)
         self.assertEqual(len(self.rows(10795)), 2)
 
+    def test_an_ex_only_item_can_be_bought_again(self):
+        # Linos is Ex but not Rare: the Armory may sell as many as the bags hold.
+        price = int(self.service.item(21404)["price"])
+        self.service.set_gil(self.character_id, 1_000_000)
+        self.service.armory_add(self.character_id, 21404)
+        self.service.armory_add(self.character_id, 21404)
+        self.assertEqual(len(self.rows(21404)), 2)
+        self.assertEqual(self.service.character(self.character_id)["gil"],
+                         1_000_000 - 2 * price)
+
     def test_the_shop_refuses_a_second_rare_copy_before_charging(self):
         self.add(10769)
         session = object.__new__(ZoneSession)

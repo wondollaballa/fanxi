@@ -1,0 +1,11 @@
+-- Dancer's menu used to advertise the retail category rows ("Jigs", "Steps",
+-- "Waltzes", "Sambas", "Flourishes I/II/III") as job abilities.  They are menu
+-- headers with no animation and no effect, so the Abilities window and the 0x0AC
+-- command list treated them as broken buttons: clicking "Jigs" played the default
+-- animation instead of Spectral Jig's, and the real waltzes/flourishes were mixed in
+-- with a row that only printed "You use Jigs."
+--
+-- The client's Abilities list is flat on this build (host/addons/hooks.c rebuilds it
+-- from 0x0AC), so the headers cannot be used as folders here.  Drop them; every real
+-- Dancer ability keeps its own row and level.
+DELETE FROM job_abilities WHERE id IN (182, 183, 198, 199, 200, 213, 263);

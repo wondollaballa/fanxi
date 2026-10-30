@@ -1,13 +1,21 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Crown, RefreshCw, Square, Users } from "lucide-react";
+import { Crown, RefreshCw, Square, Users, Wrench } from "lucide-react";
 import type { FollowEvent, FollowStatus, InstanceView, SessionView } from "../types";
 import { backend, LauncherError } from "../lib/api";
+import { serverPosition } from "../lib/format";
 import { Badge, Button, Card, EmptyState, Select, Spinner, cn } from "./ui";
 
 type Assignments = Record<string, string | null>;
 type EnabledMap = Record<string, boolean>;
 
 const COLORS = ["#59d8f2", "#ffd166", "#b9a7ff", "#5be49b", "#ff9f6e", "#ff7b72"];
+
+/**
+ * The automatic recovery moves a box that is merely out of range. A client that still cannot
+ * see its leader after three hand-offs has a broken world and needs a new process, which is
+ * the Fix button's job: more `//pos` packets only loop the box between two bad spots.
+ */
+const MAX_AUTO_RECOVERIES = 3;
 
 function accountKey(value: string): string {
   return value.trim().toLowerCase();
@@ -71,6 +79,10 @@ export function FollowCard({
   const [dragging, setDragging] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
+  const [notice, setNotice] = useState("");
+  /** The account whose Fix button is killing/relaunching the client right now. */
+  const [fixing, setFixing] = useState<string | null>(null);
+  const fixingRef = useRef<string | null>(null);
   /** Only a click on Refresh shows a spinner; the 2 s background poll stays silent. */
   const [refreshing, setRefreshing] = useState(false);
   const pollInFlight = useRef(false);
@@ -80,6 +92,7 @@ export function FollowCard({
   >(async () => undefined);
   const badSince = useRef<Map<string, number>>(new Map());
   const recoveryAt = useRef<Map<string, number>>(new Map());
+  const recoveries = useRef<Map<string, number>>(new Map());
   const assignmentsRef = useRef(assignments);
   const enabledRef = useRef(enabled);
   /** Re-apply the saved graph once to each new/restarted client, without spamming a broken one. */
@@ -285,6 +298,17 @@ export function FollowCard({
       const leader = leaderKey ? byAccount.get(leaderKey) : null;
       if (!status.enabled || !leader || (status.state !== "waiting" && status.state !== "stuck")) {
         badSince.current.delete(key);
+        recoveries.current.delete(key);
+        return;
+      }
+      // A box that is still at title/character select or zoning has no world position yet;
+      // teleporting it during a hand-off would race the zone the server is already sending.
+      if (instance.state?.login_status !== 2) return;
+      if (fixingRef.current === key) return;
+      if ((recoveries.current.get(key) ?? 0) >= MAX_AUTO_RECOVERIES) {
+        setNotice(
+          `Automatic recovery gave up on ${instance.character?.name ?? instance.name}; use Fix to restart it.`,
+        );
         return;
       }
       const now = Date.now();
@@ -296,20 +320,25 @@ export function FollowCard({
       const zone = leaderState?.zone?.id;
       const myZone = instance.state?.zone?.id;
       if (!position || !zone) return;
-      const px = Number(position.x);
-      const py = Number(position.y);
-      const pz = Number(position.z);
-      if (!Number.isFinite(px) || !Number.isFinite(py) || !Number.isFinite(pz)) return;
+      const wire = serverPosition(position);
+      if (!wire) return;
+      // `far` is measured on the client's ground plane (the leader's x/y).
       const myPosition = instance.state?.player?.position;
       const myX = Number(myPosition?.x);
       const myY = Number(myPosition?.y);
-      const far = Number.isFinite(myX) && Number.isFinite(myY) && Math.hypot(px - myX, py - myY) > 40;
+      const far =
+        Number.isFinite(myX) && Number.isFinite(myY) && Math.hypot(wire.x - myX, wire.z - myY) > 40;
       if (status.state !== "stuck" && !far && zone === myZone) return;
       recoveryAt.current.set(key, now);
+      const attempt = (recoveries.current.get(key) ?? 0) + 1;
+      recoveries.current.set(key, attempt);
+      // `serverPosition` is the boundary conversion: the client's height (`z`) becomes the
+      // server's `y`, and the client's ground `y` becomes the server's `z`. Sending the block
+      // unchanged put Fourdough 543 yalms into the air, out of every entity list.
       const line =
         zone !== myZone
-          ? `//zone ${zone} ${px.toFixed(2)} ${py.toFixed(2)} ${pz.toFixed(2)}`
-          : `//pos ${px.toFixed(2)} ${py.toFixed(2)} ${pz.toFixed(2)}`;
+          ? `//zone ${zone} ${wire.x.toFixed(2)} ${wire.y.toFixed(2)} ${wire.z.toFixed(2)}`
+          : `//pos ${wire.x.toFixed(2)} ${wire.y.toFixed(2)} ${wire.z.toFixed(2)}`;
       try {
         await backend.sendCommand(instance.port, line);
         void backend
@@ -362,6 +391,45 @@ export function FollowCard({
   // every instances refresh, and a new callback used to re-run the effect and poll immediately.
   const pollRef = useRef(poll);
   pollRef.current = poll;
+
+  /**
+   * Kill, relog and zone one box to its line leader. The backend owns the restart because it
+   * has the launch token and the process/helper handles; a local relaunch may come back on a
+   * different control port, so the next instance poll adopts the new row.
+   */
+  const fixOne = useCallback(
+    async (key: string, instance: InstanceView, leaderKey: string) => {
+      if (fixingRef.current) return;
+      const leader = byAccount.get(leaderKey);
+      if (!leader) {
+        setError("The line leader is not running; pick a leader before fixing this box.");
+        return;
+      }
+      const name = instance.character?.name ?? instance.name;
+      const leaderName = leader.character?.name ?? leader.name;
+      fixingRef.current = key;
+      setFixing(key);
+      setError("");
+      setNotice(`Fixing ${name}: killing the client, relogging @${instance.account} and zoning it to ${leaderName}…`);
+      try {
+        const result = await backend.fixFollower(instance.port, leader.port);
+        badSince.current.delete(key);
+        recoveryAt.current.delete(key);
+        recoveries.current.delete(key);
+        setNotice(result.message);
+        // A local relaunch can return on a new control port; give the instance list a beat
+        // to adopt it so the next status poll reads the new process.
+        window.setTimeout(() => void pollRef.current(true), 1500);
+      } catch (caught) {
+        setNotice("");
+        setError(messageOf(caught));
+      } finally {
+        fixingRef.current = null;
+        setFixing(null);
+      }
+    },
+    [byAccount],
+  );
 
   const handleFollowEvent = useCallback(
     async (issuer: InstanceView, event: FollowEvent) => {
@@ -423,7 +491,16 @@ export function FollowCard({
           setAssignments(nextAssignments);
           setEnabled(nextEnabled);
           await sendAll(nextAssignments, nextEnabled);
-          ack(`everyone follows ${characterName(issuerKey) || issuerKey}`);
+          // Follow-me is also the "run to me" panic button: stop Battle on every box so the
+          // follow controller owns movement instead of fighting a camp or pull tick.
+          await Promise.all(
+            [issuerKey, ...targets].map(async (key) => {
+              const target = byAccount.get(key);
+              if (!target) return;
+              await backend.sendCommand(target.port, "//battle stop").catch(() => undefined);
+            }),
+          );
+          ack(`everyone follows ${characterName(issuerKey) || issuerKey} · battle stopped`);
           return;
         }
         const target = resolve(tokens[1]);
@@ -538,6 +615,7 @@ export function FollowCard({
         trail at one yalm; leaders can follow other leaders.
       </p>
       {error && <div className="follow-error">{error}</div>}
+      {notice && <div className="follow-notice">{notice}</div>}
       <div className="follow-list">
         {running.map((instance) => {
           const key = accountKey(instance.account);
@@ -599,6 +677,25 @@ export function FollowCard({
                 ) : (
                   <Badge tone="neutral">—</Badge>
                 )}
+                {leader &&
+                  status &&
+                  instance.state?.login_status === 2 &&
+                  (status.state === "waiting" || status.state === "stuck") && (
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      className="follow-fix"
+                      icon={<Wrench size={11} />}
+                      loading={fixing === key}
+                      disabled={fixing !== null}
+                      draggable={false}
+                      onDragStart={(event) => event.preventDefault()}
+                      onClick={() => void fixOne(key, instance, leader)}
+                      title={`Kill @${instance.account}, relaunch it and zone it to ${byAccount.get(leader)?.character?.name ?? leader}`}
+                    >
+                      Fix
+                    </Button>
+                  )}
                 {leader && (
                   <span className="follow-target">
                     → {byAccount.get(leader)?.character?.name ?? leader}
@@ -631,6 +728,7 @@ export function FollowCard({
         })}
       </div>
       {busy && <Spinner label="Sending follow orders…" />}
+      {fixing && <Spinner label="Restarting the box and zoning it to its leader…" />}
     </Card>
   );
 }

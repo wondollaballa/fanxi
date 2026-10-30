@@ -90,6 +90,20 @@ function scaleLabel(scale: number): string {
   return `${label}×${scale === 2 ? " (recommended)" : ""}`;
 }
 
+/** One display in the picker. The number keeps two displays of the same resolution apart. */
+function monitorOptionLabel(monitor: DisplayMonitor, index: number): string {
+  return `Display ${index + 1} · ${monitor.width} × ${monitor.height}${
+    monitor.primary ? " · main" : ""
+  }`;
+}
+
+/** The detail line under the picker: the display the windows will really open on. */
+function monitorDescription(monitor: DisplayMonitor, index: number): string {
+  return `Display ${index + 1} · ${monitor.width} × ${monitor.height}${
+    monitor.scaleFactor > 1 ? ` at ${monitor.scaleFactor}× scale` : ""
+  } · ${monitor.workWidth} × ${monitor.workHeight} usable${monitor.primary ? " · main" : ""}`;
+}
+
 export function SettingsPage({
   config,
   host64,
@@ -128,6 +142,7 @@ export function SettingsPage({
     gameWidth: number;
     gameHeight: number;
     gameUiScale: number;
+    monitor: string;
   }) => Promise<void>;
   onBuild: (gameDir: string) => Promise<void>;
   onRefresh: () => Promise<void>;
@@ -145,6 +160,7 @@ export function SettingsPage({
   const [gameWidth, setGameWidth] = useState(String(config.gameWidth ?? 1280));
   const [gameHeight, setGameHeight] = useState(String(config.gameHeight ?? 720));
   const [uiScale, setUiScale] = useState(config.gameUiScale ?? 2);
+  const [monitor, setMonitor] = useState(config.monitor ?? "");
   const [display, setDisplay] = useState<DisplayInfo | null>(null);
   const [saving, setSaving] = useState(false);
   const [detecting, setDetecting] = useState(false);
@@ -165,6 +181,7 @@ export function SettingsPage({
     setGameWidth(String(config.gameWidth ?? 1280));
     setGameHeight(String(config.gameHeight ?? 720));
     setUiScale(config.gameUiScale ?? 2);
+    setMonitor(config.monitor ?? "");
   }, [
     config.apiUrl,
     config.gameDir,
@@ -178,6 +195,7 @@ export function SettingsPage({
     config.gameWidth,
     config.gameHeight,
     config.gameUiScale,
+    config.monitor,
     gameDir,
     repoRoot,
   ]);
@@ -199,23 +217,32 @@ export function SettingsPage({
     };
   }, []);
 
-  const primary = useMemo(() => {
-    const monitors = display?.monitors ?? [];
-    return monitors.find((monitor) => monitor.primary) ?? monitors[0] ?? null;
-  }, [display]);
+  const monitors = useMemo(() => display?.monitors ?? [], [display]);
+  const primary = useMemo(
+    () => monitors.find((candidate) => candidate.primary) ?? monitors[0] ?? null,
+    [monitors],
+  );
+  // The display the windows will really open on: the choice, or the main display while the choice
+  // is empty or that display is unplugged.
+  const chosen = useMemo(
+    () => monitors.find((candidate) => candidate.id === monitor) ?? primary,
+    [monitors, monitor, primary],
+  );
+  const missingDisplay =
+    display !== null && monitor !== "" && !monitors.some((candidate) => candidate.id === monitor);
 
   const fullscreen = isFullscreen(windowMode);
   const exceedsDisplay =
-    primary !== null &&
+    chosen !== null &&
     !fullscreen &&
-    (Number(gameWidth) > primary.width || Number(gameHeight) > primary.height);
+    (Number(gameWidth) > chosen.width || Number(gameHeight) > chosen.height);
 
   const presets = useMemo(() => {
-    if (!primary) return STANDARD_RESOLUTIONS;
+    if (!chosen) return STANDARD_RESOLUTIONS;
     return STANDARD_RESOLUTIONS.filter(
-      ([width, height]) => width <= primary.workWidth && height <= primary.workHeight,
+      ([width, height]) => width <= chosen.workWidth && height <= chosen.workHeight,
     );
-  }, [primary]);
+  }, [chosen]);
 
   // A migrated saved.reg can carry a ratio that is not one of the quarter steps. Keep it as the
   // selected option so opening and saving Settings does not silently change the interface size.
@@ -228,11 +255,11 @@ export function SettingsPage({
   // A full screen window is the display's size. Keep the stored resolution in step with it so the
   // interface scale (window / menu) is calculated from the size the game actually opens at.
   useEffect(() => {
-    if (!primary || !isFullscreen(windowMode)) return;
-    const size = displaySize(primary);
+    if (!chosen || !isFullscreen(windowMode)) return;
+    const size = displaySize(chosen);
     setGameWidth(String(size.width));
     setGameHeight(String(size.height));
-  }, [primary, windowMode]);
+  }, [chosen, windowMode]);
 
   const latest = buildEvents[buildEvents.length - 1];
   const progress = latest?.percent ?? null;
@@ -300,17 +327,23 @@ export function SettingsPage({
     if (next === windowMode) return;
     // Leaving full screen gives back a window that fits the display; entering it is handled by the
     // effect above, once the display's own size is known.
-    if (!isFullscreen(next) && isFullscreen(windowMode) && primary) {
-      const size = fittingWindow(primary);
+    if (!isFullscreen(next) && isFullscreen(windowMode) && chosen) {
+      const size = fittingWindow(chosen);
       setGameWidth(String(size.width));
       setGameHeight(String(size.height));
     }
     setWindowMode(next);
   }
 
+  function chooseDisplay(next: string) {
+    // A full-screen window takes the new display's size (the effect above); a windowed one keeps
+    // the size typed below, with a warning when that no longer fits.
+    setMonitor(next);
+  }
+
   function fitToDisplay() {
-    if (!primary) return;
-    const size = fullscreen ? displaySize(primary) : fittingWindow(primary);
+    if (!chosen) return;
+    const size = fullscreen ? displaySize(chosen) : fittingWindow(chosen);
     setGameWidth(String(size.width));
     setGameHeight(String(size.height));
   }
@@ -347,6 +380,7 @@ export function SettingsPage({
         gameWidth: width,
         gameHeight: height,
         gameUiScale: uiScale,
+        monitor,
       });
       notify("Settings saved", "success");
       await onRefresh();
@@ -521,11 +555,24 @@ export function SettingsPage({
         <Card className="settings-card game-window-settings">
           <div className="card-topline">
             <span className="eyebrow">Game window</span>
-            <Badge tone={primary ? "neutral" : "warning"} dot={Boolean(primary)}>
-              {primary ? `${primary.width} × ${primary.height}` : "Display size unavailable"}
+            <Badge tone={chosen ? "neutral" : "warning"} dot={Boolean(chosen)}>
+              {chosen ? `${chosen.width} × ${chosen.height}` : "Display size unavailable"}
             </Badge>
           </div>
-          <div className="form-grid three">
+          <div className="form-grid two">
+            <Field label="Display" hint="Where the launcher window and the game open.">
+              <Select value={monitor} onChange={(event) => chooseDisplay(event.target.value)}>
+                <option value="">Main display</option>
+                {monitors.map((candidate, index) => (
+                  <option key={candidate.id} value={candidate.id}>
+                    {monitorOptionLabel(candidate, index)}
+                  </option>
+                ))}
+                {missingDisplay && (
+                  <option value={monitor}>Last chosen display (not connected)</option>
+                )}
+              </Select>
+            </Field>
             <Field label="Window mode" hint="Used every time the launcher starts a visible client.">
               <Select
                 value={windowMode}
@@ -538,6 +585,8 @@ export function SettingsPage({
                 ))}
               </Select>
             </Field>
+          </div>
+          <div className="form-grid two">
             <Field
               label="Resolution"
               hint={
@@ -554,7 +603,7 @@ export function SettingsPage({
                   max={MAX_DIMENSION}
                   step={2}
                   value={gameWidth}
-                  disabled={fullscreen && Boolean(primary)}
+                  disabled={fullscreen && Boolean(chosen)}
                   aria-label="Game window width"
                   onChange={(event) => setGameWidth(event.target.value)}
                 />
@@ -566,7 +615,7 @@ export function SettingsPage({
                   max={MAX_DIMENSION}
                   step={2}
                   value={gameHeight}
-                  disabled={fullscreen && Boolean(primary)}
+                  disabled={fullscreen && Boolean(chosen)}
                   aria-label="Game window height"
                   onChange={(event) => setGameHeight(event.target.value)}
                 />
@@ -591,7 +640,7 @@ export function SettingsPage({
                 size="sm"
                 variant="ghost"
                 icon={<Maximize2 size={14} />}
-                disabled={!primary}
+                disabled={!chosen}
                 onClick={fitToDisplay}
               >
                 Fit this display
@@ -614,23 +663,31 @@ export function SettingsPage({
           <p className="display-note">
             <Monitor size={13} />
             <span>
-              {primary
-                ? `${primary.name ?? "Primary display"} · ${primary.width} × ${primary.height}${
-                    primary.scaleFactor > 1 ? ` at ${primary.scaleFactor}× display scale` : ""
-                  } · ${primary.workWidth} × ${primary.workHeight} usable`
+              {chosen
+                ? monitorDescription(chosen, monitors.indexOf(chosen))
                 : "Display details are unavailable; the resolution can still be typed in."}
             </span>
           </p>
+          {missingDisplay && (
+            <p className="display-note display-warning">
+              <TriangleAlert size={13} />
+              <span>
+                The display chosen last is not connected; the launcher and the game fall back to the
+                main display.
+              </span>
+            </p>
+          )}
           {exceedsDisplay && (
             <p className="display-note display-warning">
               <TriangleAlert size={13} />
-              <span>Larger than the primary display; part of the window may open off-screen.</span>
+              <span>Larger than the chosen display; part of the window may open off-screen.</span>
             </p>
           )}
           <p className="console-hint">
-            Applied the next time the launcher starts the game. Windowed and borderless windows
-            use the resolution above; full screen and borderless full screen cover the primary
-            display. Interface scale sets the game's menu resolution independently.
+            The launcher window moves to the chosen display when you save. Applied to the game the
+            next time the launcher starts it: windowed and borderless windows use the resolution
+            above, and full screen and borderless full screen cover the chosen display. Interface
+            scale sets the game's menu resolution independently.
           </p>
         </Card>
 

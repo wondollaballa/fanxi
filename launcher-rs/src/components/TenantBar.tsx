@@ -1,5 +1,6 @@
 import { UsersRound } from "lucide-react";
 import type { InstanceView, Tenant } from "../types";
+import { characterJobPair, instanceJobPair, jobPairAbbr, jobPairName } from "../lib/format";
 import { Badge, Button, Select } from "./ui";
 
 /**
@@ -28,6 +29,11 @@ export function TenantBar({
           instance.alive && Number(instance.character?.id) === Number(tenant.character.id),
       ) ?? null
     : null;
+  const jobPair = tenant
+    ? live
+      ? instanceJobPair(live)
+      : characterJobPair(tenant.character)
+    : null;
 
   return (
     <section className="tenant-bar" aria-label="Selected tenant">
@@ -52,7 +58,10 @@ export function TenantBar({
                   <span className="tenant-offline">Not running</span>
                 )}
               </div>
-              <span className="tenant-account">@{tenant.account}</span>
+              <span className="tenant-account" title={jobPair ? jobPairName(jobPair) : undefined}>
+                @{tenant.account}
+                {jobPair ? ` · ${jobPairAbbr(jobPair)}` : ""}
+              </span>
             </div>
           </div>
 

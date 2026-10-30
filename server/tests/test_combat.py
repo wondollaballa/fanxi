@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import random
 import unittest
+from dataclasses import replace
 from pathlib import Path
 import sys
 
@@ -129,10 +130,87 @@ class MagicTest(unittest.TestCase):
         self.assertEqual(combat.cast_time(3000, 50), 1500)
         self.assertEqual(combat.cast_time(3000, 99), 1500)   # 50% cap
         self.assertEqual(combat.cast_time(1000, 99), 500)    # floor
+        self.assertEqual(combat.cast_time(0, 0), 0)          # Chainspell / Spontaneity
+        self.assertEqual(combat.cast_time(0, 50), 0)
 
     def test_store_tp_scales_tp(self):
         self.assertEqual(combat.tp_gain(100, 0), 100)
         self.assertEqual(combat.tp_gain(100, 10), 110)
+
+
+class EnspellTest(unittest.TestCase):
+    """BG-wiki's en-spell curve and the three tiers' different application rules."""
+
+    def hit(self, **overrides) -> tuple[int, int]:
+        values = dict(tier=1, skill=500, element=1, potency=65, counter=0,
+                      bonus=0, percent=0, merit=0, composure=False, target_mods={})
+        values.update(overrides)
+        return combat.enspell_hit(**values)
+
+    def test_base_damage_curve_is_continuous_at_180(self):
+        self.assertEqual(combat.enspell_potency(0), 5)
+        self.assertEqual(combat.enspell_potency(179), 24)
+        self.assertEqual(combat.enspell_potency(180), 25)
+        self.assertEqual(combat.enspell_potency(300), 40)
+        self.assertEqual(combat.enspell_potency(400), 52)
+        self.assertEqual(combat.enspell_potency(500), 65)
+        self.assertEqual(combat.enspell_potency(650), 83)
+
+    def test_tier_two_cap_is_double_the_base(self):
+        self.assertEqual(combat.enspell_cap(500), 130)
+        self.assertEqual(combat.enspell_cap(0), 10)
+
+    def test_tier_one_is_the_cast_time_base(self):
+        self.assertEqual(self.hit(), (65, 65))
+        # The stored value does not move for tier I: the damage is frozen at cast.
+        self.assertEqual(self.hit(potency=42), (42, 42))
+
+    def test_flat_gear_and_merits_join_the_base(self):
+        # 65 + 35 (Enriching Sword +1) + 15 (five En-spell merit ranks) = 115.
+        self.assertEqual(self.hit(bonus=35, merit=15), (115, 65))
+
+    def test_composure_triples_and_percent_gear_is_additive(self):
+        self.assertEqual(self.hit(composure=True), (195, 65))
+        self.assertEqual(self.hit(percent=50), (97, 65))      # 65 * 1.5
+        self.assertEqual(self.hit(percent=50, composure=True), (227, 65))  # 65 * 3.5
+
+    def test_tier_two_ramps_one_point_per_round_and_caps_at_double(self):
+        self.assertEqual(self.hit(tier=2, counter=0), (65, 1))
+        self.assertEqual(self.hit(tier=2, counter=1), (66, 2))
+        self.assertEqual(self.hit(tier=2, counter=64), (129, 65))
+        self.assertEqual(self.hit(tier=2, counter=65), (130, 66))
+        # The counter keeps rising past the cap; a later skill change can use it.
+        self.assertEqual(self.hit(tier=2, counter=100), (130, 101))
+        self.assertEqual(self.hit(tier=2, skill=650, counter=100), (166, 101))
+
+    def test_tier_three_decays_and_reports_its_last_charge(self):
+        self.assertEqual(self.hit(tier=3, potency=62), (62, 61))
+        self.assertEqual(self.hit(tier=3, potency=1), (1, 0))
+        self.assertEqual(self.hit(tier=3, potency=0), (0, 0))
+
+    def test_magic_damage_and_mab_do_not_apply(self):
+        """Retail excludes the Magic Damage statistic and MAB/MDB from en-spells."""
+        plain = self.hit()
+        self.assertEqual(self.hit(bonus=0), plain)
+        # Only the resistance and MDT terms are read from the target's modifiers.
+        self.assertEqual(self.hit(target_mods={mod.MATT: 100, mod.MDEF: -100,
+                                               mod.MAGIC_DAMAGE: 200}), plain)
+
+    def test_target_magic_damage_taken_applies(self):
+        self.assertEqual(self.hit(target_mods={mod.DMGMAGIC: -5000}), (32, 65))
+
+    def test_elemental_resistance_is_the_expected_resist_tier(self):
+        self.assertAlmostEqual(combat.enspell_resist(0), 1.0)
+        self.assertAlmostEqual(combat.enspell_resist(50), 0.668, places=4)
+        self.assertAlmostEqual(combat.enspell_resist(100), 0.0625)
+        # Fire Magic Evasion only resists fire, and it lowers that hit's damage.
+        self.assertLess(self.hit(target_mods={mod.FIRE_MEVA: 50})[0], 65)
+        self.assertEqual(self.hit(target_mods={mod.ICE_MEVA: 50})[0], 65)
+
+    def test_enlight_and_endark_charges(self):
+        self.assertEqual(combat.enlight_potency(400), 62)
+        self.assertEqual(combat.enlight_potency(500), 75)
+        self.assertEqual(combat.enlight_potency(400, tier=2), 92)
 
 
 class PDifTest(unittest.TestCase):
@@ -243,6 +321,9 @@ class DefenceTest(unittest.TestCase):
         self.assertEqual(combat.block_rate(3, 424, 300), int(45 + 124 * 0.2325))
         self.assertGreater(combat.block_rate(5, 424, 300), combat.block_rate(4, 424, 300))
         self.assertEqual(combat.block_rate(3, 0, 999), 5)
+        # The Shield Mastery trait's percentage is added to the roll.
+        plain = combat.block_rate(3, 424, 300)
+        self.assertEqual(combat.block_rate(3, 424, 300, mastery=20), plain + 20)
 
     def defender(self, **kwargs) -> combat.Fighter:
         base = dict(level=99, attack=500, defense=500, accuracy=500, evasion=400,
@@ -347,6 +428,21 @@ class SheetTest(unittest.TestCase):
         two_hand = stats.build_character(char, {}, {4: 424}, stats.Weapon(skill=4, dmg=150))
         self.assertGreater(two_hand.attack, one_hand.attack)
 
+    def test_smite_raises_two_handed_attack_by_its_256th_value(self):
+        """DRK's Smite is +76/256 Attack with a 2H weapon: 29%, not 76 flat."""
+        char = {"race": 1, "main_job": 8, "main_level": 99, "sub_job": 0, "sub_level": 0}
+        weapon = stats.Weapon(skill=7, dmg=400)
+        plain = stats.build_character(char, {}, {7: 424}, weapon)
+        smite = stats.build_character(char, {mod.SMITE: 76}, {7: 424}, weapon)
+        self.assertEqual(smite.attack, plain.attack + plain.attack * 29 // 100)
+
+    def test_smite_does_not_apply_to_one_handed_weapons(self):
+        char = {"race": 1, "main_job": 8, "main_level": 99, "sub_job": 0, "sub_level": 0}
+        weapon = stats.Weapon(skill=3, dmg=150)
+        plain = stats.build_character(char, {}, {3: 424}, weapon)
+        smite = stats.build_character(char, {mod.SMITE: 76}, {3: 424}, weapon)
+        self.assertEqual(smite.attack, plain.attack)
+
     def test_defense_uses_vit_and_level(self):
         char = {"race": 1, "main_job": 1, "main_level": 99, "sub_job": 0, "sub_level": 0}
         sheet = stats.build_character(char, {}, {})
@@ -370,6 +466,59 @@ class SheetTest(unittest.TestCase):
         fast = stats.Sheet(fighter=stats.build_monster(1).fighter, delay=450, haste=0.25)
         self.assertEqual(fast.attack_delay_ms, int(450 * 1000 / 60 * 0.75))
 
+    def test_haste_pools_add_and_cap_separately(self):
+        fighter = stats.build_monster(1).fighter
+        combined = stats.Sheet(fighter=fighter, delay=450, haste=0.25,
+                               haste_magic=0.15, haste_ability=0.05)
+        # Equipment 25% + magic 15% + job ability 5% = 45% delay reduction.
+        self.assertEqual(combined.attack_delay_ms, 4125)
+
+        geared = stats.Sheet(fighter=fighter, delay=450, haste=0.50)
+        self.assertEqual(geared.attack_delay_ms, 5625)          # 25% equipment cap
+        hasted = stats.Sheet(fighter=fighter, delay=450, haste_magic=0.50)
+        self.assertEqual(hasted.attack_delay_ms, 4218)          # 43.75% magic cap
+        samba = stats.Sheet(fighter=fighter, delay=450, haste_ability=0.30)
+        self.assertEqual(samba.attack_delay_ms, 5625)           # 25% ability cap
+
+    def test_haste_pools_share_the_eighty_percent_floor(self):
+        sheet = stats.Sheet(fighter=stats.build_monster(1).fighter, delay=450,
+                            haste=0.25, haste_magic=0.4375, haste_ability=0.25)
+        self.assertEqual(sheet.attack_delay_ms, 1500)           # 450 delay x 0.2
+
+    def test_haste_pools_expose_their_caps(self):
+        sheet = stats.Sheet(fighter=stats.build_monster(1).fighter, delay=450,
+                            haste=0.50, haste_magic=0.50, haste_ability=0.30)
+        self.assertEqual(sheet.haste_pools, (0.25, 0.4375, 0.25))
+        self.assertAlmostEqual(sheet.total_haste, 0.9375)
+
+    def test_dual_wield_floor_uses_the_delay_before_dual_wield(self):
+        """The 80% cap is a fifth of the base delay, not a fifth of the DW delay.
+
+        A 35% Dual Wield pair with every haste pool capped would otherwise reach
+        0.65 x 0.20 = 13% of the base, which is faster than retail and pays less TP
+        per hit.  Retail's own rule is (1 - DW) x (1 - haste) >= 0.2.
+        """
+        fighter = stats.build_monster(1).fighter
+        sheet = stats.Sheet(fighter=fighter, delay=135, base_delay=208,
+                            haste=0.25, haste_magic=0.4375, haste_ability=0.25)
+        # 208 per-hand base x 20%, not 135 x 20%.
+        self.assertEqual(sheet.attack_delay_ms, int(208 * 1000 / 60 * 0.2))
+
+    def test_h2h_floor_uses_the_delay_before_martial_arts(self):
+        """Martial Arts is outside the haste pools; the 80% floor still uses the base."""
+        fighter = stats.build_monster(1).fighter
+        sheet = stats.Sheet(fighter=fighter, delay=366, base_delay=566,
+                            haste=0.25, haste_magic=0.4375, haste_ability=0.25)
+        self.assertEqual(sheet.attack_delay_ms, int(566 * 1000 / 60 * 0.2))
+
+    def test_tp_per_hit_applies_store_tp(self):
+        sheet = stats.Sheet(
+            fighter=replace(stats.build_monster(1).fighter,
+                            mods={mod.STORETP: 34}),
+            weapon=stats.Weapon(skill=4, delay=431), delay=431)
+        self.assertEqual(sheet.tp_per_hit(), 122)
+        self.assertEqual(sheet.tp_per_hit_with_store_tp(), 163)
+
     def test_monster_stats_grow_with_level(self):
         low = stats.build_monster(10).fighter
         high = stats.build_monster(99).fighter
@@ -379,7 +528,7 @@ class SheetTest(unittest.TestCase):
 
 
 class DualWieldTest(unittest.TestCase):
-    """Two one-handed weapons plus the trait make an off-hand swing and a faster round."""
+    """Two one-handed weapons make an off-hand swing; the trait makes the round faster."""
 
     char = {"race": 1, "main_job": 13, "main_level": 99, "sub_job": 0, "sub_level": 0}
     main = stats.Weapon(skill=9, dmg=150, delay=227)
@@ -410,12 +559,24 @@ class DualWieldTest(unittest.TestCase):
         # The off hand uses the dagger's skill, so its Accuracy is lower than the katana's.
         self.assertLess(sheet.sub_fighter.accuracy, sheet.fighter.accuracy)
 
-    def test_no_off_hand_without_the_dual_wield_trait(self):
+    def test_two_one_handed_weapons_swing_without_the_trait(self):
+        """A worn second weapon has to swing; the trait only buys the delay cut.
+
+        Fanxi's equip rules let any job fill the sub slot with a one-hander (a Red
+        Mage with a sword and a club), so the round cannot wait for the Ninja trait.
+        Without it the round is the plain average of the two delays.
+        """
         sheet = stats.build_character(
             self.char, {}, {9: 424}, self.main, self.sub)
-        self.assertFalse(sheet.dual_wield)
-        self.assertIsNone(sheet.sub_fighter)
-        self.assertEqual(sheet.delay, 227)
+        self.assertTrue(sheet.dual_wield)
+        self.assertIsNotNone(sheet.sub_fighter)
+        self.assertTrue(sheet.sub_fighter.off_hand)
+        self.assertEqual(sheet.sub_fighter.weapon_dmg, 120)
+        self.assertEqual(sheet.dual_wield_percent, 0)
+        self.assertEqual(sheet.delay, (227 + 190) // 2)
+        # TP still comes from each weapon's own delay, unhalved.
+        self.assertEqual(sheet.tp_per_hit(), 72)
+        self.assertEqual(sheet.tp_per_hit(off_hand=True), 63)
 
     def test_a_shield_is_not_an_off_hand_weapon(self):
         shield = stats.Weapon(item_id=12345)
@@ -433,7 +594,8 @@ class DualWieldTest(unittest.TestCase):
         self.assertIsNone(sheet.sub_fighter)
         self.assertEqual(sheet.delay, 450)
 
-    def test_gear_dual_wield_without_the_trait_does_not_enable_the_off_hand(self):
+    def test_an_explicit_disable_drops_the_off_hand(self):
+        """Callers that model a one-hand-only sheet can still say so."""
         sheet = stats.build_character(
             self.char, {mod.DUAL_WIELD: 10}, {9: 424}, self.main, self.sub,
             dual_wield=False)
@@ -544,6 +706,110 @@ class MeleeTest(unittest.TestCase):
         scaled = combat.melee(attacker.fighter, mob, zone=246, rng=rng, ftp=2.0)
         if not plain.missed and not scaled.missed:
             self.assertGreater(scaled.damage, plain.damage)
+
+    def test_flat_damage_is_added_before_damage_taken(self):
+        """Souleater is flat damage, but the target's PDT still applies to it."""
+        char = {"race": 1, "main_job": 8, "main_level": 99}
+        attacker = stats.build_character(char, {}, {7: 424}, stats.Weapon(skill=7, dmg=400))
+        target = replace(stats.build_monster(90).fighter, mods={mod.DMGPHYS: -5000})
+        for seed in range(20):
+            plain = combat.melee(attacker.fighter, target, zone=246,
+                                 rng=random.Random(seed))
+            boosted = combat.melee(attacker.fighter, target, zone=246,
+                                   rng=random.Random(seed), flat_damage=100)
+            if plain.missed or boosted.missed:
+                continue
+            self.assertEqual(boosted.damage - plain.damage, 50)
+            return
+        self.fail("no seed produced two landing hits")
+
+
+class DamageCapTest(unittest.TestCase):
+    """One action result never carries more than 99,999.
+
+    Retail's client prints at most five digits per damage line, so a hit, a weapon
+    skill's summed hits, a spell and a skillchain all stop at the same ceiling.  The
+    clamp lives in ``combat.cap_damage`` and is applied where the number is built, so
+    the HP the target loses matches the number the client is told.
+    """
+
+    def test_the_helper_clips_at_the_ceiling(self):
+        self.assertEqual(combat.DAMAGE_CAP, 99999)
+        self.assertEqual(combat.cap_damage(-25), 0)
+        self.assertEqual(combat.cap_damage(99998), 99998)
+        self.assertEqual(combat.cap_damage(99999), 99999)
+        self.assertEqual(combat.cap_damage(100000), 99999)
+        self.assertEqual(combat.cap_damage(10 ** 9), 99999)
+
+    def test_a_swing_that_would_print_six_digits_is_clipped(self):
+        attacker = combat.Fighter(
+            level=99, attack=10 ** 7, defense=1, accuracy=10 ** 7, evasion=0,
+            strength=10 ** 6, dexterity=100, vitality=10, agility=10, is_pc=True,
+            weapon_skill=7, weapon_dmg=10 ** 6, weapon_rank=16)
+        target = combat.Fighter(
+            level=1, attack=1, defense=1, accuracy=1, evasion=0, strength=1,
+            dexterity=1, vitality=1, agility=1, is_pc=False)
+        rng = random.Random(4)
+        landed = [combat.melee(attacker, target, zone=1, rng=rng)
+                  for _ in range(40)]
+        landed = [hit.damage for hit in landed if not hit.missed]
+        self.assertTrue(landed)
+        self.assertTrue(all(damage == combat.DAMAGE_CAP for damage in landed))
+
+    def test_a_nuke_that_would_print_six_digits_is_clipped(self):
+        damage = combat.magic_damage(
+            base=10 ** 6, multiplier=10.0, caster_int=999, target_int=0,
+            skill=424, mods={}, target_mods={}, target_level=1)
+        self.assertEqual(damage, combat.DAMAGE_CAP)
+
+    def test_an_ordinary_hit_is_not_touched(self):
+        char = {"race": 1, "main_job": 1, "main_level": 99}
+        attacker = stats.build_character(char, {}, {9: 424}, stats.Weapon(skill=9, dmg=150))
+        mob = stats.build_monster(90).fighter
+        for seed in range(10):
+            hit = combat.melee(attacker.fighter, mob, zone=246,
+                               rng=random.Random(seed))
+            self.assertLess(hit.damage, combat.DAMAGE_CAP)
+
+
+class MagicWeaponSkillTest(unittest.TestCase):
+    """The magical-WS formula: weapon level, WSC, fTP, dSTAT, Magic Damage and MAB."""
+
+    def test_level_term_uses_the_weapon_item_level(self):
+        # Level 99 without an iLvl weapon: 5 + floor(98 * 1.5) = 152.
+        self.assertEqual(combat.magic_weaponskill(
+            wsc=0, weapon_level=0, level=99, ftp=1.0), 152)
+        # iLvl 119: 152 + floor(20 * 2.45) = 201.
+        self.assertEqual(combat.magic_weaponskill(
+            wsc=0, weapon_level=119, level=99, ftp=1.0), 201)
+        # WSC and fTP multiply the base before anything is added.
+        self.assertEqual(combat.magic_weaponskill(
+            wsc=100, weapon_level=119, level=99, ftp=2.0), (201 + 100) * 2)
+
+    def test_elemental_ws_augment_multiplies_only_the_ftp_part(self):
+        # 201 + 100 WSC = 301, x2 fTP, x2 (+100% augment) = 1204,
+        # then dSTAT and flat Magic Damage are added outside that multiplier.
+        self.assertEqual(combat.magic_weaponskill(
+            wsc=100, weapon_level=119, level=99, ftp=2.0,
+            elemental_ws=100, dstat=50, magic_damage=10), 1264)
+
+    def test_wsd_affinity_mab_and_resist_stack(self):
+        # 201 + 99 Magic Damage + 1 dSTAT = 301; x1.5 WSD = 451;
+        # x1.5 light affinity = 676; x2 MAB = 1352; x0.5 resist x0.5 MDT = 338.
+        self.assertEqual(combat.magic_weaponskill(
+            wsc=0, weapon_level=119, level=99, ftp=1.0, dstat=1,
+            magic_damage=99, wsd=50, affinity=50, mab=100, mdb=0,
+            resist=0.5, damage_multiplier=0.5), 338)
+
+    def test_target_mdb_floor_is_minus_fifty_percent(self):
+        # MDB -100 still divides by 0.5, not by zero or a negative.
+        self.assertEqual(combat.magic_weaponskill(
+            wsc=0, weapon_level=119, level=99, ftp=1.0, mdb=-100), 402)
+
+    def test_magic_weaponskill_shares_the_99999_ceiling(self):
+        self.assertEqual(combat.magic_weaponskill(
+            wsc=10 ** 6, weapon_level=119, level=99, ftp=10.0),
+            combat.DAMAGE_CAP)
 
 
 if __name__ == "__main__":

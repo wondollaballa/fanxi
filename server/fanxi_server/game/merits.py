@@ -75,6 +75,15 @@ COSTS = {
 }
 
 # merit id -> (category id, cost key, max upgrades, value)
+# Samurai's Shikikoyo merit row (group 2): +12% TP shared a rank.
+SHIKIKOYO = 0x0AC0
+KILLER_INSTINCT = 0x0A02
+
+# The Bard group-1 rows the song potency reads (see zone.song_flat_bonus).
+MINNE_EFFECT = 0x03C4
+MINUET_EFFECT = 0x03C6
+MADRIGAL_EFFECT = 0x03C8
+
 MERITS = {
     0x0040: (0x0040, 'hp_mp', 15, 10),  # hp_mp / max_hp
     0x0042: (0x0040, 'hp_mp', 15, 10),  # hp_mp / max_mp
@@ -361,6 +370,22 @@ def next_cost(merit_id: int, count: int) -> int:
     ladder = COSTS[entry[1]]
     count = int(count)
     return 0 if count >= len(ladder) else int(ladder[count])
+
+
+def merit_cost(merit_id: int, count: int) -> int:
+    """Merit points already spent on ``count`` ranks of one merit."""
+    entry = MERITS.get(int(merit_id))
+    if entry is None:
+        return 0
+    ladder = COSTS[entry[1]]
+    count = max(0, min(int(count), int(entry[2]), len(ladder)))
+    return sum(int(cost) for cost in ladder[:count])
+
+
+def total_cost(counts: dict[int, int]) -> int:
+    """The point cost of every bought rank in a ``merit id -> upgrades`` map."""
+    return sum(merit_cost(int(merit_id), int(upgrades))
+               for merit_id, upgrades in (counts or {}).items())
 
 
 def max_upgrades(merit_id: int) -> int:

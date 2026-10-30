@@ -1,8 +1,9 @@
-import { useEffect, useState } from "react";
-import type { ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { KeyboardEvent, ReactNode } from "react";
 import {
   Flag,
   ListChecks,
+  Search,
   ShoppingCart,
   Swords,
   Users,
@@ -11,6 +12,8 @@ import {
 import type { CharacterData, OboroCopy } from "../types";
 import { formatNumber, JOB_ABBRS, jobName, NATIONS, pct } from "../lib/format";
 import { Badge, Button, Card, ProgressBar, Select, TextInput } from "./ui";
+
+type GearRow = CharacterData["augments"][number];
 
 type RunAction = (
   action: string,
@@ -38,6 +41,15 @@ const CONTAINERS: Record<number, string> = {
 
 function whereLabel(container: number): string {
   return CONTAINERS[container] ?? `Bag ${container}`;
+}
+
+/** "capped · Rank 30" or "Rank 7" for the copy's current augment block. */
+function currentRankLabel(item: GearRow): string {
+  if (!item.current) return "";
+  const maxRank = Math.max(...item.paths.map((path) => path.rank));
+  return item.current.rank >= maxRank
+    ? `capped · Rank ${item.current.rank}`
+    : `Rank ${item.current.rank}`;
 }
 
 function rankFor(data: CharacterData, nation: number): number {
@@ -87,6 +99,10 @@ export function ProgressCards({
     const first = data.augments.find((item) => item.kind !== "oboro");
     return first ? `${first.container}:${first.slot}` : null;
   });
+  const [gearQuery, setGearQuery] = useState("");
+  const [gearOpen, setGearOpen] = useState(false);
+  const [gearActive, setGearActive] = useState(0);
+  const gearPickerRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     setCrafts(Object.fromEntries(data.crafts.map((craft) => [craft.skill_id, craft.value])));
@@ -104,6 +120,61 @@ export function ProgressCards({
     gear.find((item) => `${item.container}:${item.slot}` === augmentKey) ??
     gear[0] ??
     null;
+  /** The top rank any of the item's paths reaches; a current block at it is capped. */
+  const selectedMaxRank = selectedAugment
+    ? Math.max(...selectedAugment.paths.map((path) => path.rank))
+    : 0;
+  const selectedCapped = Boolean(
+    selectedAugment?.current && selectedAugment.current.rank >= selectedMaxRank,
+  );
+  const filteredGear = useMemo(() => {
+    const want = gearQuery.trim().toLocaleLowerCase();
+    if (!want) return gear;
+    return gear.filter((item) =>
+      `${item.name} ${item.set} ${item.slot_name} ${item.kind} ${whereLabel(item.container)}`
+        .toLocaleLowerCase()
+        .includes(want),
+    );
+  }, [gear, gearQuery]);
+
+  useEffect(() => {
+    setGearActive(0);
+  }, [gearQuery]);
+
+  useEffect(() => {
+    function onPointerDown(event: MouseEvent) {
+      if (gearPickerRef.current && !gearPickerRef.current.contains(event.target as Node)) {
+        setGearOpen(false);
+      }
+    }
+    document.addEventListener("mousedown", onPointerDown);
+    return () => document.removeEventListener("mousedown", onPointerDown);
+  }, []);
+
+  function chooseGear(item: GearRow) {
+    setAugmentKey(`${item.container}:${item.slot}`);
+    setGearQuery("");
+    setGearOpen(false);
+  }
+
+  function onGearKeyDown(event: KeyboardEvent<HTMLInputElement>) {
+    if (event.key === "ArrowDown") {
+      event.preventDefault();
+      setGearOpen(true);
+      setGearActive((index) => Math.min(Math.max(0, filteredGear.length - 1), index + 1));
+    } else if (event.key === "ArrowUp") {
+      event.preventDefault();
+      setGearOpen(true);
+      setGearActive((index) => Math.max(0, index - 1));
+    } else if (event.key === "Enter") {
+      if (gearOpen && filteredGear.length) {
+        event.preventDefault();
+        chooseGear(filteredGear[Math.min(gearActive, filteredGear.length - 1)]);
+      }
+    } else if (event.key === "Escape" || event.key === "Tab") {
+      setGearOpen(false);
+    }
+  }
 
   function saveRank() {
     run(
@@ -441,28 +512,73 @@ export function ProgressCards({
         <Head
           icon={<Swords size={17} />}
           title="RP"
-          hint="Cap a path on Odyssey, Limbus or Unity gear in the inventory"
+          hint="Cap a path on Odyssey, Limbus, Temenos or Unity gear in the inventory"
           badge={<Badge tone="accent">{gear.length} pieces</Badge>}
         />
         {gear.length === 0 ? (
           <p className="data-note">
-            No Odyssey, Limbus or Unity gear in the inventory. Those pieces show here once
-            they are in a bag; Oboro weapons have their own card below.
+            No Odyssey, Limbus, Temenos or Unity gear in the inventory. Those pieces show
+            here once they are in a bag; Oboro weapons have their own card below.
           </p>
         ) : (
           <>
-            <Select
-              value={augmentKey ?? ""}
-              onChange={(event) => setAugmentKey(event.target.value)}
-              aria-label="Augmentable item"
-            >
-              {gear.map((item) => (
-                <option key={`${item.container}:${item.slot}`} value={`${item.container}:${item.slot}`}>
-                  {item.name} · {whereLabel(item.container)}#{item.slot}
-                  {item.current ? ` · Rank ${item.current.rank}` : ""}
-                </option>
-              ))}
-            </Select>
+            <div className="armory-search" style={{ gridTemplateColumns: "minmax(0, 1fr)" }}>
+              <div className="armory-typeahead" ref={gearPickerRef}>
+                <div className="input-with-icon">
+                  <Search size={15} />
+                  <TextInput
+                    value={gearQuery}
+                    onChange={(event) => {
+                      setGearQuery(event.target.value);
+                      setGearOpen(true);
+                    }}
+                    onFocus={() => setGearOpen(true)}
+                    onKeyDown={onGearKeyDown}
+                    placeholder={
+                      selectedAugment
+                        ? `${selectedAugment.name} · ${whereLabel(selectedAugment.container)}#${selectedAugment.slot}`
+                        : "Search RP gear…"
+                    }
+                    aria-label="Search augmentable item"
+                    role="combobox"
+                    aria-autocomplete="list"
+                    aria-expanded={gearOpen}
+                    aria-controls="rp-gear-list"
+                    autoComplete="off"
+                  />
+                </div>
+                {gearOpen && (
+                  <div className="armory-menu" id="rp-gear-list" role="listbox" aria-label="RP gear">
+                    {filteredGear.length === 0 && (
+                      <p className="armory-menu-note">No gear matches “{gearQuery.trim()}”.</p>
+                    )}
+                    {filteredGear.map((item, index) => (
+                      <button
+                        key={`${item.container}:${item.slot}`}
+                        type="button"
+                        role="option"
+                        aria-selected={index === gearActive}
+                        className={index === gearActive ? "armory-option is-active" : "armory-option"}
+                        onMouseEnter={() => setGearActive(index)}
+                        onMouseDown={(event) => event.preventDefault()}
+                        onClick={() => chooseGear(item)}
+                      >
+                        <span className="armory-option-text">
+                          <strong>{item.name}</strong>
+                          <small>
+                            {item.set || item.kind} · {whereLabel(item.container)}#{item.slot}
+                            {item.current ? ` · ${currentRankLabel(item)}` : ""}
+                          </small>
+                        </span>
+                      </button>
+                    ))}
+                    {filteredGear.length > 0 && (
+                      <p className="armory-menu-foot">↑↓ to move · Enter to select</p>
+                    )}
+                  </div>
+                )}
+              </div>
+            </div>
             {selectedAugment && (
               <>
                 <div className="data-row" style={{ marginTop: 10 }}>
@@ -470,18 +586,37 @@ export function ProgressCards({
                     {selectedAugment.set || selectedAugment.kind} · {selectedAugment.slot_name}
                   </span>
                   <strong>
-                    {selectedAugment.current
-                      ? `Path ${selectedAugment.current.path} · Rank ${selectedAugment.current.rank} · ${formatNumber(selectedAugment.current.rp)} RP`
-                      : "Not augmented"}
+                    {selectedAugment.current ? (
+                      <>
+                        <Badge tone={selectedCapped ? "success" : "accent"}>
+                          {selectedCapped ? "Capped" : "Augmented"}
+                        </Badge>{" "}
+                        Path {selectedAugment.current.path} · Rank{" "}
+                        {selectedAugment.current.rank} ·{" "}
+                        {formatNumber(selectedAugment.current.rp)} RP
+                      </>
+                    ) : (
+                      "Not augmented"
+                    )}
                   </strong>
                 </div>
                 <div className="data-paths">
                   {selectedAugment.paths.map((path) => {
                     const key = `augment-${selectedAugment.container}-${selectedAugment.slot}-${path.key}`;
+                    const current = selectedAugment.current;
+                    const onPath = Boolean(current && current.path === path.key);
+                    const capped = Boolean(onPath && current && current.rank >= path.rank);
                     return (
-                      <div className="data-path" key={path.key}>
+                      <div className={onPath ? "data-path is-current" : "data-path"} key={path.key}>
                         <div className="data-path-head">
-                          <strong>{path.label}</strong>
+                          <strong>
+                            {path.label}
+                            {capped
+                              ? " · capped"
+                              : onPath && current
+                                ? ` · current (R${current.rank})`
+                                : ""}
+                          </strong>
                           <span>
                             Rank {path.rank} · {formatNumber(path.rp)} RP
                           </span>
@@ -495,7 +630,12 @@ export function ProgressCards({
                           size="sm"
                           variant="secondary"
                           loading={busy === key}
-                          disabled={busy !== null && busy !== key}
+                          disabled={capped || (busy !== null && busy !== key)}
+                          title={
+                            current && !onPath
+                              ? `Replaces the current Path ${current.path} · Rank ${current.rank}`
+                              : undefined
+                          }
                           onClick={() =>
                             run(
                               "progress",
@@ -510,7 +650,7 @@ export function ProgressCards({
                             )
                           }
                         >
-                          Cap path
+                          {capped ? "Capped" : onPath ? "Finish path" : current ? "Change path" : "Cap path"}
                         </Button>
                       </div>
                     );

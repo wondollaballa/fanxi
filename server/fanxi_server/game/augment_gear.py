@@ -14,10 +14,16 @@ accumulated total for the client's curve; the caps are the curve maxima in
 Unity's rank-15 point on curve A is 1,110, and Oboro uses curve A at
 R15/R20/R25.  Capping a path writes rank, tier, bundle and RP in one block; the
 item's 0x020 attribute packet carries it back to the client on ``//reload``.
+
+The Temenos Furnace pieces (Alabaster and Murky Matter) are the exception:
+Alabaster Mantle, Murky Mantle and Murky Ring carry a standard five-slot block
+of fixed Rank 30 rows, so :mod:`temenos` supplies the block and ``cap`` writes
+it as-is.  The Alabaster Earring's ``All Attr.+10`` row has no standard id, so
+that one piece carries client bundle 468 instead.
 """
 from __future__ import annotations
 
-from . import augments, limbus, oboro, odyssey, unity
+from . import augments, limbus, oboro, odyssey, temenos, unity
 
 RP_ODYSSEY = 4750
 RP_LIMBUS = 55800
@@ -96,6 +102,11 @@ def entries() -> dict[int, dict]:
             "paths": [_path("A", "Rank 15 (Unity)", int(item["bundle"]), 15, 0,
                             RP_UNITY, 0, item.get("augments"))],
         }
+    for entry in temenos.entries():
+        item_id = int(entry["item_id"])
+        if item_id in out:
+            continue
+        out[item_id] = entry
     for entry in oboro.entries():
         item_id = int(entry["item_id"])
         if item_id in out:
@@ -116,6 +127,10 @@ def inventory_items(service, character_id: int) -> list[dict]:
         entry = registry.get(int(item["item_id"]))
         if entry is None:
             continue
+        if entry["kind"] == "temenos":
+            current = temenos.current(entry, item.get("extra"))
+        else:
+            current = augments.decode(item.get("extra"))
         rows.append({
             "container": int(item["container"]),
             "slot": int(item["slot"]),
@@ -125,7 +140,7 @@ def inventory_items(service, character_id: int) -> list[dict]:
             "set": entry.get("set") or "",
             "kind": entry["kind"],
             "quantity": int(item.get("quantity") or 1),
-            "current": augments.decode(item.get("extra")),
+            "current": current,
             "paths": entry["paths"],
         })
     rows.sort(key=lambda row: (row["name"].casefold(), row["container"], row["slot"]))
@@ -147,8 +162,11 @@ def cap(service, character_id: int, container: int, slot: int, path_key: str) ->
                  if str(candidate["key"]).upper() == str(path_key).strip().upper()), None)
     if path is None:
         raise ValueError("that path is not offered by this item")
-    block = augments.bundle(path["key"], path["rank"], path["tier"],
-                            path["bundle"], rp=path["rp"], curve=path["curve"])
+    if entry["kind"] == "temenos" and not int(path.get("bundle") or 0):
+        block = entry["block"]
+    else:
+        block = augments.bundle(path["key"], path["rank"], path["tier"],
+                                path["bundle"], rp=path["rp"], curve=path["curve"])
     if not service.set_item_extra(int(character_id), int(container), int(slot), block):
         raise LookupError("the item row disappeared")
     return {"container": int(container), "slot": int(slot),
