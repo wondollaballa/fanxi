@@ -71,6 +71,15 @@ class AugmentParserTest(unittest.TestCase):
     def test_haste_is_stored_in_hundredths(self):
         self.assertEqual(augment_stats.parse_line("Haste+3%"), {mod.HASTE_GEAR: 300})
 
+    def test_weapon_skill_accuracy_is_flat(self):
+        """The Beithir Ring's [1] row is the engine's WS_ACCURACY, not a client-only line."""
+        self.assertEqual(augment_stats.parse_line("Weapon Skill Acc.+15"),
+                         {mod.WS_ACCURACY: 15})
+        ring = odyssey.find("Beithir Ring")[0]
+        self.assertEqual(augment_stats.parse_rows(ring["paths"]["Rank 30"]), {
+            mod.WS_ACCURACY: 15, mod.ATT: 15, mod.SKILLCHAIN_BONUS: 5,
+        })
+
     def test_oboro_path_c_song_cast_is_read(self):
         entry = oboro.get(21576)  # Bard's Knife, path C
         path = next(candidate for candidate in entry["paths"]

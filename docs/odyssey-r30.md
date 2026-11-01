@@ -94,8 +94,10 @@ carried Odyssey piece appears there with its Rank 30 path and **Cap path**
 writes the bundle the client draws. The Beithir Ring (item 26218, bundle 465)
 is one of the accessories, so it offers the single Rank 30 path — Weapon Skill
 Acc.+15, Attack+15, Skillchain dmg.+5% — and `//augment A <item>` writes the
-same block from chat. A purchase from the Armory appears in the card straight
-away, with no separate "register this piece" step.
+same block from chat. All three rows reach combat: `augment_stats` maps them to
+the engine's weapon-skill accuracy, Attack and Skillchain damage. A purchase
+from the Armory appears in the card straight away, with no separate "register
+this piece" step.
 
 Each item's `extdata` now carries its real **augment bundle index**
 (third column above). The index names a bundle in the client's augment

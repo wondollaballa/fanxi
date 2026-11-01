@@ -59,6 +59,8 @@ _FLAT = {
     "magacc": mod.MACC,
     "macc": mod.MACC,
     "magicaccuracy": mod.MACC,
+    "weaponskillacc": mod.WS_ACCURACY,
+    "weaponskillaccuracy": mod.WS_ACCURACY,
     "magatkbonus": mod.MATT,
     "magicatkbonus": mod.MATT,
     "magatkbns": mod.MATT,
@@ -238,7 +240,6 @@ UNMODELLED = {
     "repairpotency",
     "resistparalyze",
     "resistsilence",
-    "weaponskillacc",
     "zanshin",
     # Divainy-Gamainy Skirmish rows the engine has no model for yet.
     "avatarperpetuationcost",
