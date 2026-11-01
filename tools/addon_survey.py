@@ -2,7 +2,7 @@
 """Addon compatibility survey: loads every addon of a kind in the headless harness, one at a time.
 
     python3 tools/addon_survey.py --kind ashita --data-dir <dir> [--game <FFXI folder>]
-        [--host build/host64] [--lua host/addons/lua] [--only a,b] [--jobs 6] [--json out.json]
+        [--host build/fanxi] [--lua host/addons/lua] [--only a,b] [--jobs 6] [--json out.json]
         [--markdown out.md] [--keep-logs <dir>]
 
 For each addon under <data dir>/<kind>/addons/<name>/<name>.lua the harness (host64

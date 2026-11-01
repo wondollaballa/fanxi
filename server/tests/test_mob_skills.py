@@ -16,7 +16,7 @@ from unittest import mock
 
 from support import make_service
 
-from fanxi_server.game import combat, mobskills, packets
+from fanxi_server.game import combat, effects, mobskills, modifiers as mod, packets
 from fanxi_server.game.world import World
 from fanxi_server.game.zone import ZoneSession
 
@@ -266,6 +266,78 @@ class MobSkillTest(unittest.TestCase):
         self.assertEqual(actions[0]["category"], packets.ACTION_CATEGORY_BASIC_ATTACK)
         self.assertNotIn(packets.ACTION_CATEGORY_MOB_SKILL_FINISH,
                          [action["category"] for action in actions])
+
+    def test_berserk_is_a_real_attack_and_defense_buff(self):
+        """Dhalmel Berserk is +45% Attack / -25% Defense for 120 seconds."""
+        skill = mobskills.MobSkill(
+            id=286, name="berserk", animation=30, aoe=0, aoe_radius=0.0,
+            distance=7.0, animation_time=3150, prepare_time=1000,
+            valid_targets=mobskills.TARGET_SELF, flag=0, param=0)
+        buff = mobskills.self_buff_effect(skill)
+        self.assertIsNotNone(buff)
+        self.assertEqual(buff.effect, effects.BERSERK)
+        self.assertEqual(buff.duration, 120.0)
+        self.assertEqual(buff.mods, {mod.ATT_PERCENT: 45, mod.DEF_PERCENT: -25})
+
+    def test_berserk_changes_the_monsters_swing_and_is_dispellable(self):
+        self.add_skill(9995, "berserk", valid_targets=1)
+        self.engage()
+        self.mob.skill_list_id = 9995
+        base = self.world.monster_sheet(self.mob).fighter
+        # A debuff already on the mob must not be the first thing Dispel eats.
+        self.world.apply_mob_effect(
+            self.mob, effects.for_spell("Blind"), self.session, time.time(),
+            name="Blind")
+        hit = combat.Hit(10, False, False)
+        with mock.patch("fanxi_server.game.combat.melee", return_value=hit):
+            self.world.advance(time.time() + 1.0)
+
+        self.assertIn(effects.BERSERK, self.mob.effect_state)
+        buffed = self.world.debuffed_monster(self.mob)
+        self.assertEqual(int(buffed.attack), int(base.attack * 145 / 100))
+        self.assertEqual(int(buffed.defense), int(base.defense * 75 / 100))
+        # The same buff reaches the auto-attack/TP-move fighter, not only /check.
+        attacker = self.world._mob_skill_attacker(self.mob)
+        self.assertEqual(int(attacker.attack), int(base.attack * 145 / 100))
+
+        self.assertEqual(self.world.dispel_mob(self.mob), effects.BERSERK)
+        self.assertNotIn(effects.BERSERK, self.mob.effect_state)
+        self.assertIn(effects.BLINDNESS, self.mob.effect_state)
+        self.assertEqual(int(self.world.debuffed_monster(self.mob).attack),
+                         int(base.attack))
+        self.assertEqual(int(self.world.debuffed_monster(self.mob).defense),
+                         int(base.defense))
+
+    def test_healing_breeze_is_a_max_hp_heal_scaled_by_tp(self):
+        """The Dhalmel move is 172/215/258 over 1024 of max HP at 1000/2000/3000 TP."""
+        skill = mobskills.MobSkill(
+            id=287, name="healing_breeze", animation=31, aoe=1, aoe_radius=0.0,
+            distance=15.0, animation_time=1183, prepare_time=1000,
+            valid_targets=mobskills.TARGET_SELF, flag=0, param=0)
+        self.assertEqual(
+            mobskills.self_heal_amount(skill, max_hp=308300, tp=1000), 51784)
+        self.assertEqual(
+            mobskills.self_heal_amount(skill, max_hp=308300, tp=2000), 64730)
+        self.assertEqual(
+            mobskills.self_heal_amount(skill, max_hp=308300, tp=3000), 77677)
+
+    def test_healing_breeze_heals_the_monster_not_a_flat_three_hundred(self):
+        self.add_skill(9994, "healing breeze", valid_targets=1)
+        self.engage()
+        self.mob.skill_list_id = 9994
+        self.mob.hp_max = 10000
+        self.mob.hp = 1000
+        self.mob.tp = 2000
+        with mock.patch("fanxi_server.game.combat.melee",
+                        return_value=combat.Hit(0, False, False)):
+            self.world.advance(time.time() + 1.0)
+        expected = int(10000 * 215 / 1024)
+        self.assertEqual(int(self.mob.hp), 1000 + expected)
+        actions = action_packets(self.session)
+        self.assertTrue(actions)
+        self.assertEqual(actions[0]["targets"][0]["results"][0]["value"], expected)
+        self.assertEqual(actions[0]["targets"][0]["results"][0]["message"],
+                         packets.MESSAGE_SKILL_RECOVERS_HP)
 
     def test_the_imported_lists_reach_a_starter_zone_monster(self):
         spawn = next(row for row in self.service.monster_spawns_for_zone(ZONE)

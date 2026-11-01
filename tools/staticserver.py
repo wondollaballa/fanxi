@@ -10,8 +10,8 @@ protocol to log in, stand in a zone and change zones.
 
 then start the game against it:
 
-  FFXI_LSB_SESSION=1:<hash> build/host64 ... --server 127.0.0.1      (no auth exchange), or
-  build/host64 ... --server 127.0.0.1 --user anything                 (any name and password work)
+  FFXI_LSB_SESSION=1:<hash> build/fanxi ... --server 127.0.0.1      (no auth exchange), or
+  build/fanxi ... --server 127.0.0.1 --user anything                 (any name and password work)
 
 Ports (a LandSandBoat server's): 54231 auth (TLS, needs the openssl command for its certificate),
 54230 login data (TCP), 54001 lobby (TCP), 54230 zone (UDP).

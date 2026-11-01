@@ -185,6 +185,79 @@ Level factor (players only):
 | 61-90 | `+ level + 18` |
 | 91+ | `+ level + 18 + floor((level - 89) / 2)` |
 
+## Monsters
+
+Up to level 99 Fanxi uses LandSandBoat's curves: Attack/Accuracy from the family's A+
+skill rank (`GetBaseSkill`), Defense/Evasion from `GetBaseDefEva`, and the
+family/job/subjob attribute table.  A level-99 Warrior-family monster therefore has
+Attack 499, Accuracy 424, Defense 473 and Evasion 465.
+
+Past 99 the old A+ skill table stops growing (LandSandBoat caps `GetMaxSkill` at 99, a
+research TODO in its own source), but retail's Apex/Locus tier keeps going.  Fanxi adds
+three master-level terms, applied only above 99:
+
+```
+master      = max(0, level - 99)
+attributes  = 99-capped family/job/subjob value + floor(master * 3.6)
+Accuracy    = A+ skill + mod(ACC) + master * 20
+Attack      = 8 + mod(ATT) + A+ skill + floor(STR / 2) + master * 16
+```
+
+The slopes reproduce the published level-135 Locus Camelopard parse: VIT/AGI around
+305/309 (the old table gives 180), **1324 Accuracy** -- the number its wiki page tells
+players to reach -- and Attack 1342.  The extra STR also raises fSTR, so the same swing
+hits harder on top of the Attack increase.
+
+Every Locus template uses this builder, not just Camelopard.  Their level ranges differ
+by camp and are retail's: Bibiki Bay's Bight Rarab / Camelopard / Hypnos Eft are 135-137,
+its Ghost Crab / Fiddler Crab are 137-139, and the Crawler's Nest / King Ranperre's Tomb
+Locus run 129-136.  A level-129 Locus Lugcrawler therefore has 1174 Accuracy rather than
+1324; that is the level, not a missing scaling path.
+
+Locus spawns also roll their level inside that range instead of always taking the low
+end, and a respawn rolls it again.  The published camp tables are stored verbatim in
+`monster_templates.level_stats` (JSON keyed by level) and `entities.mob_from_row` reads
+the row for the rolled level.  For Camelopard that is:
+
+| Level | HP | Defense | Evasion |
+|---:|---:|---:|---:|
+| 135 | 289,900 | 1346 | 1224 |
+| 136 | 299,100 | 1379 | 1254 |
+| 137 | 308,300 | 1413 | 1284 |
+
+`World.monster_sheet()` applies those Defense/Evasion values to the level-derived
+fighter, so the retail 1346/1224 replaces the old 740/732.  The same rows exist for
+Bight Rarab / Hypnos Eft, the Bibiki crabs, Bhaflau Colibri / Wivre, Caedarva Imp, and
+the King Ranperre's Tomb Locus.  The few Locus without a published table (the Crawler's
+Nest camp) keep the level-derived `GetBaseDefEva` curve and their flat HP.
+
+A level-135 Camelopard's 1224 Evasion is the number behind the 1324 player-Accuracy
+requirement: 95% hit rate needs `accuracy >= evasion + 40`, and one-handed weapons add
+their own +8.  Distract III is a **flat -130 Evasion** (BG-wiki's cap), not a percent,
+so it takes the Camelopard to 1094 and lets a well-geared 99 player cap again.
+
+Without the master terms a level-135 Locus had 604 Accuracy against a level-99 player's
+903 Evasion: the hit formula gave `75 + (604 - 903)/2`, which clamps to the 20% floor
+for every auto-attack and every TP move.  That is why the whole family felt
+"invincible" on an evasion set.  The 1324-accuracy Locus now reaches the 95% mob cap.
+
+Monster self-buffs that change stats live in the same `effect_state` as player debuffs,
+so they expire, can be Dispelled/Finale'd, and are visible to `/check`.  The Dhalmel
+**Berserk** TP move is the LandSandBoat script's +45% Attack / -25% Defense for 120
+seconds (`scripts/actions/mobskills/berserk.lua`); the monster version gains more Attack
+than the player's +35%/-25% Berserk.  Dispel/Finale prefer a real self-buff over the
+player's enfeebles, so the Berserk can actually be stripped while Dia is still on.
+
+**Healing Breeze** is a max-HP heal, not the old flat 300.  LandSandBoat passes
+`baseHeal = mob:getMaxHP()` and fTP `172/215/258` over 1024 at 1000/2000/3000 TP:
+
+```
+heal = floor(maxHP * fTP(spent TP))
+     = 48,694 .. 77,677 across a 289,900-308,300-HP Locus Camelopard
+```
+
+The TP value is the bar at the moment the move finishes, before the server empties it.
+
 ## fSTR
 
 The STR-versus-VIT term added to weapon damage. Players use weapon rank:
@@ -827,11 +900,18 @@ they are easy to revisit:
   shape is right and only the family variation is missing.
 - **Monster base damage** is the level itself, which is where
   `mobutils::GetBaseWeaponDamage` starts before its per-region offset and multipliers.
-  This is the one knob that decides how hard monsters hit; it is a single function in
-  `stats.build_monster`.
+  The master-level STR above still raises fSTR and Attack, so a level-135 mob no longer
+  hits with a level-99 damage rating *and* a level-99 Attack.
+- **Level 100+ Defense/Evasion keep the 99-capped base curve.** The scaled VIT/AGI add
+  to it, but LandSandBoat's `GetBaseDefEva` still uses its 5-per-level slope. The retail
+  Locus values (1346 Defense / 1224 Evasion) would pin a level-99 player to the 20% hit
+  floor until the player side models master-level accuracy. The offense was the reported
+  bug, so it was calibrated first; this is the next knob if the tier needs to be fully
+  retail-shaped.
 - **`monster_templates.attack` / `defense` / `accuracy` / `evasion` are not read.** They
-  are on a different (pre-scaling) scale from the derived numbers, so mixing the two
-  produced monsters that could not land a hit. The columns stay for future family data.
+  are importer placeholders (`5 + 2*level`, `level/2`, `75 + level`, `10 + level`), not
+  retail stats. The derived curve above is the authority; the columns stay for future
+  family data.
 - **Hand-to-hand** is one hit per attack round. Retail lands two (one per fist), so H2H
   currently swings at half the real rate.
 - **Parry, guard and block reductions.** The proc rates are retail; how much damage each

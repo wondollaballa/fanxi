@@ -111,7 +111,7 @@ def error_dialog(state: dict | None) -> bool:
 
 
 def main_processes(cfg: dict) -> list[int]:
-    """Local host64 processes for the leader account (not the headless boxes)."""
+    """Local Fanxi processes for the leader account (not the headless boxes)."""
     username = str(cfg.get("username") or "")
     found = []
     try:
@@ -121,7 +121,10 @@ def main_processes(cfg: dict) -> list[int]:
         return found
     for row in rows:
         parts = row.strip().split(None, 1)
-        if len(parts) != 2 or "host64" not in parts[1] or "host64-headless" in parts[1]:
+        if len(parts) != 2:
+            continue
+        words = parts[1].split()
+        if not words or os.path.basename(words[0]) not in ("fanxi", "host64"):
             continue
         if f"--user {username}" not in parts[1]:
             continue
@@ -187,7 +190,7 @@ def launch_main(cfg: dict) -> bool:
         return False
     client = data.get("client") or {}
     args = [
-        str(cfg.get("host64") or (ROOT / "build" / "host64")),
+        str(cfg.get("host64") or (ROOT / "build" / "fanxi")),
         "--game", str(cfg.get("game_dir")),
         "--server", str(client.get("server")),
         "--user", str(client.get("username")),

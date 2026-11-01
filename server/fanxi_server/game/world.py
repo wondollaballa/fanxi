@@ -610,6 +610,8 @@ class World:
         entity.pet_type = spec.key
         entity.pet_state = "follow"
         if spec.key == "luopan":
+            entity.pet_state = "stay"        # the bubble stays where it is put down
+
             entity.geo_drain = 24
             entity.geo_potency = 100
             entity.geo_mp_cost = 0
@@ -622,6 +624,9 @@ class World:
         entity.x = float(session.pos[0]) + math.sin(angle) * distance
         entity.y = float(session.pos[1])
         entity.z = float(session.pos[2]) + math.cos(angle) * distance
+        if spec.key == "luopan":
+            entity.x, entity.y, entity.z = (float(session.pos[0]), float(session.pos[1]),
+                                            float(session.pos[2]))
         entity.spawn_x, entity.spawn_y, entity.spawn_z = entity.x, entity.y, entity.z
         entity.rot = heading_to_rot(session.pos[0] - entity.x, session.pos[2] - entity.z)
         self.entities_for_zone(zone).append(entity)
@@ -647,6 +652,11 @@ class World:
 
         now = time.time() if now is None else now
         owner = self.session_by_char(entity.owner_char_id)
+        if owner is not None and getattr(entity, "pet_type", "") == "luopan":
+            try:
+                owner._geo_bubble_off(entity)
+            except Exception:
+                log.warning("luopan aura cleanup failed", exc_info=True)
         if owner is not None and getattr(owner, "pet_entity", None) is entity:
             owner.pet_entity = None
             owner.pet_jug_item = 0
@@ -1698,6 +1708,12 @@ class World:
             self.despawn_pet(entity, now, "owner gone")
             return
         if getattr(entity, "pet_type", "") == "luopan":
+            if now >= float(getattr(entity, "next_geo_aura", 0.0) or 0.0):
+                entity.next_geo_aura = now + 1.5
+                try:
+                    owner._apply_geo_bubble(entity, now)
+                except Exception:
+                    log.warning("luopan aura refresh failed", exc_info=True)
             if now >= float(getattr(entity, "next_geo_tick", 0.0) or 0.0):
                 drain = max(0, int(getattr(entity, "geo_drain", 0) or 0))
                 if drain:
@@ -3351,7 +3367,7 @@ class World:
                 for session in sessions:
                     session.queue.append(sub(0x00E, body))
             if entity.respawn_at and now >= entity.respawn_at:
-                entity.reset_mob(now)
+                entity.reset_mob(now, self.rng)
                 for session in sessions:
                     session.queue_entity(entity, SEND_SPAWN)
                 log.info("%s respawned in zone %d", entity.name, entity.zone)
@@ -3728,11 +3744,24 @@ class World:
         self._mob_sync(entity, sessions, now, force=arrived)
 
     def monster_sheet(self, entity: ZoneEntity):
-        """A monster's combat stats, cached per level: they depend on nothing else."""
+        """A monster's combat stats, cached per level: they depend on nothing else.
+
+        Locus camps whose Japanese tables publish Defense/Evasion per level carry a
+        ``level_stats`` override on the entity; that row replaces the level-derived
+        ``build_monster`` values so a level-135 Camelopard is the retail 1346/1224
+        rather than the 99-capped curve's 740/732.  The base sheet stays cached per
+        level and the override is applied to a copy.
+        """
         sheet = self._monster_sheets.get(int(entity.level))
         if sheet is None:
             sheet = stats.build_monster(int(entity.level))
             self._monster_sheets[int(entity.level)] = sheet
+        if entity.defense_override or entity.evasion_override:
+            fighter = replace(
+                sheet.fighter,
+                defense=entity.defense_override or sheet.fighter.defense,
+                evasion=entity.evasion_override or sheet.fighter.evasion)
+            sheet = replace(sheet, fighter=fighter)
         return sheet
 
     def mob_skill_list(self, skill_list_id: int) -> tuple["mobskills.MobSkill", ...]:
@@ -3781,6 +3810,43 @@ class World:
         gain = int(base * dagi_multiplier * subtle_multiplier)
         self._mob_gain_tp(entity, gain)
 
+    def mob_self_mods(self, entity: ZoneEntity) -> dict[int, int]:
+        """Modifier deltas from the monster's own buffs.
+
+        Only buffs store ``mods`` in ``effect_state``; a player's enfeeble uses
+        ``potency`` (a percentage) and is read by :meth:`debuffed_monster` and
+        :meth:`mob_attack` instead.  Berserk is the first row that needs this: its
+        +45% Attack / -25% Defense has to reach both the monster's own swing and the
+        player's damage against it.
+        """
+        out: dict[int, int] = {}
+        for state in entity.effect_state.values():
+            for mod_id, value in (state.get("mods") or {}).items():
+                out[int(mod_id)] = out.get(int(mod_id), 0) + int(value)
+        return out
+
+    def _apply_mob_self_mods(self, fighter: combat.Fighter,
+                             entity: ZoneEntity) -> combat.Fighter:
+        """Apply the monster's own buff modifiers to a copy of its fighter."""
+        mods = self.mob_self_mods(entity)
+        if not mods:
+            return fighter
+
+        def scaled(value: int, flat_id: int, percent_id: int) -> int:
+            value = max(1, int(value) + int(mods.get(flat_id, 0)))
+            percent = int(mods.get(percent_id, 0))
+            if percent:
+                value = max(1, int(value * (100 + percent) / 100.0))
+            return value
+
+        return replace(
+            fighter,
+            attack=scaled(fighter.attack, mod.ATT, mod.ATT_PERCENT),
+            defense=scaled(fighter.defense, mod.DEF, mod.DEF_PERCENT),
+            accuracy=max(1, int(fighter.accuracy) + int(mods.get(mod.ACC, 0))),
+            evasion=max(1, int(fighter.evasion) + int(mods.get(mod.EVA, 0))),
+        )
+
     def debuffed_monster(self, entity: ZoneEntity) -> combat.Fighter:
         """The cached monster fighter with the player's debuffs applied.
 
@@ -3797,8 +3863,11 @@ class World:
 
         state = entity.effect_state.get(effects.EVASION_DOWN)
         if state is not None:
-            cut = max(0, min(90, int(state.get("potency", 0))))
-            evasion = max(1, int(evasion * (100 - cut) / 100.0))
+            # Distract I/II/III are flat -35/-50/-130 Evasion (BG-wiki's formula caps
+            # at -130), as are the weapon-skill Evasion Down rows.  This is not the
+            # percent scale Defense Down and Attack Down use.
+            flat = max(0, min(999, int(state.get("potency", 0))))
+            evasion = max(1, evasion - flat)
         torpor = entity.effect_state.get(geomancy.GEO_EVASION_DOWN)
         if torpor is not None:
             cut = max(0, min(90, int(torpor.get("potency", 0))))
@@ -3837,7 +3906,11 @@ class World:
                 mods[mod.CRITICAL_HIT_EVASION] = (
                     int(mods.get(mod.CRITICAL_HIT_EVASION, 0)) - value * 100)
 
-        return replace(fighter, evasion=max(1, evasion), defense=max(1, defense), mods=mods)
+        result = replace(fighter, evasion=max(1, evasion), defense=max(1, defense),
+                         mods=mods)
+        # Self buffs (Berserk) apply last: they are the monster's own state, and the
+        # player's Dia/Defense Down rows above already had their bite of the base value.
+        return self._apply_mob_self_mods(result, entity)
 
     def monster_debuff_mods(self, entity: ZoneEntity) -> dict[int, int]:
         """The monster's magic-side debuffs as modifier deltas.
@@ -4032,6 +4105,7 @@ class World:
             attacker = replace(attacker, attack=max(
                 1, int(attacker.attack
                        * (1.0 - int(geo_attack.get("potency", 0)) / 100.0))))
+        attacker = self._apply_mob_self_mods(attacker, entity)
         hit = combat.melee(
             attacker, session.stat_sheet().fighter,
             zone=int(entity.zone), rng=self.rng)
@@ -4096,7 +4170,7 @@ class World:
             percent = max(0, min(95, int(state.get("potency", 0))))
             value = int(getattr(attacker, field))
             attacker = replace(attacker, **{field: max(1, value * (100 - percent) // 100)})
-        return attacker
+        return self._apply_mob_self_mods(attacker, entity)
 
     def _mob_try_skill(self, entity: ZoneEntity, target, sessions: list,
                        now: float) -> bool:
@@ -4173,7 +4247,9 @@ class World:
             return
         # Every TP move empties the bar in this implementation, including the few
         # LandSandBoat rows flagged TP-free: otherwise a no-cost move would fire every
-        # attack round because the bar never drops.
+        # attack round because the bar never drops.  Keep the spent value: Healing
+        # Breeze's max-HP heal scales with the TP the move was used at.
+        spent_tp = int(entity.tp)
         entity.tp = 0
         entity.tp_threshold = mobskills.next_threshold(self.rng)
         if (skill.is_enemy_target and not skill.is_aoe and primary is not None
@@ -4241,14 +4317,32 @@ class World:
             # A self-only move still has to animate.  Healing moves use the client's
             # "recovers HP" line; a buff shows its status icon and animation.
             effect = mobskills.self_effect(skill)
+            buff = mobskills.self_buff_effect(skill)
             if effect is not None and effect[0] == "heal":
+                # Healing Breeze is based on the monster's max HP and the TP it spent;
+                # the other self-heals keep the small flat amount from self_effect().
+                heal = mobskills.self_heal_amount(
+                    skill, max_hp=int(entity.hp_max), tp=spent_tp)
+                amount = int(effect[2]) if heal is None else int(heal)
                 before = int(entity.hp)
-                entity.hp = min(int(entity.hp_max), before + int(effect[2]))
+                entity.hp = min(int(entity.hp_max), before + amount)
                 self._queue_mob_hp(entity)
                 targets.append({"target_id": int(entity.id), "results": [{
                     "damage": int(entity.hp) - before, "miss": False, "kind": 0,
                     "animation": int(skill.animation),
                     "message": packets.MESSAGE_SKILL_RECOVERS_HP,
+                }]})
+            elif buff is not None:
+                # The stat-changing self buffs are real effects on the monster, so
+                # their icon is dispellable and their modifiers reach the next swing
+                # and every player hit against it (Berserk's -25% Defense).
+                self.apply_mob_effect(entity, buff, None, now,
+                                      duration=float(buff.duration),
+                                      name=str(skill.name))
+                targets.append({"target_id": int(entity.id), "results": [{
+                    "damage": int(buff.effect), "miss": False, "kind": 0,
+                    "animation": int(skill.animation),
+                    "message": packets.MESSAGE_MAGIC_GAIN_EFFECT,
                 }]})
             elif effect is not None:
                 targets.append({"target_id": int(entity.id), "results": [{
@@ -4443,6 +4537,12 @@ class World:
             "tick_interval": interval,
             "tier": int(tier),
             "icon": int(spec.icon or effect_id),
+            # A buff's modifiers are the monster's own stat changes (Berserk's +45%
+            # Attack / -25% Defense).  Debuff modifiers are expressed as potency and
+            # read by debuffed_monster/mob_attack, so only a buff stores this dict.
+            "mods": ({int(key): int(value)
+                      for key, value in (getattr(spec, "mods", {}) or {}).items()}
+                     if str(getattr(spec, "kind", "")) == "buff" else {}),
             "next_tick": now + first_tick,
             "source": int(session.char["char_id"]) if session is not None else 0,
             "name": str(name or ""),
@@ -4461,8 +4561,15 @@ class World:
                     pass
 
     def dispel_mob(self, entity: ZoneEntity) -> int:
-        """Remove one effect and return its icon, or 0 when the mob has none."""
-        for effect_id in reversed(list(entity.status_effects)):
+        """Remove one effect and return its icon, or 0 when the mob has none.
+
+        A real self-buff carries ``mods`` (Berserk, Protect, ...), so those are picked
+        before the player's enfeebles.  Dispel is a buff strip; letting it eat Dia
+        before the Berserk the player is trying to remove made the ability look broken.
+        """
+        candidates = [effect_id for effect_id in entity.status_effects
+                      if (entity.effect_state.get(effect_id) or {}).get("mods")]
+        for effect_id in reversed(candidates or list(entity.status_effects)):
             state = entity.effect_state.pop(effect_id, None)
             try:
                 entity.status_effects.remove(effect_id)

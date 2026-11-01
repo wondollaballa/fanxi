@@ -1,6 +1,6 @@
 """Survey Windower addons in the addon harness (host64 --addon-harness).
 
-    python3 tools/windower_survey.py --data-dir <dir> [--game <FFXI dir>] [--host build/host64]
+    python3 tools/windower_survey.py --data-dir <dir> [--game <FFXI dir>] [--host build/fanxi]
                                      [--lua host/addons/lua] [--only a,b] [--markdown out.md] [-v]
 
 <dir>/windower/ is a Windower install layout (addons/<name>/<name>.lua, addons/libs/, res/). For

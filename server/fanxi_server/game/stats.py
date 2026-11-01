@@ -11,7 +11,8 @@ This module builds one ``Sheet`` per character (or monster) and caches nothing: 
 callers hold the sheet for the duration of a swing.
 
 The formulas are in ``docs/combat-damage.md``; the mob curves are LandSandBoat's
-``mobutils::GetBaseDefEva`` / ``GetBaseToRank`` / ``GetBaseSkill``.
+``mobutils::GetBaseDefEva`` / ``GetBaseToRank`` / ``GetBaseSkill``, with the
+master-level slopes above 99 that LandSandBoat's 99-capped skill table lacks.
 """
 from __future__ import annotations
 
@@ -468,6 +469,22 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
 _MOB_FAMILY_RANK = 1
 _MOB_JOB_GRADES = base_stats.JOB_GRADES["war"]
 
+# Monsters past the old level-99 cap keep growing.  LandSandBoat's GetMaxSkill stops at
+# 99 (a research TODO in its own source), which left Apex/Locus mobs hitting like level
+# 99 ones.  BG-wiki's Locus Camelopard parse at 135 has VIT 305 / AGI 309 (Fanxi's
+# 99-capped attributes give 180), and its 1324 Accuracy requirement is the level-135
+# value players actually gear for.  These three slopes reproduce that tier:
+#
+#   attribute 180 + 36 * 3.6 = 309
+#   accuracy  604 + 36 * 20  = 1324
+#   attack    8 + 604 + 154 + 36 * 16 = 1342
+#
+# They only apply above 99, so every pre-master-level sheet and test stays unchanged.
+MOB_MASTER_LEVEL = 99
+MOB_MASTER_ATTRIBUTE_PER_LEVEL = 3.6
+MOB_MASTER_ACCURACY_PER_LEVEL = 20
+MOB_MASTER_ATTACK_PER_LEVEL = 16
+
 # Rank letter -> the number mobutils::GetBaseToRank switches on.
 _RANK_NUMBER = {"a_plus": 1, "a": 1, "b_plus": 2, "b": 2, "b_minus": 2,
                 "c_plus": 3, "c": 3, "c_minus": 3, "d": 4, "e": 5, "f": 6, "g": 7}
@@ -495,14 +512,23 @@ def _base_def_eva(rank: int, level: int) -> int:
 
 
 def mob_attributes(level: int) -> dict[str, int]:
-    """STR/DEX/VIT/AGI/INT/MND/CHR for a monster, from its level."""
+    """STR/DEX/VIT/AGI/INT/MND/CHR for a monster, from its level.
+
+    Past level 99 the 99-capped family/job table is not enough: a level-135 Locus
+    Camelopard has roughly 305-320 in its stats, not the 180 the old cap yields.  The
+    master-level bonus is the same flat addition to every attribute, which keeps the
+    family/job shape and makes the VIT/AGI-derived Defense, Evasion, fSTR and Attack
+    grow with the tier.
+    """
+    master = max(0, int(level) - MOB_MASTER_LEVEL)
+    bonus = int(master * MOB_MASTER_ATTRIBUTE_PER_LEVEL)
     attributes = {}
     for name in ("str", "dex", "vit", "agi", "int", "mnd", "chr"):
         job_rank = _RANK_NUMBER.get(_MOB_JOB_GRADES[name], 1)
         family = _base_to_rank(_MOB_FAMILY_RANK, level)
         job = _base_to_rank(job_rank, level)
         sub = _base_to_rank(job_rank, level) // 2
-        attributes[name] = family + job + sub
+        attributes[name] = family + job + sub + bonus
     return attributes
 
 
@@ -512,14 +538,22 @@ def build_monster(level: int, *, mods: dict[int, int] | None = None) -> Sheet:
     Monster Attack and Accuracy are their skill rank at their level, Defense and Evasion
     are ``mobutils::GetBaseDefEva``, and base damage is the level itself -- the curve
     ``mobutils::GetBaseWeaponDamage`` starts from before its per-region offset.
+
+    Above level 99 the skill table itself stops growing (LandSandBoat caps it at 99),
+    so Attack and Accuracy take the master-level slopes in the constants above.  Without
+    them a level-135 Locus Camelopard had 604 Accuracy against a 99 player's 903
+    Evasion, which pinned every swing and TP move to the 20% hit-rate floor.
     """
     level = max(1, int(level))
     attributes = mob_attributes(level)
     mods = dict(mods or {})
+    master = max(0, level - MOB_MASTER_LEVEL)
 
     skill_value = skills.rank_cap("a_plus", level)
-    attack = 8 + int(mods.get(mod.ATT, 0)) + skill_value + attributes["str"] // 2
-    accuracy = skill_value + int(mods.get(mod.ACC, 0))
+    attack = (8 + int(mods.get(mod.ATT, 0)) + skill_value + attributes["str"] // 2
+              + master * MOB_MASTER_ATTACK_PER_LEVEL)
+    accuracy = (skill_value + int(mods.get(mod.ACC, 0))
+                + master * MOB_MASTER_ACCURACY_PER_LEVEL)
 
     defense = _base_def_eva(_MOB_FAMILY_RANK, level) + 8 + attributes["vit"] // 2
     defense += int(mods.get(mod.DEF, 0))

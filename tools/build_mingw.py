@@ -9,7 +9,7 @@ which comes from its development package (SDL3_DIR, the same one build.py uses: 
 import library as it is).
 
 Finds clang on PATH, or in LLVM_MINGW (the unpacked llvm-mingw folder). Objects go to build\\mingw\\obj,
-apart from build.py's; host64.exe, SDL3.dll and runtime.json to --out (default build\\mingw).
+apart from build.py's; Fanxi.exe, SDL3.dll and runtime.json to --out (default build\\mingw).
 Needs generated/ from tools/prepare.py, as build.py does.
 """
 import argparse
@@ -190,7 +190,7 @@ def host64(env, out):
     run(env, ['llvm-windres', '-O', 'coff', '-o', res, 'host/host64.rc'])
     objs.append(res)
     os.makedirs(os.path.join(ROOT, out), exist_ok=True)
-    exe = os.path.join(out, 'host64.exe')
+    exe = os.path.join(out, 'Fanxi.exe')
     # -static: libc++ and libunwind inside the exe (the UCRT is Windows' own). The D3DX and gdifonts
     # stand-ins are __declspec(dllexport), so host64.exe exports them for addons' ffi.C, as with link.
     rsp = os.path.join(ROOT, OBJ, 'host64.rsp')

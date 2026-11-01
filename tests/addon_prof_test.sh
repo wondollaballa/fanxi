@@ -24,7 +24,7 @@ mkdir -p "$data/xi/addons"
 cp -R "$here/addons/proftest" "$data/xi/addons/"
 
 out="$data/out.txt"
-FFXI_ADDON_SLOW=100 FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/host64" --game "$game" --data-dir "$data" \
+FFXI_ADDON_SLOW=100 FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/fanxi" --game "$game" --data-dir "$data" \
     --addon-harness "$here/addon_prof_test.txt" > "$data/raw.txt" 2>&1 || true
 grep -E '^\[chat |^\[game\]|^\[harness\]|^\[addons\] slow|unbalanced|error' "$data/raw.txt" | grep -v 'patch.ver' |
     grep -v 'codepatch' | sed -E 's/[0-9]+([.:][0-9]+)*/N/g; s/  +/ /g' > "$out"

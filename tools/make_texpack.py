@@ -1,7 +1,7 @@
 """Texture pack entries for host64 --textures: a high-resolution replacement for one of the game's
 own textures, which the renderer swaps in whenever the game uploads that texture.
 
-  FFXI_TEXLOG=1 FFXI_TEXDUMP=<folder> build/host64 ...     the hash and size of each texture the game
+  FFXI_TEXLOG=1 FFXI_TEXDUMP=<folder> build/fanxi ...     the hash and size of each texture the game
                                                             uploads, and its bytes in <folder>
   python3 tools/make_texpack.py --hash 7d9fc1e8a2b894d2 --size 1024x2048 --png <moji_4x.png> --additive --out <folder>
 

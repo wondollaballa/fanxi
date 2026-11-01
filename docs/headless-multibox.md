@@ -64,7 +64,7 @@ the window hidden and creates the layer only when asked.
 
 ## The measurement
 
-One live client, `build/host64`, game build `2025-07-03` (16:9, 1280×720, 60 fps, Metal, modern
+One live client, `build/fanxi`, game build `2025-07-03` (16:9, 1280×720, 60 fps, Metal, modern
 effects on):
 
 | Metric | Value |
@@ -78,7 +78,7 @@ effects on):
 
 Two conclusions: **CPU is not the problem** (six at 30 fps should be under two cores even under
 Rosetta), and **memory is** on this machine as it is currently loaded. The client is also running
-under Rosetta: `file build/host64` says `x86_64`, `oahd` is running, and:
+under Rosetta: `file build/fanxi` says `x86_64`, `oahd` is running, and:
 
 ```text
 .venv/bin/python -c 'import platform; print(platform.machine())'   -> x86_64
@@ -95,7 +95,7 @@ Rosetta is also on its way out: macOS 27 is the last release with full Rosetta s
 optional long-term.
 
 **Step zero:** remove `.venv`, rebuild with `/usr/bin/python3` (universal, arm64) or
-`/opt/homebrew/bin/python3`, and confirm `file build/host64` says `arm64`. `tools/setup.py` already
+`/opt/homebrew/bin/python3`, and confirm `file build/fanxi` says `arm64`. `tools/setup.py` already
 prefers `/usr/bin/python3` when it creates the environment; the launcher does not. Rosetta 2 measured
 78–79 % of native on Geekbench 5 on an M1
 ([MacRumors](https://www.macrumors.com/2020/11/15/m1-chip-emulating-x86-benchmark/)), so expect a
@@ -324,7 +324,7 @@ needs the spike (P1) rather than a setting to switch on.
 
 1. `rm -rf .venv` and rebuild with `/usr/bin/python3` (or set `FANXI_PYTHON=/usr/bin/python3` for
    the launcher), e.g. `python3 tools/setup.py --game ~/Games/FFXI2026 --no-install`.
-2. `file build/host64` must say `arm64`; `lipo -info` for confirmation.
+2. `file build/fanxi` must say `arm64`; `lipo -info` for confirmation.
 3. Re-measure one client (CPU, RSS, frame time) as the new baseline.
 
 ### P1 — hidden-window mode (1–2 days)

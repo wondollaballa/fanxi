@@ -24,7 +24,7 @@ mkdir -p "$data/xi/addons"
 cp -R "$here/addons/wevtest" "$data/xi/addons/"
 
 out="$data/out.txt"
-FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/host64" --game "$game" --data-dir "$data" \
+FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/fanxi" --game "$game" --data-dir "$data" \
     --addon-harness "$here/windower_events_test.txt" > "$data/raw.txt" 2>&1 || true
 # the lines that matter: events, getter results, section markers, packets out
 grep -E '^EV |^\[harness\] (=|lua error|packet_out|packet_in: [0-9]+ bytes in, 28 out)|^--- |error' "$data/raw.txt" \

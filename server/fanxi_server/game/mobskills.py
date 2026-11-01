@@ -11,6 +11,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from . import effects
+from . import modifiers as mod
 
 # TARGETTYPE bits (LandSandBoat's entities/battle_entity.h).
 TARGET_SELF = 0x0001
@@ -204,8 +205,10 @@ _SELF_BUFF = ("haste", "protect", "shell", "stoneskin", "blink", "cocoon",
 def self_effect(skill: MobSkill) -> tuple[str, int, int] | None:
     """('heal'|'buff', effect id, amount) for a self-target TP move, or None.
 
-    A monster's own buffs are icons only: the engine has no mob stat sheet for a
-    temporary modifier, and the client draws the animation/status from the action.
+    The generic buff branch is icon-only: the effect id is sent so the client draws the
+    animation and status, but the engine's temporary mob modifiers come from
+    :func:`self_buff_effect` instead.  The ``300`` here is only the fallback for a
+    Cure/Regen-style self-heal; Healing Breeze uses :func:`self_heal_amount`.
     """
     name = skill.name.lower().replace("_", " ")
     if any(word in name for word in _SELF_HEAL):
@@ -213,4 +216,53 @@ def self_effect(skill: MobSkill) -> tuple[str, int, int] | None:
     if any(word in name for word in _SELF_BUFF):
         effect = effects.HASTE if "haste" in name else effects.PROTECT
         return "buff", int(effect), 60
+    return None
+
+
+# Healing Breeze is a max-HP heal, not a flat cure.  LandSandBoat's script passes
+# ``baseHeal = mob:getMaxHP()`` and fTP anchors 172/215/258 over 1024 at 1000/2000/3000
+# TP, so a 300,000-HP Locus heals about 50K-78K -- the "over 30K" seen in retail was
+# this row on a smaller-HP Dhalmel, not a flat 300.  The generic self-heal path keeps
+# its small flat value for Cure/Regen-style moves; this is the one max-HP row.
+_HEALING_BREEZE_FTP = ((1000, 172), (2000, 215), (3000, 258))
+
+
+def _healing_breeze_ftp(tp: int) -> float:
+    """Retail's fTP for Healing Breeze at a 1000-3000 TP skill use."""
+    tp = max(0, min(3000, int(tp)))
+    if tp <= 1000:
+        numerator = 172
+    elif tp <= 2000:
+        numerator = 172 + (215 - 172) * (tp - 1000) / 1000.0
+    else:
+        numerator = 215 + (258 - 215) * (tp - 2000) / 1000.0
+    return numerator / 1024.0
+
+
+def self_heal_amount(skill: MobSkill, *, max_hp: int, tp: int) -> int | None:
+    """The max-HP-based heal for a self-target TP move, or None for the flat path."""
+    name = skill.name.lower().replace("_", " ")
+    if "healing breeze" in name:
+        return max(0, int(int(max_hp) * _healing_breeze_ftp(tp)))
+    return None
+
+
+# TP moves whose buff changes a stat the engine reads.  The value is the same one the
+# LandSandBoat script passes to mobBuffMove: Berserk is +45% Attack / -25% Defense for
+# 120 seconds (``scripts/actions/mobskills/berserk.lua``), which is the monster version
+# of the player's +35%/-25% Berserk.  The effect id is also the client icon the action
+# result carries, so this row replaces the generic icon-only self_effect branch.
+_SELF_BUFF_MODS: tuple[tuple[tuple[str, ...], int, float, dict[int, int]], ...] = (
+    (("berserk",), effects.BERSERK, 120.0,
+     {mod.ATT_PERCENT: 45, mod.DEF_PERCENT: -25}),
+)
+
+
+def self_buff_effect(skill: MobSkill) -> effects.SpellEffect | None:
+    """The stat-changing self buff a TP move puts on the monster, or None."""
+    name = skill.name.lower().replace("_", " ")
+    for words, effect_id, duration, mods in _SELF_BUFF_MODS:
+        if any(word in name for word in words):
+            return effects.SpellEffect(int(effect_id), "buff", float(duration),
+                                       mods=dict(mods))
     return None

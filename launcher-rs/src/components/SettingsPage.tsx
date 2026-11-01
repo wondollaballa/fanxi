@@ -34,6 +34,7 @@ import {
   TextInput,
   cn,
 } from "./ui";
+import { ServerPicker } from "./ServerPicker";
 
 const MIN_WIDTH = 640;
 const MIN_HEIGHT = 480;
@@ -433,12 +434,7 @@ export function SettingsPage({
             </Badge>
           </div>
           <Field label="Server URL" hint="The launcher appends /api/v1 automatically.">
-            <TextInput
-              value={apiUrl}
-              onChange={(event) => setApiUrl(event.target.value)}
-              placeholder="http://127.0.0.1:8080"
-              spellCheck={false}
-            />
+            <ServerPicker value={apiUrl} onChange={setApiUrl} />
           </Field>
           <label className="check-row">
             <input type="checkbox" checked={insecure} onChange={(event) => setInsecure(event.target.checked)} />
@@ -482,7 +478,7 @@ export function SettingsPage({
           </Field>
           <Field
             label="Headless game folder"
-            hint="Optional install for windowless boxes; it must match the host64-headless build. Leave empty to use the folder above."
+            hint="Optional install for windowless boxes; it must match the Fanxi-headless build. Leave empty to use the folder above."
           >
             <div className="input-row">
               <TextInput
@@ -514,7 +510,7 @@ export function SettingsPage({
               <small>Leaves headroom for the box pollers and the rest of the desktop. Relaunch the main to apply.</small>
             </span>
           </label>
-          <Field label="Fanxi checkout" hint="Needed to run the recompiler and build host64. Leave empty to auto-detect.">
+          <Field label="Fanxi checkout" hint="Needed to run the recompiler and build the client. Leave empty to auto-detect.">
             <div className="input-row">
               <TextInput
                 value={repo}
@@ -726,7 +722,7 @@ export function SettingsPage({
           {host64 ? <Badge tone="success" dot>Client ready</Badge> : <Badge tone="warning" dot>Client not built</Badge>}
         </div>
         <div className="status-grid">
-          <StatusRow label="host64" value={host64 ?? "not built yet"} ok={Boolean(host64)} mono />
+          <StatusRow label="Fanxi" value={host64 ?? "not built yet"} ok={Boolean(host64)} mono />
           <StatusRow label="Game folder" value={gameDir ?? (gameFolder || "not found")} ok={Boolean(gameDir || gameFolder)} mono />
           <StatusRow label="Fanxi checkout" value={repoRoot ?? (repo || "not found")} ok={Boolean(repoRoot || repo)} mono />
           <StatusRow label="GearSwap defaults" value={gearswapDir ?? "not found"} ok={Boolean(gearswapDir)} mono />
@@ -744,8 +740,9 @@ export function SettingsPage({
         <ProgressBar value={progress ?? 0} indeterminate={building && progress === null} />
         <pre className="build-log">{lines.length ? lines.join("\n") : "Build output appears here."}</pre>
         <p className="console-hint">
-          The build still uses the repository's Python recompiler and your local clang toolchain.
-          The Rust launcher drives it and streams the output; it does not replace it.
+          The build still uses the repository's Python recompiler and the platform's compiler —
+          clang on macOS and Linux, MSVC on Windows. The Rust launcher drives it and streams the
+          output; it does not replace it.
         </p>
       </Card>
 

@@ -792,6 +792,12 @@ code {
   font-size: 10px;
 }
 
+/* The server list and its optional custom-URL field act as one control. */
+.server-picker {
+  display: grid;
+  gap: 6px;
+}
+
 .input {
   width: 100%;
   padding: 9px 11px;
@@ -5754,7 +5760,7 @@ button.ev-cell:hover {
 
 .phase-card-row {
   display: flex;
-  align-items: flex-end;
+  align-items: center;
   gap: 8px;
 }
 

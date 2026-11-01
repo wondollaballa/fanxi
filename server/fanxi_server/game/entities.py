@@ -5,6 +5,7 @@ instance a zone session sees. Mobs keep their health, position and combat timers
 """
 from __future__ import annotations
 
+import json
 import math
 import random
 from dataclasses import dataclass, field
@@ -61,6 +62,20 @@ class ZoneEntity:
     # mob fields
     template_id: int = 0
     level: int = 1
+    # Retail Locus spawns roll their level in this range and interpolate HP between
+    # the published level_min and level_max values; fixed-level mobs leave level_rolls
+    # false and keep the old single template HP.
+    level_min: int = 0
+    level_max: int = 0
+    level_rolls: bool = False
+    hp_min: int = 0
+    hp_high: int = 0
+    # Per-level retail rows: {"135": {"hp": 289900, "defense": 1346, "evasion": 1224}}.
+    # The Defense/Evasion values replace the 99-capped build_monster curve for the
+    # Locus camps whose tables have been published; empty for everything else.
+    level_stats: dict[int, dict] = field(default_factory=dict)
+    defense_override: int = 0
+    evasion_override: int = 0
     hp_max: int = 1
     hp: int = 1
     mp_max: int = 0
@@ -144,8 +159,20 @@ class ZoneEntity:
     def is_pet(self) -> bool:
         return self.kind == "pet"
 
-    def reset_mob(self, now: float) -> None:
+    def reset_mob(self, now: float, rng: random.Random | None = None) -> None:
         self.alive = True
+        if self.level_rolls and self.level_max > self.level_min:
+            rng = rng or random
+            self.level = rng.randint(self.level_min, self.level_max)
+            exact = self.level_stats.get(self.level) or {}
+            if exact:
+                self.hp_max = int(exact.get("hp") or self.hp_max)
+                self.defense_override = int(exact.get("defense") or 0)
+                self.evasion_override = int(exact.get("evasion") or 0)
+            else:
+                self.hp_max = mob_hp_for_level(
+                    self.level, self.level_min, self.level_max,
+                    self.hp_high or self.hp_max, self.hp_min)
         self.hp = self.hp_max
         self.mp = self.mp_max
         self.x, self.y, self.z = self.spawn_x, self.spawn_y, self.spawn_z
@@ -203,11 +230,47 @@ def npc_from_row(row: dict, targid: int, dialogue: list[str]) -> ZoneEntity:
     )
 
 
+def mob_hp_for_level(level: int, level_min: int, level_max: int,
+                     hp_max: int, hp_min: int = 0) -> int:
+    """A monster's max HP at its rolled level.
+
+    Retail prints a level range with a matching HP range (Locus Camelopard:
+    135-137 / 289,900-308,300).  ``monster_templates.hp`` is the value at
+    ``level_max`` and the optional ``hp_min`` is the value at ``level_min``; a table
+    without ``hp_min`` keeps its old flat HP.  The interpolation is linear, which is
+    within a few hundred HP of the published per-level rows.
+    """
+    low = int(level_min)
+    high = int(level_max)
+    level = max(low, min(high, int(level)))
+    hp_max = max(1, int(hp_max))
+    hp_min = int(hp_min or 0)
+    if hp_min <= 0 or high <= low:
+        return hp_max
+    ratio = (level - low) / float(high - low)
+    return max(1, int(hp_min + (hp_max - hp_min) * ratio))
+
+
 def mob_from_row(row: dict, targid: int, rng: random.Random | None = None) -> ZoneEntity:
     rng = rng or random.Random()
     zone = int(row["zone"])
-    level = int(row["level"] or rng.randint(int(row["level_min"]), int(row["level_max"])))
-    hp_max = int(row["template_hp"] or level * 24)
+    level_min = int(row["level_min"])
+    level_max = int(row["level_max"])
+    level_rolls = not bool(row.get("level"))
+    level = int(row["level"] or rng.randint(level_min, level_max))
+    hp_high = max(1, int(row["template_hp"] or level * 24))
+    hp_min = int(row.get("template_hp_min") or 0)
+    try:
+        raw_stats = json.loads(row.get("level_stats") or "{}")
+        level_stats = {int(key): dict(value) for key, value in raw_stats.items()
+                       if str(key).isdigit()}
+    except (TypeError, ValueError, AttributeError):
+        level_stats = {}
+    exact = level_stats.get(level) or {}
+    if exact:
+        hp_max = int(exact.get("hp") or hp_high)
+    else:
+        hp_max = mob_hp_for_level(level, level_min, level_max, hp_high, hp_min)
     return ZoneEntity(
         kind="mob",
         id=0x01000000 | (zone << 12) | (targid & 0xFFF),
@@ -220,7 +283,12 @@ def mob_from_row(row: dict, targid: int, rng: random.Random | None = None) -> Zo
         # The client uses this byte to predict a moving entity between position updates;
         # at 50 (retail's run speed) it outran our walk and snapped back each packet.
         speed=12, animation=0, triggerable=True, widescan=True,
-        template_id=int(row["template_id"]), level=level, hp_max=max(1, hp_max), hp=max(1, hp_max),
+        template_id=int(row["template_id"]), level=level,
+        level_min=level_min, level_max=level_max, level_rolls=level_rolls,
+        hp_min=hp_min, hp_high=hp_high, level_stats=level_stats,
+        defense_override=int(exact.get("defense") or 0),
+        evasion_override=int(exact.get("evasion") or 0),
+        hp_max=max(1, hp_max), hp=max(1, hp_max),
         mp_max=int(row["template_mp"] or 0), mp=int(row["template_mp"] or 0),
         attack=int(row["attack"] or 1), defense=int(row["defense"] or 0),
         accuracy=int(row["accuracy"] or 75), evasion=int(row["evasion"] or 10),

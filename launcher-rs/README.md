@@ -56,9 +56,10 @@ the live zone session for the launcher's stat sheet.
 - Node 18+ and npm.
 - macOS: Xcode Command Line Tools; Linux: WebKitGTK 4.1 and the usual Tauri build packages;
   Windows: WebView2 (present on current Windows).
-- For building the actual client: Python 3.9+, clang/CMake/Ninja, and your own FINAL FANTASY XI
-  files. The launcher drives the existing `tools/build_posix.py`; it does not replace the
-  recompiler yet.
+- For building the actual client: Python 3.9+ and your own FINAL FANTASY XI files, plus a toolchain
+  — clang and CMake/Ninja on macOS and Linux, Visual Studio Build Tools (C++ workload) and the SDL3
+  VC development package on Windows. The launcher drives the repository's driver for the platform
+  (`tools/build_posix.py`, or `tools/build.py`); it does not replace the recompiler yet.
 
 ## Run
 

@@ -20,7 +20,7 @@ done
 
 data=$(mktemp -d "${TMPDIR:-/tmp}/phaselock.XXXXXX")
 trap 'rm -rf "$data"' EXIT
-FFXI_CONTROL=54397 "$root/build/host64" --game "$game" --data-dir "$data" \
+FFXI_CONTROL=54397 "$root/build/fanxi" --game "$game" --data-dir "$data" \
     --addon-harness "$here/phase_lock_override_test.txt" > "$data/raw.txt" 2>&1 || true
 out=$(grep -E '^\[harness\]|^--- ' "$data/raw.txt" || true)
 

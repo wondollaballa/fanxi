@@ -9,7 +9,7 @@
                                    portable runtime, SDL3 and the Direct3D 12 back end
   python tools/build.py host64-headless
                                    the same host with no graphics (gfx_null.c), for measuring the
-                                   game's CPU time alone: build/host64-headless.exe
+                                   game's CPU time alone: build/Fanxi-headless.exe
   python tools/build.py uwp-lib    host64 as a library for the UWP app (FFXIXbox): build/uwp/ffxi_uwp.lib
   python tools/build.py gfxtest    the Direct3D 12 back end and the D3D8 front end, offscreen, without
                                    the game (tests/gfx_test.c, tests/d3d8_test.c); needs no prepare
@@ -148,6 +148,11 @@ def compile_stale(env, sources, objdir, extra, cflags=CFLAGS):
 
 
 def recomp(out, extra):
+    # Diagnostic builds of hand-patched generated code: FANXI_SKIP_RECOMP=1 keeps the recompiler
+    # from rewriting the translation (it would overwrite the patch).
+    if os.environ.get('FANXI_SKIP_RECOMP') == '1':
+        print('recomp skipped (FANXI_SKIP_RECOMP=1)')
+        return
     hooks = ','.join('%s=%s' % kv for kv in BUILD['hooks'].items())  # host hook points (recomp.py --hooks)
     wraps = ','.join('%s=%s' % kv for kv in BUILD['wraps'].items())  # host-replaceable functions (--wraps)
     # addons' code patches, translated as variants (--patches): generated/patches.json
@@ -359,15 +364,15 @@ def host64(env):
     objs += addon_objects(env, CFLAGS64, 'build\\host64')
     # Addons' ffi.C looks in the exe's own exports first, then the CRT, kernel32, user32 and gdi32: the
     # D3DX and gdifonts stand-ins (host/addons/d3d_ffi.c, gdifont_ffi.c) are __declspec(dllexport), so
-    # host64.exe exports them (link also writes an import .lib/.exp nobody needs). Win32 functions are the
+    # Fanxi.exe exports them (link also writes an import .lib/.exp nobody needs). Win32 functions are the
     # real ones (win32_ffi.c is empty on Windows); ones in other DLLs (winmm's PlaySound, shell32) need
     # xi.lua to ffi.load the real DLL there rather than map it to ffi.C.
     objs.append(host_resources(env, 'build\\host64'))
     # /MAP: tools/sample_report.py reads FFXI_SAMPLE's samples against it
-    run(['link', '/nologo', '/OUT:build\\host64.exe', '/MAP:build\\host64.map', '/MACHINE:X64', sdl_lib] + HOST_LIBS + objs, env)
+    run(['link', '/nologo', '/OUT:build\\Fanxi.exe', '/MAP:build\\Fanxi.map', '/MACHINE:X64', sdl_lib] + HOST_LIBS + objs, env)
     shutil.copy(os.path.join(SDL3, 'lib', 'x64', 'SDL3.dll'), os.path.join(ROOT, 'build'))
     buildinfo.stamp(os.path.join(ROOT, 'build', 'runtime.json'))
-    print('built build\\host64.exe; run: build\\host64.exe --game "%s" ...' % BUILD['game'])
+    print('built build\\Fanxi.exe; run: build\\Fanxi.exe --game "%s" ...' % BUILD['game'])
 
 
 def host64_headless(env):
@@ -379,9 +384,9 @@ def host64_headless(env):
     objs += addon_objects(env, CFLAGS64, 'build\\headless')
     libs = [lib for lib in HOST_LIBS if lib not in GFX_LIBS]
     objs.append(host_resources(env, 'build\\headless'))
-    run(['link', '/nologo', '/OUT:build\\host64-headless.exe', '/MACHINE:X64', sdl_lib] + libs + objs, env)
+    run(['link', '/nologo', '/OUT:build/Fanxi-headless.exe', '/MACHINE:X64', sdl_lib] + libs + objs, env)
     shutil.copy(os.path.join(SDL3, 'lib', 'x64', 'SDL3.dll'), os.path.join(ROOT, 'build'))
-    print('built build\\host64-headless.exe')
+    print('built build/Fanxi-headless.exe')
 
 
 # The UWP app (FFXIXbox) links the game as a library: the dynamic CRT (/MD) that UWP apps must use, no

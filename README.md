@@ -35,12 +35,20 @@ a server that belong to the same project:
 
 You need:
 
-- macOS on Apple silicon (M1 or later) for the client. The launcher and server run on macOS and
-  Linux; the server is Python 3.9+ only.
+- Windows 10/11 (x64) or macOS on Apple silicon (M1 or later) to run the client; Windows is the
+  player platform. The launcher runs on Windows, macOS and Linux; the server is Python 3.9+ only.
+- On Windows, building the client needs a C toolchain. [`tools/build_mingw.py`](tools/build_mingw.py)
+  builds `Fanxi.exe` with llvm-mingw and no Visual Studio; the player kit described in
+  [Onboarding](docs/onboarding.md) will carry that toolchain, SDL3 and Python so a player installs
+  nothing else. A developer checkout can use Visual Studio Build Tools with
+  [`tools/build.py`](tools/build.py).
 - Node 18+ and Rust 1.85+ if you build the launcher from source (`install.sh` drives both; on
   Linux also install the WebKitGTK/Tauri packages).
 - Your own copy of FINAL FANTASY XI: a `FINAL FANTASY XI` folder containing `FFXiMain.dll`,
   `FFXi.dll` and `ROM`.
+
+On Windows, install the launcher from the release's `-setup.exe`; `install.sh`, `setup.command` and
+the helper scripts under `scripts/` are macOS and Linux only.
 
 ```bash
 # 1. Install (launcher + local database + starter content)
@@ -64,9 +72,9 @@ In the launcher:
    multiboxing.
 2. Create a character. **Characters → New mule** makes as many as you like.
 3. Open **Settings**, point *Game folder* at your FINAL FANTASY XI folder, and press **Build
-   game**. The first build translates the game and compiles `host64`; it takes a few minutes.
+   game**. The first build translates the game and compiles `Fanxi`; it takes a few minutes.
 4. Press **Play** (or open **Control** and press **Launch** / **Launch all**). The launcher asks
-   the server for a single-use launch token, starts `host64`, and the game signs in through
+   the server for a single-use launch token, starts `Fanxi`, and the game signs in through
    Fanxi's auth gateway. Keep the launcher open: it is the control room for commands, live
    EXP/hr/DPS and gear.
 
@@ -108,10 +116,10 @@ processes and control ports — and the UI never sees a stored token. It:
 - reads the active gear of each client, detects its live main job, loads that job's default
   GearSwap library, and can import/edit/save timestamped versions from the **Gear** page, with a
   launcher-wide **GearSwap** on/off switch for players who do not want auto-swapping;
-- stores the game folder and finds `host64`;
+- stores the game folder and finds `Fanxi`;
 - builds the client from your own game files (it creates `.venv`, installs `capstone` and
   `pefile`, and streams the build log);
-- asks the server for a one-time launch token and starts `host64` with the right ports and a
+- asks the server for a one-time launch token and starts `Fanxi` with the right ports and a
   per-client control port;
 - shows server status and news, and packages itself for this OS:
 
@@ -138,7 +146,7 @@ DPS, a command console, and a Gear/GearSwap window. See
 
 A launch is deliberately short-lived: the launcher gets a single-use token that expires in two
 minutes; the game gateway consumes it, creates a 16-byte session, and that session keys the zone
-cipher. The launcher never sees the game password and host64 never sees the launcher token after
+cipher. The launcher never sees the game password and the client never sees the launcher token after
 it is used.
 
 The zone gateway implements the packets needed to sign in, stand in a zone, see the character,
@@ -312,6 +320,8 @@ is done by the launcher (or `python3 tools/setup.py` for the full macOS app bund
 - [Architecture](docs/architecture.md) — components, data flow, ports, trust boundaries
 - [Retail client data](docs/retail-data.md) — where the data comes from, patching it with PlayOnline, and importing the result
 - [Launcher](docs/launcher.md) — settings, build, troubleshooting
+- [Releases](docs/release.md) — tagging, the build matrix, signing, and what a release may not contain
+- [Onboarding](docs/onboarding.md) — the player kit: how a download becomes a Play button with no toolchain install
 - [Battle hub](docs/battle.md) — camps, formations, pulling, healing and the automation rules
 - [Character design](docs/character-design.md) — in-game model changes, the Design page and preview captures
 - [Server](docs/server.md) — API reference, deployment, admin operations

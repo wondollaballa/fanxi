@@ -1988,7 +1988,9 @@ class FanxiService:
     def monster_spawns_for_zone(self, zone: int) -> list[dict]:
         rows = self.db.all(
             "SELECT s.*, t.name AS template_name, t.model, t.size, t.level_min, t.level_max, "
-            "t.hp AS template_hp, t.mp AS template_mp, t.attack, t.defense, t.accuracy, t.evasion, "
+            "t.hp AS template_hp, t.hp_min AS template_hp_min, t.level_stats, "
+            "t.mp AS template_mp, "
+            "t.attack, t.defense, t.accuracy, t.evasion, "
             "t.attack_delay_ms, t.aggro, t.links, t.roam_radius, t.respawn_seconds AS template_respawn, "
             "t.name_prefix, t.behavior, t.content_tag, t.skill_list_id "
             "FROM monster_spawns s JOIN monster_templates t ON t.id = s.template_id "

@@ -528,7 +528,10 @@ pub async fn character_bags(state: State<'_, AppState>, character_id: i64) -> Ap
 }
 
 #[tauri::command]
-pub async fn character_magic_bag(state: State<'_, AppState>, character_id: i64) -> AppResult<Value> {
+pub async fn character_magic_bag(
+    state: State<'_, AppState>,
+    character_id: i64,
+) -> AppResult<Value> {
     let config = state.config.lock().await.clone();
     if config.token.is_empty() {
         return Err(AppError::Validation("sign in first".to_string()));
@@ -850,10 +853,37 @@ pub async fn launch(
 ) -> AppResult<InstanceView> {
     let config = state.config.lock().await.clone();
     let view = launch_with_config(&state, &config, &account, character_id).await?;
-    // The launch token skips the lobby but the game can still stop at the agreement or character
-    // select. Drive those with Enter so Play lands in the zone, like the headless path.
-    await_signin(&view).await?;
+    // The player picks the character: the launcher waits for the client to come up and then
+    // leaves the title, agreement and character-select screens alone. Boxes still drive them
+    // with Enter (await_signin) because nobody is sitting at those clients.
+    await_client_up(&view).await?;
     Ok(view)
+}
+
+/// Wait until the client answers on its control port, without touching its screens. The player
+/// drives the title, agreement and character select; the Control and Gear pages show the client
+/// as signing in until it reaches a zone.
+async fn await_client_up(view: &InstanceView) -> AppResult<Value> {
+    let client = ControlClient::new(view.port);
+    let deadline = tokio::time::Instant::now() + std::time::Duration::from_secs(30);
+    loop {
+        if !boxes::pid_alive(view.pid) {
+            return Err(AppError::Control(format!("{} exited", view.name)));
+        }
+        if let Ok(state) = client
+            .call("state", json!({}), std::time::Duration::from_secs(2))
+            .await
+        {
+            return Ok(state);
+        }
+        if tokio::time::Instant::now() >= deadline {
+            return Err(AppError::Control(format!(
+                "{} started but its control port did not answer",
+                view.name
+            )));
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+    }
 }
 
 async fn spawn_launch(
@@ -892,13 +922,14 @@ async fn spawn_launch(
     };
     if headless {
         if game::find_host64_headless(config).is_none() {
-            return Err(AppError::Game(
-                "host64-headless is not built yet; build it with tools/build_posix.py host64-headless".to_string(),
-            ));
+            return Err(AppError::Game(format!(
+                "the headless host is not built yet; build it with {} host64-headless",
+                game::build_driver()
+            )));
         }
     } else if game::find_host64(config).is_none() {
         return Err(AppError::Game(
-            "host64 is not built yet; open Settings and build the game".to_string(),
+            "the game is not built yet: open Settings and build it".to_string(),
         ));
     }
     let character = data.get("character").cloned().unwrap_or(fallback_character);

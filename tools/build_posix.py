@@ -20,7 +20,7 @@
         go into the built app only: nothing names a server in the source.
 
   python3 tools/build_posix.py desktop --game <folder> [--server name]
-        (Linux) build/host64 in the applications menu: fanxi.desktop and its icon in
+        (Linux) build/fanxi in the applications menu: fanxi.desktop and its icon in
         ~/.local/share, named for host64's app id, so docks and window switchers show its icon.
 
   python3 tools/build_posix.py kit --out <dir>     (Linux) the kit: every library and every source that
@@ -338,10 +338,10 @@ def host64_kit(game, kitdir):
     # libxi.a whole, as the other builds link every object: addons find win32_ffi.c's and gdifont_ffi.c's
     # functions by name (ffi.C), so nothing references them and an archive would leave them out
     xi = ['-Wl,--whole-archive', os.path.join(kitdir, 'lib', 'libxi.a'), '-Wl,--no-whole-archive']
-    run(CXX + PIE_LINK + ['-o', 'build/host64'] + objs + xi + ['-Wl,--start-group'] + libs + ['-Wl,--end-group'] + k['system'] +
+    run(CXX + PIE_LINK + ['-o', 'build/fanxi'] + objs + xi + ['-Wl,--start-group'] + libs + ['-Wl,--end-group'] + k['system'] +
         ['-rdynamic'])
     buildinfo.stamp(os.path.join(ROOT, 'build', 'runtime.json'))
-    print('built build/host64 from the kit; run: build/host64 --game %s --server <name>' % shlex.quote(game))
+    print('built build/fanxi from the kit; run: build/fanxi --game %s --server <name>' % shlex.quote(game))
 
 
 def host64(game):
@@ -358,9 +358,9 @@ def host64(game):
     # -export_dynamic: addons' ffi.C finds D3DX and Win32 (host/addons/d3d_ffi.c, win32_ffi.c) with
     # dlsym(RTLD_DEFAULT), so their symbols stay in the executable's export table
     export = ['-Wl,-export_dynamic'] if sys.platform == 'darwin' else ['-rdynamic']
-    run(CC + PIE_LINK + ['-o', 'build/host64'] + objs + sdl_libs + tls_libs + addon_libs + GFX_LIBS + ['-lm', '-lpthread'] + export)
+    run(CC + PIE_LINK + ['-o', 'build/fanxi'] + objs + sdl_libs + tls_libs + addon_libs + GFX_LIBS + ['-lm', '-lpthread'] + export)
     buildinfo.stamp(os.path.join(ROOT, 'build', 'runtime.json'))
-    print('built build/host64; run: build/host64 --game %s --server <name>' % shlex.quote(game))
+    print('built build/fanxi; run: build/fanxi --game %s --server <name>' % shlex.quote(game))
 
 
 def host64_headless(game):
@@ -383,9 +383,9 @@ def host64_headless(game):
     # no GFX_LIBS: gfx_null.c needs no graphics API. The macOS keychain still needs Security.
     export = ['-Wl,-export_dynamic'] if sys.platform == 'darwin' else ['-rdynamic']
     extra = ['-framework', 'Security'] if sys.platform == 'darwin' else []
-    run(CC + PIE_LINK + ['-o', 'build/host64-headless'] + objs + sdl_libs + tls_libs + addon_libs + extra + ['-lm', '-lpthread'] + export)
+    run(CC + PIE_LINK + ['-o', 'build/fanxi-headless'] + objs + sdl_libs + tls_libs + addon_libs + extra + ['-lm', '-lpthread'] + export)
     buildinfo.stamp(os.path.join(ROOT, 'build', 'runtime.json'))
-    print('built build/host64-headless')
+    print('built build/fanxi-headless')
 
 
 def gfxtest():
@@ -422,15 +422,15 @@ def desktop_quote(arg):
 
 
 def desktop(game, server):
-    """(Linux) build/host64 in the applications menu, as fanxi.desktop with the game's
+    """(Linux) build/fanxi in the applications menu, as fanxi.desktop with the game's
     icon: the name of host64's app id, so docks and window switchers show the icon for its windows.
     Icon= is the file's path, not a theme name: shells that index icon themes once at login
     (Omarchy's switcher) would show nothing for a theme icon installed since."""
     if sys.platform == 'darwin':
         raise SystemExit('the desktop entry is for Linux (macOS: the app target)')
-    exe = os.path.join(ROOT, 'build', 'host64')
+    exe = os.path.join(ROOT, 'build', 'fanxi')
     if not os.path.exists(exe):
-        raise SystemExit('no build/host64: build it first (host64 --game <folder>)')
+        raise SystemExit('no build/fanxi: build it first (host64 --game <folder>)')
     data = os.environ.get('XDG_DATA_HOME') or os.path.expanduser('~/.local/share')
     entry = os.path.join(data, 'applications', DESKTOP_ID + '.desktop')
     if os.path.exists(entry):
@@ -518,7 +518,7 @@ def app(game, a):
     os.makedirs(macos)
     os.makedirs(res)
     exe = os.path.join(macos, APP_NAME)
-    shutil.copy(os.path.join(ROOT, 'build', 'host64'), exe)
+    shutil.copy(os.path.join(ROOT, 'build', 'fanxi'), exe)
     shutil.copy(os.path.join(ROOT, 'ffxi.reg'), res)
     shutil.copy(os.path.join(ROOT, 'assets', 'icon.icns'), res)
     shutil.copy(os.path.join(ROOT, 'build', 'runtime.json'), res)  # the launcher's rebuild check

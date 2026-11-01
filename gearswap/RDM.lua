@@ -1,6 +1,6 @@
 --[[
     Fanxi GearSwap library — Onedough RDM
-    Updated 2026-10-30 13:03:09
+    Updated 2026-10-31 21:10:44
     The launcher writes sets back to this file; the first copy is kept as a .bak.
     Source: /Users/wondochoung/Documents/GitHub/fanxi/gearswap/RDM.lua
 
@@ -168,6 +168,23 @@ function get_sets()
         ring2 = "Begrudging Ring",
         back = "Sucellos's Cape",
     }
+    sets.WS.Imperator = {
+        main = "Caliburnus",
+        sub = "Thibron",
+        ammo = "Crepuscular Pebble",
+        head = "Nyame Helm",
+        body = "Nyame Mail",
+        hands = "Nyame Gauntlets",
+        legs = "Nyame Flanchard",
+        feet = "Nyame Sollerets",
+        neck = "Fotia Gorget",
+        waist = "Fotia Belt",
+        ear1 = "Moonshade Earring",
+        ear2 = "Hoxne Earring",
+        ring1 = "Epaminondas's Ring",
+        ring2 = "Metamorph Ring +1",
+        back = "Sucellos's Cape",
+    }
     sets.WS.Requiescat = {
         main = "Sequence",
         sub = "Daybreak",
@@ -234,23 +251,6 @@ function get_sets()
         ear2 = "Hoxne Earring",
         ring1 = "Epaminondas's Ring",
         ring2 = "Sroda Ring",
-        back = "Sucellos's Cape",
-    }
-    sets.WS["Imperator"] = {
-        main = "Caliburnus",
-        sub = "Thibron",
-        ammo = "Crepuscular Pebble",
-        head = "Nyame Helm",
-        body = "Nyame Mail",
-        hands = "Nyame Gauntlets",
-        legs = "Nyame Flanchard",
-        feet = "Nyame Sollerets",
-        neck = "Fotia Gorget",
-        waist = "Fotia Belt",
-        ear1 = "Moonshade Earring",
-        ear2 = "Hoxne Earring",
-        ring1 = "Epaminondas's Ring",
-        ring2 = "Metamorph Ring +1",
         back = "Sucellos's Cape",
     }
     sets.WS["Seraph Blade"] = {

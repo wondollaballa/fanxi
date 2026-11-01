@@ -303,14 +303,152 @@ TLS (self-signed by default); the client does not verify it, as is normal for pr
 Open only what players need: `8080/tcp` (or 443 if proxied), `54231/tcp`, `54230/tcp`,
 `54230/udp`, `54001/tcp`, `54002/tcp`. Keep SSH and the database file private.
 
+### Deploying an update
+
+The server runs from a git checkout, so an update is a pull and a restart. Migrations in
+`database/migrations/` are applied by the service at startup, in version order — which is why the
+backup comes before the pull.
+
+```bash
+cd /srv/fanxi
+git rev-parse HEAD > /tmp/fanxi-previous        # for a code rollback
+sudo -u fanxi ./scripts/db-backup.sh            # before a migration touches the schema
+git pull --ff-only
+systemctl restart fanxi
+sleep 2
+systemctl is-active fanxi
+curl -s http://127.0.0.1:8080/api/v1/health
+journalctl -u fanxi -n 30 --no-pager
+```
+
+`/health` returns the server's `version`, so a bumped version in that response is the simplest
+proof the new code is live.
+
+If it does not come up, restore the data first, then the code:
+
+```bash
+systemctl stop fanxi
+cp data/backups/fanxi-<newest>.db data/fanxi.db
+rm -f data/fanxi.db-wal data/fanxi.db-shm
+git checkout "$(cat /tmp/fanxi-previous)"
+systemctl start fanxi
+```
+
+Two constraints worth knowing:
+
+- The server's clone is shallow. A commit that is not on `origin/main` cannot be checked out, so
+  push before deploying. If you copy files over with `rsync` instead, the checkout no longer
+  matches the repository and the next `git pull` will fight you.
+- Uncommitted changes on a development machine are not in `origin/main`, and therefore not in a
+  `git pull`. Commit and push first.
+
+The launcher is a separate artifact. A server update needs no launcher release unless the HTTP API
+changed; a launcher release needs no server restart.
+
+### Local dashboard
+
+`tools/fanxi_tui.py` is a terminal dashboard you run on the machine you administer from, not on the
+server. It drives the steps above over SSH and shows the state between them:
+
+```bash
+./tools/fanxi_tui.py
+```
+
+| Key | Action |
+| --- | --- |
+| `d` | deploy: backup, `git pull`, restart, health check, offer rollback |
+| `R` | restart the service |
+| `b` | take a backup on the server |
+| `p` | pull the latest backup home (the homelab job, run by hand) |
+| `l` | scroll the journal |
+| `g` | toggle registration on/off |
+| `a` | create or reset an admin (interactive, over a tty) |
+| `c` | open a shell on the server |
+| `e` | edit `~/.fanxi-manager.json` |
+| `r` | refresh now |
+
+The menu is navigable three ways — ↑↓ and Enter, a mouse click, or the hotkey in the label — and
+the pane beside it explains the selected action and states its risk. Anything that changes the
+server asks for confirmation first, with the risk repeated in the dialog and "no" as the default,
+so a stray key cannot restart the box. Colour marks state: green for healthy, yellow for stale,
+red for broken or destructive.
+
+The first run asks for the ssh destination, the checkout path and the launcher URL, and writes
+`~/.fanxi-manager.json` mode 0600. `FANXI_SSH`, `FANXI_REMOTE_DIR`, `FANXI_URL` and
+`FANXI_SSH_KEY` override it.
+
+Two non-interactive modes use the same code, so they can be scripted:
+
+```bash
+./tools/fanxi_tui.py --status     # the report, no curses
+./tools/fanxi_tui.py --deploy     # the deploy sequence, exit 1 on failure
+```
+
+It uses `ssh -o BatchMode=yes` with your existing key, so it fails fast instead of prompting, and it
+only touches the database through the server's own commands (`db-backup.sh`, `create-admin`).
+
 ### Backups
 
 ```bash
 ./scripts/db-backup.sh                 # data/backups/fanxi-YYYYmmdd-HHMMSS.db
 ```
 
-The script uses SQLite's online backup API, so it is safe while the server runs. Keep a copy
-off-machine. The TLS private key and `launcher.json` (on a player machine) are separate secrets.
+The script uses SQLite's online backup API, so it is safe while the server runs. It keeps the
+newest 14 copies and deletes the rest (`FANXI_BACKUP_KEEP=30` to change that, `0` keeps
+everything); without retention a daily backup of a small database fills the disk within a year.
+A daily cron entry is enough for a friend server:
+
+```cron
+15 4 * * * /srv/fanxi/scripts/db-backup.sh >/dev/null
+```
+
+Keep a copy off-machine. The TLS private key and `launcher.json` (on a player machine) are
+separate secrets.
+
+### Off-site copy to a homelab
+
+`scripts/pull-offsite-backup.sh` runs **on the machine that keeps the copies** (a homelab, a NAS,
+a desktop), not on the server. It asks the server for a fresh snapshot over SSH, copies it down,
+checks the copy with SQLite's `integrity_check`, and deletes local copies older than a week.
+
+Pull rather than push on purpose: the homelab already reaches the internet, so the server needs no
+route back and the homelab exposes no port. A failed night exits non-zero **before** pruning, so a
+broken transfer never removes the last good backup.
+
+```bash
+# once: the homelab's key, so the cron job is unattended
+ssh-keygen -t ed25519 -f ~/.ssh/fanxi-backup -N ''
+ssh-copy-id -i ~/.ssh/fanxi-backup.pub root@203.0.113.10   # or append to authorized_keys
+
+# daily, from the homelab
+FANXI_SSH=root@203.0.113.10 \
+FANXI_BACKUP_DIR=$HOME/backups/fanxi \
+  /path/to/fanxi/scripts/pull-offsite-backup.sh
+```
+
+```cron
+30 4 * * * FANXI_SSH=root@203.0.113.10 FANXI_BACKUP_DIR=/srv/backups/fanxi /srv/tools/pull-offsite-backup.sh >>/var/log/fanxi-backup.log 2>&1
+```
+
+`FANXI_REMOTE_DIR` defaults to `/srv/fanxi` and `FANXI_KEEP_DAYS` to `7`. Run it once a day; an
+hourly timer keeps 24× as many files for the same seven days.
+
+The copy on the homelab is the raw database: password hashes and live session tokens included.
+Either keep it on an encrypted volume or encrypt it (`age -r <key> fanxi-*.db`), and treat the
+homelab disk as a secret of the same weight as `data/tls/`.
+
+**Restore it once, before you need it.** A backup you have never restored is a hypothesis:
+
+```bash
+systemctl stop fanxi
+install -m 600 -o fanxi -g fanxi fanxi-20261101-043000.db /srv/fanxi/data/fanxi.db
+rm -f /srv/fanxi/data/fanxi.db-wal /srv/fanxi/data/fanxi.db-shm   # the old write-ahead log
+systemctl start fanxi
+python3 -m fanxi_server doctor
+```
+
+Dropping the `-wal` and `-shm` files matters: leaving them next to a replaced database applies the
+old log to the new file.
 
 ### Closing registration without restarting
 

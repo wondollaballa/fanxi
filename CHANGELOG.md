@@ -1,5 +1,81 @@
 # Changelog
 
+## Unreleased — Locus-tier monsters hit back
+
+- **Level 100+ monsters no longer use the level-99 offense cap.**  LandSandBoat's
+  `GetMaxSkill` stops at 99, so a level-135 Locus Camelopard had 604 Accuracy against a
+  level-99 player's 903 Evasion: every auto-attack and TP move sat on the 20% hit-rate
+  floor.  `stats.build_monster` now adds master-level attributes (+3.6/level), Accuracy
+  (+20/level) and Attack (+16/level) above 99, giving Locus 305-309 stats, 1324 Accuracy
+  and 1342 Attack.  The 1324 number is the requirement BG-wiki publishes for the camp;
+  the mob now reaches the 95% hit cap instead of missing everything.
+- **Monster Berserk is a real buff.**  The Dhalmel TP move was an icon-only self-buff,
+  so its +45% Attack / -25% Defense never reached the swing.  It is now stored in the
+  monster's `effect_state` with `ATT_PERCENT`/`DEF_PERCENT`, expires after 120 seconds,
+  affects auto-attacks, TP moves and damage taken, and Dispel/Finale can strip it
+  (Dispel now prefers a real self-buff over the player's Dia/other enfeebles).
+- **Healing Breeze is a max-HP heal.**  The old self-heal path restored a flat 300 HP.
+  The LandSandBoat script uses `baseHeal = maxHP` and fTP 172/215/258 over 1024 at
+  1000/2000/3000 TP, so a 308,300-HP Locus heals 51,784-77,677 instead of 300.  The
+  spent TP is captured before the bar is emptied.
+- **Every Locus uses the same level-100+ sheet, and three HP placeholders are fixed.**
+  The builder is generic, but `monster_templates` still had three Locus rows imported
+  without HP: Colibri 2,680, Wivre 2,720 and Lemures 2,740, while the rest of the family
+  has 293,000-327,500.  Migration 174 restores 229,600 / 259,000 / 305,000, and
+  The same migration writes retail level/HP curves for the camps that publish them:
+  Colibri 133-136 / 214,600-229,600, Wivre 135-137 / 244,000-259,000, Bibiki's three
+  135-137 Locus / 289,900-308,300, its crabs 137-139 / 309,100-327,500, and the King
+  Ranperre's Tomb rows.  Locus spawns now roll their level in that range (and reroll
+  on respawn), and `entities.mob_hp_for_level` interpolates HP between `hp_min` and
+  `hp`.  A level-129
+  Lugcrawler is still weaker than a 135 Camelopard; the camps are not flattened.
+  `test_stats.py` walks all 23 Locus templates and pins the master-level
+  Accuracy/Attack, the rolled level, and the interpolated HP.
+- **Locus Defense/Evasion now use the published per-level rows.**  `monster_templates`
+  stores them in `level_stats` (JSON), and `World.monster_sheet` applies the row for the
+  rolled level: Camelopard is 1346/1224 at 135, 1413/1284 at 137.  That is the retail
+  1324-accuracy requirement; Distract III is now a flat -130 Evasion (not a percent),
+  which brings a 135 Camelopard to 1094 and lets the new accuracy gear cap again.
+  Locus with no published table keep the level-derived curve.
+
+## Unreleased — the Odyssey accessories ship with the checkout
+
+- **The Beithir Ring can be augmented again.**  The ten Sheol Gaol accessories (Beithir Ring,
+  Schere Earring, Tellen Belt, Obstin. Sash, Hesperiidae, Coiste Bodhar, Epitaph, Neo Animator,
+  Acrontica and Tsuru), the Bunzi's/Ikenga's/Mpaca's sets, Gekkei and Kunimitsu live in
+  `data/odyssey_extra_r30.json`, but the `data/*` whitelist in `.gitignore` never un-ignored it.
+  A fresh clone -- including the live server -- therefore loaded only `data/odyssey_r30.json`,
+  `odyssey.entries()` had no accessory rows, a carried Beithir Ring had no Rank 30 path in the
+  RP card, and `//augment A Beithir Ring` answered "no known Rank 30 bundle".
+- **Both source datasets are now tracked.**  `.gitignore` whitelists
+  `data/odyssey_extra_r30.json` and `data/sinister_reign.json` (the Sinister Reign card's dataset
+  had the same omission), and both files are added to the repository.  `odyssey.missing()` and
+  `sinister.missing()` report an absent file and log a warning instead of silently serving an empty
+  catalogue; `test_odyssey.py` and `test_sinister.py` pin the files, so a checkout that loses one
+  fails the suite. `docs/odyssey-r30.md` describes the merge and the ring's single Rank 30 path.
+- **The ring's first row reaches the sheet.**  "Weapon Skill Acc.+15" was in the unmodelled list,
+  so only Attack+15 and Skillchain dmg.+5% of the ring's Rank 30 block applied.  The row now maps
+  to the engine's `WS_ACCURACY` (48), which the weapon-skill accuracy path already reads, and
+  `test_augment_stats.py` pins all three rows together.
+
+## Unreleased — a nearest-actor chain no longer freezes the client
+
+- **The freeze was a mutual-nearest cycle, not the gear.**  `f_10158ca0` follows "nearest actor
+  matching these masks" from one actor to the next with no visited set.  The player's trusts stand
+  together, so Luzaf's nearest match was Cornelia and Cornelia's was Luzaf; both carry mask 0x100e,
+  so the chain bounced between them forever and the frame never completed.  The post-battle gear
+  restore is only the moment the selector runs.  Captured live at 18:25, 19:03 and fixed at 19:54
+  (`[chain] cycle 0ebf97c0 -> 0ec37df0 -> 0ebf97c0`), with the two actors read out as Luzaf
+  (ServerId 16795396) and Cornelia (16795392).  See docs/freeze-actor-list.md.
+- **The chain now stops on A -> B -> A.**  `recomp/x86c.py` emits a two-deep history into both of
+  `f_10158ca0`'s loops; when the chain returns to the actor before last it logs `[chain] cycle`
+  and ends the chain where retail would spin.  Retail's loop assumes the chain terminates; any two
+  admitted actors can form the pair, so the guard is the fix, not a workaround for one pair.
+- **How it was found.**  `tools/freeze_watch.py` detects a wedged client, `tools/freeze_capture.py`
+  samples it and attaches `lldb` only when the stack is the actor chain, and the probe records the
+  guest registers and the walk.  A diagnostic build (`FANXI_SKIP_RECOMP=1` in tools/build.py) let
+  the guard be tested in generated code before the recompiler emitted it.
+
 ## Unreleased — a locked weapon holds through a weaponskill and re-arms when drawn
 
 - **A pinned weapon is a lock, not a filter.**  The host kept only a slot mask, so a set that

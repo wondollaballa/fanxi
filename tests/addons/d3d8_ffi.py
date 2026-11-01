@@ -9,7 +9,7 @@ gdifonts renderer (gdifont_ffi.c), in the addon harness with Ashita's own libs/d
 and libs there). gdifonts is not in this repository: without --gdifonts (or /tmp/gdifonts) its test
 is skipped. Addons carry versions of it (tTimers ThornyFFXI's, fancychat's with colour markers,
 balloon's with regions and clipping): each --gdifonts is tested in turn. A scratch data dir gets the libs and the test addons (tests/addons/d3d8test, gditest);
-build/host64 runs d3d8_ffi.txt and gdifonts.txt. Fails on any FAIL line, a Lua error, or a DONE
+build/fanxi runs d3d8_ffi.txt and gdifonts.txt. Fails on any FAIL line, a Lua error, or a DONE
 line that isn't all passed."""
 import argparse
 import os

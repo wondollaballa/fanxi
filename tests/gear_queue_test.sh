@@ -19,7 +19,7 @@ done
 
 data=$(mktemp -d "${TMPDIR:-/tmp}/gearqueue.XXXXXX")
 trap 'rm -rf "$data"' EXIT
-FFXI_CONTROL=54397 "$root/build/host64" --game "$game" --data-dir "$data" \
+FFXI_CONTROL=54397 "$root/build/fanxi" --game "$game" --data-dir "$data" \
     --addon-harness "$here/gear_queue_test.txt" > "$data/raw.txt" 2>&1 || true
 out=$(grep -E '^\[harness\] packet_out:' "$data/raw.txt" || true)
 

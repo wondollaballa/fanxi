@@ -1,9 +1,9 @@
 //! Finding the game, building `host64`, and starting it.
 //!
-//! The launcher never touches the player's game files itself. It runs the repository's existing
-//! Python build driver (`tools/build_posix.py`) exactly as the source installer does, then starts the
-//! resulting native host. Keeping that boundary means the Rust launcher can land before the
-//! recompiler is ported.
+//! The launcher never touches the player's game files itself. It runs the repository's Python
+//! build driver — `tools/build_posix.py` (clang) on macOS and Linux, `tools/build.py` (MSVC) on
+//! Windows — exactly as the source installer does, then starts the resulting native host. Keeping
+//! that boundary means the Rust launcher can land before the recompiler is ported.
 
 use std::path::{Path, PathBuf};
 use std::process::Stdio;
@@ -20,12 +20,23 @@ use crate::config;
 use crate::display;
 use crate::error::{AppError, AppResult};
 
-pub const HOST64: &str = if cfg!(windows) {
+/// The game executable the build produces.
+///
+/// The build *target* is still called `host64` (`python tools/build.py host64`); the artifact is
+/// Fanxi, matching the macOS bundle, whose executable is `Fanxi.app/Contents/MacOS/Fanxi`.
+pub const GAME_BIN: &str = if cfg!(windows) { "Fanxi.exe" } else { "fanxi" };
+pub const GAME_BIN_HEADLESS: &str = if cfg!(windows) {
+    "Fanxi-headless.exe"
+} else {
+    "Fanxi-headless"
+};
+/// What earlier builds wrote. Still searched so an existing `build/host64` keeps working.
+pub const LEGACY_GAME_BIN: &str = if cfg!(windows) {
     "host64.exe"
 } else {
     "host64"
 };
-pub const HOST64_HEADLESS: &str = if cfg!(windows) {
+pub const LEGACY_GAME_BIN_HEADLESS: &str = if cfg!(windows) {
     "host64-headless.exe"
 } else {
     "host64-headless"
@@ -79,9 +90,9 @@ pub fn resolve_repo_root(configured: &str) -> Option<PathBuf> {
     None
 }
 
-/// The checkout for a running config. This also understands the earlier launcher's `host64` path
-/// (`<checkout>/build/host64`) and `FANXI_HOST64`, which matters when a release bundle lives deep
-/// inside the checkout instead of next to it.
+/// The checkout for a running config. This also understands an earlier launcher's host path
+/// (`<checkout>/build/fanxi`, formerly `build/host64`) and `FANXI_HOST64`, which matters when a
+/// release bundle lives deep inside the checkout instead of next to it.
 pub fn resolve_repo_root_for(config: &crate::config::LauncherConfig) -> Option<PathBuf> {
     if let Some(root) = resolve_repo_root(&config.repo_root) {
         return Some(root);
@@ -118,9 +129,22 @@ fn repo_root_from_hint(hint: &str) -> Option<PathBuf> {
 }
 
 pub fn is_repo_root(path: &Path) -> bool {
-    path.join("tools").join("build_posix.py").is_file()
+    let tools = path.join("tools");
+    (tools.join("build_posix.py").is_file() || tools.join("build.py").is_file())
         && path.join("runtime").join("portable").is_dir()
         && path.join("host").is_dir()
+}
+
+/// The build driver this platform uses.
+///
+/// `tools/build_posix.py` drives clang on macOS and Linux; `tools/build.py` drives MSVC on Windows
+/// and activates the Visual Studio environment itself through `vswhere` and `vcvarsall`.
+pub fn build_driver() -> &'static str {
+    if cfg!(windows) {
+        "tools/build.py"
+    } else {
+        "tools/build_posix.py"
+    }
 }
 
 pub fn is_game_dir(path: &Path) -> bool {
@@ -180,8 +204,10 @@ pub fn host64_candidates(config: &crate::config::LauncherConfig) -> Vec<PathBuf>
         candidates.push(config::expand_home(config.host64.trim()));
     }
     if let Some(root) = resolve_repo_root_for(config) {
-        candidates.push(root.join("build").join(HOST64));
-        candidates.push(root.join("build").join(HOST64_HEADLESS));
+        candidates.push(root.join("build").join(GAME_BIN));
+        candidates.push(root.join("build").join(GAME_BIN_HEADLESS));
+        candidates.push(root.join("build").join(LEGACY_GAME_BIN));
+        candidates.push(root.join("build").join(LEGACY_GAME_BIN_HEADLESS));
         candidates.push(
             root.join("build")
                 .join("Fanxi.app")
@@ -201,8 +227,11 @@ pub fn find_host64(config: &crate::config::LauncherConfig) -> Option<PathBuf> {
 
 pub fn find_host64_headless(config: &crate::config::LauncherConfig) -> Option<PathBuf> {
     let root = resolve_repo_root_for(config)?;
-    let candidate = root.join("build").join(HOST64_HEADLESS);
-    candidate.is_file().then_some(candidate)
+    let build = root.join("build");
+    [GAME_BIN_HEADLESS, LEGACY_GAME_BIN_HEADLESS]
+        .into_iter()
+        .map(|name| build.join(name))
+        .find(|candidate| candidate.is_file())
 }
 
 pub fn build_launch_command(
@@ -251,13 +280,14 @@ pub async fn spawn_host64(
     })?;
     let host64 = if headless {
         find_host64_headless(config).ok_or_else(|| {
-            AppError::Game(
-                "host64-headless is not built yet; run tools/build_posix.py host64-headless".into(),
-            )
+            AppError::Game(format!(
+                "the headless host is not built yet; run {} host64-headless",
+                build_driver()
+            ))
         })?
     } else {
         find_host64(config).ok_or_else(|| {
-            AppError::Game("host64 is not built yet; build the game in Settings".into())
+            AppError::Game("the game is not built yet: press Build in Settings".into())
         })?
     };
     if !is_game_dir(game_dir) {
@@ -337,7 +367,7 @@ pub async fn spawn_host64(
     }
     let child = process
         .spawn()
-        .map_err(|error| AppError::Game(format!("could not start host64: {error}")))?;
+        .map_err(|error| AppError::Game(format!("could not start Fanxi: {error}")))?;
     Ok(child)
 }
 
@@ -350,17 +380,58 @@ pub async fn build_game(app: &AppHandle, root: &Path, game_dir: &Path) -> AppRes
     }
     if !is_repo_root(root) {
         return Err(AppError::Config(format!(
-            "{} is not a Fanxi checkout (tools/build_posix.py is missing)",
+            "{} is not a Fanxi checkout ({} is missing)",
+            root.display(),
+            build_driver()
+        )));
+    }
+    let driver = build_driver();
+    if !root.join(driver).is_file() {
+        return Err(AppError::Config(format!(
+            "{} does not contain {driver}",
             root.display()
         )));
     }
+    if cfg!(windows) {
+        check_windows_toolchain()?;
+    }
 
     let python = ensure_build_tools(app, root).await?;
+
+    // prepare.py identifies the retail build and unpacks the two DLLs into generated/.  A checkout
+    // that was cloned and never prepared has no generated/build.json, and every driver refuses to
+    // translate without one — so the launcher runs it, and re-runs it when the player points at a
+    // different game folder.
+    if needs_prepare(root, game_dir) {
+        emit(
+            app,
+            BuildEvent {
+                line: format!("Reading the game build from {}…", game_dir.display()),
+                phase: None,
+                percent: None,
+            },
+        );
+        let mut prepare = Command::new(&python);
+        prepare
+            .arg("tools/prepare.py")
+            .arg("--game")
+            .arg(game_dir)
+            .current_dir(root)
+            .env("FFXI_PROGRESS", "1");
+        let (code, tail) = stream_command(app, prepare, "Preparing the game files").await?;
+        if code != 0 {
+            return Err(AppError::Game(format!(
+                "could not read the game files (exit {code}).\n\n{}",
+                tail.join("\n")
+            )));
+        }
+    }
+
     emit(
         app,
         BuildEvent {
             line: format!(
-                "Translating and compiling host64 from {}…",
+                "Translating and compiling Fanxi from {}…",
                 game_dir.display()
             ),
             phase: None,
@@ -369,14 +440,21 @@ pub async fn build_game(app: &AppHandle, root: &Path, game_dir: &Path) -> AppRes
     );
 
     let mut command = Command::new(&python);
-    command
-        .arg("tools/build_posix.py")
-        .arg("host64")
-        .arg("--game")
-        .arg(game_dir)
-        .current_dir(root)
-        .env("FFXI_PROGRESS", "1");
-    let (code, tail) = stream_command(app, command, "Building host64").await?;
+    command.current_dir(root).env("FFXI_PROGRESS", "1");
+    if cfg!(windows) {
+        // The MSVC driver reads the game folder that prepare.py recorded, so it takes no --game.
+        command.arg("tools/build.py").arg("host64");
+        if let Some(sdl3) = sdl3_dir() {
+            command.env("SDL3_DIR", sdl3);
+        }
+    } else {
+        command
+            .arg("tools/build_posix.py")
+            .arg("host64")
+            .arg("--game")
+            .arg(game_dir);
+    }
+    let (code, tail) = stream_command(app, command, "Building Fanxi").await?;
     if code != 0 {
         return Err(AppError::Game(format!(
             "the build failed (exit {code}).\n\n{}",
@@ -384,7 +462,7 @@ pub async fn build_game(app: &AppHandle, root: &Path, game_dir: &Path) -> AppRes
         )));
     }
 
-    let host64 = root.join("build").join(HOST64);
+    let host64 = root.join("build").join(GAME_BIN);
     if !host64.is_file() {
         return Err(AppError::Game(format!(
             "the build finished but {} is missing",
@@ -403,6 +481,82 @@ pub async fn build_game(app: &AppHandle, root: &Path, game_dir: &Path) -> AppRes
         host64: host64.to_string_lossy().into_owned(),
         tail,
     })
+}
+
+/// Whether `generated/build.json` was written for a different game folder, or never written.
+fn needs_prepare(root: &Path, game_dir: &Path) -> bool {
+    let chosen = root.join("generated").join("build.json");
+    let Ok(text) = std::fs::read_to_string(&chosen) else {
+        return true;
+    };
+    let Ok(value) = serde_json::from_str::<Value>(&text) else {
+        return true;
+    };
+    let Some(game) = value.get("game").and_then(Value::as_str) else {
+        return true;
+    };
+    match (Path::new(game).canonicalize(), game_dir.canonicalize()) {
+        (Ok(prepared), Ok(requested)) => prepared != requested,
+        _ => Path::new(game) != game_dir,
+    }
+}
+
+#[cfg(not(windows))]
+fn check_windows_toolchain() -> AppResult<()> {
+    Ok(())
+}
+
+/// The two things `tools/build.py` needs that a player's machine may not have.
+#[cfg(windows)]
+fn check_windows_toolchain() -> AppResult<()> {
+    let program_files = std::env::var("ProgramFiles(x86)")
+        .unwrap_or_else(|_| r"C:\Program Files (x86)".to_string());
+    let vswhere = Path::new(&program_files)
+        .join("Microsoft Visual Studio")
+        .join("Installer")
+        .join("vswhere.exe");
+    if !vswhere.is_file() {
+        return Err(AppError::Game(
+            "Visual Studio Build Tools are missing. Install them with the \"Desktop development \
+             with C++\" workload (the MSVC v143 build tools and the Windows SDK), then press \
+             Build again."
+                .to_string(),
+        ));
+    }
+    if sdl3_dir().is_none() {
+        return Err(AppError::Game(format!(
+            "SDL3 is missing. Unpack the SDL3 VC development package into {} so it contains \
+             include\\SDL3\\SDL.h and lib\\x64\\SDL3.lib, or set SDL3_DIR to the package folder.",
+            config::data_dir().join("tools").join("SDL3").display()
+        )));
+    }
+    Ok(())
+}
+
+#[cfg(not(windows))]
+fn sdl3_dir() -> Option<PathBuf> {
+    None
+}
+
+/// The SDL3 VC package `tools/build.py` links against: `$SDL3_DIR` if set, else the managed copy
+/// under the launcher's data folder, else the development default the driver itself uses.
+#[cfg(windows)]
+fn sdl3_dir() -> Option<PathBuf> {
+    fn is_package(path: &Path) -> bool {
+        path.join("include").join("SDL3").join("SDL.h").is_file()
+    }
+    if let Ok(value) = std::env::var("SDL3_DIR") {
+        let value = value.trim();
+        if !value.is_empty() && is_package(Path::new(value)) {
+            return Some(PathBuf::from(value));
+        }
+    }
+    [
+        config::data_dir().join("tools").join("SDL3"),
+        PathBuf::from(r"C:\Dev\SDL3\SDL3-3.4.16"),
+    ]
+    .into_iter()
+    .find(|candidate| is_package(candidate))
 }
 
 async fn ensure_build_tools(app: &AppHandle, root: &Path) -> AppResult<PathBuf> {
@@ -718,8 +872,8 @@ mod tests {
         std::fs::create_dir_all(repo.join("host")).unwrap();
         std::fs::create_dir_all(repo.join("build")).unwrap();
         std::fs::write(repo.join("tools").join("build_posix.py"), b"").unwrap();
-        std::fs::write(repo.join("build").join(HOST64), b"").unwrap();
-        let host64 = repo.join("build").join(HOST64);
+        std::fs::write(repo.join("build").join(GAME_BIN), b"").unwrap();
+        let host64 = repo.join("build").join(GAME_BIN);
         let found =
             repo_root_from_hint(&host64.to_string_lossy()).expect("checkout from host64 path");
         assert_eq!(found, repo.canonicalize().unwrap());

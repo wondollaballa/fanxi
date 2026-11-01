@@ -24,7 +24,7 @@ data=$(mktemp -d "${TMPDIR:-/tmp}/phasestate.XXXXXX")
 trap 'rm -rf "$data"' EXIT
 
 out="$data/out.txt"
-FFXI_CONTROL=54398 "$root/build/host64" --game "$game" --data-dir "$data" \
+FFXI_CONTROL=54398 "$root/build/fanxi" --game "$game" --data-dir "$data" \
     --addon-harness "$here/phase_state_test.txt" > "$data/raw.txt" 2>&1 || true
 grep -E '^\[harness\] =|^--- |lua error|error' "$data/raw.txt" > "$out"
 

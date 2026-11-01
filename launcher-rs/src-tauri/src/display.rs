@@ -479,9 +479,7 @@ pub fn place_launcher_window(app: &AppHandle, monitor: &str) -> AppResult<()> {
     );
     window
         .set_position(tauri::LogicalPosition::new(x, y))
-        .map_err(|error| {
-            AppError::Config(format!("cannot move the launcher window: {error}"))
-        })?;
+        .map_err(|error| AppError::Config(format!("cannot move the launcher window: {error}")))?;
     Ok(())
 }
 

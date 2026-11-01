@@ -1,0 +1,281 @@
+name: release
+
+# Cut a release by pushing a version tag:
+#
+#   scripts/version.py set 0.3.0
+#   git commit -am "release 0.3.0"
+#   git tag v0.3.0
+#   git push origin main v0.3.0
+#
+# This workflow builds the launcher on macOS (universal) and Linux (x86_64), attaches the
+# bundles and a SHA-256 manifest to a *draft* GitHub Release, and stops there.  Read the draft,
+# write the notes and press Publish.
+#
+# It ships Fanxi and only Fanxi.  No FINAL FANTASY XI data, DLLs or a translated host64 go into
+# the release: none of it may be redistributed.  See docs/release.md.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Existing tag to build again, e.g. v0.3.0"
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+
+jobs:
+  version:
+    name: check the version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.read.outputs.version }}
+      tag: ${{ steps.read.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+          fetch-depth: 0
+
+      - name: Read the version and compare it with the tag
+        id: read
+        shell: bash
+        env:
+          TAG: ${{ inputs.tag || github.ref_name }}
+        run: |
+          set -euo pipefail
+          python3 scripts/version.py check "$TAG"
+          version="$(python3 scripts/version.py)"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+          echo "Building $version for tag $TAG"
+
+  build:
+    name: build ${{ matrix.platform }}
+    needs: version
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # One .dmg that runs natively on Apple silicon and Intel.
+          - os: macos-latest
+            platform: macos-universal
+            target: universal-apple-darwin
+            bundles: app,dmg
+          # One AppImage (no install) and one .deb, built on the oldest runner we support so
+          # the glibc floor stays low.
+          - os: ubuntu-22.04
+            platform: linux-x86_64
+            target: ""
+            bundles: appimage,deb
+          # The player base: an NSIS installer, which is the only bundle that registers Start
+          # menu shortcuts and an uninstaller without an admin prompt.
+          - os: windows-latest
+            platform: windows-x64
+            target: ""
+            bundles: nsis
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.tag || github.ref }}
+
+      - name: Install the Tauri system packages (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            libwebkit2gtk-4.1-dev libappindicator3-dev librsvg2-dev patchelf \
+            libgtk-3-dev libssl-dev xdg-utils
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: launcher-rs/package-lock.json
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ runner.os == 'macOS' && 'aarch64-apple-darwin,x86_64-apple-darwin' || '' }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: launcher-rs/src-tauri -> target
+          key: release-${{ matrix.platform }}
+
+      - name: Install frontend packages
+        working-directory: launcher-rs
+        run: npm ci
+
+      - name: Configure macOS signing
+        if: runner.os == 'macOS'
+        shell: bash
+        env:
+          APPLE_CERTIFICATE: ${{ secrets.APPLE_CERTIFICATE }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ secrets.APPLE_CERTIFICATE_PASSWORD }}
+          APPLE_SIGNING_IDENTITY: ${{ secrets.APPLE_SIGNING_IDENTITY }}
+          APPLE_ID: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD: ${{ secrets.APPLE_PASSWORD }}
+          APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+          KEYCHAIN_PASSWORD: ${{ secrets.KEYCHAIN_PASSWORD }}
+        run: |
+          set -euo pipefail
+          if [ -z "${APPLE_CERTIFICATE:-}" ]; then
+            # No Developer ID certificate yet. Ad-hoc signing is the difference between "the app
+            # is damaged" and "open it once from the context menu" on Apple silicon.
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
+            echo "No APPLE_CERTIFICATE secret: signing ad hoc, not notarizing."
+            exit 0
+          fi
+          for name in APPLE_CERTIFICATE APPLE_CERTIFICATE_PASSWORD APPLE_SIGNING_IDENTITY \
+                      APPLE_ID APPLE_PASSWORD APPLE_TEAM_ID KEYCHAIN_PASSWORD; do
+            if [ -n "${!name:-}" ]; then
+              echo "$name=${!name}" >> "$GITHUB_ENV"
+            fi
+          done
+          echo "Signing with a Developer ID certificate."
+
+      - name: Build the bundles
+        working-directory: launcher-rs
+        shell: bash
+        run: |
+          set -euo pipefail
+          args=(--bundles "${{ matrix.bundles }}")
+          if [ -n "${{ matrix.target }}" ]; then
+            args+=(--target "${{ matrix.target }}")
+          fi
+          npm run tauri build -- "${args[@]}"
+
+      - name: Collect the assets with stable names
+        shell: bash
+        env:
+          VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          set -euo pipefail
+          mkdir -p dist
+          case "${{ matrix.platform }}" in
+            macos-universal)
+              bundle="launcher-rs/src-tauri/target/universal-apple-darwin/release/bundle"
+              dmg="$(find "$bundle/dmg" -maxdepth 1 -name '*.dmg' -print -quit)"
+              test -n "$dmg"
+              cp "$dmg" "dist/Fanxi-Launcher-$VERSION-macos-universal.dmg"
+              ;;
+            linux-x86_64)
+              bundle="launcher-rs/src-tauri/target/release/bundle"
+              cp "$bundle"/appimage/*.AppImage "dist/Fanxi-Launcher-$VERSION-linux-x86_64.AppImage"
+              cp "$bundle"/deb/*.deb "dist/Fanxi-Launcher-$VERSION-linux-amd64.deb"
+              chmod +x "dist/Fanxi-Launcher-$VERSION-linux-x86_64.AppImage"
+              ;;
+            windows-x64)
+              bundle="launcher-rs/src-tauri/target/release/bundle/nsis"
+              setup="$(find "$bundle" -maxdepth 1 -name '*-setup.exe' -print -quit)"
+              test -n "$setup"
+              cp "$setup" "dist/Fanxi-Launcher-$VERSION-windows-x64-setup.exe"
+              ;;
+            *)
+              echo "unknown platform ${{ matrix.platform }}" >&2
+              exit 1
+              ;;
+          esac
+          ls -lh dist
+
+      - uses: actions/upload-artifact@v7
+        with:
+          name: ${{ matrix.platform }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  publish:
+    name: draft the release
+    needs: [version, build]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v8
+        with:
+          path: dist
+          merge-multiple: true
+
+      - name: Write the checksum manifest
+        working-directory: dist
+        run: |
+          sha256sum ./* > SHA256SUMS.txt
+          cat SHA256SUMS.txt
+
+      - uses: softprops/action-gh-release@v3
+        with:
+          tag_name: ${{ needs.version.outputs.tag }}
+          name: Fanxi ${{ needs.version.outputs.version }}
+          draft: true
+          prerelease: false
+          generate_release_notes: true
+          files: dist/*
+          body: |
+            ## Fanxi ${{ needs.version.outputs.version }}
+
+            Pick the file for the machine you are installing on. One disk image covers both Mac
+            chips; the AppImage needs no installation.
+
+            | Your machine | Download |
+            | --- | --- |
+            | **macOS 12+** — Apple silicon or Intel | [`Fanxi-Launcher-${{ needs.version.outputs.version }}-macos-universal.dmg`](https://github.com/wondollaballa/fanxi/releases/download/${{ needs.version.outputs.tag }}/Fanxi-Launcher-${{ needs.version.outputs.version }}-macos-universal.dmg) |
+            | **Linux x86_64** — any distribution | [`Fanxi-Launcher-${{ needs.version.outputs.version }}-linux-x86_64.AppImage`](https://github.com/wondollaballa/fanxi/releases/download/${{ needs.version.outputs.tag }}/Fanxi-Launcher-${{ needs.version.outputs.version }}-linux-x86_64.AppImage) |
+            | **Debian / Ubuntu (x86_64)** | [`Fanxi-Launcher-${{ needs.version.outputs.version }}-linux-amd64.deb`](https://github.com/wondollaballa/fanxi/releases/download/${{ needs.version.outputs.tag }}/Fanxi-Launcher-${{ needs.version.outputs.version }}-linux-amd64.deb) |
+            | **Windows 10/11 (x64)** | [`Fanxi-Launcher-${{ needs.version.outputs.version }}-windows-x64-setup.exe`](https://github.com/wondollaballa/fanxi/releases/download/${{ needs.version.outputs.tag }}/Fanxi-Launcher-${{ needs.version.outputs.version }}-windows-x64-setup.exe) |
+
+            Not sure which one?
+
+            - **macOS:** Apple menu → *About This Mac*. The `.dmg` is universal, so the chip does
+              not matter.
+            - **Linux:** `uname -m` prints `x86_64` for both builds above. `aarch64` or `arm64`
+              (Raspberry Pi, Asahi) has no build yet.
+            - **AppImage or `.deb`:** the AppImage runs anywhere and needs no install, just
+              `chmod +x`; the `.deb` adds the desktop entry and system integration.
+            - **Windows:** take the `-setup.exe`. Building `host64` needs a C toolchain and SDL3;
+              the launcher names whichever piece is missing. The player kit that bundles both is
+              the next milestone (see [docs/onboarding.md](https://github.com/wondollaballa/fanxi/blob/main/docs/onboarding.md)).
+
+            Verify a download with `shasum -a 256 -c SHA256SUMS.txt` (macOS)
+            or `sha256sum -c SHA256SUMS.txt` (Linux).
+
+            The `Source code` archives GitHub adds below are this repository at the tag — you only
+            need them to build from source.
+
+            ### Before you install
+
+            Fanxi ships **no FINAL FANTASY XI data and no game binaries**. You need your own
+            patched FINAL FANTASY XI installation — the client is free from Square Enix — and you
+            point the launcher at it. See
+            [docs/retail-data.md](https://github.com/wondollaballa/fanxi/blob/main/docs/retail-data.md).
+
+            The launcher also builds `host64` from your own DLLs with the Python tools in the
+            Fanxi checkout, so clone it once and set **Settings → Fanxi checkout** to the clone:
+
+            ```sh
+            git clone https://github.com/wondollaballa/fanxi.git
+            ```
+
+            Or run `install.sh`, which clones the checkout and builds the app for you:
+
+            ```sh
+            curl -fsSL https://raw.githubusercontent.com/wondollaballa/fanxi/main/install.sh | bash
+            ```
+
+            ### What's in the box
+
+            - the launcher: sign-in, characters, team, GearSwap, warps, HUD and the build driver;
+            - the bundled `gearswap/` job libraries;
+            - `SHA256SUMS.txt`.

@@ -34,7 +34,7 @@ while IFS= read -r line; do
 done < "$here/windower_layer_test.txt" > "$script"
 
 out="$data/out.txt"
-FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/host64" --game "$game" --data-dir "$data" \
+FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/fanxi" --game "$game" --data-dir "$data" \
     --addon-harness "$script" > "$data/raw.txt" 2>&1 || true
 grep -E '^\[chat |^\[game\]|^\[harness\]|error' "$data/raw.txt" | grep -v 'patch.ver' | sed "s|$data|<data>|g" > "$out"
 

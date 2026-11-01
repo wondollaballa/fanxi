@@ -26,7 +26,7 @@ frames 2
 load battletest xi
 frames 3
 TXT
-FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/host64" --game "$game" --data-dir "$data" \
+FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/fanxi" --game "$game" --data-dir "$data" \
     --addon-harness "$data/script.txt" > "$data/out.txt" 2>&1 || true
 grep -E '^\[chat 1\] (install|ok|FAIL|failures=)' "$data/out.txt" \
     | sed 's/^\[chat 1\] //' > "$data/result.txt" || true

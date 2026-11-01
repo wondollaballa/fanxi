@@ -24,7 +24,7 @@ mkdir -p "$data/xi/addons"
 cp -R "$here/addons/coretest" "$data/xi/addons/"
 
 out="$data/out.txt"
-FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/host64" --game "$game" --data-dir "$data" \
+FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/fanxi" --game "$game" --data-dir "$data" \
     --addon-harness "$here/addon_core_test.txt" > "$data/raw.txt" 2>&1 || true
 grep -E '^\[chat |^\[game\]|^\[harness\]|unbalanced|error' "$data/raw.txt" | grep -v 'patch.ver' > "$out"
 

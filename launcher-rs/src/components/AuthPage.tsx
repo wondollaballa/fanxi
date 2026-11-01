@@ -3,6 +3,7 @@ import { ArrowLeft, ArrowRight, LockKeyhole, Server, Sparkles, UserRound } from 
 import type { PublicView, SessionView } from "../types";
 import { backend, LauncherError } from "../lib/api";
 import { Badge, Button, ErrorBanner, Field, TextInput, cn } from "./ui";
+import { ServerPicker } from "./ServerPicker";
 
 export function AuthPage({
   initialApiUrl,
@@ -143,17 +144,11 @@ export function AuthPage({
           {error && <ErrorBanner message={error} onClose={() => setError("")} />}
 
           <form onSubmit={submit} className="auth-form">
-            <Field label="Server">
-              <div className="input-with-icon">
-                <Server size={15} />
-                <TextInput
-                  value={apiUrl}
-                  onChange={(event) => setApiUrl(event.target.value)}
-                  placeholder="http://127.0.0.1:8080"
-                  spellCheck={false}
-                  autoCapitalize="off"
-                />
-              </div>
+            <Field
+              label="Server"
+              hint="Pick the hosted server, or choose Custom URL to type your own."
+            >
+              <ServerPicker value={apiUrl} onChange={setApiUrl} />
             </Field>
             <Field label="Username">
               <div className="input-with-icon">

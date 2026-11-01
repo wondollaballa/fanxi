@@ -11,7 +11,7 @@ back on their recorded timing. Nothing depends on a live server's state.
 
 then start the game against it:
 
-  build/host64 ... --server 127.0.0.1 --user anything --pass x --authport 55231 --dataport 55230 --viewport 55001
+  build/fanxi ... --server 127.0.0.1 --user anything --pass x --authport 55231 --dataport 55230 --viewport 55001
 
 A session starts in the suite's home scene (one marked --home: GM Home, say) and waits there. Ask for
 scenes in chat (the "!" is optional):

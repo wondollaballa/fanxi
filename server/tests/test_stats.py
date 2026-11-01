@@ -1,8 +1,10 @@
 """Gear stats: the reforged data migration and the HP/MP percentage modifiers."""
 from __future__ import annotations
 
+import random
 import sys
 import tempfile
+import time
 import unittest
 from pathlib import Path
 
@@ -11,8 +13,13 @@ sys.path.insert(0, str(ROOT / "server"))
 sys.path.insert(0, str(ROOT / "tools"))
 
 from fanxi_server.db import Database  # noqa: E402
+from fanxi_server.config import Config  # noqa: E402
 from fanxi_server.game import (  # noqa: E402
-    base_stats, modifiers as mod, prime_weapons, stats)
+    base_stats, effects, modifiers as mod, prime_weapons, stats)
+from fanxi_server.game.entities import (  # noqa: E402
+    ZoneEntity, mob_from_row, mob_hp_for_level)
+from fanxi_server.game.world import World  # noqa: E402
+from fanxi_server.service import FanxiService  # noqa: E402
 import import_reforged_item_data as reforged  # noqa: E402
 
 
@@ -263,6 +270,128 @@ class DescriptionParserTest(unittest.TestCase):
         self.assertEqual(table[mod.REGEN_MULTIPLIER], 25)
         self.assertEqual(table[mod.REGEN_DURATION], 27)
         self.assertFalse(reforged.looks_like_stat(leftover))
+
+class LocusTierTest(unittest.TestCase):
+    """Every Locus template is on the same level-100+ sheet as Locus Camelopard."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.db = Database(Path(cls.tmp.name) / "fanxi.db", ROOT)
+        cls.db.initialize()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def test_every_locus_gets_the_master_level_offense(self):
+        rows = self.db.all(
+            "SELECT name, level_min, level_max, hp FROM monster_templates "
+            "WHERE name LIKE 'Locus%' ORDER BY name")
+        self.assertGreaterEqual(len(rows), 20)
+        for row in rows:
+            name = str(row["name"])
+            level_min, level_max = int(row["level_min"]), int(row["level_max"])
+            self.assertGreaterEqual(int(row["hp"]), 100000, name)
+            low = stats.build_monster(level_min).fighter
+            high = stats.build_monster(level_max).fighter
+            # The 99-capped table alone gives 424-624 Accuracy at these levels; the
+            # master slope has to put every Locus above that, including the 129-131
+            # Crawler's Nest camp.
+            self.assertGreaterEqual(low.accuracy, 1174, name)
+            self.assertGreaterEqual(high.accuracy,
+                                    424 + max(0, level_max - 99) * 20, name)
+            self.assertGreaterEqual(high.attack, 1200, name)
+
+    def test_locus_placeholder_hp_is_gone(self):
+        """Migration 174: these three imported as 2,680/2,720/2,740 HP."""
+        expected = {
+            "Locus Colibri": 229600,
+            "Locus Wivre": 259000,
+            "Locus Lemures": 311800,
+        }
+        for name, hp in expected.items():
+            row = self.db.one(
+                "SELECT hp FROM monster_templates WHERE name = ?", (name,))
+            self.assertIsNotNone(row, name)
+            self.assertEqual(int(row["hp"]), hp, name)
+
+    def test_locus_spawns_roll_their_retail_level_range(self):
+        rows = self.db.all(
+            "SELECT s.level, t.name, t.level_min, t.level_max FROM monster_spawns s "
+            "JOIN monster_templates t ON t.id = s.template_id "
+            "WHERE t.name LIKE 'Locus%'")
+        self.assertGreaterEqual(len(rows), 20)
+        for row in rows:
+            self.assertIsNone(row["level"], row["name"])
+            self.assertLessEqual(int(row["level_min"]), int(row["level_max"]))
+        # The published Bhaflau table runs Colibri to 136, not the importer's 135.
+        colibri = self.db.one(
+            "SELECT level_min, level_max FROM monster_templates "
+            "WHERE name = 'Locus Colibri'")
+        self.assertEqual((int(colibri["level_min"]), int(colibri["level_max"])),
+                         (133, 136))
+
+    def test_mob_hp_interpolates_between_the_retail_ends(self):
+        # Bibiki Bay Camelopard: 289,900 at 135, 308,300 at 137.
+        self.assertEqual(mob_hp_for_level(135, 135, 137, 308300, 289900), 289900)
+        self.assertEqual(mob_hp_for_level(136, 135, 137, 308300, 289900), 299100)
+        self.assertEqual(mob_hp_for_level(137, 135, 137, 308300, 289900), 308300)
+        # A template without hp_min keeps its old flat value.
+        self.assertEqual(mob_hp_for_level(135, 135, 137, 305000), 305000)
+
+    def test_locus_respawn_rerolls_level_and_hp(self):
+        service = FanxiService(Config.from_env(ROOT), self.db)
+        row = next(row for row in service.monster_spawns_for_zone(4)
+                   if row["template_name"] == "Locus Camelopard")
+        row = dict(row)
+        row["level"] = None
+        mob = mob_from_row(row, 124, random.Random(1))
+        self.assertTrue(mob.level_rolls)
+        self.assertIn(mob.level, (135, 136, 137))
+        self.assertEqual(mob.hp_max, mob.level_stats[mob.level]["hp"])
+        self.assertEqual(mob.defense_override, mob.level_stats[mob.level]["defense"])
+        self.assertEqual(mob.evasion_override, mob.level_stats[mob.level]["evasion"])
+        mob.reset_mob(0.0, random.Random(4))
+        self.assertIn(mob.level, (135, 136, 137))
+        self.assertEqual(mob.hp_max, mob.level_stats[mob.level]["hp"])
+        self.assertEqual(mob.hp, mob.hp_max)
+
+    def test_mob_from_row_uses_the_rolled_level_and_hp(self):
+        service = FanxiService(Config.from_env(ROOT), self.db)
+        row = next(row for row in service.monster_spawns_for_zone(4)
+                   if row["template_name"] == "Locus Camelopard")
+        row = dict(row)
+        row["level"] = 136
+        mob = mob_from_row(row, 123)
+        self.assertEqual(mob.level, 136)
+        self.assertEqual(mob.hp_max, 299100)
+        self.assertEqual(mob.hp, 299100)
+        self.assertEqual(mob.defense_override, 1379)
+        self.assertEqual(mob.evasion_override, 1254)
+
+    def test_distract_iii_is_flat_evasion_down(self):
+        service = FanxiService(Config.from_env(ROOT), self.db)
+        world = World(Config.from_env(ROOT), service, None)
+        entity = ZoneEntity(
+            kind="mob", id=0x01000000, targid=2, zone=4,
+            name="Locus Camelopard", level=135,
+            defense_override=1346, evasion_override=1224)
+        world.apply_mob_effect(
+            entity, effects.for_spell("Distract III"), None, time.time(),
+            name="Distract III")
+        self.assertEqual(world.debuffed_monster(entity).evasion, 1094)
+
+    def test_monster_sheet_uses_the_retail_defense_and_evasion(self):
+        service = FanxiService(Config.from_env(ROOT), self.db)
+        world = World(Config.from_env(ROOT), service, None)
+        entity = ZoneEntity(
+            kind="mob", id=0x01000000, targid=1, zone=4,
+            name="Locus Camelopard", level=135,
+            defense_override=1346, evasion_override=1224)
+        sheet = world.monster_sheet(entity)
+        self.assertEqual(sheet.fighter.defense, 1346)
+        self.assertEqual(sheet.fighter.evasion, 1224)
 
 
 if __name__ == "__main__":

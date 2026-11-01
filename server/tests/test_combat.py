@@ -526,6 +526,31 @@ class SheetTest(unittest.TestCase):
         self.assertGreater(high.defense, low.defense)
         self.assertGreater(high.weapon_dmg, low.weapon_dmg)
 
+    def test_master_level_monsters_keep_growing_past_the_skill_cap(self):
+        """A level-135 Locus Camelopard is not a level-99 mob with a bigger HP bar.
+
+        BG-wiki's parse gives it ~305-320 VIT/AGI and a 1324 Accuracy requirement.
+        Before the master-level slopes its Accuracy was 604, which pinned every swing
+        and TP move against a 99 player's 888 Evasion to the 20% floor.
+        """
+        mob = stats.build_monster(135).fighter
+        self.assertGreaterEqual(mob.strength, 300)
+        self.assertGreaterEqual(mob.vitality, 300)
+        self.assertGreaterEqual(mob.agility, 300)
+        self.assertGreaterEqual(mob.accuracy, 1300)
+        self.assertGreaterEqual(mob.attack, 1300)
+        rate = combat.hit_rate(
+            accuracy=mob.accuracy, evasion=888, attacker_level=135, target_level=99,
+            is_pc=False, corrected=False)
+        self.assertGreaterEqual(rate, 0.90)
+
+    def test_level_ninety_nine_monsters_keep_the_old_curve(self):
+        mob = stats.build_monster(99).fighter
+        self.assertEqual(mob.accuracy, 424)
+        self.assertEqual(mob.attack, 499)
+        self.assertEqual(mob.defense, 473)
+        self.assertEqual(mob.evasion, 465)
+
 
 class DualWieldTest(unittest.TestCase):
     """Two one-handed weapons make an off-hand swing; the trait makes the round faster."""

@@ -9505,6 +9505,9 @@ class ZoneSession:
             return
         status, mods, hostile = spec
         bubble = geomancy.bubble(name)
+        if bubble == "geo":
+            self._geo_bubble(spell, now, cast, status, mods, hostile)
+            return
         me = int(self.char["char_id"])
         duration = 180.0
         if hostile:
@@ -9514,9 +9517,12 @@ class ZoneSession:
             self._clear_geo_aura(bubble, int(status),
                                  int(target.id) if target is not None else 0)
             if target is not None and target.alive:
+                # Carry the spell's name: the Target Debuffs window prefers it over the
+                # client's status label, and the shared Colure status (558 for every
+                # frailty aura, Indi- or Geo-) is named for the Indi- bubble there.
                 self.world.apply_mob_effect(
                     target, effects.SpellEffect(status, "debuff", duration, potency=10),
-                    self, now, duration=duration)
+                    self, now, duration=duration, name=name)
                 self.say("%s affects %s." % (name, target.name))
             return
         self._clear_geo_aura(bubble, int(status), 0)
@@ -9558,6 +9564,87 @@ class ZoneSession:
             if target is not self:
                 self.queue.append(action)
         self.queue.append(self.party_member())
+
+    GEO_RADIUS = 10.0
+
+    def _geo_bubble(self, spell: dict, now: float, cast: dict, status: int,
+                    mods: dict, hostile: bool) -> None:
+        """A Geo- spell puts its Luopan down, and the bubble is the Luopan's.
+
+        Retail's Geo- aura radiates from the Luopan, not from the Geomancer: party
+        members inside the radius keep the buff, monsters inside take the hex, and
+        stepping out drops it.  The Luopan is a pet, so a recast replaces it and its
+        bubble with it.
+        """
+        name = str(spell.get("name") or "")
+        pet = self.world.spawn_pet(self, "luopan", now)
+        if pet is None:
+            return
+        pet.geo_name = name
+        pet.geo_status = int(status)
+        pet.geo_mods = dict(mods)
+        pet.geo_hostile = bool(hostile)
+        pet.geo_potency = 10
+        pet.geo_mob_id = 0
+        if hostile:
+            target = None
+            if int(cast.get("target") or 0):
+                target = self.world.entity_by_id(int(self.zone), int(cast["target"]))
+            if ((target is None or not target.is_mob() or not target.alive)
+                    and self.engaged_id):
+                target = self.world.entity_by_id(int(self.zone), int(self.engaged_id))
+            if target is not None and target.is_mob() and target.alive:
+                pet.geo_mob_id = int(target.id)
+        self._clear_geo_aura("geo", int(status), int(getattr(pet, "geo_mob_id", 0) or 0))
+        self._apply_geo_bubble(pet, now)
+
+    def _apply_geo_bubble(self, pet, now: float) -> None:
+        """Put the Luopan's aura on whoever is inside its radius, take it off the rest."""
+        spec = geomancy.indi_effect(str(getattr(pet, "geo_name", "") or ""))
+        if spec is None:
+            return
+        status, mods, hostile = spec
+        duration = 180.0
+        here = (float(pet.x), float(pet.y), float(pet.z))
+        if hostile:
+            mob_id = int(getattr(pet, "geo_mob_id", 0) or 0)
+            mob = self.world.entity_by_id(int(self.zone), mob_id) if mob_id else None
+            if mob is None or not mob.alive:
+                return
+            if math.dist(here, (float(mob.x), float(mob.y), float(mob.z))) <= self.GEO_RADIUS:
+                if mob.effect_state.get(status) is None:
+                    self.say("%s affects %s." % (pet.geo_name, mob.name))
+                self.world.apply_mob_effect(
+                    mob, effects.SpellEffect(status, "debuff", duration, potency=10),
+                    self, now, duration=duration, name=str(pet.geo_name))
+            elif mob.effect_state.get(status) is not None:
+                self.world._drop_mob_effect(int(self.char["char_id"]), mob, status)
+            return
+        for target in self._geo_party():
+            inside = math.dist(here, tuple(target.pos[:3])) <= self.GEO_RADIUS
+            state = target.effect_state.get(status)
+            if inside:
+                if state is None or float(state.get("until") or 0.0) - now < 60.0:
+                    target.add_effect(status, duration=duration, power=10, mods=dict(mods))
+                    target.queue.append(target.char_status())
+            elif state is not None:
+                target.remove_effect(status, quiet=True)
+                target.queue.append(target.char_status())
+
+    def _geo_bubble_off(self, pet) -> None:
+        """The Luopan is gone (expired, replaced, Full Circle): take its aura with it."""
+        status = int(getattr(pet, "geo_status", 0) or 0)
+        if not status:
+            return
+        for target in self._geo_party():
+            if target.effect_state.get(status) is not None:
+                target.remove_effect(status, quiet=True)
+                target.queue.append(target.char_status())
+        mob_id = int(getattr(pet, "geo_mob_id", 0) or 0)
+        if mob_id:
+            mob = self.world.entity_by_id(int(self.zone), mob_id)
+            if mob is not None and mob.effect_state.get(status) is not None:
+                self.world._drop_mob_effect(int(self.char["char_id"]), mob, status)
 
     def _clear_geo_aura(self, bubble: str, keep: int, mob_id: int) -> None:
         """Take this bubble's last aura down before the new cast lands.

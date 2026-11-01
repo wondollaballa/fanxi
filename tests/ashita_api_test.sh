@@ -29,7 +29,7 @@ printf '[test.pointer]\nmodule = FFXiMain.dll\npattern = A1????????85C05E74????8
     > "$data/ashita/config/ashita/custom.pointers.ini"
 
 out="$data/out.txt"
-FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/host64" --game "$game" --data-dir "$data" \
+FFXI_ADDONS_LUA="$root/host/addons/lua" "$root/build/fanxi" --game "$game" --data-dir "$data" \
     --addon-harness "$here/ashita_api_test.txt" > "$data/raw.txt" 2>&1 || true
 grep -E '^\[chat |^\[game\]|^\[harness\]|unsupported|error' "$data/raw.txt" | grep -v 'patch.ver\|ImGui assertion' > "$out"
 

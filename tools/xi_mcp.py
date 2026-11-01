@@ -9,7 +9,7 @@ to the game without its window having focus, and screenshots are read from its f
 
 Environment:
   XI_CONTROL_PORT   the game's control port (54300)
-  XI_GAME           for game_launch: the game's executable (build/host64, or the app's
+  XI_GAME           for game_launch: the game's executable (build/fanxi, or the app's
                     "Contents/MacOS/Final Fantasy XI")
   XI_GAME_ARGS      for game_launch: its arguments when the call gives none (shell-style)
 

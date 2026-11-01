@@ -147,7 +147,7 @@ A server's AI walks a spawned crowd home, so crowds need `--hold`; it can't put 
 place, so `--players` makes them.
 
     python3 tools/replayserver.py --huffman <dir with compress.dat> --suite suite.txt
-    build/host64 --game "<FINAL FANTASY XI>" --server 127.0.0.1 --user replay --pass x \
+    build/fanxi --game "<FINAL FANTASY XI>" --server 127.0.0.1 --user replay --pass x \
         --authport 55231 --dataport 55230 --viewport 55001
 
 The session waits in the home scene. Ask for scenes in chat (the `!` is optional):
@@ -198,6 +198,6 @@ addon, the frame log, and the report.
     python3 tools/replay.py shots suite.txt                          # a frame capture at each READY
     python3 tools/replay.py play suite.txt                           # a session to watch: !replay in chat
 
-`--game` (or `FFXI_GAME`), `--huffman` (or `FFXI_HUFFMAN`), `--client` (default `build/host64`),
+`--game` (or `FFXI_GAME`), `--huffman` (or `FFXI_HUFFMAN`), `--client` (default `build/fanxi`),
 `--data-dir` (default host64's); arguments after `--` go to host64. The game's own frame cap and
 display settings are what it measures under.

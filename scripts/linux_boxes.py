@@ -12,7 +12,7 @@ that folder and tried without rebuilding the remote `host64-headless`. A missing
 harmless: the client falls back to the copy embedded in the binary.
 
 The Mac keeps the server and the main client; the five subs run as headless host64 processes on the
-Linux box (build/host64-headless, SDL's dummy video and audio drivers). Each one listens on its own
+Linux box (build/fanxi-headless, SDL's dummy video and audio drivers). Each one listens on its own
 loopback control port there, and an ssh -L tunnel makes the same port reachable on this Mac, so the
 existing control protocol and the launcher can drive it unchanged.
 
@@ -140,7 +140,10 @@ def remote_games(ssh: str) -> list[dict]:
             continue
         etime, command = parts[1], parts[2]
         words = command.split()
-        if not words or not os.path.basename(words[0]).startswith("host64"):
+        if not words:
+            continue
+        name = os.path.basename(words[0])
+        if name not in ("fanxi", "host64", "fanxi-headless", "host64-headless"):
             continue
         user = ""
         for index, word in enumerate(words):
@@ -297,7 +300,7 @@ def up(args) -> int:
         remote = " ".join(
             [
                 f"cd {shlex.quote(args.repo)} &&",
-                f"setsid env {env} ./build/host64-headless",
+                f"setsid env {env} ./build/fanxi-headless",
                 "--game", shlex.quote(args.game),
                 "--server", shlex.quote(str(client.get("server", ""))),
                 "--user", shlex.quote(str(client.get("username", user))),

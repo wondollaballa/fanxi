@@ -47,7 +47,7 @@ One JSON file, mode `0600`, at:
     "ui_scale": 2.0
   },
   "monitor": "Monitor #29451",
-  "host64": "/…/fanxi/build/host64",
+  "host64": "/…/fanxi/build/fanxi",
   "auto_login": true,
   "last_page": "control",
   "accounts": [
@@ -358,12 +358,24 @@ binaries.
 3. The launcher:
    - creates `.venv/` in the repository if missing;
    - installs `capstone` and `pefile` into it (needs network once);
-   - runs `.venv/bin/python tools/build_posix.py host64 --game <folder>`;
+   - runs `tools/prepare.py --game <folder>` when `generated/build.json` is missing or names
+     another folder, so a fresh checkout builds without a manual prepare;
+   - runs `.venv/bin/python tools/build_posix.py host64 --game <folder>` on macOS and Linux, or
+     `.venv\Scripts\python.exe tools/build.py host64` on Windows;
    - streams the phases, compile progress and errors into the build log.
 
 The first build takes several minutes; later builds are incremental. Build requirements:
-Python 3.9+, Clang (Xcode Command Line Tools on macOS), CMake/Ninja for the vendored SDL, and your
-game files. The build writes `build/host64` (and `build/Fanxi.app` for the full bundle target).
+
+| | macOS | Linux | Windows |
+| --- | --- | --- | --- |
+| Compiler | Xcode Command Line Tools (clang) | `build-essential`, CMake, Ninja | llvm-mingw (what [`tools/build_mingw.py`](../tools/build_mingw.py) drives; the player kit will carry it), or Visual Studio Build Tools with the C++ workload for [`tools/build.py`](../tools/build.py) |
+| Python | 3.9+ | 3.9+ | 3.9+ on `PATH` as `python` (the player kit ships its own) |
+| SDL3 | built from `third_party/` | built from `third_party/` | the SDL3 development package — the kit carries it; otherwise `SDL3_DIR` or `%APPDATA%\Fanxi\tools\SDL3` |
+
+The build writes `build/fanxi` (`build\Fanxi.exe` on Windows), with `SDL3.dll` copied beside it.
+On Windows the Build button checks for a compiler and SDL3 first and names whichever is missing
+instead of failing inside the compiler. The player kit — the toolchain, SDL3 and Python in one
+download — is described in [Onboarding](onboarding.md).
 
 If `host64` already exists, Play uses it. To rebuild after a game update, run Build game again.
 
@@ -376,7 +388,7 @@ If `host64` already exists, Play uses it. To rebuild after a game update, run Bu
 3. starts:
 
 ```bash
-build/host64 --game <folder> --server <host> --user <name> --login-token <token> \
+build/fanxi --game <folder> --server <host> --user <name> --login-token <token> \
              --authport 54231 --dataport 54230 --viewport 54001 \
              --reg-final <launcher data dir>/display.reg
 ```
@@ -686,8 +698,10 @@ checkout moves, set **Fanxi checkout** in Settings to the new path.
 | Sign-in says the session expired | Sign out and in again; the token may have been revoked by a server restart or admin action. |
 | Build fails on `capstone`/`pefile` | The venv needs network access once. Delete `.venv/` and build again, or run `python3 -m pip install 'capstone>=5,<6' 'pefile>=2023'` in it. |
 | Build fails on clang/CMake | Install Xcode Command Line Tools (macOS) or `build-essential cmake ninja-build` (Linux). |
+| Build fails on `vswhere`/`cl`/`link` | Install Visual Studio Build Tools with the **Desktop development with C++** workload (Windows), then build again. |
+| Build fails on SDL3 | Unpack the SDL3 VC development package into `%APPDATA%\Fanxi\tools\SDL3` so it holds `include\SDL3\SDL.h` and `lib\x64\SDL3.lib`, or set `SDL3_DIR`. |
+| Game starts and immediately exits | Read `~/Library/Application Support/Fanxi/logs/game-<account>.log` (macOS), `~/.local/share/fanxi/logs/game-<account>.log` (Linux) or `%APPDATA%\Fanxi\logs\game-<account>.log` (Windows). |
 | Play fails with auth error | The server's game gateway is off or `FANXI_PUBLIC_HOST` is not reachable. Check `python3 -m fanxi_server doctor` on the server. |
-| Game starts and immediately exits | Read `~/Library/Application Support/Fanxi/logs/game-<account>.log` (macOS) or `~/.local/share/fanxi/logs/game-<account>.log` (Linux). |
 | Control page says "starting" forever | Rebuild `host64` after updating the repository; the control addon is embedded in the client. Check the game log for `control: listening`. |
 | `command: the line must start with / or !` | The console only runs commands; to say something use `chat_send` (or start with `/say`). |
 | GearSwap import says a set is missing | The file builds that set in an `include()`d library; this pass does not evaluate includes. |

@@ -1762,7 +1762,7 @@ export function ControlPage({
       {logPort !== null && (
         <Modal
           title={`Game log — ${running.find((item) => item.port === logPort)?.name ?? "client"}`}
-          subtitle="The last lines host64 wrote to its account log."
+          subtitle="The last lines Fanxi wrote to its account log."
           wide
           onClose={() => setLogPort(null)}
           footer={

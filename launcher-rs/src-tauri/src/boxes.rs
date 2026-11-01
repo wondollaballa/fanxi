@@ -406,13 +406,27 @@ pub async fn wait_local_gone(account: &str, timeout: Duration) {
     }
 }
 
+/// The executable's file name, lower-cased and without its folder or `.exe`, so a Unix `ps` line
+/// and a Windows command line both reduce to `fanxi`.
+fn exe_name(exe: &str) -> String {
+    let base = exe.rsplit(['/', '\\']).next().unwrap_or(exe);
+    base.strip_suffix(".exe")
+        .unwrap_or(base)
+        .to_ascii_lowercase()
+}
+
 pub fn is_game_process(command: &str) -> bool {
     command
         .split_whitespace()
         .next()
         .map(|exe| {
-            let name = exe.rsplit('/').next().unwrap_or(exe);
-            name == "host64" || name == "host64-headless"
+            let name = exe_name(exe);
+            // `host64` is what builds before the rename wrote; keep matching it so old boxes
+            // are still found and cleaned up.
+            name == "fanxi"
+                || name == "fanxi-headless"
+                || name == "host64"
+                || name == "host64-headless"
         })
         .unwrap_or(false)
 }
@@ -432,7 +446,10 @@ pub fn is_headless_process(command: &str) -> bool {
     command
         .split_whitespace()
         .next()
-        .map(|exe| exe.rsplit('/').next().unwrap_or(exe) == "host64-headless")
+        .map(|exe| {
+            let name = exe_name(exe);
+            name == "fanxi-headless" || name == "host64-headless"
+        })
         .unwrap_or(false)
 }
 
@@ -465,7 +482,23 @@ pub fn pid_alive(pid: u32) -> bool {
     pid > 0 && unsafe { libc::kill(pid as i32, 0) == 0 }
 }
 
-#[cfg(not(unix))]
+/// Windows has no `kill(pid, 0)`; the task table is the portable answer, and `CREATE_NO_WINDOW`
+/// keeps a console from flashing every time the launcher polls it.
+#[cfg(windows)]
+pub fn pid_alive(pid: u32) -> bool {
+    if pid == 0 {
+        return false;
+    }
+    let filter = format!("PID eq {pid}");
+    let Some(output) = run_hidden("tasklist", &["/FI", &filter, "/NH"]) else {
+        return false;
+    };
+    let text = String::from_utf8_lossy(&output.stdout);
+    let needle = pid.to_string();
+    text.split_whitespace().any(|token| token == needle)
+}
+
+#[cfg(not(any(unix, windows)))]
 pub fn pid_alive(_pid: u32) -> bool {
     true
 }
@@ -479,7 +512,17 @@ fn terminate(pid: u32) {
     }
 }
 
-#[cfg(not(unix))]
+/// `taskkill` without `/F` asks a windowed process to close, the nearest thing Windows has to
+/// SIGTERM; the caller force-kills whatever is still alive after the grace period.
+#[cfg(windows)]
+fn terminate(pid: u32) {
+    if pid > 0 {
+        let pid = pid.to_string();
+        let _ = run_hidden("taskkill", &["/PID", pid.as_str(), "/T"]);
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn terminate(_pid: u32) {}
 
 #[cfg(unix)]
@@ -491,8 +534,27 @@ fn force_kill(pid: u32) {
     }
 }
 
-#[cfg(not(unix))]
+#[cfg(windows)]
+fn force_kill(pid: u32) {
+    if pid > 0 {
+        let pid = pid.to_string();
+        let _ = run_hidden("taskkill", &["/PID", pid.as_str(), "/T", "/F"]);
+    }
+}
+
+#[cfg(not(any(unix, windows)))]
 fn force_kill(_pid: u32) {}
+
+#[cfg(windows)]
+fn run_hidden(program: &str, args: &[&str]) -> Option<std::process::Output> {
+    use std::os::windows::process::CommandExt;
+    const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+    std::process::Command::new(program)
+        .args(args)
+        .creation_flags(CREATE_NO_WINDOW)
+        .output()
+        .ok()
+}
 
 /// Force cleanup: stop every copy of the account, including a healthy one and a stale
 /// registry/tunnel. This is what the explicit **Force relaunch** button uses.
@@ -589,6 +651,25 @@ mod tests {
         assert!(has_user_arg(line, "onedough-3"));
         assert!(has_user_arg(line, "ONEDOUGH-3"));
         assert!(!has_user_arg(line, "onedough-4"));
+    }
+
+    #[test]
+    fn the_renamed_binary_is_still_a_game_process() {
+        assert!(is_game_process(
+            "/Users/me/fanxi/build/fanxi --game /games/FFXI --user aria"
+        ));
+        assert!(is_game_process(
+            r"C:\Users\me\fanxi\build\Fanxi.exe --game C:\games\FFXI --user aria"
+        ));
+        assert!(is_headless_process(
+            "/Users/me/fanxi/build/fanxi-headless --user aria"
+        ));
+        // builds from before the rename keep being found, so their boxes are still cleaned up
+        assert!(is_game_process("/Users/me/fanxi/build/host64 --user aria"));
+        assert!(is_headless_process(
+            "/Users/me/fanxi/build/host64-headless --user aria"
+        ));
+        assert!(!is_game_process("/usr/bin/fanxi-something --user aria"));
     }
 
     #[test]

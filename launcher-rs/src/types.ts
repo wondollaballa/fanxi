@@ -77,7 +77,7 @@ export interface ConfigView {
   /** The character selected in the global tenant bar; may be a sub-account box. */
   tenantCharacterId: number | null;
   gameDir: string;
-  /** Optional separate install for windowless boxes; must match the host64-headless build. */
+  /** Optional separate install for windowless boxes; must match the Fanxi-headless build. */
   headlessGameDir: string;
   /** SSH target of the Linux host that runs headless boxes; empty means local. */
   remoteSsh: string;
