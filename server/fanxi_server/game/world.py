@@ -528,9 +528,7 @@ class World:
         # Qultada and Luzaf are support: they roll for the party and never swing, so the
         # AI takes the roll branch before it ever looks for a target to attack.
         entity.roll_support = trust_ai.plans_rolls(entity.name)
-        entity.roll_status = 0
-        entity.roll_key = ""
-        entity.roll_mob = -1
+        entity.roll_keys = []
         entity.next_roll_at = now + 1.0
         self._apply_trust_gear_share(entity, session, full=True)
         entity.next_gear_sync = now + TRUST_GEAR_SYNC_SECONDS
@@ -1124,55 +1122,98 @@ class World:
             hit_rate=hit_rate)
 
     # --- trust corsair rolls --------------------------------------------------------------------
+    def _trust_roll_members(self, owner) -> list:
+        """The owner and the party members this Trust's roll lands on."""
+        return [owner] + self._trust_party_sessions(owner)
+
+    @staticmethod
+    def _trust_roll_spec(key: str):
+        return rolls.spec(trust_ai.ROLL_IDS.get(str(key or ""), 0))
+
+    def _drop_trust_roll(self, entity: ZoneEntity, owner, key: str) -> None:
+        """Take one of this Trust's rolls off the party, when its set changes."""
+        spec = self._trust_roll_spec(key)
+        if spec is None:
+            return
+        status = int(spec.status)
+        changed = False
+        for member in self._trust_roll_members(owner):
+            state = member.effect(status)
+            if state is None:
+                continue
+            if int(state.get("roll_owner") or 0) != int(entity.id):
+                continue                    # another Corsair owns this copy; leave it
+            member.remove_effect(status, quiet=True)
+            member.queue += [member.char_status(), member.char_stats(),
+                             member.party_member()]
+            changed = True
+        if changed:
+            self.queue_party_buffs(owner)
+
+    def _set_trust_rolls(self, entity: ZoneEntity, owner, keys) -> None:
+        """Store the held list, dropping any roll that left the owner's priority set."""
+        old = list(getattr(entity, "roll_keys", []) or [])
+        new = list(keys)
+        for key in old:
+            if key not in new:
+                self._drop_trust_roll(entity, owner, key)
+        entity.roll_keys = new
+
     def _try_trust_roll(self, entity: ZoneEntity, owner, target, now: float) -> bool:
-        """Roll for the party, or keep the roll already up.  Returns True when it rolled.
+        """Keep up to two rolls on the party, one new roll per beat.
 
         A roll lands on every party member in the zone, so the plan is a party decision
         (``trust_ai.choose_roll``): the melee's Attack, the casters' MP, the ranged line.
-        The Trust re-rolls it when the party's copy is about to fall off, so a roll is
-        always live without re-singing it every beat.
+        Retail Qultada holds two rolls at once (Chaos and Fighter's are his standard pair)
+        and an alter ego is a maxed-out Corsair, so both support Corsairs fill two slots.
+        The first slot is the party's biggest need; the second takes the next line the
+        other Corsair has not already put up.
         """
         if now < float(getattr(entity, "next_roll_at", 0.0) or 0.0):
             return False
-        # Keep the roll for the whole fight.  Re-deciding every refresh made Chaos and
-        # Samurai trade the slot whenever the Attack/Defense ratio crossed the cap --
-        # and Chaos itself moves that ratio, so it never settled.
-        target_id = int(target.id) if target is not None else 0
         selected = self._trust_action_set(owner, entity.trust_spell)
         signature = tuple(int(ability) for ability in selected)
         if getattr(entity, "roll_set_signature", None) != signature:
-            # The owner changed the priority list (or this is the first beat): drop the
-            # roll held for the old list so the new order can take effect now.
+            # The owner changed the priority list (or this is the first beat).  Held
+            # rolls still on the new list stay; the ones that left it are removed below.
             entity.roll_set_signature = signature
-            entity.roll_key = ""
-            entity.roll_mob = -1
-        allowed = {trust_ai.ROLL_KEYS.get(int(ability), "")
-                   for ability in selected}
-        if entity.roll_key and allowed and entity.roll_key not in allowed:
-            entity.roll_key = ""             # the owner changed the priority list
-        if (getattr(entity, "roll_key", "")
-                and int(getattr(entity, "roll_mob", -1)) == target_id):
-            ability = trust_ai.ROLL_IDS.get(entity.roll_key)
-        else:
-            ability = trust_ai.choose_roll(
-                self._trust_roll_need(owner, target, entity), selected)
-            entity.roll_key = trust_ai.ROLL_KEYS.get(int(ability or 0), "")
-            entity.roll_mob = target_id
-        if ability is None:
+        allowed = {trust_ai.ROLL_KEYS[int(ability)]
+                   for ability in selected
+                   if int(ability) in trust_ai.ROLL_KEYS}
+        held = list(getattr(entity, "roll_keys", []) or [])
+        if allowed:
+            held = [key for key in held if key in allowed]
+        self._set_trust_rolls(entity, owner, held)
+        held = list(getattr(entity, "roll_keys", []) or [])
+        members = self._trust_roll_members(owner)
+        # Refresh a held roll before adding another: a dispelled or expiring copy is the
+        # more urgent job, and re-rolling the same key keeps the party's pair stable.
+        for key in held:
+            spec = self._trust_roll_spec(key)
+            if spec is None:
+                continue
+            if any(self._roll_remaining(member, spec, now)
+                   <= trust_ai.ROLL_REFRESH_SECONDS for member in members):
+                return self._cast_trust_roll(entity, owner, members, spec, now)
+        if len(held) >= trust_ai.MAX_TRUST_ROLLS:
+            return False                    # both slots are up and healthy
+        need = self._trust_roll_need(owner, target, entity)
+        ability = trust_ai.choose_roll(need, selected)
+        spec = rolls.spec(int(ability)) if ability is not None else None
+        if spec is None or spec.key in held:
             return False
-        spec = rolls.spec(ability)
-        if spec is None:
-            return False
+        if int(spec.status) in need.active:
+            return False                    # the other Corsair already keeps it up
+        entity.roll_keys = held + [spec.key]
+        return self._cast_trust_roll(entity, owner, members, spec, now)
+
+    def _cast_trust_roll(self, entity: ZoneEntity, owner, members, spec, now: float) -> bool:
+        """Put one roll on every party member and send the Trust's roll action."""
         entity.next_roll_at = now + trust_ai.ROLL_REFRESH_SECONDS
-        members = [owner] + self._trust_party_sessions(owner)
-        if all(self._roll_remaining(member, spec, now) > trust_ai.ROLL_REFRESH_SECONDS
-               for member in members):
-            return False                       # the party already has this roll
         value = rolls.value(self.rng)
         mods = spec.mods(value)
         # An alter ego is a maxed-out Corsair: the roll runs the COR job-point maximum
-        # (Phantom Roll Duration, 2 seconds per rank over the 60-second base) instead of
-        # the bare 60 seconds a fresh level-99 would get.
+        # (Phantom Roll Duration, 2 seconds per rank over the 300-second base).
         duration = rolls.duration(int(entity.job))
         for member in members:
             member.remove_effect(int(spec.status), quiet=True)
@@ -1184,11 +1225,11 @@ class World:
                 state["roll_owner"] = int(entity.id)
             member.queue += [member.char_status(), member.char_stats(),
                              member.party_member()]
-        entity.roll_status = int(spec.status)
+        ability = int(trust_ai.ROLL_IDS[spec.key])
         self._queue_trust_action(
-            entity, int(owner.char["char_id"]), value=value, animation=int(ability),
+            entity, int(owner.char["char_id"]), value=value, animation=ability,
             message=packets.MESSAGE_USES_JOB_ABILITY,
-            category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=int(ability))
+            category=packets.ACTION_CATEGORY_ABILITY_FINISH, action_id=ability)
         log.info("%s rolls %s: %d", entity.name, spec.name, value)
         return True
 
@@ -1205,9 +1246,11 @@ class World:
                     0, int(member.char.get("mp_current", 0))) / max_mp)
             if job in trust_ai.MAGE_JOBS:
                 mages += 1
+            if job in trust_ai.HYBRID_JOBS:
+                melee += 1                 # a melee RDM/BLU also joins the melee plan
             elif job in trust_ai.RANGED_JOBS:
                 ranged += 1
-            else:
+            elif job not in trust_ai.MAGE_JOBS:
                 melee += 1
         attack_capped = False
         if target is not None and target.is_mob():
@@ -1217,12 +1260,12 @@ class World:
             cap = combat.PDIF_WEAPON_CAP.get(
                 int(getattr(fighter, "weapon_skill", 0) or 0), combat.DEFAULT_PDIF_CAP)
             attack_capped = ratio >= cap - 0.375
-        # What the other Corsair already keeps up: this Trust takes a different roll.
+        # What every Corsair already keeps up, this Trust included: the next slot takes a
+        # different line instead of overwriting a copy the party already has.
         active = set()
         for member in members:
             for spec in rolls.active(member):
                 active.add(int(spec.status))
-        active.discard(int(getattr(entity, "roll_status", 0) or 0))
         return trust_ai.RollNeed(melee=melee, mages=mages, ranged=ranged,
                                  mp_percent=lowest_mp, attack_capped=attack_capped,
                                  active=frozenset(active))

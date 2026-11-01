@@ -17,7 +17,8 @@ from fanxi_server.config import Config  # noqa: E402
 from fanxi_server.game import (  # noqa: E402
     base_stats, effects, modifiers as mod, prime_weapons, stats)
 from fanxi_server.game.entities import (  # noqa: E402
-    ZoneEntity, mob_from_row, mob_hp_for_level)
+    LOCUS_DEFENSE_SCALE, LOCUS_EVASION_SCALE, ZoneEntity, mob_from_row,
+    mob_hp_for_level, scaled_level_stat)
 from fanxi_server.game.world import World  # noqa: E402
 from fanxi_server.service import FanxiService  # noqa: E402
 import import_reforged_item_data as reforged  # noqa: E402
@@ -350,8 +351,10 @@ class LocusTierTest(unittest.TestCase):
         self.assertTrue(mob.level_rolls)
         self.assertIn(mob.level, (135, 136, 137))
         self.assertEqual(mob.hp_max, mob.level_stats[mob.level]["hp"])
-        self.assertEqual(mob.defense_override, mob.level_stats[mob.level]["defense"])
-        self.assertEqual(mob.evasion_override, mob.level_stats[mob.level]["evasion"])
+        self.assertEqual(mob.defense_override, scaled_level_stat(
+            mob.level_stats[mob.level]["defense"], LOCUS_DEFENSE_SCALE))
+        self.assertEqual(mob.evasion_override, scaled_level_stat(
+            mob.level_stats[mob.level]["evasion"], LOCUS_EVASION_SCALE))
         mob.reset_mob(0.0, random.Random(4))
         self.assertIn(mob.level, (135, 136, 137))
         self.assertEqual(mob.hp_max, mob.level_stats[mob.level]["hp"])
@@ -367,8 +370,8 @@ class LocusTierTest(unittest.TestCase):
         self.assertEqual(mob.level, 136)
         self.assertEqual(mob.hp_max, 299100)
         self.assertEqual(mob.hp, 299100)
-        self.assertEqual(mob.defense_override, 1379)
-        self.assertEqual(mob.evasion_override, 1254)
+        self.assertEqual(mob.defense_override, 1034)     # 1379 x 0.75
+        self.assertEqual(mob.evasion_override, 940)      # 1254 x 0.75
 
     def test_distract_iii_is_flat_evasion_down(self):
         service = FanxiService(Config.from_env(ROOT), self.db)
@@ -382,7 +385,7 @@ class LocusTierTest(unittest.TestCase):
             name="Distract III")
         self.assertEqual(world.debuffed_monster(entity).evasion, 1094)
 
-    def test_monster_sheet_uses_the_retail_defense_and_evasion(self):
+    def test_monster_sheet_uses_the_defense_and_evasion_override(self):
         service = FanxiService(Config.from_env(ROOT), self.db)
         world = World(Config.from_env(ROOT), service, None)
         entity = ZoneEntity(

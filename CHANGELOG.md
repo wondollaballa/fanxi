@@ -1,5 +1,40 @@
 # Changelog
 
+## Unreleased — weapon-skill animation context
+
+- **A weapon skill's finish waits one flush after its start.**  Start and finish were
+  queued in the same datagram; the client processes the start's `SetAction` on its
+  scheduler, so a finish that reads animation 6 or 237 could fall back to the spell
+  table and play a Blue Magic casting motion (Flat Blade -> Cure VI, Requiescat ->
+  Choke).  `queue_action` now accepts a `not_before` time, `pack()` holds those messages
+  for a later flush, and the SkillFinish is held for 150 ms so it lands in the next
+  datagram.  The start and finish packets and their order are unchanged; only the
+  datagram boundary is new.
+
+## Unreleased — Corsair Trusts keep both rolls
+
+- **Qultada and Luzaf now fill both of a Corsair's roll slots.**  The Trust AI kept one
+  `roll_key` per alter ego and treated every other roll as a replacement, so a Corsair
+  Trust only ever had one roll up.  Retail Qultada keeps two at once (Chaos and Fighter's
+  are his standard pair) and a Trust is a maxed-out Corsair, so each support Corsair now
+  stores an ordered `roll_keys` list, fills the first slot with the party's biggest need
+  and the second with the next line another Corsair has not already put up.  A held roll
+  is refreshed when its party copy nears expiry; changing the owner's `set rolls` list
+  removes only the rolls that left it.  Two Corsair Trusts can now hold four different
+  rolls (Chaos, Fighter's, Samurai, Hunter's/Evoker's...) instead of two.
+- **Fighter's Roll joined the melee plan.**  `trust_ai.roll_options` now offers Chaos,
+  Fighter's and Samurai, matching Qultada's retail Chaos + Fighter's pair while keeping
+  Samurai as the Store TP line at the pDIF cap.
+- **A solo Red Mage now gets both roll lines.**  RDM and BLU count as caster *and* melee,
+  so Qultada and Luzaf fill four slots (Chaos, Fighter's, Samurai, Wizard's) instead of
+  the caster-only plan giving one roll and leaving the second Corsair idle.  The ranged
+  job set also named job 7, which is Paladin; Ranger is 11.  `RANGED_SONG_JOBS` had the
+  same typo.
+- Tests: `test_world.py` covers two slots on one Trust, two selected rolls both staying
+  up, four rolls from two Trusts, and the removed-roll cleanup when the list changes.
+  Docs: `docs/world.md` (the roll section's 100-second figure was stale; a Trust roll is
+  340 seconds).
+
 ## Unreleased — Locus-tier monsters hit back
 
 - **Level 100+ monsters no longer use the level-99 offense cap.**  LandSandBoat's
@@ -31,12 +66,16 @@
   Lugcrawler is still weaker than a 135 Camelopard; the camps are not flattened.
   `test_stats.py` walks all 23 Locus templates and pins the master-level
   Accuracy/Attack, the rolled level, and the interpolated HP.
-- **Locus Defense/Evasion now use the published per-level rows.**  `monster_templates`
-  stores them in `level_stats` (JSON), and `World.monster_sheet` applies the row for the
-  rolled level: Camelopard is 1346/1224 at 135, 1413/1284 at 137.  That is the retail
-  1324-accuracy requirement; Distract III is now a flat -130 Evasion (not a percent),
-  which brings a 135 Camelopard to 1094 and lets the new accuracy gear cap again.
-  Locus with no published table keep the level-derived curve.
+- **Locus Defense/Evasion use the published rows, scaled to 75% for the current gear.**
+  `monster_templates.level_stats` stores the retail rows verbatim, and
+  `World.monster_sheet` applies the row for the rolled level.  `entities.mob_from_row`
+  scales Defense and Evasion by `LOCUS_DEFENSE_SCALE` / `LOCUS_EVASION_SCALE` (0.75):
+  Camelopard is 1010/918 at 135 and 1060/963 at 137, down from 1346/1224 and 1413/1284.
+  At the current ~1182 Accuracy that caps the one-handed hit rate without Distract III,
+  and the lower Defense restores weapon-skill damage; HP, Accuracy and Attack stay at
+  the published values.  Distract III remains a flat -130 Evasion (not a percent).
+  Locus with no published table keep the level-derived curve.  Setting both scales to
+  1.0 restores the untouched retail rows.
 
 ## Unreleased — the Odyssey accessories ship with the checkout
 

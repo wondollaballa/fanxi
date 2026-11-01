@@ -112,6 +112,13 @@ STATUS_ICON_NO_TIMER = 0x7FFFFFFF
 # bucket.  Actions, chat, status packets and equipment sync are never charged here.
 AMBIENT_BYTES_PER_SECOND = 2400
 AMBIENT_BURST_BYTES = 1000
+# The SkillStart and SkillFinish of one weapon skill must not share a datagram.  The
+# client queues the start's SetAction for its scheduler; a finish in the same packet can
+# still read the sub-kind against the spell table, which is why Flat Blade (6) played
+# Cure VI and Requiescat (237) played Choke.  Holding the finish for one flush gives the
+# client a frame to enter the weapon-skill context first.  The finish also waits for one
+# packet to be sent since it was queued, so a slow flush cannot put both in one datagram.
+WEAPONSKILL_FINISH_DELAY = 0.15
 # One zone packet carries at most this many bytes of sub-messages.  About twelve position
 # records fit here, which keeps packet overhead down without exceeding a normal MTU.
 PACKET_BYTES = 900
@@ -457,6 +464,14 @@ class Msg(bytearray):
     targid = 0
     priority = 0.0
     queued_at = 0.0
+    # A message that must not go out before this wall-clock time.  pack() leaves it in
+    # the queue and the next flush after the deadline sends it; this is how a weapon
+    # skill's start and finish land in separate datagrams.
+    not_before = 0.0
+    # The last server packet id at queue time.  A held message also waits until one
+    # packet has gone out since then, which guarantees the start is not in the same
+    # datagram even when the flush is late.
+    after_packet = -1
 
 
 def sub(ptype: int, body: bytes) -> Msg:
@@ -5281,7 +5296,7 @@ class ZoneSession:
                      category: int = packets.ACTION_CATEGORY_BASIC_ATTACK,
                      info: int | None = None, action_id: int | None = None,
                      results: list[dict] | None = None,
-                     broadcast: bool = False) -> None:
+                     broadcast: bool = False, not_before: float = 0.0) -> None:
         """Queue one 0x028 action for ``target_id``.
 
         ``results`` packs several hits into that single action, which is how a melee
@@ -5319,6 +5334,9 @@ class ZoneSession:
             actor, int(target_id), kind=kind, category=category,
             message=message, info=info, results=prepared,
             action_id=(packets.BASIC_ATTACK_ID if action_id is None else int(action_id))))
+        packet.not_before = max(0.0, float(not_before or 0.0))
+        if packet.not_before:
+            packet.after_packet = int(self.server_id)
         self.queue.append(packet)
         if broadcast:
             # Every other client in the zone needs the same result: a party member's
@@ -5329,7 +5347,10 @@ class ZoneSession:
                 if int(self.char.get("targid", 0)) not in getattr(
                         observer, "sent_targids", set()):
                     continue
-                observer.queue.append(Msg(packet))
+                copy = Msg(packet)
+                copy.not_before = packet.not_before
+                copy.after_packet = packet.after_packet
+                observer.queue.append(copy)
 
     def start_resting(self) -> None:
         if self.resting or self.casting or self.dead_until:
@@ -8030,10 +8051,13 @@ class ZoneSession:
                        else packets.MESSAGE_SKILL_MISSES)
         self._last_target_hp = entity.hp_max
         if no_damage:
-            self.queue.append(sub(0x028, packets.battle_action(
+            finish = sub(0x028, packets.battle_action(
                 me, int(entity.id), drained_mp, miss=False, critical=False,
                 defeated=False, animation=animation, kind=3, message=message,
-                category=packets.ACTION_CATEGORY_SKILL_FINISH, action_id=int(ws["id"]))))
+                category=packets.ACTION_CATEGORY_SKILL_FINISH, action_id=int(ws["id"])))
+            finish.not_before = now + WEAPONSKILL_FINISH_DELAY
+            finish.after_packet = int(self.server_id)
+            self.queue.append(finish)
             self.queue.append(self.party_member())
             self.say("%s drains %d MP from %s." % (ws["name"], drained_mp, entity.name)
                      if drained_mp else "%s has no effect." % ws["name"])
@@ -8067,7 +8091,8 @@ class ZoneSession:
                           add_message=int(chain["message"]))
         self.queue_action(int(entity.id), results=[result], kind=3,
                           category=packets.ACTION_CATEGORY_SKILL_FINISH,
-                          action_id=int(ws["id"]), broadcast=True)
+                          action_id=int(ws["id"]), broadcast=True,
+                          not_before=now + WEAPONSKILL_FINISH_DELAY)
         # The client prints its own "uses <skill>. <target> takes N points of damage."
         # line from the result, so there is no second chat line here: the old self.say
         # was the duplicate (and, on a multi-hit skill, the only line that was a total).
@@ -8800,11 +8825,14 @@ class ZoneSession:
                     duration=spec.duration, potency=spec.potency):
                 continue
             landed = True
-            self.queue.append(sub(0x028, packets.battle_action(
+            status_packet = sub(0x028, packets.battle_action(
                 me, int(entity.id), int(spec.effect), animation=0, kind=3,
                 message=packets.MESSAGE_MAGIC_ENFEEB, info=0,
                 category=packets.ACTION_CATEGORY_SKILL_FINISH,
-                action_id=int(ws["id"]))))
+                action_id=int(ws["id"])))
+            status_packet.not_before = now + WEAPONSKILL_FINISH_DELAY
+            status_packet.after_packet = int(self.server_id)
+            self.queue.append(status_packet)
         if landed:
             self.world.add_mob_hate(entity, me, HATE_ENFEEBLE, now)
 
@@ -13634,6 +13662,17 @@ class ZoneSession:
         """
         packet_id = self.server_id if packet_id is None else int(packet_id)
         queued, self.queue = self.queue, []
+        now = time.time()
+        deferred: list[Msg] = []
+        ready: list[Msg] = []
+        for message in queued:
+            due = float(getattr(message, "not_before", 0.0) or 0.0) <= now
+            after = int(getattr(message, "after_packet", -1))
+            if not due or (after >= 0 and int(self.server_id) <= after):
+                deferred.append(message)
+            else:
+                ready.append(message)
+        queued = ready
         urgent: list[Msg] = []
         latest: dict[tuple[int, int], Msg] = {}
         for message in queued:
@@ -13641,7 +13680,6 @@ class ZoneSession:
                 latest[(message.ptype, message.targid)] = message
             else:
                 urgent.append(message)
-        now = time.time()
 
         def rank(message: Msg) -> float:
             # Nearest first, but a message that has waited gets promoted so a distant
@@ -13713,7 +13751,7 @@ class ZoneSession:
             spent += len(message)
             self.pending_positions.pop((message.ptype, message.targid), None)
         self.ambient_tokens = max(0.0, self.ambient_tokens - spent)
-        self.queue = held
+        self.queue = held + deferred
         if not body:
             return b"", 0, False
         data, nbits = self.world.huff.compress(bytes(body))

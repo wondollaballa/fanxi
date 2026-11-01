@@ -4197,18 +4197,108 @@ class WorldTest(unittest.TestCase):
         trust.next_roll_at = 0
         self.assertTrue(self.world._try_trust_roll(
             trust, self.session, None, now))
-        self.assertEqual(trust.roll_key, "samurai")
-        self.assertEqual(int(trust.roll_status),
-                         trust_ai.ROLL_STATUS["samurai"])
+        self.assertEqual(trust.roll_keys, ["samurai"])
+        self.assertIsNotNone(self.session.effect(trust_ai.ROLL_STATUS["samurai"]))
 
         # Changing the list while the Trust keeps the old roll re-chooses on the next beat.
         self.session.trust_actions[928] = [105]
         trust.next_roll_at = 0
         self.assertTrue(self.world._try_trust_roll(
             trust, self.session, None, now + 20))
-        self.assertEqual(trust.roll_key, "chaos")
-        self.assertEqual(int(trust.roll_status),
-                         trust_ai.ROLL_STATUS["chaos"])
+        self.assertEqual(trust.roll_keys, ["chaos"])
+        self.assertIsNotNone(self.session.effect(trust_ai.ROLL_STATUS["chaos"]))
+        self.assertIsNone(self.session.effect(trust_ai.ROLL_STATUS["samurai"]))
+
+    def test_a_corsair_trust_keeps_two_rolls(self):
+        """A Trust Corsair fills both roll slots: retail Qultada holds Chaos and Fighter's.
+
+        The first beat takes the party's biggest need, the second the next useful line.
+        """
+        self.zone(100)
+        self.session.char.update(main_job=1, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        trust = self.world.spawn_trust(self.session, self.service.trust(967))
+        self.assertIsNotNone(trust)
+        now = time.time()
+        trust.next_roll_at = 0
+        self.assertTrue(self.world._try_trust_roll(
+            trust, self.session, None, now))
+        self.assertEqual(trust.roll_keys, ["chaos"])
+        trust.next_roll_at = 0
+        self.assertTrue(self.world._try_trust_roll(
+            trust, self.session, None, now + 8))
+        self.assertEqual(trust.roll_keys, ["chaos", "fighters"])
+        for key in trust.roll_keys:
+            self.assertIsNotNone(
+                self.session.effect(trust_ai.ROLL_STATUS[key]), key)
+
+    def test_a_corsair_trust_uses_both_slots_from_the_owner_list(self):
+        """Two selected rolls are two simultaneous slots, not one replacement."""
+        self.zone(100)
+        self.session.char.update(main_job=1, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        self.session.trust_actions[967] = [105, 109]      # Chaos, Samurai
+        trust = self.world.spawn_trust(self.session, self.service.trust(967))
+        self.assertIsNotNone(trust)
+        now = time.time()
+        trust.next_roll_at = 0
+        self.assertTrue(self.world._try_trust_roll(
+            trust, self.session, None, now))
+        trust.next_roll_at = 0
+        self.assertTrue(self.world._try_trust_roll(
+            trust, self.session, None, now + 8))
+        self.assertEqual(trust.roll_keys, ["chaos", "samurai"])
+        self.assertIsNotNone(self.session.effect(trust_ai.ROLL_STATUS["chaos"]))
+        self.assertIsNotNone(self.session.effect(trust_ai.ROLL_STATUS["samurai"]))
+
+    def test_two_corsairs_can_hold_four_selected_rolls(self):
+        """Each Corsair fills two slots; two of them put four different rolls up."""
+        self.zone(100)
+        self.session.char.update(main_job=1, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        self.session.trust_actions[967] = [105, 109]      # Chaos, Samurai
+        self.session.trust_actions[928] = [108, 112]      # Hunter's, Evoker's
+        qultada = self.world.spawn_trust(self.session, self.service.trust(967))
+        luzaf = self.world.spawn_trust(self.session, self.service.trust(928))
+        self.assertIsNotNone(qultada)
+        self.assertIsNotNone(luzaf)
+        now = time.time()
+        for beat in range(4):
+            for trust in (qultada, luzaf):
+                trust.next_roll_at = 0
+                self.world._try_trust_roll(
+                    trust, self.session, None, now + beat * 8)
+        self.assertEqual(set(qultada.roll_keys), {"chaos", "samurai"})
+        self.assertEqual(set(luzaf.roll_keys), {"hunters", "evokers"})
+        for key in ("chaos", "samurai", "hunters", "evokers"):
+            self.assertIsNotNone(
+                self.session.effect(trust_ai.ROLL_STATUS[key]), key)
+
+    def test_a_solo_red_mage_gets_both_roll_lines(self):
+        """A melee RDM counts as caster and melee, so two Corsairs fill four slots."""
+        self.zone(100)
+        self.session.char.update(main_job=5, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        self.session.char["mp_current"] = int(self.session.char["mp"])
+        need = self.world._trust_roll_need(self.session, None)
+        self.assertEqual((need.melee, need.mages, need.ranged), (1, 1, 0))
+        self.assertEqual(trust_ai.roll_options(need),
+                         ["chaos", "fighters", "samurai", "wizards"])
+        qultada = self.world.spawn_trust(self.session, self.service.trust(967))
+        luzaf = self.world.spawn_trust(self.session, self.service.trust(928))
+        self.assertIsNotNone(qultada)
+        self.assertIsNotNone(luzaf)
+        now = time.time()
+        for beat in range(4):
+            for trust in (qultada, luzaf):
+                trust.next_roll_at = 0
+                self.world._try_trust_roll(
+                    trust, self.session, None, now + beat * 8)
+        self.assertEqual(len(qultada.roll_keys), 2)
+        self.assertEqual(len(luzaf.roll_keys), 2)
+        for key in ("wizards", "chaos", "fighters", "samurai"):
+            self.assertIsNotNone(
+                self.session.effect(trust_ai.ROLL_STATUS[key]), key)
 
     def test_sylvie_casts_geo_malaise_from_the_owners_spell_pool(self):
         """Sylvie's custom list can hold the enemy-targeted Malaise hex, not only Indi-."""
@@ -4298,7 +4388,7 @@ class WorldTest(unittest.TestCase):
     def test_a_corsair_trust_rolls_for_the_casters(self):
         """A caster owner gets the magic roll, not the melee one, on the same Trust."""
         self.zone(100)
-        self.session.char.update(main_job=5, main_level=99, sub_job=0, sub_level=0)
+        self.session.char.update(main_job=4, main_level=99, sub_job=0, sub_level=0)
         self.session.refresh_vitals()
         self.session.char["mp_current"] = int(self.session.char["mp"])
         trust = self.world.spawn_trust(self.session, self.service.trust(928))
@@ -4314,7 +4404,7 @@ class WorldTest(unittest.TestCase):
     def test_a_corsair_trust_gives_the_dry_caster_a_refresh_roll(self):
         """MP under half a bar turns the same party into Evoker's Roll territory."""
         self.zone(100)
-        self.session.char.update(main_job=5, main_level=99, sub_job=0, sub_level=0)
+        self.session.char.update(main_job=4, main_level=99, sub_job=0, sub_level=0)
         self.session.refresh_vitals()
         self.session.char["mp_current"] = int(self.session.char["mp"]) // 10
         trust = self.world.spawn_trust(self.session, self.service.trust(928))
@@ -4338,7 +4428,10 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(trust_ai.choose_roll(need()), 105)                 # lone owner
         # A second Corsair takes the roll the first one is not already keeping up.
         chaos = frozenset({trust_ai.ROLL_STATUS["chaos"]})
-        self.assertEqual(trust_ai.choose_roll(need(melee=2, active=chaos)), 109)
+        self.assertEqual(trust_ai.choose_roll(need(melee=2, active=chaos)), 98)   # Fighter's
+        chaos_fighters = frozenset({trust_ai.ROLL_STATUS["chaos"],
+                                    trust_ai.ROLL_STATUS["fighters"]})
+        self.assertEqual(trust_ai.choose_roll(need(melee=2, active=chaos_fighters)), 109)
 
     def test_a_corsair_trust_rolls_last_the_job_point_maximum(self):
         """A Trust is a maxed Corsair: a roll runs 5:00 plus the 40 s job-point row."""
@@ -4372,8 +4465,8 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(hunter[mod.ACC], 40)
         self.assertEqual(hunter[mod.RACC], 40)
 
-    def test_two_corsairs_hold_two_different_rolls(self):
-        """Qultada rolls Chaos, Luzaf sees it and adds Samurai instead of duplicating."""
+    def test_two_corsairs_hold_three_different_rolls(self):
+        """Qultada and Luzaf split the melee plan instead of duplicating a roll."""
         self.zone(100)
         self.session.char.update(main_job=1, main_level=99, sub_job=0, sub_level=0)
         self.session.refresh_vitals()
@@ -4386,8 +4479,9 @@ class WorldTest(unittest.TestCase):
             for trust in (qultada, luzaf):
                 self.world._tick_trust(
                     trust, self.world.sessions_in_zone(100), now + beat * 4)
-        self.assertIsNotNone(self.session.effect(trust_ai.ROLL_STATUS["chaos"]))
-        self.assertIsNotNone(self.session.effect(trust_ai.ROLL_STATUS["samurai"]))
+        for key in ("chaos", "fighters", "samurai"):
+            self.assertIsNotNone(
+                self.session.effect(trust_ai.ROLL_STATUS[key]), key)
 
     def test_a_hurt_owner_still_gets_the_aura(self):
         """The heal rule must not starve the bubble: a 60% owner gets both."""

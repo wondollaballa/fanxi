@@ -216,25 +216,29 @@ Locus run 129-136.  A level-129 Locus Lugcrawler therefore has 1174 Accuracy rat
 
 Locus spawns also roll their level inside that range instead of always taking the low
 end, and a respawn rolls it again.  The published camp tables are stored verbatim in
-`monster_templates.level_stats` (JSON keyed by level) and `entities.mob_from_row` reads
-the row for the rolled level.  For Camelopard that is:
+`monster_templates.level_stats` (JSON keyed by level).  `entities.mob_from_row` reads the
+row for the rolled level and applies **75%** of its Defense and Evasion: the full rows
+are tuned for an iL119 endgame party, and at the current level-99/master-gear range they
+made ordinary weapon skills miss and hit for about half.  HP, Accuracy and Attack remain
+the published values.  For Camelopard that is:
 
-| Level | HP | Defense | Evasion |
+| Level | HP | Published Def/Eva | In play Def/Eva |
 |---:|---:|---:|---:|
-| 135 | 289,900 | 1346 | 1224 |
-| 136 | 299,100 | 1379 | 1254 |
-| 137 | 308,300 | 1413 | 1284 |
+| 135 | 289,900 | 1346 / 1224 | 1010 / 918 |
+| 136 | 299,100 | 1379 / 1254 | 1034 / 940 |
+| 137 | 308,300 | 1413 / 1284 | 1060 / 963 |
 
-`World.monster_sheet()` applies those Defense/Evasion values to the level-derived
-fighter, so the retail 1346/1224 replaces the old 740/732.  The same rows exist for
-Bight Rarab / Hypnos Eft, the Bibiki crabs, Bhaflau Colibri / Wivre, Caedarva Imp, and
-the King Ranperre's Tomb Locus.  The few Locus without a published table (the Crawler's
-Nest camp) keep the level-derived `GetBaseDefEva` curve and their flat HP.
+`World.monster_sheet()` applies those scaled Defense/Evasion values to the level-derived
+fighter, replacing the old 740/732.  The same rows exist for Bight Rarab / Hypnos Eft, the
+Bibiki crabs, Bhaflau Colibri / Wivre, Caedarva Imp, and the King Ranperre's Tomb Locus.
+The few Locus without a published table (the Crawler's Nest camp) keep the level-derived
+`GetBaseDefEva` curve and their flat HP.  `LOCUS_DEFENSE_SCALE` and `LOCUS_EVASION_SCALE`
+in `entities.py` are the tuning knobs; 1.0 restores the untouched published rows.
 
-A level-135 Camelopard's 1224 Evasion is the number behind the 1324 player-Accuracy
-requirement: 95% hit rate needs `accuracy >= evasion + 40`, and one-handed weapons add
-their own +8.  Distract III is a **flat -130 Evasion** (BG-wiki's cap), not a percent,
-so it takes the Camelopard to 1094 and lets a well-geared 99 player cap again.
+A level-135 Camelopard's scaled 918 Evasion is below the player's ~1182 Accuracy, so the
+one-handed hit rate caps without Distract III.  Distract III is still a **flat -130
+Evasion** (BG-wiki's cap), not a percent, so it remains useful against the higher-level
+crabs and any future camp whose Evasion is not scaled down this far.
 
 Without the master terms a level-135 Locus had 604 Accuracy against a level-99 player's
 903 Evasion: the hit formula gave `75 + (604 - 903)/2`, which clamps to the 20% floor

@@ -1,6 +1,6 @@
 --[[
     Fanxi GearSwap library — Onedough WAR
-    Updated 2026-10-31 23:17:16
+    Updated 2026-10-31 23:57:37
     The launcher writes sets back to this file; the first copy is kept as a .bak.
     Source: /Users/wondochoung/Documents/GitHub/fanxi/gearswap/WAR.lua
 
@@ -577,9 +577,17 @@ function get_sets()
     }
 
     -- ===== weaponset =====
+    sets.weaponset["Dolichenus-Farsha"] = {
+        main = "Dolichenus",
+        sub = "Farsha",
+    }
     sets.weaponset.Helheim = {
         main = "Helheim",
         sub = "Utu Grip",
+    }
+    sets.weaponset["Naegling-Blurred"] = {
+        main = "Naegling",
+        sub = "Blurred Shield +1",
     }
     sets.weaponset["Shining One"] = {
         main = "Shining One",

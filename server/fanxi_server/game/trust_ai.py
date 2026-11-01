@@ -57,11 +57,11 @@ BUFF_PRIORITY = {
 # Accuracy, so Madrigal would be a wasted slot).  A Corsair owns ranged attacks but
 # fights in melee too, so it gets the melee plan; the owner can still ask for Prelude by
 # name with the per-character song set.
-RANGED_JOBS = frozenset({7, 17})      # Ranger, Corsair: the rolls count them as ranged
+RANGED_JOBS = frozenset({11, 17})     # Ranger, Corsair: the rolls count them as ranged
 #: The jobs whose default song plan is the ranged one.  A Corsair is not here: Prelude's
 #: Ranged Accuracy is a wasted slot for the melee set, and `//trust joachim set songs`
 #: is how a shooting Corsair asks for it.
-RANGED_SONG_JOBS = frozenset({7})     # Ranger only
+RANGED_SONG_JOBS = frozenset({11})    # Ranger only
 #: The Trusts whose songs are planned by role.  Joachim is the Bard the owner is
 #: travelling with; other Bards (Ulmia) keep the plain buff rotation for now.
 SONG_PLANNERS = frozenset({"joachim"})
@@ -209,11 +209,15 @@ def _song(kit: dict, family: str) -> dict | None:
 #   * a ranged-heavy party     Hunter's Roll    (Ranged Accuracy)
 #   * melee short of Attack    Chaos Roll       (Attack)
 #   * melee at the pDIF cap    Samurai Roll     (Store TP: more weapon skills)
+#   * any melee                Fighter's Roll   (Double Attack)
 # A second Corsair sees the roll already on the party and takes the next line that is
-# still useful, so Qultada and Luzaf together hold Chaos and Samurai rather than rolling
-# the same one twice.
+# still useful, so Qultada and Luzaf together hold Chaos, Fighter's and Samurai rather
+# than rolling the same one twice.
 ROLL_PLANNERS = frozenset({"qultada", "luzaf"})
-#: How often a roll Trust checks the party while its roll is still up.
+#: How many rolls one Trust Corsair keeps up.  Retail Qultada holds two at once (Chaos
+#: and Fighter's are his standard pair), and an alter ego is a maxed-out Corsair.
+MAX_TRUST_ROLLS = 2
+#: How often a roll Trust checks the party while its rolls are still up.
 ROLL_REFRESH_SECONDS = 8.0
 #: Ability id and status id by ``rolls.RollSpec.key``: plans name a roll, not a number.
 ROLL_IDS: dict[str, int] = {}
@@ -244,21 +248,26 @@ def plans_rolls(name: str) -> bool:
 
 
 def roll_options(need: RollNeed) -> list[str]:
-    """The rolls worth having for this party, best first."""
+    """The rolls worth having for this party, best first.
+
+    A party with as many melee as casters is treated as a melee party: the melee line is
+    what makes the kills, and the caster line still follows before the list ends.  That
+    is also what gives a solo Red Mage both lines instead of only Wizard's Roll.
+    """
     options: list[str] = []
     if need.mages and float(need.mp_percent) < MP_LOW_PERCENT:
         options.append("evokers")
-    if need.mages and need.mages >= need.melee:
+    if need.mages and need.mages > need.melee:
         options.append("wizards")
     if need.ranged:
         options.append("hunters")
     if need.melee:
         if need.attack_capped:
-            options.append("samurai")
-            options.append("chaos")
+            options.extend(("samurai", "fighters", "chaos"))
         else:
-            options.append("chaos")
-            options.append("samurai")
+            options.extend(("chaos", "fighters", "samurai"))
+    if need.mages and need.mages <= need.melee:
+        options.append("wizards")
     if not options:
         options.append("wizards" if need.mages else "chaos")
     return options
@@ -308,6 +317,9 @@ def never_cast(name: str) -> frozenset[int]:
 # choices: a hit rate under 80% (the one-handed cap is well above it), an Attack/Defense
 # ratio under 1.3, or a team that is down to its last half a mana bar.
 MAGE_JOBS = frozenset({3, 4, 5, 15, 16, 20, 21})   # WHM BLM RDM SMN BLU SCH GEO
+#: Melee-capable casters.  A Red Mage or Blue Mage counts on both sides of the roll plan,
+#: so a solo one still gets the melee line next to Wizard's/Evoker's instead of one roll.
+HYBRID_JOBS = frozenset({5, 16})                   # Red Mage, Blue Mage
 ACCURACY_SHORTFALL = 0.80
 ATTACK_SHORTFALL = 1.30
 MP_LOW_PERCENT = 50.0

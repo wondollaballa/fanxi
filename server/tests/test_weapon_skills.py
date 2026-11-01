@@ -1115,8 +1115,33 @@ class WeaponSkillSessionTest(unittest.TestCase):
         self.assertEqual(action_category(start), packets.ACTION_CATEGORY_SKILL_START)
         self.assertEqual(result_message(start), packets.MESSAGE_READIES_WEAPONSKILL)
         self.assertEqual(result_value(start), int(row["id"]))
+        # The finish is held for the next flush: start and finish in one datagram let the
+        # client read animation 6/237 against the spell table (Cure VI / Choke).
+        self.assertEqual(float(getattr(start, "not_before", 0.0)), 0.0)
+        self.assertGreater(float(getattr(finish, "not_before", 0.0)), 0.0)
         self.assertEqual(action_category(finish), packets.ACTION_CATEGORY_SKILL_FINISH)
         self.assertEqual(action_result_count(finish), 1)
+
+    def test_a_delayed_weapon_skill_finish_waits_for_the_next_flush(self):
+        """pack() holds the finish until its deadline, so the start goes out alone."""
+        mob = self.mob()
+        self.use("Heavy Swing", tp=1000, target=mob)
+        finish = finish_action(self.session)
+        self.assertGreater(float(finish.not_before), time.time())
+        original = self.world.huff
+        huff = mock.Mock()
+        huff.compress.return_value = (b"\0\0\0\0", 32)
+        self.world.huff = huff
+        self.addCleanup(setattr, self.world, "huff", original)
+        self.session.queue = [finish]
+        data, _bits, _zone_out = self.session.pack()
+        self.assertEqual(data, b"")               # nothing else is due
+        self.assertIn(finish, self.session.queue)
+        finish.not_before = 0.0
+        self.session.server_id += 1          # the SkillStart packet has gone out
+        data, _bits, _zone_out = self.session.pack()
+        self.assertNotEqual(data, b"")
+        self.assertNotIn(finish, self.session.queue)
 
     def test_double_attack_adds_an_extra_weapon_skill_swing(self):
         """A DA proc rolls a second main-hand hit; both land in the single total."""

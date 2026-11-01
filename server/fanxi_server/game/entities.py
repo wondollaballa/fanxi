@@ -167,8 +167,10 @@ class ZoneEntity:
             exact = self.level_stats.get(self.level) or {}
             if exact:
                 self.hp_max = int(exact.get("hp") or self.hp_max)
-                self.defense_override = int(exact.get("defense") or 0)
-                self.evasion_override = int(exact.get("evasion") or 0)
+                self.defense_override = scaled_level_stat(
+                    exact.get("defense"), LOCUS_DEFENSE_SCALE)
+                self.evasion_override = scaled_level_stat(
+                    exact.get("evasion"), LOCUS_EVASION_SCALE)
             else:
                 self.hp_max = mob_hp_for_level(
                     self.level, self.level_min, self.level_max,
@@ -230,6 +232,19 @@ def npc_from_row(row: dict, targid: int, dialogue: list[str]) -> ZoneEntity:
     )
 
 
+#: The published Locus rows assume an iL119 endgame party.  At the current level-99 /
+#: master-gear range the full Defense and Evasion made ordinary weapon skills miss and
+#: hit for about half, so those two columns are scaled for play while HP, Accuracy and
+#: Attack stay at the retail values.
+LOCUS_DEFENSE_SCALE = 0.75
+LOCUS_EVASION_SCALE = 0.75
+
+
+def scaled_level_stat(value, scale: float) -> int:
+    """One published level-stat column, scaled to the current gear range."""
+    return max(0, int(round(int(value or 0) * float(scale))))
+
+
 def mob_hp_for_level(level: int, level_min: int, level_max: int,
                      hp_max: int, hp_min: int = 0) -> int:
     """A monster's max HP at its rolled level.
@@ -286,8 +301,10 @@ def mob_from_row(row: dict, targid: int, rng: random.Random | None = None) -> Zo
         template_id=int(row["template_id"]), level=level,
         level_min=level_min, level_max=level_max, level_rolls=level_rolls,
         hp_min=hp_min, hp_high=hp_high, level_stats=level_stats,
-        defense_override=int(exact.get("defense") or 0),
-        evasion_override=int(exact.get("evasion") or 0),
+        defense_override=scaled_level_stat(
+            exact.get("defense"), LOCUS_DEFENSE_SCALE),
+        evasion_override=scaled_level_stat(
+            exact.get("evasion"), LOCUS_EVASION_SCALE),
         hp_max=max(1, hp_max), hp=max(1, hp_max),
         mp_max=int(row["template_mp"] or 0), mp=int(row["template_mp"] or 0),
         attack=int(row["attack"] or 1), defense=int(row["defense"] or 0),

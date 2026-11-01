@@ -262,7 +262,8 @@ and Sylvie's Indi- auras, with the level of each; only the ticked spells are use
 default AI still decides *when* each one is worth casting (cure when hurt, buff when
 missing, and so on).  A **Set rolls** dialog for Luzaf (928) and Qultada (967) lists the
 31 Corsair rolls; the list is a priority order, so the first selected roll that is not
-already on the party wins.  Sylvie's list also carries **Geo-malaise**, the enemy-targeted
+already on the party wins; a second selected roll fills the Trust's other slot.  Sylvie's
+list also carries **Geo-malaise**, the enemy-targeted
 Magic Defense Down hex, so she can keep the Idris 30% Malaise on a monster instead of an
 Indi- aura; it is migration 0172.  An empty set means the built-in logic.  Chat uses
 `//trust <id|name> set spells|rolls "..." ...`, `//trust <id|name> songs`, and
@@ -285,17 +286,22 @@ it, and leaving the loop running landed hits the player never saw themselves mak
 **Qultada and Luzaf roll for the party and never swing.**  `trust_ai.choose_roll()` reads
 what the party is short of rather than the owner's job — Evoker's Roll when a caster is
 under half MP, Wizard's for a caster-heavy group, Hunter's for a ranged-heavy one, and for
-melee **Chaos Roll** while Attack is short of the pDIF cap and **Samurai Roll** (Store TP)
-once it is capped.  The amounts are BG-wiki's per-total tables, not a per-point line: the
-lucky and unlucky numbers jump, so a Chaos IV is +25% Attack while a Chaos VIII is +3%.
-A roll lands on every party member in the zone for **100 seconds** -- the COR job-point
-maximum for Phantom Roll Duration (60s base + 2s per rank over 20 ranks), because an alter
-ego is a maxed-out Corsair -- and the Trust keeps the same roll for the whole fight — re-deciding every refresh made Chaos and Samurai trade
-the slot as the ratio crossed the cap.  A second Corsair sees the roll already up and takes
-the next useful line, so Qultada and Luzaf together hold Chaos and Samurai instead of
-duplicating one.  An explicit roll set from the HUD or `//trust <id> set rolls` is a
-priority order instead: the first selected roll whose status is not already on the party
-wins, and the Trust keeps it for the fight.  An empty set restores the role plan.
+melee **Chaos Roll** while Attack is short of the pDIF cap, **Fighter's Roll** (Double
+Attack) as the general second line, and **Samurai Roll** (Store TP) once it is capped.
+The amounts are BG-wiki's per-total tables, not a per-point line: the lucky and unlucky
+numbers jump, so a Chaos IV is +25% Attack while a Chaos VIII is +3%.
+**A Trust Corsair fills both of a Corsair's roll slots**, as retail Qultada does with his
+standard Chaos + Fighter's pair.  A roll lands on every party member in the zone for
+**340 seconds** -- the COR job-point maximum for Phantom Roll Duration (300s base + 2s per
+rank over 20 ranks), because an alter ego is a maxed-out Corsair.  The first slot takes the
+party's biggest need and the second takes the next useful line, so a second Corsair adds
+another roll instead of duplicating one; Qultada and Luzaf together can hold Chaos,
+Fighter's and Samurai.  A held roll is refreshed when its party copy is about to fall off,
+and is kept for the whole fight — re-deciding every refresh made Chaos and Samurai trade
+the slot as the ratio crossed the cap.  An explicit roll set from the HUD or
+`//trust <id> set rolls` fills the two slots in the order given: the first selected roll
+whose status is not already on the party wins, then the next, and so on.  Changing the
+list removes a held roll that is no longer in it.  An empty set restores the role plan.
 
 The seven passive Trusts do not swing.  They radiate the retail COLURE aura, and the
 aura is a separate effect from the player's own buff: Cornelia applies

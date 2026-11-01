@@ -63,8 +63,8 @@ echo "DISK=$(df -h / | awk 'NR==2{print $4}')"
 LATEST=$(ls -1t data/backups/fanxi-*.db 2>/dev/null | head -1)
 echo "BACKUP=$LATEST"
 if [ -n "$LATEST" ]; then echo "BACKUP_AGE=$(( $(date +%s) - $(stat -c %Y "$LATEST") ))"; fi
-echo "COMMIT=$(git rev-parse --short HEAD 2>/dev/null)"
-echo "BRANCH=$(git rev-parse --abbrev-ref HEAD 2>/dev/null)"
+echo "COMMIT=$(sudo -u fanxi -H git -C __REMOTE__ rev-parse --short HEAD 2>/dev/null)"
+echo "BRANCH=$(sudo -u fanxi -H git -C __REMOTE__ rev-parse --abbrev-ref HEAD 2>/dev/null)"
 """
 
 
@@ -187,7 +187,9 @@ def human_age(seconds: str | int | None) -> str:
 def deploy(config: dict, emit) -> tuple[bool, str]:
     """Backup, pull, restart, verify. Returns (ok, previous commit)."""
     remote = shlex.quote(config["remote_dir"])
-    _, head = run_remote(config, f"cd {remote} && git rev-parse HEAD")
+    # The checkout is owned by `fanxi`; git run as root refuses it as "dubious ownership".
+    git = f"sudo -u fanxi -H git -C {remote}"
+    _, head = run_remote(config, f"{git} rev-parse HEAD")
     previous = head.strip().splitlines()[-1] if head.strip() else ""
     emit(f"current commit: {previous[:12] or '?'}")
 
@@ -202,11 +204,19 @@ def deploy(config: dict, emit) -> tuple[bool, str]:
         return False, previous
 
     emit("pulling…")
-    code, output = run_remote(config, f"cd {remote} && git pull --ff-only 2>&1", timeout=120)
+    code, output = run_remote(config, f"{git} pull --ff-only 2>&1", timeout=120)
     for line in output.strip().splitlines():
         emit("  " + line)
     if code != 0:
+        emit("pull rejected — the server is still on the previous commit")
         return False, previous
+
+    _, after = run_remote(config, f"{git} rev-parse HEAD")
+    after = after.strip().splitlines()[-1] if after.strip() else ""
+    if after == previous:
+        emit("already on this commit — nothing to deploy")
+        return True, previous
+    emit(f"now at {after[:12]}")
 
     emit("restarting…")
     run_remote(config, "systemctl restart fanxi")
@@ -229,7 +239,7 @@ def rollback(config: dict, commit: str, emit) -> bool:
         return False
     remote = shlex.quote(config["remote_dir"])
     emit(f"rolling back to {commit[:12]}…")
-    code, _ = run_remote(config, f"cd {remote} && git checkout {shlex.quote(commit)}")
+    code, _ = run_remote(config, f"sudo -u fanxi -H git -C {remote} checkout {shlex.quote(commit)}")
     run_remote(config, "systemctl restart fanxi")
     time.sleep(2)
     _, health = run_remote(config, "curl -s --max-time 3 http://127.0.0.1:8080/api/v1/health")
@@ -674,7 +684,7 @@ class Dashboard:
         ok, previous = deploy(self.config, self.say)
         self.previous_commit = previous or self.previous_commit
         self.say("deploy finished" if ok else "deploy FAILED — see the log (l) for the reason")
-        self.message = "deploy ok" if ok else "deploy failed"
+        self.message = "deploy ok — server restarted" if ok else "DEPLOY FAILED — old code still running"
         if not ok and self.previous_commit:
             rollback_action = Action(
                 "y",
