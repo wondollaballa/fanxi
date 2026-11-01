@@ -6,6 +6,11 @@ from server.fanxi_server.game import odyssey
 
 
 class OdysseyTest(unittest.TestCase):
+    def test_every_dataset_file_is_present(self):
+        """Both datasets ship in the checkout; a missing EXTRA hides the accessories."""
+        self.assertEqual(odyssey.missing(), [])
+        self.assertEqual(len(odyssey.data()["accessories"]), 10)
+
     def test_every_odyssey_item_is_present(self):
         entries = odyssey.entries()
         self.assertEqual(len(entries), 60)

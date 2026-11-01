@@ -1,0 +1,476 @@
+{
+  "source": "https://www.bg-wiki.com/ffxi/Category:Odyssey_Rewards",
+  "note": "Odyssey Rank 30 pieces beyond the four GearSwap sets: Bunzi's, Ikenga's and Mpaca's armour, their weapons, and the Atonement 1/2 accessories. The RP card reads this together with data/odyssey_r30.json so every Odyssey augmentable piece in the bags is listed.",
+  "sets": {
+    "bunzi": {
+      "set": "Bunzi's Attire Set",
+      "jobs": [
+        "WHM",
+        "RDM",
+        "BRD",
+        "SMN"
+      ],
+      "source": "Mboze (Sheol Gaol)",
+      "pieces": {
+        "hat": {
+          "item_id": 23760,
+          "name": "Bunzi's Hat",
+          "slot": "head",
+          "bundle": 433,
+          "augments": {
+            "R30": [
+              "Attack+30 Magic Damage+30",
+              "\"Store TP\"+8",
+              "Accuracy+15 Mag. Acc.+15",
+              "Quadruple Attack +3%"
+            ]
+          }
+        },
+        "robe": {
+          "item_id": 23767,
+          "name": "Bunzi's Robe",
+          "slot": "body",
+          "bundle": 434,
+          "augments": {
+            "R30": [
+              "Attack+30 Magic Damage+30",
+              "Physical damage limit +8%",
+              "Accuracy+15 Mag. Acc.+15",
+              "DEX+5"
+            ]
+          }
+        },
+        "gloves": {
+          "item_id": 23774,
+          "name": "Bunzi's Gloves",
+          "slot": "hands",
+          "bundle": 435,
+          "augments": {
+            "R30": [
+              "Attack+30 Magic Damage+30",
+              "Magic burst damage II +6",
+              "Accuracy+15 Mag. Acc.+15",
+              "MND+5"
+            ]
+          }
+        },
+        "pants": {
+          "item_id": 23781,
+          "name": "Bunzi's Pants",
+          "slot": "legs",
+          "bundle": 436,
+          "augments": {
+            "R30": [
+              "Attack+30 Magic Damage+30",
+              "\"Blood Pact\" damage +8",
+              "Accuracy+15 Mag. Acc.+15",
+              "Pet: Damage taken -5%"
+            ]
+          }
+        },
+        "sabots": {
+          "item_id": 23788,
+          "name": "Bunzi's Sabots",
+          "slot": "feet",
+          "bundle": 437,
+          "augments": {
+            "R30": [
+              "Attack+30 Magic Damage+30",
+              "\"Regen\" potency +10",
+              "Accuracy+15 Mag. Acc.+15",
+              "Avatar: All Attr.+10"
+            ]
+          }
+        }
+      }
+    },
+    "ikenga": {
+      "set": "Ikenga's Attire Set",
+      "jobs": [
+        "RNG",
+        "COR"
+      ],
+      "source": "Xevioso (Sheol Gaol)",
+      "pieces": {
+        "hat": {
+          "item_id": 23755,
+          "name": "Ikenga's Hat",
+          "slot": "head",
+          "bundle": 408,
+          "augments": {
+            "R30": [
+              "Ranged Attack+30",
+              "\"Mag. Atk. Bns.\"+45",
+              "Rng. Acc.+15 Mag. Acc.+15",
+              "\"Subtle Blow II\"+5"
+            ]
+          }
+        },
+        "vest": {
+          "item_id": 23762,
+          "name": "Ikenga's Vest",
+          "slot": "body",
+          "bundle": 409,
+          "augments": {
+            "R30": [
+              "Ranged Attack+30",
+              "TP Bonus+200",
+              "Rng. Acc.+15 Mag. Acc.+15",
+              "Critical hit rate +5%"
+            ]
+          }
+        },
+        "gloves": {
+          "item_id": 23769,
+          "name": "Ikenga's Gloves",
+          "slot": "hands",
+          "bundle": 410,
+          "augments": {
+            "R30": [
+              "Ranged Attack+30",
+              "\"Subtle Blow\"+15",
+              "Rng. Acc.+15 Mag. Acc.+15",
+              "\"Recycle\"+10"
+            ]
+          }
+        },
+        "trousers": {
+          "item_id": 23776,
+          "name": "Ikenga's Trousers",
+          "slot": "legs",
+          "bundle": 411,
+          "augments": {
+            "R30": [
+              "Ranged Attack+30",
+              "Damage taken -10%",
+              "Rng. Acc.+15 Mag. Acc.+15",
+              "STR+5"
+            ]
+          }
+        },
+        "clogs": {
+          "item_id": 23783,
+          "name": "Ikenga's Clogs",
+          "slot": "feet",
+          "bundle": 412,
+          "augments": {
+            "R30": [
+              "Ranged Attack+30",
+              "\"True Shot\"+10",
+              "Rng. Acc.+15 Mag. Acc.+15",
+              "AGI+5"
+            ]
+          }
+        }
+      }
+    },
+    "mpaca": {
+      "set": "Mpaca's Attire Set",
+      "jobs": [
+        "MNK",
+        "SAM",
+        "NIN",
+        "PUP"
+      ],
+      "source": "Arebati (Sheol Gaol)",
+      "pieces": {
+        "cap": {
+          "item_id": 23758,
+          "name": "Mpaca's Cap",
+          "slot": "head",
+          "bundle": 423,
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "Skillchain dmg. +15%",
+              "Accuracy+15 Mag. Acc.+15",
+              "\"Double Attack\"+5%"
+            ]
+          }
+        },
+        "doublet": {
+          "item_id": 23765,
+          "name": "Mpaca's Doublet",
+          "slot": "body",
+          "bundle": 424,
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Store TP\"+8",
+              "Accuracy+15 Mag. Acc.+15",
+              "\"Regen\"+3"
+            ]
+          }
+        },
+        "gloves": {
+          "item_id": 23772,
+          "name": "Mpaca's Gloves",
+          "slot": "hands",
+          "bundle": 425,
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Triple Attack\" damage +10%",
+              "Accuracy+15 Mag. Acc.+15",
+              "DEX+5"
+            ]
+          }
+        },
+        "hose": {
+          "item_id": 23779,
+          "name": "Mpaca's Hose",
+          "slot": "legs",
+          "bundle": 426,
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "Physical damage limit +8%",
+              "Accuracy+15 Mag. Acc.+15",
+              "Mag. Evasion+10"
+            ]
+          }
+        },
+        "boots": {
+          "item_id": 23786,
+          "name": "Mpaca's Boots",
+          "slot": "feet",
+          "bundle": 427,
+          "augments": {
+            "R30": [
+              "Attack+30",
+              "\"Mag. Atk. Bns.\"+45",
+              "Accuracy+15 Mag. Acc.+15",
+              "AGI+5"
+            ]
+          }
+        }
+      }
+    }
+  },
+  "weapons": {
+    "bunzi_chopper": {
+      "item_id": 21780,
+      "name": "Bunzi's Chopper",
+      "slot": "main",
+      "weapon": "Great Axe",
+      "source": "Mboze",
+      "augments": [
+        "DMG:+27",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc.+15",
+        "STR/VIT+5"
+      ],
+      "bundle": 399
+    },
+    "bunzi_rod": {
+      "item_id": 22041,
+      "name": "Bunzi's Rod",
+      "slot": "main",
+      "weapon": "Staff",
+      "source": "Mboze",
+      "augments": [
+        "DMG:+11",
+        "\"Mag. Atk. Bns.\"+30",
+        "Accuracy+15 Mag. Acc.+15",
+        "Enmity-5"
+      ],
+      "bundle": 404
+    },
+    "ikenga_axe": {
+      "item_id": 21723,
+      "name": "Ikenga's Axe",
+      "slot": "main",
+      "weapon": "Axe",
+      "source": "Xevioso",
+      "augments": [
+        "DMG:+15",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc.+15",
+        "TP Bonus+500"
+      ],
+      "bundle": 397
+    },
+    "ikenga_lance": {
+      "item_id": 21884,
+      "name": "Ikenga's Lance",
+      "slot": "main",
+      "weapon": "Polearm",
+      "source": "Xevioso",
+      "augments": [
+        "DMG:+26",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc.+15",
+        "\"Regen\"+3"
+      ],
+      "bundle": 401
+    },
+    "mpaca_bow": {
+      "item_id": 22151,
+      "name": "Mpaca's Bow",
+      "slot": "range",
+      "weapon": "Bow",
+      "source": "Arebati",
+      "augments": [
+        "DMG:+21",
+        "Ranged Attack+45",
+        "Rng. Acc.+15 Mag. Acc.+15",
+        "\"Recycle\"+5"
+      ],
+      "bundle": 407
+    },
+    "mpaca_staff": {
+      "item_id": 22100,
+      "name": "Mpaca's Staff",
+      "slot": "main",
+      "weapon": "Staff",
+      "source": "Arebati",
+      "augments": [
+        "DMG:+21",
+        "\"Mag. Atk. Bns.\"+30",
+        "Accuracy+15 Mag. Acc.+15",
+        "INT/MND+5"
+      ],
+      "bundle": 405
+    },
+    "gekkei": {
+      "item_id": 21979,
+      "name": "Gekkei",
+      "slot": "main",
+      "weapon": "Great Katana",
+      "source": "Ngai",
+      "augments": [
+        "DMG:+24",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc.+15",
+        "STR+5"
+      ],
+      "bundle": 403
+    },
+    "kunimitsu": {
+      "item_id": 21925,
+      "name": "Kunimitsu",
+      "slot": "main",
+      "weapon": "Katana",
+      "source": "Xevioso",
+      "augments": [
+        "DMG:+12",
+        "Attack+45",
+        "Accuracy+15 Mag. Acc.+15",
+        "\"Daken\"+5"
+      ],
+      "bundle": 402
+    }
+  },
+  "accessories": [
+    {
+      "item_id": 21430,
+      "name": "Hesperiidae",
+      "slot": "ammo",
+      "augments": [
+        "Pet: Attack+15",
+        "Attack+15",
+        "Pet: All Attr.+10"
+      ],
+      "bundle": 458
+    },
+    {
+      "item_id": 21431,
+      "name": "Coiste Bodhar",
+      "slot": "ammo",
+      "augments": [
+        "Attack+15",
+        "STR+10",
+        "DEX+10"
+      ],
+      "bundle": 459
+    },
+    {
+      "item_id": 21432,
+      "name": "Epitaph",
+      "slot": "ammo",
+      "augments": [
+        "Avatar: Accuracy/Magic Accuracy +30",
+        "Avatar: All Attr.+15",
+        "Avatar: Enmity+10"
+      ],
+      "bundle": 460
+    },
+    {
+      "item_id": 21433,
+      "name": "Neo Animator",
+      "slot": "range",
+      "augments": [
+        "Automaton: Accuracy/Magic Accuracy/Ranged Accuracy +30",
+        "Automaton: HP+60",
+        "Automaton: Special attack damage +5%"
+      ],
+      "bundle": 461
+    },
+    {
+      "item_id": 21568,
+      "name": "Acrontica",
+      "slot": "main",
+      "augments": [
+        "DEF+30",
+        "\"Waltz\" potency +10%",
+        "\"Mag. Def. Bns.\"+5"
+      ],
+      "bundle": 462
+    },
+    {
+      "item_id": 21926,
+      "name": "Tsuru",
+      "slot": "main",
+      "augments": [
+        "DEF+30",
+        "\"Daken\"+10",
+        "Mag. Evasion+10"
+      ],
+      "bundle": 463
+    },
+    {
+      "item_id": 26116,
+      "name": "Schere Earring",
+      "slot": "ear",
+      "augments": [
+        "Accuracy+15",
+        "Attack+15",
+        "\"Store TP\"+5"
+      ],
+      "bundle": 464
+    },
+    {
+      "item_id": 26218,
+      "name": "Beithir Ring",
+      "slot": "ring",
+      "augments": [
+        "Weapon Skill Acc.+15",
+        "Attack+15",
+        "Skillchain dmg. +5%"
+      ],
+      "bundle": 465
+    },
+    {
+      "item_id": 26362,
+      "name": "Tellen Belt",
+      "slot": "waist",
+      "augments": [
+        "Ranged Accuracy+15",
+        "Ranged Attack+15",
+        "Enmity-5"
+      ],
+      "bundle": 466
+    },
+    {
+      "item_id": 26363,
+      "name": "Obstin. Sash",
+      "slot": "waist",
+      "augments": [
+        "Magic Accuracy+15",
+        "Enfb. mag. skill+15",
+        "Enmity-5"
+      ],
+      "bundle": 467
+    }
+  ]
+}

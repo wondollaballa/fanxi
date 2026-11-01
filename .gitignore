@@ -24,10 +24,16 @@ data/nav/
 !data/weapon_skill_properties.json
 !data/limbus_r30.json
 !data/odyssey_r30.json
+# Odyssey's extra pieces (Bunzi's, Ikenga's, Mpaca's, Gekkei, Kunimitsu and the
+# ten Sheol Gaol accessories, the Beithir Ring among them) live in their own
+# merged dataset.  Whitelisting it is not optional: a missing file silently
+# removes those items from the augment registry.
+!data/odyssey_extra_r30.json
 !data/oboro_r25.json
 !data/nolan_mezzotint.json
 !data/oseem_glyptics.json
 !data/skirmish.json
+!data/sinister_reign.json
 !data/temenos_r30.json
 !data/moonshade.json
 !data/magian.json

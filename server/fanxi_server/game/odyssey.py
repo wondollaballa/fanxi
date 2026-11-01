@@ -10,7 +10,10 @@ so ``//r30`` is the in-game view of the table.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
+
+log = logging.getLogger("fanxi.odyssey")
 
 ROOT = Path(__file__).resolve().parents[3]
 PATH = ROOT / "data" / "odyssey_r30.json"
@@ -25,9 +28,32 @@ def _read(path: Path) -> dict:
         return {}
 
 
+def _relative(path: Path) -> str:
+    try:
+        return str(path.relative_to(ROOT))
+    except ValueError:
+        return str(path)
+
+
+def missing() -> list[str]:
+    """Dataset files this module needs but cannot read.
+
+    ``EXTRA`` carries Bunzi's, Ikenga's, Mpaca's, Gekkei, Kunimitsu and the ten
+    Sheol Gaol accessories.  It used to be absent from a fresh clone because the
+    ``data/*`` whitelist in ``.gitignore`` skipped it, which silently removed
+    those items from the augment registry -- the Beithir Ring could not be
+    capped at all.  The warning below and the tests pin that the file ships.
+    """
+    return [_relative(path) for path in (PATH, EXTRA) if not path.is_file()]
+
+
 def data() -> dict:
     global _cache
     if _cache is None:
+        absent = missing()
+        if absent:
+            log.warning("Odyssey dataset(s) missing: %s; their items cannot be augmented",
+                        ", ".join(absent))
         merged = {"sets": {}, "weapons": {}, "accessories": []}
         for path in (PATH, EXTRA):
             part = _read(path)

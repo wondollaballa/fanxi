@@ -24,9 +24,12 @@ so this is a sandbox convenience, not an in-game NPC path.
 from __future__ import annotations
 
 import json
+import logging
 from pathlib import Path
 
 from . import capes, skirmish
+
+log = logging.getLogger("fanxi.sinister")
 
 ROOT = Path(__file__).resolve().parents[3]
 PATH = ROOT / "data" / "sinister_reign.json"
@@ -49,9 +52,23 @@ GROUP_ORDER = {"Weapons": 0, "Head": 1, "Body": 2, "Hands": 3, "Legs": 4, "Feet"
 _cache: dict | None = None
 
 
+def missing() -> list[str]:
+    """Dataset files this module needs but cannot read."""
+    if PATH.is_file():
+        return []
+    try:
+        return [str(PATH.relative_to(ROOT))]
+    except ValueError:
+        return [str(PATH)]
+
+
 def data() -> dict:
     global _cache
     if _cache is None:
+        absent = missing()
+        if absent:
+            log.warning("Sinister Reign dataset missing: %s; the card has no pieces",
+                        ", ".join(absent))
         try:
             _cache = json.loads(PATH.read_text())
         except (OSError, ValueError):

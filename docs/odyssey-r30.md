@@ -6,7 +6,17 @@ Rank 30 rows from [BG Wiki's Odyssey page](https://www.bg-wiki.com/ffxi/Odyssey)
 and each item's page.
 
 The same data drives `gearswap/*.lua` (`local odyssey` and the `sets.Odyssey`
-container), `data/odyssey_r30.json`, and the server's `//r30` chat command.
+container), `data/odyssey_r30.json`, `data/odyssey_extra_r30.json` and the
+server's `//r30` chat command.
+
+The registry merges two datasets: `data/odyssey_r30.json` holds the four armour
+sets and the seven weapons the GearSwap generator owns, while
+`data/odyssey_extra_r30.json` holds Bunzi's, Ikenga's and Mpaca's sets, Gekkei,
+Kunimitsu and the ten Sheol Gaol accessories — the Beithir Ring among them.
+Both files are tracked in git, so a fresh clone (and the live server) has the
+same catalogue the launcher and `//r30` read. The extra file is not optional:
+`odyssey.missing()` reports it, `test_odyssey.py` pins it, and without it the
+accessories silently drop out of the augment registry.
 
 ## Nyame Armor Set
 
@@ -78,6 +88,14 @@ The armour pieces are granted to the character's wardrobes by
 `database/migrations/0072_odyssey_r30.sql`. Use `//r30 <item>` in the chat
 log to print an item's Rank 30 rows, and `//r30` alone to list every
 Odyssey item the server knows.
+
+The **RP** card on the launcher's Data page is Fanxi's Pilgrim Moogle: a
+carried Odyssey piece appears there with its Rank 30 path and **Cap path**
+writes the bundle the client draws. The Beithir Ring (item 26218, bundle 465)
+is one of the accessories, so it offers the single Rank 30 path — Weapon Skill
+Acc.+15, Attack+15, Skillchain dmg.+5% — and `//augment A <item>` writes the
+same block from chat. A purchase from the Armory appears in the card straight
+away, with no separate "register this piece" step.
 
 Each item's `extdata` now carries its real **augment bundle index**
 (third column above). The index names a bundle in the client's augment

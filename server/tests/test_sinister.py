@@ -22,6 +22,9 @@ def item_named(name: str) -> dict:
 
 
 class SinisterCatalogTest(unittest.TestCase):
+    def test_the_dataset_is_present(self):
+        self.assertEqual(sinister.missing(), [])
+
     def test_every_sinister_piece_is_there(self):
         entries = sinister.entries()
         self.assertEqual(len(entries), 37)
