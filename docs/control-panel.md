@@ -328,7 +328,8 @@ window follows the selected target, hides with the other HUD windows when a menu
 and remembers its position per character. The poll names the character by the client's ServerId
 (the long `0x01000000 | char_id` value from the entity table), so the API accepts either that or
 the database row id; an error is shown by its `message` ("Target info unavailable: character is
-not in a zone"), never as a raw table.
+not in a zone"), never as a raw table. The API URL may be HTTP or HTTPS: the HUD uses LuaSocket
+for HTTP and libcurl through LuaJIT FFI for HTTPS.
 
 ![Target Debuffs showing Slow, Dia and Evasion Down](images/target-debuffs.png)
 

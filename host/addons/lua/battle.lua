@@ -522,13 +522,102 @@ local function api_config()
     return url, token
 end
 
+-- The live launcher points FANXI_API_URL at https://..., while LuaSocket has no TLS.  The
+-- LuaJIT FFI reaches the libcurl that ships with macOS (and the libcurl DLL on Windows); its
+-- default write callback into tmpfile() collects the body without a Lua callback.  Without
+-- this, every Battle/Target-Debuffs request failed with "no HTTP" before it left the client.
+-- These live on S instead of new locals: the main chunk is already at LuaJIT's 200-local limit.
+S.ffi_ok, S.ffi = pcall(require, 'ffi')
+S.curl_lib = nil
+
+function S.libcurl()
+    if not S.ffi_ok then return nil, 'LuaJIT FFI is not available' end
+    if S.curl_lib == false then return nil, 'libcurl is not available' end
+    if S.curl_lib then return S.curl_lib end
+    pcall(S.ffi.cdef, [[
+        void *tmpfile(void);
+        int fclose(void *);
+        int fseek(void *, long, int);
+        long ftell(void *);
+        size_t fread(void *, size_t, size_t, void *);
+        void *curl_easy_init(void);
+        void curl_easy_cleanup(void *);
+        int curl_easy_setopt(void *, int, ...);
+        int curl_easy_perform(void *);
+        int curl_easy_getinfo(void *, int, ...);
+        const char *curl_easy_strerror(int);
+        void *curl_slist_append(void *, const char *);
+        void curl_slist_free_all(void *);
+    ]])
+    local ok, lib = pcall(S.ffi.load, 'curl')
+    if not ok then ok, lib = pcall(S.ffi.load, 'libcurl') end
+    if not ok then S.curl_lib = false; return nil, 'libcurl is not available' end
+    S.curl_lib = lib
+    return lib
+end
+
+function S.https_json(method, url, body, token)
+    local C, why = S.libcurl()
+    if not C then return nil, why end
+    if token == '' then return nil, 'no API token' end
+    local payload = body and encode(body) or nil
+    if body and not payload then return nil, 'could not encode the request' end
+    local curl = C.curl_easy_init()
+    if curl == nil then return nil, 'libcurl could not start' end
+    local file = C.tmpfile()
+    if file == nil then
+        C.curl_easy_cleanup(curl)
+        return nil, 'could not open a response buffer'
+    end
+    local list = C.curl_slist_append(nil, 'Authorization: Bearer ' .. token)
+    if payload then list = C.curl_slist_append(list, 'Content-Type: application/json') end
+    C.curl_easy_setopt(curl, 10002, url)                      -- CURLOPT_URL
+    C.curl_easy_setopt(curl, 10001, file)                     -- CURLOPT_WRITEDATA
+    C.curl_easy_setopt(curl, 10023, list)                     -- CURLOPT_HTTPHEADER
+    C.curl_easy_setopt(curl, 52, S.ffi.cast('long', 1))       -- CURLOPT_FOLLOWLOCATION
+    C.curl_easy_setopt(curl, 13, S.ffi.cast('long', 8))       -- CURLOPT_TIMEOUT
+    C.curl_easy_setopt(curl, 99, S.ffi.cast('long', 1))       -- CURLOPT_NOSIGNAL
+    if method == 'GET' then
+        C.curl_easy_setopt(curl, 80, S.ffi.cast('long', 1))   -- CURLOPT_HTTPGET
+    else
+        C.curl_easy_setopt(curl, 10036, method)               -- CURLOPT_CUSTOMREQUEST
+        if payload then
+            C.curl_easy_setopt(curl, 10015, payload)          -- CURLOPT_POSTFIELDS
+            C.curl_easy_setopt(curl, 60, S.ffi.cast('long', #payload)) -- CURLOPT_POSTFIELDSIZE
+        end
+    end
+    local rc = C.curl_easy_perform(curl)
+    local code = S.ffi.new('long[1]')
+    C.curl_easy_getinfo(curl, 0x200002, code)                 -- CURLINFO_RESPONSE_CODE
+    local status = tonumber(code[0]) or 0
+    local size = tonumber(C.ftell(file)) or 0
+    C.fseek(file, 0, 0)
+    local buffer = S.ffi.new('char[?]', size + 1)
+    local got = tonumber(C.fread(buffer, 1, size, file)) or 0
+    local raw = got > 0 and S.ffi.string(buffer, got) or ''
+    C.fclose(file)
+    C.curl_slist_free_all(list)
+    C.curl_easy_cleanup(curl)
+    if rc ~= 0 then return nil, S.ffi.string(C.curl_easy_strerror(rc)) end
+    local decoded = decode(raw)
+    if status < 200 or status >= 300 then
+        return nil, (decoded and decoded.error) or ('HTTP ' .. status)
+    end
+    return decoded
+end
+
 local function http_json(method, path, body)
-    if not socket_ok or not socket then return nil, 'LuaSocket is not available' end
     local base, token = api_config()
+    local scheme = tostring(base):match('^(https?)://')
+    if not scheme then return nil, 'no HTTP API configured' end
+    if token == '' then return nil, 'no API token' end
+    if scheme == 'https' then
+        return S.https_json(method, tostring(base) .. path, body, token)
+    end
+    if not socket_ok or not socket then return nil, 'LuaSocket is not available' end
     local host, port = tostring(base):match('^http://([^/:]+):?(%d*)$')
     if not host then return nil, 'no HTTP API configured' end
     port = tonumber(port) or 80
-    if token == '' then return nil, 'no API token' end
     local data = body and encode(body) or nil
     if body and not data then return nil, 'could not encode the request' end
     local sock = socket.tcp()

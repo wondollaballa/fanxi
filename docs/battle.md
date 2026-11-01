@@ -233,7 +233,9 @@ team:
   token can write any character in its family; a sub account can write its own.
 - Profiles are stored in `char_settings` (`battle_profile`) and survive relogging/restarts.
 - The launcher passes `FANXI_API_URL` and `FANXI_API_TOKEN` to every local/remote client. A
-  development client also falls back to the launcher's `launcher.json`.
+  development client also falls back to the launcher's `launcher.json`. The client speaks
+  plain HTTP with LuaSocket and HTTPS with libcurl through LuaJIT FFI, so a live launcher's
+  `https://...` endpoint works without a local proxy.
 - Each client polls the team route (every six seconds) and **applies its own server profile**.
   If the profile's `engine.running` changed, the client starts or stops its Battle engine.
 - The team response includes each character's main/sub job, levels and job abilities, so the

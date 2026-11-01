@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Target Debuffs and Battle HUD over HTTPS
+
+- **The HUD's API client now speaks HTTPS.** `battle.http_json` only parsed `http://`, so with
+  `FANXI_API_URL=https://172.236.103.193.sslip.io` the Target Debuffs window showed
+  **"Target info unavailable: no HTTP"** and the Battle HUD stopped polling. The plain-HTTP
+  path is unchanged (LuaSocket); an `https://` URL goes through libcurl via LuaJIT FFI
+  (Bearer header, follow redirects, body in `tmpfile()`), with a clear
+  `libcurl is not available` fallback. The server API and token are unchanged.
+
 ## Unreleased — weapon-skill animation context
 
 - **A weapon skill's finish waits one flush after its start.**  Start and finish were
