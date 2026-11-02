@@ -62,7 +62,9 @@
     "Pet dmg+5%"
    ],
    "bundle": 497,
-   "pet": "Automaton: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2"
+   "pet": "Automaton: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
+   "model": 474,
+   "model_stand_in": "Varga Purnikawa (Stage 5)"
   },
   {
    "item_id": 21599,
@@ -83,7 +85,9 @@
     "Attack+50",
     "HP+150"
    ],
-   "bundle": 498
+   "bundle": 498,
+   "model": 929,
+   "model_stand_in": "Ethereal Dagger"
   },
   {
    "item_id": 21738,
@@ -103,7 +107,9 @@
     "Pet dmg+5%"
    ],
    "bundle": 502,
-   "pet": "Main hand: Pet: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2"
+   "pet": "Main hand: Pet: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
+   "model": 931,
+   "model_stand_in": "Ethereal Axe"
   },
   {
    "item_id": 21795,
@@ -121,7 +127,9 @@
     "Attack+70",
     "HP+200"
    ],
-   "bundle": 503
+   "bundle": 503,
+   "model": 932,
+   "model_stand_in": "Ethereal Great Axe"
   },
   {
    "item_id": 21848,
@@ -139,7 +147,9 @@
     "Attack+70",
     "HP+200"
    ],
-   "bundle": 504
+   "bundle": 504,
+   "model": 934,
+   "model_stand_in": "Ethereal Scythe"
   },
   {
    "item_id": 21899,
@@ -158,7 +168,9 @@
     "HP+200"
    ],
    "bundle": 505,
-   "pet": "Wyvern: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2"
+   "pet": "Wyvern: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
+   "model": 933,
+   "model_stand_in": "Ethereal Spear"
   },
   {
    "item_id": 21942,
@@ -176,7 +188,9 @@
     "Attack+50 Ranged Attack+50",
     "HP+150"
    ],
-   "bundle": 506
+   "bundle": 506,
+   "model": 935,
+   "model_stand_in": "Ethereal Katana"
   },
   {
    "item_id": 21948,
@@ -194,7 +208,9 @@
     "Attack+70",
     "HP+200"
    ],
-   "bundle": 507
+   "bundle": 507,
+   "model": 936,
+   "model_stand_in": "Ethereal Tachi"
   },
   {
    "item_id": 22176,
@@ -212,7 +228,9 @@
     "Ranged Attack+100",
     "HP+300"
    ],
-   "bundle": 510
+   "bundle": 510,
+   "model": 151,
+   "model_stand_in": "Pinaka (Stage 5)"
   },
   {
    "item_id": 22182,
@@ -232,7 +250,9 @@
     "Attack+50",
     "HP+150"
    ],
-   "bundle": 499
+   "bundle": 499,
+   "model": 930,
+   "model_stand_in": "Ethereal Sword"
   },
   {
    "item_id": 22188,
@@ -252,7 +272,9 @@
     "Magic Damage+25",
     "HP+150"
    ],
-   "bundle": 500
+   "bundle": 500,
+   "model": 930,
+   "model_stand_in": "Ethereal Sword"
   },
   {
    "item_id": 22225,
@@ -271,7 +293,9 @@
     "Magic Damage+25",
     "HP+150"
    ],
-   "bundle": 508
+   "bundle": 508,
+   "model": 937,
+   "model_stand_in": "Ethereal Club"
   },
   {
    "item_id": 22231,
@@ -293,7 +317,9 @@
     "\"Blood Pact\" Damage+10"
    ],
    "bundle": 509,
-   "pet": "Avatar: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2"
+   "pet": "Avatar: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
+   "model": 938,
+   "model_stand_in": "Ethereal Staff"
   },
   {
    "item_id": 22237,
@@ -314,7 +340,9 @@
     "Attack+70",
     "HP+200"
    ],
-   "bundle": 501
+   "bundle": 501,
+   "model": 920,
+   "model_stand_in": "Helheim (Stage 5)"
   },
   {
    "item_id": 26503,
@@ -332,7 +360,10 @@
     "HP+150",
     "VIT+30"
    ],
-   "bundle": 512
+   "bundle": 512,
+   "model": 676,
+   "model_stand_in": "Duban (Stage 5)"
   }
- ]
+ ],
+ "model_note": "The 2026 wave shipped without a grap model in any server data: LandSandBoat marks these rows `TODO: MId`, and the client's item records carry no model at all (the model is server-side data private servers curate by hand).  An equipped copy was therefore invisible ('no grap model: it will not show').  Each weapon now carries the client model of its own weapon type -- the 2026 'Ethereal' block (929-938) where it names that type, the type's Stage 5 afterglow otherwise -- so it renders with the right silhouette.  These are stand-ins, not the Telopanos skins; `//model <item> <id>` sets one copy's look and a later dataset edit can bake the real id in.  The grip keeps model 0: grips are never drawn."
 }

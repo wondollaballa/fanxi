@@ -52,6 +52,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Knuckles
 
 - **Item:** 21549, **slot:** main, **bundle:** 497
+- **Model:** 474 (grap stand-in, not the Telopanos skin)
 - **Jobs:** MNK / PUP
 - **Stats:** DMG:173 Delay:91 Accuracy+32 Magic Accuracy+32 Hand-to-Hand skill +255 Guard skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Automaton: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -63,6 +64,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Knife
 
 - **Item:** 21599, **slot:** main, **bundle:** 498
+- **Model:** 929 (grap stand-in, not the Telopanos skin)
 - **Jobs:** RDM / THF / BRD / DNC
 - **Stats:** DMG:128 Delay:189 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Dagger skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -73,6 +75,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Axe
 
 - **Item:** 21738, **slot:** main, **bundle:** 502
+- **Model:** 931 (grap stand-in, not the Telopanos skin)
 - **Jobs:** BST
 - **Stats:** DMG:181 Delay:268 Accuracy+32 Magic Accuracy+32 Axe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Main hand: Pet: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -84,6 +87,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Chopper
 
 - **Item:** 21795, **slot:** main, **bundle:** 503
+- **Model:** 932 (grap stand-in, not the Telopanos skin)
 - **Jobs:** WAR
 - **Stats:** DMG:330 Delay:489 Accuracy+32 Magic Accuracy+32 Great Axe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -94,6 +98,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Scythe
 
 - **Item:** 21848, **slot:** main, **bundle:** 504
+- **Model:** 934 (grap stand-in, not the Telopanos skin)
 - **Jobs:** DRK
 - **Stats:** DMG:345 Delay:513 Accuracy+32 Magic Accuracy+32 Scythe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -104,6 +109,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Halberd
 
 - **Item:** 21899, **slot:** main, **bundle:** 505
+- **Model:** 933 (grap stand-in, not the Telopanos skin)
 - **Jobs:** DRG
 - **Stats:** DMG:259 Delay:385 Accuracy+32 Magic Accuracy+32 Polearm skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Wyvern: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -115,6 +121,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Shin.
 
 - **Item:** 21942, **slot:** main, **bundle:** 506
+- **Model:** 935 (grap stand-in, not the Telopanos skin)
 - **Jobs:** NIN
 - **Stats:** DMG:149 Delay:222 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Katana skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -125,6 +132,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Katana
 
 - **Item:** 21948, **slot:** main, **bundle:** 507
+- **Model:** 936 (grap stand-in, not the Telopanos skin)
 - **Jobs:** SAM
 - **Stats:** DMG:294 Delay:435 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Great Katana skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -135,6 +143,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Bow
 
 - **Item:** 22176, **slot:** range, **bundle:** 510
+- **Model:** 151 (grap stand-in, not the Telopanos skin)
 - **Jobs:** RNG
 - **Stats:** DMG:316 Delay:582 Ranged Accuracy+32 Magic Accuracy+32 Archery skill +255 Snapshot +5 Physical damage limit +10% Damage taken -5%
 
@@ -145,6 +154,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Sword
 
 - **Item:** 22182, **slot:** main, **bundle:** 499
+- **Model:** 930 (grap stand-in, not the Telopanos skin)
 - **Jobs:** WAR / PLD / DRK
 - **Stats:** DMG:173 Delay:258 Accuracy+32 Magic Accuracy+32 Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -155,6 +165,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Saber
 
 - **Item:** 22188, **slot:** main, **bundle:** 500
+- **Model:** 930 (grap stand-in, not the Telopanos skin)
 - **Jobs:** RDM / BLU / COR
 - **Stats:** DMG:157 Delay:233 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +52 Magic damage +250 Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%
 
@@ -165,6 +176,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Maul
 
 - **Item:** 22225, **slot:** main, **bundle:** 508
+- **Model:** 937 (grap stand-in, not the Telopanos skin)
 - **Jobs:** WHM / GEO
 - **Stats:** DMG:223 Delay:334 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +52 Magic damage +250 Club skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%
 
@@ -175,6 +187,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Staff
 
 - **Item:** 22231, **slot:** main, **bundle:** 509
+- **Model:** 938 (grap stand-in, not the Telopanos skin)
 - **Jobs:** BLM / SMN / SCH
 - **Stats:** DMG:240 Delay:356 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +72 Magic damage +312 Staff skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%
 - **Pet line (client text, not stored):** Avatar: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -186,6 +199,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Claymore
 
 - **Item:** 22237, **slot:** main, **bundle:** 501
+- **Model:** 920 (grap stand-in, not the Telopanos skin)
 - **Jobs:** WAR / PLD / DRK / RUN
 - **Stats:** DMG:314 Delay:466 Accuracy+32 Magic Accuracy+32 Great Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -196,12 +210,49 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Shield
 
 - **Item:** 26503, **slot:** sub, **bundle:** 512
+- **Model:** 676 (grap stand-in, not the Telopanos skin)
 - **Jobs:** PLD
 - **Stats:** DEF:152 Accuracy+32 Magic Accuracy+32 Shield skill +121 Haste+5% Damage taken II -5%
 
 | [1] | [2] | [3] | [4] |
 | --- | --- | --- | --- |
 | Attack+50 | HP+150 | VIT+30 |  |
+
+## Grap models
+
+The 2026 wave shipped without a **grap model** in any server data: LandSandBoat
+marks each row `TODO: MId`, and the client's own item records carry no model
+(the model is server-side data that private servers curate by hand).  A copy
+equipped with model 0 was simply not drawn -- the server log said
+`equipped Telopanos Sword in slot 0 with no grap model: it will not show`.
+
+Every weapon now carries the client model of its own weapon type, taken from
+the 2026 **Ethereal** block (929-938, one model per weapon group) where that
+block names the type, and from the type's Stage 5 afterglow otherwise.  That
+renders the right silhouette, but it is a stand-in, not the Telopanos skin:
+
+| Weapon | Group | Model | Stand-in for |
+| --- | --- | --- | --- |
+| Telopanos Grip | Grips | none (grips are invisible) | - |
+| Telopanos Knuckles | Hand-to-Hand | 474 | Varga Purnikawa (Stage 5) |
+| Telopanos Knife | Dagger | 929 | Ethereal Dagger |
+| Telopanos Axe | Axe | 931 | Ethereal Axe |
+| Telopanos Chopper | Great Axe | 932 | Ethereal Great Axe |
+| Telopanos Scythe | Scythe | 934 | Ethereal Scythe |
+| Telopanos Halberd | Polearm | 933 | Ethereal Spear |
+| Telopanos Shin. | Katana | 935 | Ethereal Katana |
+| Telopanos Katana | Great Katana | 936 | Ethereal Tachi |
+| Telopanos Bow | Archery | 151 | Pinaka (Stage 5) |
+| Telopanos Sword | Sword | 930 | Ethereal Sword |
+| Telopanos Saber | Sword | 930 | Ethereal Sword |
+| Telopanos Maul | Club | 937 | Ethereal Club |
+| Telopanos Staff | Staff | 938 | Ethereal Staff |
+| Telopanos Claymore | Great Sword | 920 | Helheim (Stage 5) |
+| Telopanos Shield | Shield | 676 | Duban (Stage 5) |
+
+`//model <item> <id>` sets one copy's look in game; editing the dataset's
+`model` field and running the generator bakes a better id into the migration.
+The grip keeps model 0 on purpose: a grip is never drawn.
 
 ## Where the data comes from
 

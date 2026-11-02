@@ -1,5 +1,6 @@
 """The Limbus Rank 30 dataset, its exdata and the migration that stamps it."""
 
+import json
 import tempfile
 import unittest
 from pathlib import Path
@@ -150,6 +151,33 @@ class LimbusWeaponTest(unittest.TestCase):
             path = entry["paths"][0]
             self.assertEqual((path["key"], path["bundle"], path["rank"], path["rp"],
                               path["curve"]), ("A", bundle, 30, 55800, 1), item_id)
+
+
+class WeaponModelTest(unittest.TestCase):
+    """Every weapon but the grip carries a grap model, or the client draws nothing."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(self.tmp.cleanup)
+        _config, self.db, _service = make_service(Path(self.tmp.name))
+
+    def test_every_weapon_but_the_grip_has_a_model_in_the_dataset(self):
+        for weapon in json.loads((ROOT / "data" / "limbus_weapons_r30.json").read_text())["weapons"]:
+            if weapon["item_id"] == 18800:  # the grip is never drawn
+                self.assertNotIn("model", weapon)
+                continue
+            self.assertTrue(1 <= int(weapon["model"]) <= 4095, weapon["name"])
+            self.assertTrue(weapon.get("model_stand_in"), weapon["name"])
+
+    def test_the_catalogue_rows_carry_the_same_models(self):
+        document = json.loads((ROOT / "data" / "limbus_weapons_r30.json").read_text())
+        for weapon in document["weapons"]:
+            if not weapon.get("model"):
+                continue
+            row = self.db.one("SELECT model FROM items WHERE item_id = ?",
+                              (int(weapon["item_id"]),))
+            self.assertIsNotNone(row, weapon["name"])
+            self.assertEqual(int(row["model"]), int(weapon["model"]), weapon["name"])
 
 
 class LimbusMigrationTest(unittest.TestCase):

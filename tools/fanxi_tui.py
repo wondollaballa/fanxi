@@ -167,6 +167,85 @@ def collect_status(config: dict) -> dict:
     return status
 
 
+MIGRATION_SCRIPT = r"""
+python3 - <<'PY'
+import json
+import sqlite3
+from pathlib import Path
+
+root = Path.cwd()
+db = root / "data" / "fanxi.db"
+files = []
+for path in sorted((root / "database" / "migrations").glob("*.sql")):
+    try:
+        version = int(path.name.split("_", 1)[0])
+    except ValueError:
+        continue
+    files.append({"version": version, "name": path.name})
+
+applied = set()
+error = ""
+if db.is_file():
+    try:
+        connection = sqlite3.connect(db, timeout=10)
+        try:
+            applied = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
+        except sqlite3.OperationalError as exc:
+            if "no such table" not in str(exc).lower():
+                error = str(exc)
+        finally:
+            connection.close()
+    except sqlite3.Error as exc:
+        error = str(exc)
+
+print("MIGRATIONS=" + json.dumps({
+    "total": len(files),
+    "applied": len(applied),
+    "pending": [path for path in files if path["version"] not in applied],
+    "error": error,
+}))
+PY
+"""
+
+
+def migration_state(config: dict) -> dict:
+    """The checkout's migration files against the versions the database records.
+
+    Reads only: the server applies migrations itself during startup (``db.initialize``), and the
+    deploy restarts it, so this is how the dashboard proves that actually happened. A missing
+    database is a fresh install, where every file is pending.
+    """
+    remote = shlex.quote(config["remote_dir"])
+    code, output = run_remote(config, "cd " + remote + " && " + MIGRATION_SCRIPT, timeout=30)
+    for line in reversed(output.splitlines()):
+        if not line.startswith("MIGRATIONS="):
+            continue
+        try:
+            state = json.loads(line.split("=", 1)[1])
+        except ValueError:
+            break
+        state["ok"] = code == 0 and not state.get("error")
+        return state
+    return {
+        "ok": False,
+        "error": output.strip()[-300:] or f"ssh exited {code}",
+        "total": 0,
+        "applied": 0,
+        "pending": [],
+    }
+
+
+def migration_summary(state: dict) -> str:
+    pending = state.get("pending") or []
+    total = state.get("total") or 0
+    if not pending:
+        return f"all {total} migration{'s' if total != 1 else ''} applied"
+    names = ", ".join(entry.get("name", "?") for entry in pending[:5])
+    if len(pending) > 5:
+        names += f", +{len(pending) - 5} more"
+    return f"{len(pending)} new migration{'s' if len(pending) != 1 else ''}: {names}"
+
+
 def human_age(seconds: str | int | None) -> str:
     try:
         seconds = int(seconds or 0)

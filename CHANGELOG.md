@@ -27,6 +27,16 @@
   `FanxiService.equipped_weapons` adds it to `item_weapon.dmg`, which the attack
   round and the weaponskill formula already read.  A Rank 30 Saber swings at
   157+18.
+- **The weapons render.**  A copy equipped with model 0 was silently not drawn --
+  `equipped Telopanos Sword in slot 0 with no grap model: it will not show` in the
+  zone log.  The 2026 wave has no MId in any server data (LandSandBoat marks the
+  rows `TODO: MId`) and the client's item records carry no model at all, so
+  `0176_limbus_weapon_models.sql` gives each weapon the client model of its own
+  weapon type: the 2026 Ethereal block (929-938, one model per weapon group) where
+  it names the type, the type's Stage 5 afterglow otherwise.  They are stand-ins,
+  not the Telopanos skins -- `//model <item> <id>` overrides one copy, and the
+  dataset's `model` field plus a regeneration bakes a better id in.  The grip
+  stays model 0: a grip is never drawn.
 - **The shared stat-line parser learned four more tooltip spellings.**  Unquoted
   `Magic Attack Bonus +n`, lower-case `Magic damage +n`, unquoted
   `Snapshot +n`, and the shield's one-line `Damage taken II -5%` (which feeds

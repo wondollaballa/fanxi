@@ -9,7 +9,9 @@ rows; this tool turns it into the two artefacts that must not drift from it:
 
 * ``--sql``    write ``database/migrations/0175_limbus_weapons_r30.sql`` (the
                 base modifiers, the client skill bonuses, the item descriptions
-                and the grant for characters 1 and 2);
+                and the grant for characters 1 and 2) and
+                ``0176_limbus_weapon_models.sql`` (the grap model each weapon
+                wears -- stand-ins, see :func:`render_models_sql`);
 * ``--docs``   write ``docs/limbus-weapons-r30.md`` (every weapon, every Rank 30
                 row and the bundle each copy carries);
 * ``--check``  exit non-zero if either file is out of date.
@@ -39,6 +41,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "limbus_weapons_r30.json"
 DOCS = ROOT / "docs" / "limbus-weapons-r30.md"
 SQL = ROOT / "database" / "migrations" / "0175_limbus_weapons_r30.sql"
+MODELS_SQL = ROOT / "database" / "migrations" / "0176_limbus_weapon_models.sql"
 
 # The two characters the award goes to: Onedough (account onedough) and
 # Twodough (account onedough-2), the same pair migration 99 granted the suits to.
@@ -183,6 +186,7 @@ def render_sql(doc: dict) -> str:
     lines.append("  ELSE description END")
     lines.append(" WHERE item_id IN (%s);" % ids)
 
+
     lines += [
         "",
         "-- Give both mains one copy of each weapon, into their first free slots.",
@@ -223,6 +227,50 @@ def render_sql(doc: dict) -> str:
         "-- weapon's Rank %d rows and //rp30 re-stamps the %d-RP block." % (rank, rp),
         "",
     ]
+    return "\n".join(lines)
+
+
+
+def render_models_sql(doc: dict) -> str:
+    items = weapons(doc)
+    modelled = [weapon for weapon in sorted(items, key=lambda entry: int(entry["item_id"]))
+                if weapon.get("model")]
+    if not modelled:
+        raise SystemExit("no grap models in %s" % DATA)
+    lines = [
+        "-- Limbus weapon grap models (migration %s)." % MODELS_SQL.stem.split("_", 1)[0],
+        "--",
+        "-- The 2026 wave carries no MId in any server data: LandSandBoat marks these",
+        "-- rows `TODO: MId`, and the client's own item records hold no model at all",
+        "-- (the model is server-side data private servers curate by hand).  An",
+        "-- equipped copy therefore had model 0 and the client drew nothing -- the",
+        "-- server logged \"equipped Telopanos Sword in slot 0 with no grap model: it",
+        "-- will not show\".",
+        "--",
+        "-- Each weapon takes the client model of its own weapon type -- the 2026",
+        "-- Ethereal block (929-938, one model per weapon group) where it names the",
+        "-- type, the type's Stage 5 afterglow otherwise.  These are stand-ins, not",
+        "-- the Telopanos skins: //model <item> <id> overrides one copy's look, and a",
+        "-- dataset edit plus regeneration bakes a better id in.",
+        "--",
+        "-- Generated from data/limbus_weapons_r30.json by tools/gen_limbus_weapons.py.",
+        "",
+        "INSERT OR REPLACE INTO item_models (item_id,model) VALUES",
+    ]
+    lines.append("  " + ", ".join("(%d,%d)" % (int(weapon["item_id"]), int(weapon["model"]))
+                                  for weapon in modelled) + ";")
+    lines += [
+        "",
+        "-- The rows already in the catalogue keep their model too (item_models'",
+        "-- triggers only stamp rows inserted later).",
+        "UPDATE items SET model = CASE item_id",
+    ]
+    for weapon in modelled:
+        lines.append("  WHEN %d THEN %d" % (int(weapon["item_id"]), int(weapon["model"])))
+    lines.append("  ELSE model END")
+    lines.append(" WHERE item_id IN (%s);"
+                 % ", ".join(str(int(weapon["item_id"])) for weapon in modelled))
+    lines.append("")
     return "\n".join(lines)
 
 
@@ -273,6 +321,8 @@ def render_docs(doc: dict) -> str:
         lines.append("")
         lines.append("- **Item:** %d, **slot:** %s, **bundle:** %d" % (
             int(weapon["item_id"]), weapon.get("slot") or "-", int(weapon["bundle"])))
+        if weapon.get("model"):
+            lines.append("- **Model:** %d (grap stand-in, not the Telopanos skin)" % int(weapon["model"]))
         lines.append("- **Jobs:** %s" % " / ".join(weapon.get("jobs") or ("All jobs",)))
         if weapon.get("stats"):
             lines.append("- **Stats:** %s" % " ".join(weapon["stats"]))
@@ -287,6 +337,33 @@ def render_docs(doc: dict) -> str:
         lines.append("")
 
     lines += [
+        "## Grap models",
+        "",
+        "The 2026 wave shipped without a **grap model** in any server data: LandSandBoat",
+        "marks each row `TODO: MId`, and the client's own item records carry no model",
+        "(the model is server-side data that private servers curate by hand).  A copy",
+        "equipped with model 0 was simply not drawn -- the server log said",
+        "`equipped Telopanos Sword in slot 0 with no grap model: it will not show`.",
+        "",
+        "Every weapon now carries the client model of its own weapon type, taken from",
+        "the 2026 **Ethereal** block (929-938, one model per weapon group) where that",
+        "block names the type, and from the type's Stage 5 afterglow otherwise.  That",
+        "renders the right silhouette, but it is a stand-in, not the Telopanos skin:",
+        "",
+        "| Weapon | Group | Model | Stand-in for |",
+        "| --- | --- | --- | --- |",
+    ]
+    for weapon in items:
+        lines.append("| %s | %s | %s | %s |" % (
+            weapon["name"], weapon.get("skill") or "-",
+            weapon.get("model") if weapon.get("model") else "none (grips are invisible)",
+            weapon.get("model_stand_in") or "-"))
+    lines += [
+        "",
+        "`//model <item> <id>` sets one copy's look in game; editing the dataset's",
+        "`model` field and running the generator bakes a better id into the migration.",
+        "The grip keeps model 0 on purpose: a grip is never drawn.",
+        "",
         "## Where the data comes from",
         "",
         "- Item ids, slots, jobs and the stat lines are BG Wiki's item pages; the",
@@ -356,6 +433,7 @@ def main(argv=None) -> int:
     wanted = []
     if args.sql or args.all or args.check:
         wanted.append((SQL, render_sql(doc)))
+        wanted.append((MODELS_SQL, render_models_sql(doc)))
     if args.docs or args.all or args.check:
         wanted.append((DOCS, render_docs(doc)))
     stale = [path.name for path, text in wanted if not write(path, text, args.check)]
