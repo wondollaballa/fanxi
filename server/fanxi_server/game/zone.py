@@ -2194,7 +2194,8 @@ class ZoneSession:
             "//ws <name>, //ja <name>, //abilities, //traits, //job <job> [sub] (stores every "
             "other job's gear, pulls this job's set and tidies the bags), "
             "//job <character> <job> <sub> (the same swap on a sub-account), //cast <spell>, "
-            "//equip <name>, //unequip <slot>, //model <item> <id>, //event <id> [p1..p8], "
+            "//equip <name>, //unequip <slot>, //model <item> <id>, "
+            "//modelnext <item>, //event <id> [p1..p8], "
             "//character model <race> <1-48|random>, //reload (re-read the launcher's Data page), "
             "//doors auto [on|off] (automatically open city/outdoor doors), "
             "//mount party [mount name|id] | off | list (mounts; no name gives every sub box "
@@ -2411,19 +2412,24 @@ class ZoneSession:
                 except ValueError:
                     self.say("Usage: //model <item name> <model id>")
                     return
-                match = next((i for i in self.world.service.inventory(self.char["id"])
-                              if int(i["container"]) == 0
-                              and want in str(i.get("name") or "").casefold()), None)
+                match = self._model_item(want)
                 if match is None:
-                    self.say("No inventory item matching that name.")
+                    self.say("No bag or Magic Bag item matching that name.")
                     return
-                self.world.service.set_item_model(int(match["item_id"]), model)
-                self.refresh_character()
-                for kind, (container, slot, item_id) in list(self.equipped.items()):
-                    if int(item_id) == int(match["item_id"]):
-                        self._apply_equip_model(kind, {"model": model})
-                self.queue.append(self.grap_list())
-                self.say("%s now uses model %d." % (match["name"], model))
+                self._set_model(match["item_id"], model, match["name"])
+            elif words and words[0] == "modelnext" and len(words) >= 2:
+                # Sweep the look ids one call at a time: //modelnext <item> walks from the
+                # current id upward (starting at 951 when the item has no model), so a
+                # renamed/unknown block can be found by eye without retyping a command.
+                want = " ".join(words[1:]).casefold()
+                match = self._model_item(want)
+                if match is None:
+                    self.say("No bag or Magic Bag item matching that name.")
+                    return
+                item = self.world.service.item(int(match["item_id"])) or {}
+                current = int(item.get("model") or 0)
+                nxt = current + 1 if 900 <= current < 1200 else 951
+                self._set_model(match["item_id"], nxt, match["name"])
             elif words and words[0] in ("r30", "odyssey"):
                 from . import limbus, odyssey
                 query = " ".join(words[1:]).strip()
@@ -4736,6 +4742,32 @@ class ZoneSession:
             log.info("%s restored kind=%d item=%d (%s)", self.addr, kind,
                      int(row["item_id"]), item.get("name"))
         return restored > 0
+
+    def _model_item(self, want: str) -> dict | None:
+        """The inventory or Magic Bag row whose name contains *want*.
+
+        ``//model`` used to look only at the bag (container 0); gear parked in a
+        wardrobe or in the Magic Bag (the hidden 9,999-slot locker) then answered
+        "no inventory item matching that name" even though the client listed it.
+        The model is stored per item id, so where the copy sits does not matter.
+        """
+        for row in self.world.service.inventory(self.char["id"]):
+            if want in str(row.get("name") or "").casefold():
+                return row
+        for row in self.world.service.locker_items(self.char["id"]):
+            if want in str(row.get("name") or "").casefold():
+                return row
+        return None
+
+    def _set_model(self, item_id: int, model: int, name: str) -> None:
+        """Store a look id for an item and push it to the client for this session."""
+        self.world.service.set_item_model(int(item_id), int(model))
+        self.refresh_character()
+        for kind, (container, slot, equipped_id) in list(self.equipped.items()):
+            if int(equipped_id) == int(item_id):
+                self._apply_equip_model(kind, {"model": int(model)})
+        self.queue.append(self.grap_list())
+        self.say("%s now uses model %d (//modelnext for the next one)." % (name, int(model)))
 
     def _apply_equip_model(self, kind: int, item: dict) -> None:
         """Put the item's visual model into the character's grap list."""

@@ -33,7 +33,7 @@
 static const char* const TOP[] = {
     "warp", "zone", "where", "pos", "home", "hp", "homepoint", "heal", "sg", "merits",
     "character", "job", "cast", "ws", "ja", "abilities", "traits", "equip", "unequip",
-    "model", "event", "door", "doors", "time", "entities", "storage", "locker", "recycle", "item",
+    "model", "modelnext", "event", "door", "doors", "time", "entities", "storage", "locker", "recycle", "item",
     "bags", "magicbag", "stock", "r30",
     "odyssey", "rp30", "augment", "cape", "moghouse", "mh", "reload", "disengage", "gs",
     "follow", "trust", "makeparty", "invite", "battle", "help", "hint", "mount", "mounts",
@@ -464,6 +464,7 @@ static const Command COMMANDS[] = {
     { "equip", "//equip <item>", "equip an item by name" },
     { "unequip", "//unequip <slot>", "empty an equip slot" },
     { "model", "//model <item> <id>", "change an item's model id" },
+    { "modelnext", "//modelnext <item>", "step an item's model id up by one" },
     { "event", "//event <id> [p1..p8]", "play a cutscene event" },
     { "door", "//door <id>", "add a door target here" },
     { "doors", "//doors auto [on|off]", "automatic doors in cities and outdoors" },

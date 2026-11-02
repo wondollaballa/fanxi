@@ -252,8 +252,9 @@ main DAT only.  H2H, Archery and the shield sit in their own groups.
 | Telopanos Claymore | Great Sword | 959 | confirmed in game (Onedough) |
 | Telopanos Shield | Shield | 680 | tentative — try 681 (large) or 1181 (buckler) if wrong |
 
-`//model <item> <id>` sets one copy's look in game; editing the dataset's
-`model` field and running the generator bakes a better id into the migration.
+`//model <item> <id>` sets a copy's look in game and `//modelnext <item>` steps
+it up one id per call; editing the dataset's `model` field and running the
+generator bakes a better id into the migration.
 The grip keeps model 0 on purpose: a grip is never drawn.
 
 ## Where the data comes from
