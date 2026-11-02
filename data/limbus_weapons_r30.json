@@ -63,8 +63,8 @@
    ],
    "bundle": 497,
    "pet": "Automaton: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
-   "model": 474,
-   "model_stand_in": "Varga Purnikawa (Stage 5)"
+   "model": 951,
+   "model_note": "derived — H2H is the only two-hand model left in the block"
   },
   {
    "item_id": 21599,
@@ -86,8 +86,8 @@
     "HP+150"
    ],
    "bundle": 498,
-   "model": 929,
-   "model_stand_in": "Ethereal Dagger"
+   "model": 957,
+   "model_note": "derived — Dagger is first in the block"
   },
   {
    "item_id": 21738,
@@ -108,8 +108,8 @@
    ],
    "bundle": 502,
    "pet": "Main hand: Pet: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
-   "model": 931,
-   "model_stand_in": "Ethereal Axe"
+   "model": 960,
+   "model_note": "derived — Axe follows G.Sword"
   },
   {
    "item_id": 21795,
@@ -128,8 +128,8 @@
     "HP+200"
    ],
    "bundle": 503,
-   "model": 932,
-   "model_stand_in": "Ethereal Great Axe"
+   "model": 961,
+   "model_note": "derived — G.Axe two-hand, main-only"
   },
   {
    "item_id": 21848,
@@ -148,8 +148,8 @@
     "HP+200"
    ],
    "bundle": 504,
-   "model": 934,
-   "model_stand_in": "Ethereal Scythe"
+   "model": 963,
+   "model_note": "derived — Scythe two-hand, main-only"
   },
   {
    "item_id": 21899,
@@ -169,8 +169,8 @@
    ],
    "bundle": 505,
    "pet": "Wyvern: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
-   "model": 933,
-   "model_stand_in": "Ethereal Spear"
+   "model": 962,
+   "model_note": "derived — Polearm two-hand, main-only"
   },
   {
    "item_id": 21942,
@@ -189,8 +189,8 @@
     "HP+150"
    ],
    "bundle": 506,
-   "model": 935,
-   "model_stand_in": "Ethereal Katana"
+   "model": 964,
+   "model_note": "derived — Katana one-hand, main+sub"
   },
   {
    "item_id": 21948,
@@ -209,8 +209,8 @@
     "HP+200"
    ],
    "bundle": 507,
-   "model": 936,
-   "model_stand_in": "Ethereal Tachi"
+   "model": 965,
+   "model_note": "derived — G.Katana two-hand, main-only"
   },
   {
    "item_id": 22176,
@@ -229,8 +229,8 @@
     "HP+300"
    ],
    "bundle": 510,
-   "model": 151,
-   "model_stand_in": "Pinaka (Stage 5)"
+   "model": 156,
+   "model_note": "derived — the only new ranged model in ROM/386"
   },
   {
    "item_id": 22182,
@@ -251,8 +251,8 @@
     "HP+150"
    ],
    "bundle": 499,
-   "model": 930,
-   "model_stand_in": "Ethereal Sword"
+   "model": 958,
+   "model_note": "confirmed in game (Onedough)"
   },
   {
    "item_id": 22188,
@@ -273,8 +273,8 @@
     "HP+150"
    ],
    "bundle": 500,
-   "model": 930,
-   "model_stand_in": "Ethereal Sword"
+   "model": 968,
+   "model_note": "tentative — try 956, 955, 954, 953, 952 if wrong"
   },
   {
    "item_id": 22225,
@@ -294,8 +294,8 @@
     "HP+150"
    ],
    "bundle": 508,
-   "model": 937,
-   "model_stand_in": "Ethereal Club"
+   "model": 966,
+   "model_note": "derived — Club one-hand, main+sub"
   },
   {
    "item_id": 22231,
@@ -318,8 +318,8 @@
    ],
    "bundle": 509,
    "pet": "Avatar: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
-   "model": 938,
-   "model_stand_in": "Ethereal Staff"
+   "model": 967,
+   "model_note": "derived — Staff two-hand, main-only"
   },
   {
    "item_id": 22237,
@@ -341,8 +341,8 @@
     "HP+200"
    ],
    "bundle": 501,
-   "model": 920,
-   "model_stand_in": "Helheim (Stage 5)"
+   "model": 959,
+   "model_note": "confirmed in game (Onedough)"
   },
   {
    "item_id": 26503,
@@ -361,9 +361,9 @@
     "VIT+30"
    ],
    "bundle": 512,
-   "model": 676,
-   "model_stand_in": "Duban (Stage 5)"
+   "model": 680,
+   "model_note": "tentative — try 681 (large) or 1181 (buckler) if wrong"
   }
  ],
- "model_note": "The 2026 wave shipped without a grap model in any server data: LandSandBoat marks these rows `TODO: MId`, and the client's item records carry no model at all (the model is server-side data private servers curate by hand).  An equipped copy was therefore invisible ('no grap model: it will not show').  Each weapon now carries the client model of its own weapon type -- the 2026 'Ethereal' block (929-938) where it names that type, the type's Stage 5 afterglow otherwise -- so it renders with the right silhouette.  These are stand-ins, not the Telopanos skins; `//model <item> <id>` sets one copy's look and a later dataset edit can bake the real id in.  The grip keeps model 0: grips are never drawn."
+ "model_note": "The 2026 wave has no model id in any server data (LandSandBoat: TODO MId) and the client's item record carries none either, so the ids below come from the client's own 2026 model block, identified in game: the claymore confirmed 959 and the sword 958, which fixes the block's weapon-group order (Dagger 957, Sword 958, G.Sword 959, Axe 960, G.Axe 961, Polearm 962, Scythe 963, Katana 964, G.Katana 965, Club 966, Staff 967).  H2H, Archery and the shield sit in their own groups (951, 156, 680).  The Saber and Shield are still unconfirmed: //model <item> <id> tests one copy."
 }

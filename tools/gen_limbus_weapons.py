@@ -10,8 +10,9 @@ rows; this tool turns it into the two artefacts that must not drift from it:
 * ``--sql``    write ``database/migrations/0175_limbus_weapons_r30.sql`` (the
                 base modifiers, the client skill bonuses, the item descriptions
                 and the grant for characters 1 and 2) and
-                ``0176_limbus_weapon_models.sql`` (the grap model each weapon
-                wears -- stand-ins, see :func:`render_models_sql`);
+                ``0178_limbus_weapon_models.sql`` (the grap model each weapon
+                wears, identified from the client's 2026 block -- see
+                :func:`render_models_sql`);
 * ``--docs``   write ``docs/limbus-weapons-r30.md`` (every weapon, every Rank 30
                 row and the bundle each copy carries);
 * ``--check``  exit non-zero if either file is out of date.
@@ -41,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "limbus_weapons_r30.json"
 DOCS = ROOT / "docs" / "limbus-weapons-r30.md"
 SQL = ROOT / "database" / "migrations" / "0175_limbus_weapons_r30.sql"
-MODELS_SQL = ROOT / "database" / "migrations" / "0176_limbus_weapon_models.sql"
+MODELS_SQL = ROOT / "database" / "migrations" / "0178_limbus_weapon_models.sql"
 
 # The two characters the award goes to: Onedough (account onedough) and
 # Twodough (account onedough-2), the same pair migration 99 granted the suits to.
@@ -240,18 +241,21 @@ def render_models_sql(doc: dict) -> str:
     lines = [
         "-- Limbus weapon grap models (migration %s)." % MODELS_SQL.stem.split("_", 1)[0],
         "--",
-        "-- The 2026 wave carries no MId in any server data: LandSandBoat marks these",
-        "-- rows `TODO: MId`, and the client's own item records hold no model at all",
-        "-- (the model is server-side data private servers curate by hand).  An",
-        "-- equipped copy therefore had model 0 and the client drew nothing -- the",
-        "-- server logged \"equipped Telopanos Sword in slot 0 with no grap model: it",
-        "-- will not show\".",
+        "-- Supersedes migration 176, which gave these weapons same-type stand-ins so",
+        "-- they would at least draw.  The 2026 wave ships no MId in any server data",
+        "-- (LandSandBoat marks the rows `TODO: MId`) and the client's item records",
+        "-- carry no model either, so the ids below were identified from the client's",
+        "-- own 2026 model block by testing them in game: the Claymore confirmed 959",
+        "-- and the Sword 958, which fixes the block's weapon-group order (the same",
+        "-- order the prime block uses: Dagger, Sword, G.Sword, Axe, G.Axe, Polearm,",
+        "-- Scythe, Katana, G.Katana, Club, Staff).  The one-handed models carry a",
+        "-- main and a sub DAT, the two-handed ones main only -- every id below is",
+        "-- consistent with its weapon's handedness, which is the cross-check on the",
+        "-- derived ones.  H2H, Archery and the shield live in their own groups.",
         "--",
-        "-- Each weapon takes the client model of its own weapon type -- the 2026",
-        "-- Ethereal block (929-938, one model per weapon group) where it names the",
-        "-- type, the type's Stage 5 afterglow otherwise.  These are stand-ins, not",
-        "-- the Telopanos skins: //model <item> <id> overrides one copy's look, and a",
-        "-- dataset edit plus regeneration bakes a better id in.",
+        "-- The Saber and the Shield are still tentative in the dataset note;",
+        "-- //model <item> <id> tests one copy and a dataset edit + regeneration bakes",
+        "-- the confirmed id in.",
         "--",
         "-- Generated from data/limbus_weapons_r30.json by tools/gen_limbus_weapons.py.",
         "",
@@ -322,7 +326,8 @@ def render_docs(doc: dict) -> str:
         lines.append("- **Item:** %d, **slot:** %s, **bundle:** %d" % (
             int(weapon["item_id"]), weapon.get("slot") or "-", int(weapon["bundle"])))
         if weapon.get("model"):
-            lines.append("- **Model:** %d (grap stand-in, not the Telopanos skin)" % int(weapon["model"]))
+            lines.append("- **Model:** %d -- %s" % (int(weapon["model"]),
+                                                   weapon.get("model_note") or "from the 2026 block"))
         lines.append("- **Jobs:** %s" % " / ".join(weapon.get("jobs") or ("All jobs",)))
         if weapon.get("stats"):
             lines.append("- **Stats:** %s" % " ".join(weapon["stats"]))
@@ -345,19 +350,21 @@ def render_docs(doc: dict) -> str:
         "equipped with model 0 was simply not drawn -- the server log said",
         "`equipped Telopanos Sword in slot 0 with no grap model: it will not show`.",
         "",
-        "Every weapon now carries the client model of its own weapon type, taken from",
-        "the 2026 **Ethereal** block (929-938, one model per weapon group) where that",
-        "block names the type, and from the type's Stage 5 afterglow otherwise.  That",
-        "renders the right silhouette, but it is a stand-in, not the Telopanos skin:",
+        "The ids come from the client's own 2026 model block, identified in game.  The",
+        "Claymore confirmed **959** and the Sword **958**; that fixes the block's",
+        "weapon-group order (Dagger, Sword, G.Sword, Axe, G.Axe, Polearm, Scythe, Katana,",
+        "G.Katana, Club, Staff), and every derived id matches its weapon's handedness --",
+        "the client gives one-handed models a main and a sub DAT, two-handed models a",
+        "main DAT only.  H2H, Archery and the shield sit in their own groups.",
         "",
-        "| Weapon | Group | Model | Stand-in for |",
+        "| Weapon | Group | Model | Note |",
         "| --- | --- | --- | --- |",
     ]
     for weapon in items:
         lines.append("| %s | %s | %s | %s |" % (
             weapon["name"], weapon.get("skill") or "-",
             weapon.get("model") if weapon.get("model") else "none (grips are invisible)",
-            weapon.get("model_stand_in") or "-"))
+            weapon.get("model_note") or "-"))
     lines += [
         "",
         "`//model <item> <id>` sets one copy's look in game; editing the dataset's",

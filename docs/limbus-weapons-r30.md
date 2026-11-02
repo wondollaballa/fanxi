@@ -52,7 +52,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Knuckles
 
 - **Item:** 21549, **slot:** main, **bundle:** 497
-- **Model:** 474 (grap stand-in, not the Telopanos skin)
+- **Model:** 951 -- derived — H2H is the only two-hand model left in the block
 - **Jobs:** MNK / PUP
 - **Stats:** DMG:173 Delay:91 Accuracy+32 Magic Accuracy+32 Hand-to-Hand skill +255 Guard skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Automaton: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -64,7 +64,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Knife
 
 - **Item:** 21599, **slot:** main, **bundle:** 498
-- **Model:** 929 (grap stand-in, not the Telopanos skin)
+- **Model:** 957 -- derived — Dagger is first in the block
 - **Jobs:** RDM / THF / BRD / DNC
 - **Stats:** DMG:128 Delay:189 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Dagger skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -75,7 +75,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Axe
 
 - **Item:** 21738, **slot:** main, **bundle:** 502
-- **Model:** 931 (grap stand-in, not the Telopanos skin)
+- **Model:** 960 -- derived — Axe follows G.Sword
 - **Jobs:** BST
 - **Stats:** DMG:181 Delay:268 Accuracy+32 Magic Accuracy+32 Axe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Main hand: Pet: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -87,7 +87,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Chopper
 
 - **Item:** 21795, **slot:** main, **bundle:** 503
-- **Model:** 932 (grap stand-in, not the Telopanos skin)
+- **Model:** 961 -- derived — G.Axe two-hand, main-only
 - **Jobs:** WAR
 - **Stats:** DMG:330 Delay:489 Accuracy+32 Magic Accuracy+32 Great Axe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -98,7 +98,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Scythe
 
 - **Item:** 21848, **slot:** main, **bundle:** 504
-- **Model:** 934 (grap stand-in, not the Telopanos skin)
+- **Model:** 963 -- derived — Scythe two-hand, main-only
 - **Jobs:** DRK
 - **Stats:** DMG:345 Delay:513 Accuracy+32 Magic Accuracy+32 Scythe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -109,7 +109,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Halberd
 
 - **Item:** 21899, **slot:** main, **bundle:** 505
-- **Model:** 933 (grap stand-in, not the Telopanos skin)
+- **Model:** 962 -- derived — Polearm two-hand, main-only
 - **Jobs:** DRG
 - **Stats:** DMG:259 Delay:385 Accuracy+32 Magic Accuracy+32 Polearm skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Wyvern: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -121,7 +121,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Shin.
 
 - **Item:** 21942, **slot:** main, **bundle:** 506
-- **Model:** 935 (grap stand-in, not the Telopanos skin)
+- **Model:** 964 -- derived — Katana one-hand, main+sub
 - **Jobs:** NIN
 - **Stats:** DMG:149 Delay:222 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Katana skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -132,7 +132,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Katana
 
 - **Item:** 21948, **slot:** main, **bundle:** 507
-- **Model:** 936 (grap stand-in, not the Telopanos skin)
+- **Model:** 965 -- derived — G.Katana two-hand, main-only
 - **Jobs:** SAM
 - **Stats:** DMG:294 Delay:435 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Great Katana skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -143,7 +143,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Bow
 
 - **Item:** 22176, **slot:** range, **bundle:** 510
-- **Model:** 151 (grap stand-in, not the Telopanos skin)
+- **Model:** 156 -- derived — the only new ranged model in ROM/386
 - **Jobs:** RNG
 - **Stats:** DMG:316 Delay:582 Ranged Accuracy+32 Magic Accuracy+32 Archery skill +255 Snapshot +5 Physical damage limit +10% Damage taken -5%
 
@@ -154,7 +154,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Sword
 
 - **Item:** 22182, **slot:** main, **bundle:** 499
-- **Model:** 930 (grap stand-in, not the Telopanos skin)
+- **Model:** 958 -- confirmed in game (Onedough)
 - **Jobs:** WAR / PLD / DRK
 - **Stats:** DMG:173 Delay:258 Accuracy+32 Magic Accuracy+32 Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -165,7 +165,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Saber
 
 - **Item:** 22188, **slot:** main, **bundle:** 500
-- **Model:** 930 (grap stand-in, not the Telopanos skin)
+- **Model:** 968 -- tentative — try 956, 955, 954, 953, 952 if wrong
 - **Jobs:** RDM / BLU / COR
 - **Stats:** DMG:157 Delay:233 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +52 Magic damage +250 Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%
 
@@ -176,7 +176,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Maul
 
 - **Item:** 22225, **slot:** main, **bundle:** 508
-- **Model:** 937 (grap stand-in, not the Telopanos skin)
+- **Model:** 966 -- derived — Club one-hand, main+sub
 - **Jobs:** WHM / GEO
 - **Stats:** DMG:223 Delay:334 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +52 Magic damage +250 Club skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%
 
@@ -187,7 +187,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Staff
 
 - **Item:** 22231, **slot:** main, **bundle:** 509
-- **Model:** 938 (grap stand-in, not the Telopanos skin)
+- **Model:** 967 -- derived — Staff two-hand, main-only
 - **Jobs:** BLM / SMN / SCH
 - **Stats:** DMG:240 Delay:356 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +72 Magic damage +312 Staff skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%
 - **Pet line (client text, not stored):** Avatar: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -199,7 +199,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Claymore
 
 - **Item:** 22237, **slot:** main, **bundle:** 501
-- **Model:** 920 (grap stand-in, not the Telopanos skin)
+- **Model:** 959 -- confirmed in game (Onedough)
 - **Jobs:** WAR / PLD / DRK / RUN
 - **Stats:** DMG:314 Delay:466 Accuracy+32 Magic Accuracy+32 Great Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -210,7 +210,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Shield
 
 - **Item:** 26503, **slot:** sub, **bundle:** 512
-- **Model:** 676 (grap stand-in, not the Telopanos skin)
+- **Model:** 680 -- tentative — try 681 (large) or 1181 (buckler) if wrong
 - **Jobs:** PLD
 - **Stats:** DEF:152 Accuracy+32 Magic Accuracy+32 Shield skill +121 Haste+5% Damage taken II -5%
 
@@ -226,29 +226,31 @@ marks each row `TODO: MId`, and the client's own item records carry no model
 equipped with model 0 was simply not drawn -- the server log said
 `equipped Telopanos Sword in slot 0 with no grap model: it will not show`.
 
-Every weapon now carries the client model of its own weapon type, taken from
-the 2026 **Ethereal** block (929-938, one model per weapon group) where that
-block names the type, and from the type's Stage 5 afterglow otherwise.  That
-renders the right silhouette, but it is a stand-in, not the Telopanos skin:
+The ids come from the client's own 2026 model block, identified in game.  The
+Claymore confirmed **959** and the Sword **958**; that fixes the block's
+weapon-group order (Dagger, Sword, G.Sword, Axe, G.Axe, Polearm, Scythe, Katana,
+G.Katana, Club, Staff), and every derived id matches its weapon's handedness --
+the client gives one-handed models a main and a sub DAT, two-handed models a
+main DAT only.  H2H, Archery and the shield sit in their own groups.
 
-| Weapon | Group | Model | Stand-in for |
+| Weapon | Group | Model | Note |
 | --- | --- | --- | --- |
 | Telopanos Grip | Grips | none (grips are invisible) | - |
-| Telopanos Knuckles | Hand-to-Hand | 474 | Varga Purnikawa (Stage 5) |
-| Telopanos Knife | Dagger | 929 | Ethereal Dagger |
-| Telopanos Axe | Axe | 931 | Ethereal Axe |
-| Telopanos Chopper | Great Axe | 932 | Ethereal Great Axe |
-| Telopanos Scythe | Scythe | 934 | Ethereal Scythe |
-| Telopanos Halberd | Polearm | 933 | Ethereal Spear |
-| Telopanos Shin. | Katana | 935 | Ethereal Katana |
-| Telopanos Katana | Great Katana | 936 | Ethereal Tachi |
-| Telopanos Bow | Archery | 151 | Pinaka (Stage 5) |
-| Telopanos Sword | Sword | 930 | Ethereal Sword |
-| Telopanos Saber | Sword | 930 | Ethereal Sword |
-| Telopanos Maul | Club | 937 | Ethereal Club |
-| Telopanos Staff | Staff | 938 | Ethereal Staff |
-| Telopanos Claymore | Great Sword | 920 | Helheim (Stage 5) |
-| Telopanos Shield | Shield | 676 | Duban (Stage 5) |
+| Telopanos Knuckles | Hand-to-Hand | 951 | derived — H2H is the only two-hand model left in the block |
+| Telopanos Knife | Dagger | 957 | derived — Dagger is first in the block |
+| Telopanos Axe | Axe | 960 | derived — Axe follows G.Sword |
+| Telopanos Chopper | Great Axe | 961 | derived — G.Axe two-hand, main-only |
+| Telopanos Scythe | Scythe | 963 | derived — Scythe two-hand, main-only |
+| Telopanos Halberd | Polearm | 962 | derived — Polearm two-hand, main-only |
+| Telopanos Shin. | Katana | 964 | derived — Katana one-hand, main+sub |
+| Telopanos Katana | Great Katana | 965 | derived — G.Katana two-hand, main-only |
+| Telopanos Bow | Archery | 156 | derived — the only new ranged model in ROM/386 |
+| Telopanos Sword | Sword | 958 | confirmed in game (Onedough) |
+| Telopanos Saber | Sword | 968 | tentative — try 956, 955, 954, 953, 952 if wrong |
+| Telopanos Maul | Club | 966 | derived — Club one-hand, main+sub |
+| Telopanos Staff | Staff | 967 | derived — Staff two-hand, main-only |
+| Telopanos Claymore | Great Sword | 959 | confirmed in game (Onedough) |
+| Telopanos Shield | Shield | 680 | tentative — try 681 (large) or 1181 (buckler) if wrong |
 
 `//model <item> <id>` sets one copy's look in game; editing the dataset's
 `model` field and running the generator bakes a better id into the migration.

@@ -167,7 +167,7 @@ class WeaponModelTest(unittest.TestCase):
                 self.assertNotIn("model", weapon)
                 continue
             self.assertTrue(1 <= int(weapon["model"]) <= 4095, weapon["name"])
-            self.assertTrue(weapon.get("model_stand_in"), weapon["name"])
+            self.assertTrue(weapon.get("model_note"), weapon["name"])
 
     def test_the_catalogue_rows_carry_the_same_models(self):
         document = json.loads((ROOT / "data" / "limbus_weapons_r30.json").read_text())
