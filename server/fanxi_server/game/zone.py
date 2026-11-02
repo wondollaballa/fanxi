@@ -2483,10 +2483,24 @@ class ZoneSession:
                 from .augments import bundle as augment_bundle, describe
                 from .odyssey import bundle_for
                 if len(words) < 2 or words[1].lower() in ("list", "unity"):
+                    # The catalogue is the whole Unity set now (108 pieces), so
+                    # "//augment list <text>" narrows it instead of flooding chat.
+                    needle = " ".join(words[2:]).casefold() if len(words) > 2 else ""
+                    shown = 0
                     for item_id, entry in unity.ITEMS.items():
+                        if needle and needle not in str(entry["name"]).casefold():
+                            continue
+                        shown += 1
                         self.say("%s (item %d, bundle %d): %s" % (
                             entry["name"], item_id, entry["bundle"],
                             " / ".join(entry["augments"])))
+                    if not shown:
+                        self.say("No Unity piece matches %r." % needle)
+                    elif needle:
+                        self.say("%d Unity piece(s) matching %r." % (shown, needle))
+                    else:
+                        self.say("%d Unity pieces; //augment list <text> filters them."
+                                 % shown)
                     self.say("//augment A <item> rewrites a Unity or Odyssey bundle; "
                              "//augment <index|off> <item> sets or clears one.")
                     return
@@ -2671,7 +2685,7 @@ class ZoneSession:
                     for trait in known:
                         self.say(trait.describe())
                 # The passive tick is trait modifiers *plus gear* (Chirich Ring +1's
-                # Regen, Stikini Ring +1's Refresh, ...), so report the merged total even
+                # Regen, Karieyh Ring +1's Regain, ...), so report the merged total even
                 # for a job pair with no Auto Regen/Auto Refresh trait.  Reading
                 # trait_mods() here used to hide every gear-only tick.
                 all_mods = self.combat_mods()
@@ -2679,9 +2693,17 @@ class ZoneSession:
                             - int(all_mods.get(mod.REGEN_DOWN, 0)))
                 refresh = max(0, int(all_mods.get(mod.REFRESH, 0))
                               - int(all_mods.get(mod.REFRESH_DOWN, 0)))
-                if regen or refresh:
-                    self.say("Passive tick: Regen %d HP, Refresh %d MP every 3s "
-                             "(traits and gear)." % (regen, refresh))
+                regain = max(0, int(all_mods.get(mod.REGAIN, 0)))
+                parts = []
+                if regen:
+                    parts.append("Regen %d HP" % regen)
+                if refresh:
+                    parts.append("Refresh %d MP" % refresh)
+                if regain:
+                    parts.append("Regain %d TP" % regain)
+                if parts:
+                    self.say("Passive tick: %s every 3s (traits and gear)."
+                             % ", ".join(parts))
                 self.queue += [self.char_abilities(), self.char_commands()]
             elif words and words[0] == "job" and len(words) >= 2:
                 self.job_command(words)
@@ -11724,14 +11746,19 @@ class ZoneSession:
         if entity is not None:
             self.queue_spawn(entity)
 
-    def gain_tp(self, tenths: int) -> None:
-        """Add TP and refresh the bar.  TP is kept in tenths, the client's own unit."""
+    def gain_tp(self, tenths: int, *, queue: bool = True) -> None:
+        """Add TP and refresh the bar.  TP is kept in tenths, the client's own unit.
+
+        ``queue=False`` lets a caller that sends its own 0x00DF (the passive tick) share
+        one packet instead of queueing a second copy.
+        """
         current = int(self.char.get("tp", 0))
         tp = min(TP_MAX, current + max(0, int(tenths)))
         if tp == current:
             return
         self.char["tp"] = tp
-        self.queue.append(self.party_member())
+        if queue:
+            self.queue.append(self.party_member())
         # Diagnostic: the client's TP bar and the party window both read this value; if
         # the bar is stuck at zero while swings land, this line says whether the server
         # gained TP at all (and how much it queued for the client).
@@ -11828,12 +11855,12 @@ class ZoneSession:
             pass
 
     def tick_regen(self, now: float) -> None:
-        """Apply Auto Refresh/Auto Regen (and gear Refresh/Regen) once per 3 seconds.
+        """Apply Auto Refresh/Auto Regen and gear Refresh/Regen/Regain once per 3 seconds.
 
         These are passive modifiers, not status effects: the client draws no icon for
         them.  The tick uses the same merged modifier dict as the stat sheet, so the
         traits and gear both feed it.  ``REGEN_DOWN``/``REFRESH_DOWN`` come first, and a
-        negative total never drains the character.
+        negative total never drains the character.  Regain adds TP, capped at 3000.
 
         The maxima are re-derived from the sheet on every tick.  A gear change can raise
         the stored maximum (or a save can carry an older one), and a maximum that is too
@@ -11864,22 +11891,30 @@ class ZoneSession:
         regen = max(0, int(mods.get(mod.REGEN, 0)) - int(mods.get(mod.REGEN_DOWN, 0)))
         refresh = max(0, int(mods.get(mod.REFRESH, 0))
                       - int(mods.get(mod.REFRESH_DOWN, 0)))
-        if regen <= 0 and refresh <= 0:
+        regain = max(0, int(mods.get(mod.REGAIN, 0)))
+        if regen <= 0 and refresh <= 0 and regain <= 0:
             return
         changed = False
+        vitals_changed = False
         hp = int(self.char.get("hp_current", 0))
         if regen > 0 and hp < hp_max:
             hp = min(hp_max, hp + regen)
             self.char["hp_current"] = hp
-            changed = True
+            changed = vitals_changed = True
         mp = int(self.char.get("mp_current", 0))
         if refresh > 0 and mp < mp_max:
             mp = min(mp_max, mp + refresh)
             self.char["mp_current"] = mp
+            changed = vitals_changed = True
+        if regain > 0 and int(self.char.get("tp", 0)) < TP_MAX:
+            # gain_tp logs the bar change; the packet below covers the party window.
+            self.gain_tp(regain, queue=False)
             changed = True
         if not changed:
             return
         self.queue += [self.char_status(), self.party_member()]
+        if not vitals_changed:
+            return
         try:
             self.world.service.save_vitals(int(self.char["id"]), hp, mp)
         except Exception as exc:

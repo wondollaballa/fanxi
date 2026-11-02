@@ -500,8 +500,8 @@ never hardcoded.
   host64 rebuilds that list from each `0x0AC` packet, so a restarted client shows the filtered
   Weapon Skills and its Job Abilities submenu lists the advertised abilities. `//ja` remains a
   shortcut. The fourth `0x0AC` block carries the current main/support job's trait ids, and the
-  Auto Regen/Auto Refresh traits tick their HP/MP every three seconds. Still missing: ranged
-  attacks, TP moves, skillchains, status effects, raise and an enmity list.
+  Auto Regen/Auto Refresh traits and gear Regain tick HP/MP/TP every three seconds. Still
+  missing: ranged attacks, TP moves, skillchains, status effects, raise and an enmity list.
 - Character creation and deletion in the client are acknowledged but not persisted; use the
   launcher.
 - Unlimited characters per account by default (`FANXI_MAX_CHARACTERS=0`). Only one

@@ -54,7 +54,7 @@ MOD = {
     "SKILLCHAINBONUS": 174, "DUAL_WIELD": 259, "DOUBLE_ATTACK": 288,
     "SUBTLE_BLOW": 289, "TRIPLE_ATTACK": 302, "QUADRUPLE_ATTACK": 430,
     "DRAIN_ASPIR": 315, "MAGIC_DAMAGE": 311,
-    "RAPID_SHOT": 359, "SNAPSHOT": 365, "REFRESH": 369, "REGEN": 370,
+    "RAPID_SHOT": 359, "SNAPSHOT": 365, "REFRESH": 369, "REGEN": 370, "REGAIN": 368,
     "HASTE_GEAR": 384, "WEAPON_BASH": 392, "CRIT_DMG_INCREASE": 421,
     "SKILLCHAINDMG": 175, "MAGIC_BURST": 487, "MAGIC_BURST_II": 274,
     "DREAD_SPIKES": 998, "ARCANE_CIRCLE": 1069, "DAMAGE_LIMITP": 1081,
@@ -216,6 +216,7 @@ def parse_description(description: str):
     take(r"Magic burst damage II\s*\+\s*(\d+)", MOD["MAGIC_BURST_II"])
     take(r"Magic burst damage\s*\+\s*(\d+)", MOD["MAGIC_BURST"])
     take(r'"Refresh"\s*\+\s*(\d+)', MOD["REFRESH"])
+    take(r'"Regain"\s*\+\s*(\d+)', MOD["REGAIN"])
     take(r'"Regen" effect duration\s*\+\s*(\d+)', MOD["REGEN_DURATION"])
     take(r'"Regen" duration\s*\+\s*(\d+)', MOD["REGEN_DURATION"])
     take(r'"Regen" potency\s*\+\s*(\d+)%', MOD["REGEN_MULTIPLIER"])

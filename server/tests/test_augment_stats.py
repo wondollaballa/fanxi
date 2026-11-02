@@ -71,6 +71,10 @@ class AugmentParserTest(unittest.TestCase):
     def test_haste_is_stored_in_hundredths(self):
         self.assertEqual(augment_stats.parse_line("Haste+3%"), {mod.HASTE_GEAR: 300})
 
+    def test_regain_is_a_passive_tick(self):
+        """A Regain augment must feed the same tick as the gear's base Regain."""
+        self.assertEqual(augment_stats.parse_line('"Regain"+10'), {mod.REGAIN: 10})
+
     def test_weapon_skill_accuracy_is_flat(self):
         """The Beithir Ring's [1] row is the engine's WS_ACCURACY, not a client-only line."""
         self.assertEqual(augment_stats.parse_line("Weapon Skill Acc.+15"),

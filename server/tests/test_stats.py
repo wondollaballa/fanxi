@@ -125,6 +125,59 @@ class ReforgedItemDataTest(unittest.TestCase):
             self.assertEqual(int(row["model"]), model, item_id)
 
 
+class MissingClientGearModsTest(unittest.TestCase):
+    """Migration 183: gear the client has but LandSandBoat's item_mods dump does not."""
+
+    @classmethod
+    def setUpClass(cls):
+        cls.tmp = tempfile.TemporaryDirectory()
+        cls.db = Database(Path(cls.tmp.name) / "fanxi.db", ROOT)
+        cls.db.initialize()
+
+    @classmethod
+    def tearDownClass(cls):
+        cls.tmp.cleanup()
+
+    def mods(self, item_id: int) -> dict[int, int]:
+        return {int(row["mod_id"]): int(row["value"])
+                for row in self.db.all(
+                    "SELECT mod_id, value FROM item_mods WHERE item_id = ?", (item_id,))}
+
+    def test_null_masque_carries_its_regen_refresh_and_regain(self):
+        mods = self.mods(24270)
+        self.assertEqual(mods[mod.DEF], 138)
+        self.assertEqual(mods[mod.HP], 100)
+        self.assertEqual(mods[mod.MP], 70)
+        self.assertEqual(mods[mod.MND], 50)
+        self.assertEqual(mods[mod.MACC], 50)
+        self.assertEqual(mods[mod.HASTE_GEAR], 1000)  # Haste10%, no plus in the tooltip
+        self.assertEqual(mods[mod.REGEN], 3)
+        self.assertEqual(mods[mod.REFRESH], 1)
+        self.assertEqual(mods[mod.REGAIN], 2)
+        self.assertEqual(mods[mod.DMG], -1000)
+
+    def test_null_belt_carries_its_accuracy_and_regen(self):
+        mods = self.mods(26367)
+        self.assertEqual(mods[mod.ACC], 30)
+        self.assertEqual(mods[mod.RACC], 30)
+        self.assertEqual(mods[mod.MACC], 30)
+        self.assertEqual(mods[mod.REGEN], 3)
+
+    def test_hiza_body_carries_its_regen(self):
+        mods = self.mods(25792)
+        self.assertEqual(mods[mod.DEF], 141)
+        self.assertEqual(mods[mod.HP], 100)
+        self.assertEqual(mods[mod.STR], 40)
+        self.assertEqual(mods[mod.ACC], 46)
+        self.assertEqual(mods[mod.ATT], 28)
+        self.assertEqual(mods[mod.REGEN], 12)
+        self.assertEqual(mods[mod.HASTE_GEAR], 400)
+
+    def test_wakido_kabuto_regain_is_restored(self):
+        """Migration 92's parser dropped Wakido Kabuto +4's "Regain"+4."""
+        self.assertEqual(self.mods(23906)[mod.REGAIN], 4)
+
+
 class PrimeAfterglowItemDataTest(unittest.TestCase):
     """Migration 165 gives every 119 III Prime its afterglow stat block."""
 

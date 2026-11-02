@@ -24,6 +24,13 @@ UNITY_ACCESSORIES = {
     "Unmoving Collar +1", "Vim Torque +1", "Warder's Charm +1", "Zwazo Earring +1",
 }
 
+# The augmentable +1 pieces on BG Wiki's three Unity categories (the level 98/99
+# +1 upgrades that take no Lustreless item are not augmented and are not here).
+UNITY_CATEGORIES = {"Accessories": 27, "Armor": 32, "Weapons": 49}
+
+# Unity's own slice of the client's augment table.
+UNITY_BUNDLES = set(range(285, 393))
+
 
 class UnityTest(unittest.TestCase):
     def test_items_include_the_original_ninja_unity_pieces(self):
@@ -36,6 +43,61 @@ class UnityTest(unittest.TestCase):
         """An accessory missing from this registry never reaches the RP card."""
         names = {entry["name"] for entry in unity.ITEMS.values()}
         self.assertTrue(UNITY_ACCESSORIES <= names)
+
+    def test_the_whole_unity_catalogue_is_registered(self):
+        """Every augmentable +1 piece on the three Unity categories is in the registry.
+
+        The registry used to carry the accessories (plus Loess Barbuta +1 and
+        Rigorous Grip +1) only, so armour and weapons never reached the RP card.
+        """
+        counts = {}
+        for entry in unity.ITEMS.values():
+            counts[entry["category"]] = counts.get(entry["category"], 0) + 1
+        self.assertEqual(counts, UNITY_CATEGORIES)
+        self.assertEqual(len(unity.ITEMS), sum(UNITY_CATEGORIES.values()))
+        # The five GearSwap pieces stay first so the docs and MNK.lua agree.
+        self.assertEqual(set(list(unity.ITEMS)[:5]), NIN_ITEMS)
+
+    def test_tatenashi_gote_is_registered(self):
+        """Tatena. Gote +1 was reported missing from the RP card."""
+        entry = unity.get(27149)
+        self.assertIsNotNone(entry)
+        self.assertEqual(entry["name"], "Tatena. Gote +1")
+        self.assertEqual(entry["slot"], "hands")
+        self.assertEqual(entry["category"], "Armor")
+        self.assertEqual(entry["bundle"], 389)
+        self.assertEqual(entry["augments"], [
+            "Accuracy+40",
+            "All Attr.+10",
+            '"Triple Attack" +4%',
+        ])
+        self.assertEqual(unity.index_for(27149), 389)
+        # The game abbreviates the set to "Tatena."; "tatenashi" is wiki-speak.
+        self.assertEqual(unity.find("tatena. gote")["item_id"], 27149)
+        self.assertEqual(unity.find("gote")["item_id"], 27149)
+
+    def test_armour_and_weapon_pieces_are_registered(self):
+        for item_id, name, slot, bundle in (
+                (20852, "Aizkora +1", "main", 344),
+                (26871, "Emet Harness +1", "body", 323),
+                (27410, "Hippomenes Socks +1", "feet", 309),
+                (27639, "Ajax +1", "sub", 339),
+                (21417, "Refined Grip +1", "sub", 313)):
+            entry = unity.get(item_id)
+            self.assertIsNotNone(entry, item_id)
+            self.assertEqual(entry["name"], name)
+            self.assertEqual(entry["slot"], slot)
+            self.assertEqual(entry["bundle"], bundle)
+
+    def test_every_bundle_is_a_different_unity_row(self):
+        bundles = [entry["bundle"] for entry in unity.ITEMS.values()]
+        self.assertEqual(len(set(bundles)), len(bundles))
+        self.assertEqual(set(bundles), UNITY_BUNDLES)
+
+    def test_the_dataset_ships(self):
+        """A missing data/unity_r15.json silently empties the RP card's Unity list."""
+        self.assertEqual(unity.missing(), [])
+        self.assertTrue(unity.ITEMS)
 
     def test_unity_armour_piece_is_registered(self):
         """Blistering Sallet +1 is Unity armour, not an accessory, and was missing from the

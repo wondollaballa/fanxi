@@ -1067,18 +1067,20 @@ int16s, so a piece that lowers an element shows a negative orb instead of being 
 Shield Mastery (a shield-block addition), Clear Mind (a resting MP addition), Damage Limit+
 and the stat boosts change behaviour today; the killer/resist families are kept for the
 client's trait list and future combat work until the monster family and status-resist models
-exist.  The closing "Passive tick" line adds the worn gear's Regen and Refresh to the traits,
-so `Chirich Ring +1` and `Stikini Ring +1` report their tick even on a job pair with no Auto
-Regen/Auto Refresh trait.
+exist.  The closing "Passive tick" line adds the worn gear's Regen, Refresh and Regain to the
+traits, so `Chirich Ring +1`, `Stikini Ring +1` and `Karieyh Ring +1` report their tick even on
+a job pair with no Auto Regen/Auto Refresh trait.
 
 `Auto Regen` (White Mage 25/76, Rune Fencer 35/65/95) and `Auto Refresh` (Paladin 35, Summoner
 25/90) are passive modifiers (`REGEN`/`REFRESH`), not status effects: they put no icon in the
 client's status bar. The zone tick restores their value once every three seconds while the
-character is alive, and gear with `Regen`/`Refresh` adds to the same modifiers. The tick
-re-derives the maxima from the stat sheet and an equipment batch calls `refresh_vitals`, so a
-set that raises max HP/MP -- or the reforged body with `"Refresh"+4` -- cannot leave the
-character stuck below its own maximum. `Auto Refresh` is not a Red Mage trait; Red Mage has the
-Refresh spell instead. Blue Mage gets both from its set spells, which Fanxi does not track yet.
+character is alive, and gear with `Regen`/`Refresh`/`Regain` adds to the same modifiers. The
+tick re-derives the HP/MP maxima from the stat sheet and an equipment batch calls
+`refresh_vitals`, so a set that raises max HP/MP -- or the reforged body with `"Refresh"+4` --
+cannot leave the character stuck below its own maximum. Regain pays 5 TP to Karieyh Ring +1's
+wearer on that same tick, up to the 3000 TP cap. `Auto Refresh` is not a Red Mage trait; Red
+Mage has the Refresh spell instead. Blue Mage gets both from its set spells, which Fanxi does
+not track yet.
 
 ## Spells, buffs and debuffs
 

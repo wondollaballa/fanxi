@@ -34,6 +34,10 @@ data/nav/
 # removes those items from the augment registry.
 !data/odyssey_extra_r30.json
 !data/oboro_r25.json
+# The Unity +1 catalogue (every accessory, armour piece and weapon on BG Wiki's
+# three Unity categories).  Its registry lives in the dataset now, so leaving
+# this line out silently empties the Data page's RP card for Unity gear.
+!data/unity_r15.json
 !data/nolan_mezzotint.json
 !data/oseem_glyptics.json
 !data/skirmish.json

@@ -563,7 +563,10 @@ and the ability layer live only in the game process, which is why this is not co
 launcher. The character has to be in a zone and the **server must be running the new code**; until
 then the card says it is waiting for the live sheet. The refresh button re-reads the report. The
 Manage tab's **Set totals** remain the client-tooltip/augment view for a GearSwap set; they are a
-set preview, not the live character sheet.
+set preview, not the live character sheet.  They normally agree once the set is worn, because the
+server reads `item_mods` instead of the tooltip.  A live total lower than the tooltip total usually
+means the server's item table has no row for that piece (some client-only gear is absent from the
+LandSandBoat dump); the live sheet is the authoritative one, and the fix belongs in a migration.
 
 Editing any library saves the sets back to the account's row for that job as soon as they change,
 so a new weaponset or an edited idle set survives a logout, a relaunch and a job change. The

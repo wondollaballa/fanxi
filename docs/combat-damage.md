@@ -843,11 +843,12 @@ Two smaller gear paths share the same merged modifier dict:
 - **Fast Cast** reduces the cast timer by its percent, capped at 50% and a 0.5 s floor.
 - **Store TP** scales the TP from a landed hit after the delay curve (see "Tactical Points").
 
-**Refresh** and **Regen** are passive three-second ticks from `tick_regen`; the same dict
-carries the Auto Refresh/Auto Regen traits and the gear lines, so a reforged body with
-`"Refresh"+4` restores 4 MP per tick. The tick reads the maxima from the stat sheet (and
-`flush_equipment` refreshes them after every outfit batch), so swapping into gear that raises
-max HP/MP never leaves the character regenerating against the previous set's cap.
+**Refresh**, **Regen** and **Regain** are passive three-second ticks from `tick_regen`; the same
+dict carries the Auto Refresh/Auto Regen traits and the gear lines, so a reforged body with
+`"Refresh"+4` restores 4 MP per tick and Karieyh Ring +1's `"Regain"+5` adds 5 TP. The tick reads
+the HP/MP maxima from the stat sheet (and `flush_equipment` refreshes them after every outfit
+batch), so swapping into gear that raises max HP/MP never leaves the character regenerating
+against the previous set's cap. Regain stops at 3000 TP, the client's cap.
 
 ## Worked example
 
@@ -1009,8 +1010,9 @@ they are easy to revisit:
 - **Food** is a modifier source with a starter table (`food_effects`); the full food
   catalogue is not imported.  **Another player's buffs are not modelled** because the
   server has no party system yet, so only the session's own effects merge into the pool.
-  **Subtle Blow** and **Regain** are stored but inert: monsters do not accumulate TP, and
-  the tick has no Regain path yet.
+  **Subtle Blow** is stored but inert because monsters do not accumulate TP.  **Regain**
+  is paid by the passive tick, and a Tactician's Roll's Regain follows its own three-second
+  effect tick.
 - **Merits** are not added to base attributes; they are added to skills, which does flow
   into Attack and Accuracy.
 

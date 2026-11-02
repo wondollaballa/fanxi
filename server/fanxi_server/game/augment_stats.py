@@ -64,8 +64,11 @@ _FLAT = {
     "magatkbonus": mod.MATT,
     "magicatkbonus": mod.MATT,
     "magatkbns": mod.MATT,
+    # Unity gear spells the same two stats out in full.
+    "magicattackbonus": mod.MATT,
     "magdevasion": mod.MEVA,
     "magevasion": mod.MEVA,
+    "magicevasion": mod.MEVA,
     "mageva": mod.MEVA,
     "meva": mod.MEVA,
     "evasion": mod.EVA,
@@ -99,6 +102,7 @@ _PERCENT = {
     "drainandaspirpotency": mod.DRAIN_ASPIR,
     "refresh": mod.REFRESH,
     "regen": mod.REGEN,
+    "regain": mod.REGAIN,
     "enhmageffdur": mod.ENH_MAGIC_DURATION_AUGMENT,
     "physdmglimit": mod.DAMAGE_LIMITP,
     "physicaldamagelimit": mod.DAMAGE_LIMITP,
@@ -163,7 +167,11 @@ UNMODELLED = {
     "spellinterruptionratedown",
     "waltzpotency",             # Dancer waltz potency is not modelled
     # Unity accessory rows the engine has no pool for yet.
+    "enhancingmagicreceivedduration",
     "magicburstbonus",
+    "occasionallyresiststatusailments",
+    "parryingskill",
+    "resistbind",
     "resistcharm",
     "resistsleep",
     "shieldblockrate",

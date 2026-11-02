@@ -53,6 +53,11 @@ class ReforgedSongStatsTest(unittest.TestCase):
             description = documents[str(item_id)]["description"]
             self.assertEqual(_mods(description)[mod_id], value, item_id)
 
+    def test_the_wakido_kabuto_keeps_its_regain(self):
+        documents = json.loads(SOURCE.read_text(encoding="utf-8"))
+        description = documents["23906"]["description"]
+        self.assertEqual(_mods(description)[368], 4)  # "Regain"+4
+
     def test_family_song_plus_lines(self):
         self.assertEqual(_mods('"March"+1')[443], 1)
         self.assertEqual(_mods('"Minuet"+1')[434], 1)

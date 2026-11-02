@@ -67,6 +67,16 @@ class ItemModelTest(unittest.TestCase):
             self.assertIsNotNone(row, item_id)
             self.assertEqual(int(row["model"]), model, item_id)
 
+    def test_null_masque_uses_the_masque_not_the_rogue_bonnet(self):
+        """Migration 184: 4170 is Rogue's Bonnet (head 74); the masque is head 522."""
+        row = self.db.one("SELECT model FROM items WHERE item_id = 24270")
+        self.assertIsNotNone(row)
+        self.assertEqual(int(row["model"]), 4618)
+        lookup = self.db.one("SELECT model FROM item_models WHERE item_id = 24270")
+        self.assertIsNotNone(lookup)
+        self.assertEqual(int(lookup["model"]), 4618)
+        self.assertEqual(item_models.catalog()[24270], 4618)
+
     def test_gleti_knife_uses_its_own_dagger_model(self):
         """Migration 121: 513 is Kannagi's katana; the client's knife is 877."""
         row = self.db.one("SELECT model FROM items WHERE item_id = 21567")

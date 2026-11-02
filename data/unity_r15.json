@@ -1,0 +1,1276 @@
+{
+  "rank": 15,
+  "tier": 0,
+  "curve": 0,
+  "rp": 1110,
+  "source": "BG Wiki Category:Unity Accessories, Category:Unity Armor and Category:Unity Weapons",
+  "bundle_source": "LandSandBoat xi.data.augments.bundles (the client's augment table), matched to each item's Rank 15 row; every Unity item is one of bundles 285-392",
+  "note": "Unity Wanted iLvl 119+ +1 gear takes a single Rank 15 augment path.  The client stores it in the 24-byte AugmentBundle block at rank 15, max-rank tier 0 (the 15-rank unlock) and RP curve A.",
+  "items": [
+    {
+      "item_id": 27509,
+      "name": "Unmoving Collar +1",
+      "slot": "neck",
+      "category": "Accessories",
+      "bundle": 305,
+      "augments": [
+        "DEF+30",
+        "HP+200"
+      ]
+    },
+    {
+      "item_id": 27549,
+      "name": "Odnowa Earring +1",
+      "slot": "ear",
+      "category": "Accessories",
+      "bundle": 367,
+      "augments": [
+        "DEF+30",
+        "Damage taken-3%"
+      ]
+    },
+    {
+      "item_id": 10769,
+      "name": "Gelatinous Ring +1",
+      "slot": "ring",
+      "category": "Accessories",
+      "bundle": 316,
+      "augments": [
+        "VIT+15",
+        "HP+100"
+      ]
+    },
+    {
+      "item_id": 21344,
+      "name": "Ghastly Tathlum +1",
+      "slot": "ammo",
+      "category": "Accessories",
+      "bundle": 343,
+      "augments": [
+        "Magic Damage +10",
+        "INT+5"
+      ]
+    },
+    {
+      "item_id": 25636,
+      "name": "Loess Barbuta +1",
+      "slot": "head",
+      "category": "Armor",
+      "bundle": 376,
+      "augments": [
+        "Enmity+10",
+        "Damage taken-10%",
+        "All Attr.+10"
+      ]
+    },
+    {
+      "item_id": 28430,
+      "name": "Acuity Belt +1",
+      "slot": "waist",
+      "category": "Accessories",
+      "bundle": 295,
+      "augments": [
+        "Magic Accuracy +15",
+        "INT +10"
+      ]
+    },
+    {
+      "item_id": 27561,
+      "name": "Apeile Ring +1",
+      "slot": "ring",
+      "category": "Accessories",
+      "bundle": 310,
+      "augments": [
+        "DEF +20",
+        "Magic Defense Bonus +5"
+      ]
+    },
+    {
+      "item_id": 28487,
+      "name": "Arete del Luna +1",
+      "slot": "ear",
+      "category": "Accessories",
+      "bundle": 302,
+      "augments": [
+        "Resist Sleep +15",
+        "Resist Charm +15"
+      ]
+    },
+    {
+      "item_id": 27620,
+      "name": "Aurist's Cape +1",
+      "slot": "back",
+      "category": "Accessories",
+      "bundle": 363,
+      "augments": [
+        "Accuracy/Magic Accuracy +25",
+        "INT/MND +25"
+      ]
+    },
+    {
+      "item_id": 27518,
+      "name": "Bathy Choker +1",
+      "slot": "neck",
+      "category": "Accessories",
+      "bundle": 350,
+      "augments": [
+        "Evasion +15",
+        "Counter +10"
+      ]
+    },
+    {
+      "item_id": 10771,
+      "name": "Cacoethic Ring +1",
+      "slot": "ring",
+      "category": "Accessories",
+      "bundle": 358,
+      "augments": [
+        "DEX +10",
+        "AGI +10"
+      ]
+    },
+    {
+      "item_id": 28353,
+      "name": "Canto Necklace +1",
+      "slot": "neck",
+      "category": "Accessories",
+      "bundle": 296,
+      "augments": [
+        "Magic Accuracy +15",
+        "CHR +10"
+      ]
+    },
+    {
+      "item_id": 27543,
+      "name": "Domin. Earring +1",
+      "slot": "ear",
+      "category": "Accessories",
+      "bundle": 374,
+      "augments": [
+        "Accuracy +10",
+        "DEX +6"
+      ]
+    },
+    {
+      "item_id": 27610,
+      "name": "Fi Follet Cape +1",
+      "slot": "back",
+      "category": "Accessories",
+      "bundle": 360,
+      "augments": [
+        "Fast Cast +10%",
+        "Spell Interruption Rate -5%"
+      ]
+    },
+    {
+      "item_id": 27602,
+      "name": "Ground. Mantle +1",
+      "slot": "back",
+      "category": "Accessories",
+      "bundle": 320,
+      "augments": [
+        "Accuracy +15",
+        "DEX +10"
+      ]
+    },
+    {
+      "item_id": 28491,
+      "name": "Handler's Earring +1",
+      "slot": "ear",
+      "category": "Accessories",
+      "bundle": 298,
+      "augments": [
+        "Pet: Accuracy/Magic Accuracy +15",
+        "Accuracy +10"
+      ]
+    },
+    {
+      "item_id": 28413,
+      "name": "Kentarch Belt +1",
+      "slot": "waist",
+      "category": "Accessories",
+      "bundle": 355,
+      "augments": [
+        "STR+10",
+        "DEX+10"
+      ]
+    },
+    {
+      "item_id": 26002,
+      "name": "Loricate Torque +1",
+      "slot": "neck",
+      "category": "Accessories",
+      "bundle": 372,
+      "augments": [
+        "DEF +45",
+        "Spell Interruption Rate -5%"
+      ]
+    },
+    {
+      "item_id": 28482,
+      "name": "Lugra Earring +1",
+      "slot": "ear",
+      "category": "Accessories",
+      "bundle": 312,
+      "augments": [
+        "DEF +20",
+        "STR/DEX/VIT/INT +8"
+      ]
+    },
+    {
+      "item_id": 27559,
+      "name": "Mephitas's Ring +1",
+      "slot": "ring",
+      "category": "Accessories",
+      "bundle": 337,
+      "augments": [
+        "Conserve MP +15",
+        "INT +5"
+      ]
+    },
+    {
+      "item_id": 27563,
+      "name": "Metamorph Ring +1",
+      "slot": "ring",
+      "category": "Accessories",
+      "bundle": 306,
+      "augments": [
+        "Magic Accuracy +10",
+        "INT/MND/CHR +10"
+      ]
+    },
+    {
+      "item_id": 28485,
+      "name": "Nourishing Earring +1",
+      "slot": "ear",
+      "category": "Accessories",
+      "bundle": 290,
+      "augments": [
+        "Resist Silence +15",
+        "Spell Interruption Rate -5%"
+      ]
+    },
+    {
+      "item_id": 28428,
+      "name": "Sailfi Belt +1",
+      "slot": "waist",
+      "category": "Accessories",
+      "bundle": 292,
+      "augments": [
+        "STR +15",
+        "Double Attack +5%"
+      ]
+    },
+    {
+      "item_id": 22255,
+      "name": "Seeth. Bomblet +1",
+      "slot": "ammo",
+      "category": "Accessories",
+      "bundle": 364,
+      "augments": [
+        "STR +10",
+        "Haste +5%"
+      ]
+    },
+    {
+      "item_id": 28424,
+      "name": "Shinjutsu-no-Obi +1",
+      "slot": "waist",
+      "category": "Accessories",
+      "bundle": 294,
+      "augments": [
+        "Conserve MP +15",
+        "Fast Cast +5%"
+      ]
+    },
+    {
+      "item_id": 26022,
+      "name": "Vim Torque +1",
+      "slot": "neck",
+      "category": "Accessories",
+      "bundle": 383,
+      "augments": [
+        "Accuracy +15",
+        "Store TP +10"
+      ]
+    },
+    {
+      "item_id": 27505,
+      "name": "Warder's Charm +1",
+      "slot": "neck",
+      "category": "Accessories",
+      "bundle": 324,
+      "augments": [
+        "Skillchain Damage +15%",
+        "Magic Burst Bonus +10%"
+      ]
+    },
+    {
+      "item_id": 27533,
+      "name": "Zwazo Earring +1",
+      "slot": "ear",
+      "category": "Accessories",
+      "bundle": 357,
+      "augments": [
+        "HP +45",
+        "Shield Block Rate +3%"
+      ]
+    },
+    {
+      "item_id": 26715,
+      "name": "Adorned Helm +1",
+      "slot": "head",
+      "category": "Armor",
+      "bundle": 325,
+      "augments": [
+        "Accuracy/Magic Accuracy +45",
+        "Attack +50",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 26943,
+      "name": "Agony Jerkin +1",
+      "slot": "body",
+      "category": "Armor",
+      "bundle": 314,
+      "augments": [
+        "Attack +60",
+        "\"Store TP\" +10",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 26787,
+      "name": "Alhazen Hat +1",
+      "slot": "head",
+      "category": "Armor",
+      "bundle": 345,
+      "augments": [
+        "All Attr. +30",
+        "Evasion +50",
+        "Accuracy/Ranged Accuracy/Magic Accuracy +25"
+      ]
+    },
+    {
+      "item_id": 28135,
+      "name": "Assid. Pants +1",
+      "slot": "legs",
+      "category": "Armor",
+      "bundle": 289,
+      "augments": [
+        "Avatar: Accuracy/Magic Accuracy +35",
+        "Avatar: All Attr. +20",
+        "MP +20"
+      ]
+    },
+    {
+      "item_id": 27107,
+      "name": "Asteria Mitts +1",
+      "slot": "hands",
+      "category": "Armor",
+      "bundle": 352,
+      "augments": [
+        "MP +45",
+        "Avatar: Accuracy/Magic Accuracy +40",
+        "Avatar: Magic Burst Bonus +10%"
+      ]
+    },
+    {
+      "item_id": 28137,
+      "name": "Augury Cuisses +1",
+      "slot": "legs",
+      "category": "Armor",
+      "bundle": 291,
+      "augments": [
+        "Attack +60",
+        "Magic Attack Bonus +30",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 25602,
+      "name": "Blistering Sallet +1",
+      "slot": "head",
+      "category": "Armor",
+      "bundle": 359,
+      "augments": [
+        "Accuracy/Magic Accuracy +45",
+        "Critical Hit Rate +10%",
+        "STR/DEX +25"
+      ]
+    },
+    {
+      "item_id": 25681,
+      "name": "Cohort Cloak +1",
+      "slot": "body",
+      "category": "Armor",
+      "bundle": 354,
+      "augments": [
+        "Magic Accuracy +100",
+        "Magic Attack Bonus +100",
+        "All Attr. +20"
+      ]
+    },
+    {
+      "item_id": 26871,
+      "name": "Emet Harness +1",
+      "slot": "body",
+      "category": "Armor",
+      "bundle": 323,
+      "augments": [
+        "Evasion +30",
+        "Accuracy +40",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 27151,
+      "name": "Gazu Bracelets +1",
+      "slot": "hands",
+      "category": "Armor",
+      "bundle": 366,
+      "augments": [
+        "Accuracy +50",
+        "Haste +10%",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 26785,
+      "name": "Hike Khat +1",
+      "slot": "head",
+      "category": "Armor",
+      "bundle": 341,
+      "augments": [
+        "Physical Damage Taken -10%",
+        "Pet: Damage Taken -5%",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 26873,
+      "name": "Hime Domaru +1",
+      "slot": "body",
+      "category": "Armor",
+      "bundle": 326,
+      "augments": [
+        "Accuracy +45",
+        "\"Double Attack\" +5%",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 27410,
+      "name": "Hippomenes Socks +1",
+      "slot": "feet",
+      "category": "Armor",
+      "bundle": 309,
+      "augments": [
+        "\"Resist Bind\" +45",
+        "Evasion +20",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 27408,
+      "name": "Hygieia Clogs +1",
+      "slot": "feet",
+      "category": "Armor",
+      "bundle": 335,
+      "augments": [
+        "\"Cure\" Potency +15%",
+        "Healing Magic Skill +10",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 26710,
+      "name": "Imp. Wing Hair. +1",
+      "slot": "head",
+      "category": "Armor",
+      "bundle": 286,
+      "augments": [
+        "Accuracy +35",
+        "Magic Evasion +100",
+        "Critical Hit Rate +10%"
+      ]
+    },
+    {
+      "item_id": 28276,
+      "name": "Jute Boots +1",
+      "slot": "feet",
+      "category": "Armor",
+      "bundle": 317,
+      "augments": [
+        "DEX/AGI +15",
+        "Magic Evasion +30",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 27051,
+      "name": "Kachi. Kote +1",
+      "slot": "hands",
+      "category": "Armor",
+      "bundle": 331,
+      "augments": [
+        "Attack +45",
+        "Accuracy/Magic Accuracy +30",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 27109,
+      "name": "Lamassu Mitts +1",
+      "slot": "hands",
+      "category": "Armor",
+      "bundle": 353,
+      "augments": [
+        "Avatar: All Attr. +30",
+        "Avatar: Accuracy/Magic Accuracy +40",
+        "Avatar Perpetuation Cost -5"
+      ]
+    },
+    {
+      "item_id": 26897,
+      "name": "Lugra Cloak +1",
+      "slot": "body",
+      "category": "Armor",
+      "bundle": 311,
+      "augments": [
+        "Magic Accuracy +60",
+        "Spell Interruption Rate -20%",
+        "All Attr. +20"
+      ]
+    },
+    {
+      "item_id": 27994,
+      "name": "Macabre Gaunt. +1",
+      "slot": "hands",
+      "category": "Armor",
+      "bundle": 287,
+      "augments": [
+        "Magic Evasion +75",
+        "Occasionally Resist Status Ailments +10",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 25710,
+      "name": "Obviat. Cuirass +1",
+      "slot": "body",
+      "category": "Armor",
+      "bundle": 380,
+      "augments": [
+        "Magic Evasion+60",
+        "Enmity+5",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 28274,
+      "name": "Regal Pumps +1",
+      "slot": "feet",
+      "category": "Armor",
+      "bundle": 285,
+      "augments": [
+        "Healing Magic Skill +10",
+        "Enhancing Magic Skill +10",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 26869,
+      "name": "Ros. Jaseran +1",
+      "slot": "body",
+      "category": "Armor",
+      "bundle": 304,
+      "augments": [
+        "Magic Accuracy +45",
+        "Damage Taken -5%",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 27996,
+      "name": "Shigure Tekko +1",
+      "slot": "hands",
+      "category": "Armor",
+      "bundle": 297,
+      "augments": [
+        "Evasion +90",
+        "Magic Evasion +80",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 26888,
+      "name": "Shomonjijoe +1",
+      "slot": "body",
+      "category": "Armor",
+      "bundle": 328,
+      "augments": [
+        "Avatar: TP Bonus +300",
+        "Avatar: Accuracy/Magic Accuracy +30",
+        "Avatar: All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 26732,
+      "name": "Stinger Helm +1",
+      "slot": "head",
+      "category": "Armor",
+      "bundle": 329,
+      "augments": [
+        "Accuracy/Magic Accuracy +30",
+        "Physical Damage Limit +5%",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 27149,
+      "name": "Tatena. Gote +1",
+      "slot": "hands",
+      "category": "Armor",
+      "bundle": 389,
+      "augments": [
+        "Accuracy+40",
+        "All Attr.+10",
+        "\"Triple Attack\" +4%"
+      ]
+    },
+    {
+      "item_id": 25856,
+      "name": "Tatena. Haidate +1",
+      "slot": "legs",
+      "category": "Armor",
+      "bundle": 382,
+      "augments": [
+        "Accuracy+60",
+        "All Attr.+10",
+        "\"Triple Attack\" +3%"
+      ]
+    },
+    {
+      "item_id": 25733,
+      "name": "Tatena. Harama. +1",
+      "slot": "body",
+      "category": "Armor",
+      "bundle": 392,
+      "augments": [
+        "Accuracy+30",
+        "All Attr.+10",
+        "\"Triple Attack\" +5%"
+      ]
+    },
+    {
+      "item_id": 25924,
+      "name": "Tatena. Sune. +1",
+      "slot": "feet",
+      "category": "Armor",
+      "bundle": 386,
+      "augments": [
+        "Accuracy+60",
+        "All Attr.+10",
+        "\"Triple Attack\" +3%"
+      ]
+    },
+    {
+      "item_id": 27231,
+      "name": "Zoar Subligar +1",
+      "slot": "legs",
+      "category": "Armor",
+      "bundle": 308,
+      "augments": [
+        "Accuracy +30",
+        "Critical Hit Rate +5%",
+        "All Attr. +10"
+      ]
+    },
+    {
+      "item_id": 21165,
+      "name": "Ababinili +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 321,
+      "augments": [
+        "Healing Magic Skill +10",
+        "Enhancing Magic Skill +10",
+        "Damage Taken -10%"
+      ]
+    },
+    {
+      "item_id": 20852,
+      "name": "Aizkora +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 344,
+      "augments": [
+        "Accuracy/Magic Accuracy +45",
+        "\"Triple Attack\" +3%",
+        "\"Quadruple Attack\" +3%"
+      ]
+    },
+    {
+      "item_id": 27639,
+      "name": "Ajax +1",
+      "slot": "sub",
+      "category": "Weapons",
+      "bundle": 339,
+      "augments": [
+        "Shield Block Rate +10%",
+        "Enhancing Magic Received Duration +10%"
+      ]
+    },
+    {
+      "item_id": 20607,
+      "name": "Anathema Harpe +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 330,
+      "augments": [
+        "DMG +20",
+        "Accuracy/Magic Accuracy +40",
+        "Critical Hit Rate +10%"
+      ]
+    },
+    {
+      "item_id": 22267,
+      "name": "Antitail +1",
+      "slot": "range",
+      "category": "Weapons",
+      "bundle": 373,
+      "augments": [
+        "Magic Evasion+15",
+        "\"Double Attack\"+3"
+      ]
+    },
+    {
+      "item_id": 20854,
+      "name": "Beheader +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 347,
+      "augments": [
+        "DMG +53",
+        "Accuracy/Magic Accuracy +40",
+        "Haste +10%"
+      ]
+    },
+    {
+      "item_id": 20807,
+      "name": "Buramgh +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 299,
+      "augments": [
+        "DMG +30",
+        "Pet: Accuracy/Magic Accuracy +30",
+        "Accuracy/Magic Accuracy +35"
+      ]
+    },
+    {
+      "item_id": 20697,
+      "name": "Combuster +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 377,
+      "augments": [
+        "DMG:+19",
+        "Accuracy/Magic Accuracy +40",
+        "\"Store TP\"+10"
+      ]
+    },
+    {
+      "item_id": 20508,
+      "name": "Comeuppances +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 390,
+      "augments": [
+        "DEX+20",
+        "Accuracy/Magic Accuracy +40",
+        "\"Store TP\"+10",
+        "Pet: Accuracy/Magic Accuracy +40"
+      ]
+    },
+    {
+      "item_id": 22058,
+      "name": "Contemplator +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 391,
+      "augments": [
+        "Magic Accuracy +70",
+        "Enfeebling Magic Skill +20",
+        "MND +10"
+      ]
+    },
+    {
+      "item_id": 27641,
+      "name": "Deliverance +1",
+      "slot": "sub",
+      "category": "Weapons",
+      "bundle": 348,
+      "augments": [
+        "Accuracy/Magic Accuracy +30",
+        "Shield Skill +10"
+      ]
+    },
+    {
+      "item_id": 20709,
+      "name": "Demers. Degen +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 351,
+      "augments": [
+        "Accuracy/Magic Accuracy +45",
+        "DEX +10",
+        "Sword Enhancement Spell Damage +50%"
+      ]
+    },
+    {
+      "item_id": 20522,
+      "name": "Emeici +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 315,
+      "augments": [
+        "DMG +30",
+        "Accuracy/Magic Accuracy +30",
+        "Critical Hit Rate +10%"
+      ]
+    },
+    {
+      "item_id": 27637,
+      "name": "Evalach +1",
+      "slot": "sub",
+      "category": "Weapons",
+      "bundle": 300,
+      "augments": [
+        "HP +150",
+        "Shield Skill +10",
+        "Accuracy/Magic Accuracy +20"
+      ]
+    },
+    {
+      "item_id": 20528,
+      "name": "Fists of Fury +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 346,
+      "augments": [
+        "DMG +14",
+        "Accuracy/Magic Accuracy +40",
+        "\"Regen\" +5"
+      ]
+    },
+    {
+      "item_id": 20682,
+      "name": "Flyssa +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 387,
+      "augments": [
+        "DMG:+10",
+        "Accuracy/Magic Accuracy +40",
+        "Damage taken -5%"
+      ]
+    },
+    {
+      "item_id": 26402,
+      "name": "Forfend +1",
+      "slot": "sub",
+      "category": "Weapons",
+      "bundle": 379,
+      "augments": [
+        "Accuracy+15",
+        "Magic Accuracy+15",
+        "Enhancing Magic Skill +10"
+      ]
+    },
+    {
+      "item_id": 20943,
+      "name": "Gae Derg +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 338,
+      "augments": [
+        "DMG +62",
+        "Accuracy/Magic Accuracy +40",
+        "\"Store TP\" +8"
+      ]
+    },
+    {
+      "item_id": 21749,
+      "name": "Habilitator +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 381,
+      "augments": [
+        "DMG:+21",
+        "Accuracy/Magic Accuracy +40",
+        "STR/DEX/CHR+10",
+        "Pet: Accuracy/Magic Accuracy +40"
+      ]
+    },
+    {
+      "item_id": 22121,
+      "name": "Imati +1",
+      "slot": "range",
+      "category": "Weapons",
+      "bundle": 371,
+      "augments": [
+        "DMG +17",
+        "Ranged Accuracy +40",
+        "\"Snapshot\" +10%"
+      ]
+    },
+    {
+      "item_id": 20609,
+      "name": "Jugo Kukri +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 332,
+      "augments": [
+        "DMG +13",
+        "Accuracy/Magic Accuracy +40",
+        "Evasion +20"
+      ]
+    },
+    {
+      "item_id": 21703,
+      "name": "Kladenets +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 342,
+      "augments": [
+        "DMG +50",
+        "Accuracy/Magic Accuracy +40",
+        "\"Fast Cast\" +10%"
+      ]
+    },
+    {
+      "item_id": 21035,
+      "name": "Kunimune +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 307,
+      "augments": [
+        "TP Bonus +500",
+        "Accuracy/Magic Accuracy +30",
+        "STR +10"
+      ]
+    },
+    {
+      "item_id": 20581,
+      "name": "Kustawi +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 368,
+      "augments": [
+        "Ranged Attack +20",
+        "Ranged Accuracy/Magic Accuracy +40",
+        "Enmity -5"
+      ]
+    },
+    {
+      "item_id": 21091,
+      "name": "Loxotic Mace +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 365,
+      "augments": [
+        "DMG +33",
+        "Accuracy/Magic Accuracy +40",
+        "Weapon Skill Damage +10%"
+      ]
+    },
+    {
+      "item_id": 21100,
+      "name": "Magesmasher +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 318,
+      "augments": [
+        "DMG +45",
+        "Accuracy/Magic Accuracy +30",
+        "Weapon Skill Damage +15%"
+      ]
+    },
+    {
+      "item_id": 21484,
+      "name": "Malison +1",
+      "slot": "range",
+      "category": "Weapons",
+      "bundle": 378,
+      "augments": [
+        "Ranged Attack+45",
+        "Ranged Accuracy/Magic Accuracy +40",
+        "DMG:+5"
+      ]
+    },
+    {
+      "item_id": 21160,
+      "name": "Marin Staff +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 333,
+      "augments": [
+        "Magic Attack Bonus +40",
+        "Accuracy/Magic Accuracy +40",
+        "INT/MND +10"
+      ]
+    },
+    {
+      "item_id": 20800,
+      "name": "Mdomo Axe +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 356,
+      "augments": [
+        "DMG +24",
+        "Accuracy/Magic Accuracy +40",
+        "Pet: Accuracy/Magic Accuracy +50"
+      ]
+    },
+    {
+      "item_id": 21223,
+      "name": "Mengado +1",
+      "slot": "range",
+      "category": "Weapons",
+      "bundle": 301,
+      "augments": [
+        "\"Snapshot\" +15",
+        "DMG +10",
+        "Ranged Accuracy +20"
+      ]
+    },
+    {
+      "item_id": 21689,
+      "name": "Montante +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 385,
+      "augments": [
+        "DMG:+20",
+        "Accuracy/Magic Accuracy +40",
+        "HP+100"
+      ]
+    },
+    {
+      "item_id": 21030,
+      "name": "Norifusa +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 362,
+      "augments": [
+        "DMG +10",
+        "Accuracy/Magic Accuracy +40",
+        "Skillchain Damage +20%"
+      ]
+    },
+    {
+      "item_id": 21696,
+      "name": "Nullis +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 375,
+      "augments": [
+        "DMG:+33",
+        "Accuracy/Magic Accuracy +40",
+        "Dark magic skill +10"
+      ]
+    },
+    {
+      "item_id": 21220,
+      "name": "Paloma Bow +1",
+      "slot": "range",
+      "category": "Weapons",
+      "bundle": 349,
+      "augments": [
+        "DMG +9",
+        "Ranged Accuracy +40",
+        "\"Rapid Shot\" +15%"
+      ]
+    },
+    {
+      "item_id": 20805,
+      "name": "Perun +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 340,
+      "augments": [
+        "Ranged Attack +45",
+        "Ranged Accuracy/Magic Accuracy +30",
+        "\"Snapshot\" +5%"
+      ]
+    },
+    {
+      "item_id": 21806,
+      "name": "Pixquizpan +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 370,
+      "augments": [
+        "DMG +36",
+        "Accuracy/Magic Accuracy +40",
+        "Magic Attack Bonus +50"
+      ]
+    },
+    {
+      "item_id": 21163,
+      "name": "Pouwhenua +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 303,
+      "augments": [
+        "DMG +45",
+        "Accuracy/Magic Accuracy +30",
+        "\"Store TP\" +10"
+      ]
+    },
+    {
+      "item_id": 20614,
+      "name": "Pukulatmuj +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 322,
+      "augments": [
+        "DMG +38",
+        "Accuracy/Magic Accuracy +30",
+        "Sword Enhancement Spell Damage +150%"
+      ]
+    },
+    {
+      "item_id": 20981,
+      "name": "Raicho +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 361,
+      "augments": [
+        "DMG +20",
+        "Accuracy/Magic Accuracy +40",
+        "Magic Defense Bonus +5"
+      ]
+    },
+    {
+      "item_id": 21417,
+      "name": "Refined Grip +1",
+      "slot": "sub",
+      "category": "Weapons",
+      "bundle": 313,
+      "augments": [
+        "DEF +20",
+        "Parrying Skill +10"
+      ]
+    },
+    {
+      "item_id": 21419,
+      "name": "Rigorous Grip +1",
+      "slot": "sub",
+      "category": "Weapons",
+      "bundle": 327,
+      "augments": [
+        "Attack +30",
+        "STR +15"
+      ]
+    },
+    {
+      "item_id": 20612,
+      "name": "Sangarius +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 319,
+      "augments": [
+        "DMG +35",
+        "Accuracy/Magic Accuracy +30",
+        "\"Quadruple Attack\" +3%"
+      ]
+    },
+    {
+      "item_id": 21076,
+      "name": "Septoptic +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 388,
+      "augments": [
+        "DMG:+10",
+        "Accuracy/Magic Accuracy +40",
+        "Magic Attack Bonus +30"
+      ]
+    },
+    {
+      "item_id": 20988,
+      "name": "Tancho +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 293,
+      "augments": [
+        "DMG +25",
+        "Accuracy/Ranged Accuracy/Magic Accuracy +20",
+        "Magic Attack Bonus +20"
+      ]
+    },
+    {
+      "item_id": 20680,
+      "name": "Tanmogayi +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 384,
+      "augments": [
+        "DMG+11",
+        "Accuracy/Magic Accuracy +40",
+        "Attack+40"
+      ]
+    },
+    {
+      "item_id": 20604,
+      "name": "Ternion Dagger +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 336,
+      "augments": [
+        "DMG +17",
+        "Accuracy/Magic Accuracy +40",
+        "Weapon Skill Damage +5%"
+      ]
+    },
+    {
+      "item_id": 20899,
+      "name": "Triska Scythe +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 334,
+      "augments": [
+        "DMG +56",
+        "Accuracy/Magic Accuracy +40",
+        "Critical Hit Rate +10%"
+      ]
+    },
+    {
+      "item_id": 21691,
+      "name": "Ushenzi +1",
+      "slot": "main",
+      "category": "Weapons",
+      "bundle": 369,
+      "augments": [
+        "DMG +28",
+        "Accuracy/Magic Accuracy +40",
+        "\"Cure\" Potency Received +10%"
+      ]
+    },
+    {
+      "item_id": 21350,
+      "name": "Wingcutter +1",
+      "slot": "range",
+      "category": "Weapons",
+      "bundle": 288,
+      "augments": [
+        "Accuracy +10",
+        "Evasion +10"
+      ]
+    }
+  ]
+}

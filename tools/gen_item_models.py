@@ -96,6 +96,11 @@ EXTRA_MODELS = {
     24167: 4612, 24170: 8708, 24173: 12804, 24176: 16900, 24179: 20996,
     # Clemency (Mercy), MId 517
     24182: 4613, 24185: 8709, 24188: 12805, 24191: 16901, 24194: 20997,
+    # Null Masque (The Orb's Radiance II), MId 522.  LandSandBoat's row is MId 0, so
+    # the resolver's name lookups used the Rogue's Bonnet (74); the client's 2025
+    # masque is head model 522 (ROM/387/6.DAT, texture hm_mts1).  Migration 184
+    # stamps this into a database.
+    24270: 4618,
 }
 
 # A few weapons' item_equipment rows carry another weapon's MId.  The client's model

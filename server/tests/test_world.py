@@ -892,6 +892,51 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(int(self.session.char["mp_current"]),
                          min(int(self.session.char["mp"]), before + int(row["value"])))
 
+    def test_gear_regain_ticks_tp(self):
+        """Karieyh Ring +1's Regain+5 adds TP on the same three-second tick."""
+        self.service.save_equipment(int(self.character["id"]),
+                                    {13: (0, 0, 26199)})  # Karieyh Ring +1
+        self.session.char.update(main_job=1, main_level=1, sub_job=0, sub_level=0)
+        self.session._trait_cache = None
+        self.session.refresh_vitals()
+        self.session.char["tp"] = 0
+        self.session.queue.clear()
+        self.session.next_regen_tick = 0.0
+        self.session.tick(time.time())
+        self.assertEqual(int(self.session.char["tp"]), 5)
+        # One 0x0DF covers the HP/MP/TP refresh; gain_tp(queue=False) must not queue a
+        # second party copy behind it.
+        self.assertEqual(msg_types(self.session).count(0x0DF), 1)
+
+    def test_idle_field_set_keeps_its_regen_refresh_and_regain(self):
+        """The real MNK idle set: 19 Regen, 1 Refresh and 7 Regain while worn.
+
+        Null Masque and Null Belt had no item_mods rows, so the live sheet showed
+        Regen 13 / Regain 5 and no Refresh row at all while the client tooltip totals
+        (and the player) expected 19 / 7 / 1.
+        """
+        self.service.save_equipment(int(self.character["id"]), {
+            3: (0, 0, 22279),   # ammo  Staunch Tathlum +1
+            4: (0, 0, 24270),   # head  Null Masque
+            5: (0, 0, 23941),   # body  Anchorite's Cyclas +4
+            6: (0, 0, 27027),   # hands Rao Kote +1
+            7: (0, 0, 27203),   # legs  Rao Haidate +1
+            8: (0, 0, 27379),   # feet  Rao Sune-Ate +1
+            9: (0, 0, 27518),   # neck  Bathy Choker +1
+            10: (0, 0, 26367),  # waist Null Belt
+            11: (0, 0, 28475),  # ear1  Infused Earring
+            12: (0, 0, 28512),  # ear2  Dawn Earring
+            13: (0, 0, 26182),  # ring1 Chirich Ring +1
+            14: (0, 0, 26199),  # ring2 Karieyh Ring +1
+            15: (0, 0, 26269),  # back  Moonlight Cape
+        })
+        self.session.char.update(main_job=1, main_level=1, sub_job=0, sub_level=0)
+        self.session._trait_cache = None
+        mods = self.session.combat_mods()
+        self.assertEqual(mods.get(mod.REGEN), 19)
+        self.assertEqual(mods.get(mod.REFRESH), 1)
+        self.assertEqual(mods.get(mod.REGAIN), 7)
+
     def test_gear_swap_refreshes_the_maximum_the_tick_reads(self):
         """Chirich/Stikini only tick when the stored maxima follow the outfit.
 
@@ -983,6 +1028,15 @@ class WorldTest(unittest.TestCase):
         joined = "\n".join(self.chats())
         self.assertIn("Regen 2 HP", joined)
         self.assertIn("Refresh 1 MP", joined)
+
+        # Karieyh Ring +1 is the Regain half of the same diagnostic.
+        self.service.save_equipment(int(self.character["id"]),
+                                    {13: (0, 0, 26199)})   # Karieyh Ring +1
+        self.session.refresh_vitals()
+        self.session.queue.clear()
+        self.session.command(["traits"])
+        joined = "\n".join(self.chats())
+        self.assertIn("Regain 5 TP", joined)
 
     def test_stats_request_resends_command_data(self):
         """The client builds the Abilities menu after 0x061, so 0x0AC belongs in its reply."""

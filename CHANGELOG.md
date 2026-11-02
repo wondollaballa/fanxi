@@ -1,5 +1,39 @@
 # Changelog
 
+## Unreleased — Null Masque's own look
+
+- **Null Masque no longer draws as the THF artifact bonnet.**  The full catalogue
+  (migration 111) gave item 24270 the Rogue's Bonnet model, 4170, because LandSandBoat's
+  `item_equipment` row is still `MId 0 / TODO: verify model` and the import fell back to a
+  related-set guess.  Migration 184 stamps the client's 2025 head model 522 — the masque —
+  as raw grap id `0x1000 + 522 = 4618`, and keeps `item_models` and
+  `tools/item_models.json` in step so a grant or clone re-stamps it.  The Equip View icon
+  was already the correct Null Masque icon.
+- Tests: `server/tests/test_item_models.py` pins the item row, the lookup row and the
+  catalogue.
+- Fix a live character with `//model Null Masque 4618` (or unequip/re-equip the head); a
+  relog or zone also redraws it.
+
+## Unreleased — the whole Unity catalogue on the RP card
+
+- **Every Unity +1 accessory, armour piece and weapon is augmentable now.**  The Data page's RP
+  card takes its Unity rows from `server/fanxi_server/game/unity.py`, which carried 30 of the
+  108 pieces: the accessories, plus Loess Barbuta +1, Blistering Sallet +1 and Rigorous Grip +1.
+  Tatena. Gote +1 and the rest of the Unity armour and weapons were absent even when the item
+  was in a bag.  The catalogue now lives in `data/unity_r15.json` — 27 accessories, 32 armour
+  pieces and 49 weapons/grips from BG Wiki's three Unity categories — and every entry carries
+  its client bundle: the 108 pieces are bundles 285-392 of the augment table, one each, matched
+  to the Rank 15 line on the item's page.
+- **The registry is generated data now.**  `tools/gen_unity.py` regenerates
+  `database/migrations/0083_unity_augments.sql` and `docs/unity-augments.md` from the dataset,
+  and the page's tables are grouped by category; `--check` keeps them in step.  `augment_stats`
+  learned the spellings the armour rows use (`Magic Attack Bonus`, `Magic Evasion`) and lists
+  the rows the engine still has no pool for (parrying skill, resist bind, avatar perpetuation
+  cost, ...).
+- Tests: `server/tests/test_unity.py` pins the catalogue counts, the bundle block and Tatena.
+  Gote +1's row, and `server/tests/test_character_data.py` caps it through the RP card the same
+  way the reported item would be.
+
 ## Unreleased — the Equip View wears the client's equip window
 
 - **The in-game EquipViewer now looks like the game's own equip menu.**  The window paints the

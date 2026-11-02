@@ -77,6 +77,24 @@ class StatReportTest(unittest.TestCase):
                            ("hp", sheet.max_hp), ("mp", sheet.max_mp)):
             self.assertEqual(by_key[key]["value"], value, key)
 
+    def test_regain_is_a_first_class_row(self):
+        """Karieyh Ring +1's Regain shows as Regain, not a bare mod:368 row."""
+        self.equip(26199, 13)  # Karieyh Ring +1, Regain+5
+        stats = {stat["key"]: stat for stat in self.report()["stats"]}
+        self.assertIn("regain", stats)
+        self.assertNotIn("mod:368", stats)
+        self.assertEqual(stats["regain"]["label"], "Regain")
+        self.assertEqual(stats["regain"]["value"], 5)
+        self.assertEqual(stats["regain"]["group"], "Combat")
+
+    def test_null_masque_reaches_the_report(self):
+        """A client-only item's Regen/Refresh/Regain must appear in the live sheet."""
+        self.equip(24270, 4)  # Null Masque
+        stats = {stat["key"]: stat for stat in self.report()["stats"]}
+        self.assertEqual(stats["regen"]["value"], 3)
+        self.assertEqual(stats["refresh"]["value"], 1)
+        self.assertEqual(stats["regain"]["value"], 2)
+
     def test_report_shows_effective_haste_interval_and_tp(self):
         """Hasso's ability haste must reach the report's sheet, not only combat_mods."""
         self.equip(16960, 0)   # Uchigatana, two-handed

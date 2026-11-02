@@ -101,6 +101,13 @@ static DOWN_RE: LazyLock<Regex> = LazyLock::new(|| {
         .expect("valid negative-stat regular expression")
 });
 
+/// One client tooltip, the Null Masque, prints `Haste10%` with no sign. Every other Haste line
+/// carries a `+`, so putting the sign back here recovers the 10% without teaching the signed-stat
+/// expression to accept stat lines with no separator at all.
+static BARE_HASTE_RE: LazyLock<Regex> = LazyLock::new(|| {
+    Regex::new(r"(?i)\bHaste\s*(\d+)\s*%").expect("valid bare-haste regular expression")
+});
+
 /// `Set:` bonuses depend on other pieces, the pet/avatar lines belong to another entity and
 /// `Unity Ranking:` values depend on Unity standing. They are not one piece's player stats, so the
 /// card stops before them and the totals never see them.
@@ -303,6 +310,7 @@ pub fn parse_augment(augment: &str) -> Vec<GearStat> {
 
 fn parse_stat_text(text: &str) -> Vec<GearStat> {
     let normalized = DOWN_RE.replace_all(text, "-$1");
+    let normalized = BARE_HASTE_RE.replace_all(&normalized, "Haste+$1%");
     let mut out = Vec::new();
     for captures in COLON_RE.captures_iter(&normalized) {
         let Some(label) = captures.name("label").map(|value| value.as_str()) else {
@@ -515,6 +523,7 @@ const ORDER: &[&str] = &[
     "regen",
     "regen potency",
     "regen duration",
+    "regain",
     "enfeebling magic effect",
     "enfeebling magic duration",
     "enfeebling magic skill",
@@ -834,6 +843,7 @@ const ALIASES: &[(&str, &str, &str)] = &[
     ("regen potency", "regen potency", "Regen potency"),
     ("regen duration", "regen duration", "Regen duration"),
     ("regen effect duration", "regen duration", "Regen duration"),
+    ("regain", "regain", "Regain"),
     // Magic skills and effect lines.
     (
         "enhancing magic duration",
@@ -1029,6 +1039,19 @@ mod tests {
         assert!(stat(&stats, "Magic burst damage").percent);
         assert_eq!(stat(&stats, "Fast Cast").value, 16);
         assert!(stat(&stats, "Fast Cast").percent);
+    }
+
+    #[test]
+    fn reads_the_null_masques_unseparated_haste() {
+        // The client really prints "Haste10%" for this piece, with no sign at all.
+        let description = "DEF:138 HP+100 MP+70 STR+28 DEX+28 VIT+50 AGI+28 INT+28 MND+50 CHR+28\nAccuracy+50 Magic Accuracy+50 Evasion+100 Magic Evasion+100\n\"Magic Def. Bonus\"+8\nHaste10% \"Regen\"+3 \"Refresh\"+1 \"Regain\"+2\nDamage taken-10%";
+        let (_, stats) = parse_description(description);
+        assert_eq!(stat(&stats, "Haste").value, 10);
+        assert!(stat(&stats, "Haste").percent);
+        assert_eq!(stat(&stats, "Regen").value, 3);
+        assert_eq!(stat(&stats, "Refresh").value, 1);
+        assert_eq!(stat(&stats, "Regain").value, 2);
+        assert_eq!(stat(&stats, "Damage taken").value, -10);
     }
 
     #[test]

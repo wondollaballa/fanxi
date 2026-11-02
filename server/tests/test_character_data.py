@@ -218,6 +218,36 @@ class CharacterDataTest(unittest.TestCase):
         self.assertEqual(decoded["rank"], 15)
         self.assertEqual(decoded["index"], 355)
 
+    def test_unity_armour_piece_is_offered_in_the_rp_card(self):
+        """Tatena. Gote +1 was reported missing from the RP list.
+
+        The registry only carried accessories (plus Loess Barbuta +1) and the grip,
+        so a Unity armour piece in a bag never reached the card at all.
+        """
+        self.service.add_item(self.character["id"], 27149, 1)
+        data = self.service.character_data(self.character["id"])
+        item = next(row for row in data["augments"] if row["item_id"] == 27149)
+        self.assertEqual(item["name"], "Tatena. Gote +1")
+        self.assertEqual(item["kind"], "unity")
+        self.assertEqual(item["set"], "Unity +1")
+        self.assertEqual(item["slot_name"], "hands")
+        self.assertIsNone(item["current"])
+        path = item["paths"][0]
+        self.assertEqual(path["key"], "A")
+        self.assertEqual(path["rank"], 15)
+        self.assertEqual(path["bundle"], 389)
+        self.assertEqual(path["augments"], [
+            "Accuracy+40", "All Attr.+10", '"Triple Attack" +4%'])
+
+        from fanxi_server.game import augment_gear, augments
+        augment_gear.cap(self.service, self.character["id"],
+                         item["container"], item["slot"], "A")
+        row = next(row for row in self.service.inventory(self.character["id"])
+                   if int(row["item_id"]) == 27149)
+        decoded = augments.decode(row["extra"])
+        self.assertEqual(decoded["rank"], 15)
+        self.assertEqual(decoded["index"], 389)
+
     def test_armory_purchase_refreshes_the_rp_card(self):
         """The Armory snapshot must already carry the new Unity belt."""
         self.service.top_off_gil(self.character["id"])

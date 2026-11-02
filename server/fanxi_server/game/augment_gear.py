@@ -5,7 +5,8 @@ Four datasets expose a 24-byte ``AugmentBundle`` block:
 * Odyssey ("Nyame" has four paths A-D, every other set/weapon one Rank 30 row),
 * Limbus (the five armour suits and the sixteen Telopanos weapons, one Rank 30
   row each, RP curve B),
-* Unity +1 accessories (one Rank 15 row, RP curve A),
+* Unity +1 gear (every accessory, armour piece and weapon/grip in
+  ``data/unity_r15.json``, one Rank 15 row each, RP curve A),
 * Oboro Dynamis-Divergence JSE weapons (three paths A-C, NQ R15 / HQ1 R20 /
   HQ2 R25, RP curve A).
 

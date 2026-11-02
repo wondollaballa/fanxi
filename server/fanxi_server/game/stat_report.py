@@ -127,6 +127,10 @@ RAW_STATS = (
     ("cure_potency", "Cure potency", mod.CURE_POTENCY, True, 1, True, "Magic", 411),
     ("refresh", "Refresh", mod.REFRESH, False, 1, True, "Magic", 412),
     ("regen", "Regen", mod.REGEN, False, 1, True, "Magic", 413),
+    # Regain is the TP sibling of the other two passive ticks (Karieyh Ring +1,
+    # Null Masque).  Without a row here it fell through to the generic "Other"
+    # modifier list as "mod:368".
+    ("regain", "Regain", mod.REGAIN, False, 1, True, "Combat", 414),
     ("enmity", "Enmity", mod.ENMITY, False, 1, True, "Defense", 500),
     ("tp_bonus", "TP Bonus", mod.TP_BONUS, False, 1, True, "Combat", 330),
     ("weapon_skill_damage", "Weapon skill damage", mod.WSD_ALL_HITS, True, 1, True, "Combat", 331),
