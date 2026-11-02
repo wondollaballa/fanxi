@@ -86,6 +86,52 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(payload["world"]["name"], "Fanxi")
         self.assertEqual(payload["client"]["username"], "tester")
 
+    def test_character_gearswap_library_round_trip_and_tenant_scope(self):
+        token = self.register()["token"]
+        created = self.call("POST", "/api/v1/characters",
+                            {"name": "Gearowner", "race": 1}, token=token)
+        self.assertEqual(created.status, 201, created.payload)
+        character_id = json.loads(created.payload)["character"]["id"]
+        path = "/api/v1/characters/%d/gearswap/library" % character_id
+
+        seeded = self.call("GET", path, token=token, query={"job": ["WAR"]})
+        self.assertEqual(seeded.status, 200, seeded.payload)
+        source = json.loads(seeded.payload)["library"]["source"]
+        self.assertIn("function get_sets()", source)
+
+        custom = source + "\n-- API import\n"
+        saved = self.call("PUT", path, {"job": "WAR", "source": custom, "name": "api-war.lua"},
+                          token=token)
+        self.assertEqual(saved.status, 200, saved.payload)
+        self.assertEqual(json.loads(saved.payload)["library"]["source"], custom)
+
+        # The main token manages its own box through the tenant character id, and the box's
+        # library is separate from the main account's.
+        sub = self.call("POST", "/api/v1/accounts/sub",
+                        {"character": {"name": "Gearbox", "race": 1}}, token=token)
+        self.assertEqual(sub.status, 201, sub.payload)
+        sub_character_id = json.loads(sub.payload)["sub"]["character"]["id"]
+        sub_path = "/api/v1/characters/%d/gearswap/library" % sub_character_id
+        sub_seeded = self.call("GET", sub_path, token=token, query={"job": ["WAR"]})
+        self.assertEqual(sub_seeded.status, 200, sub_seeded.payload)
+        self.assertNotEqual(json.loads(sub_seeded.payload)["library"]["source"], custom)
+        sub_saved = self.call("PUT", sub_path,
+                              {"job": "WAR", "source": "-- box only\n", "name": "box.lua"},
+                              token=token)
+        self.assertEqual(sub_saved.status, 200, sub_saved.payload)
+        main_again = self.call("GET", path, token=token, query={"job": ["WAR"]})
+        self.assertEqual(json.loads(main_again.payload)["library"]["source"], custom)
+
+        # Another account cannot read the first account's character library.
+        other = self.register("other")["token"]
+        denied = self.call("GET", path, token=other, query={"job": ["WAR"]})
+        self.assertEqual(denied.status, 404)
+
+        reset = self.call("DELETE", path, token=token, query={"job": ["WAR"]})
+        self.assertEqual(reset.status, 200, reset.payload)
+        self.assertNotEqual(json.loads(reset.payload)["library"]["source"], custom)
+        self.assertEqual(json.loads(reset.payload)["library"]["source"], source)
+
     def test_the_target_route_accepts_the_long_character_id(self):
         """The in-game HUD only knows the client's ServerId (0x01000000 | char_id).
 

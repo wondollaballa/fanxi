@@ -46,6 +46,73 @@ class ServiceTest(unittest.TestCase):
             self.service.save_gearswap_settings(account_id, ["not", "an", "object"])
         self.assertEqual(ctx.exception.status, 422)
 
+    def test_gearswap_library_is_seeded_and_isolated_per_account(self):
+        first = self.register("first")
+        first_id = int(first.account["id"])
+        self.service.create_character(first_id, {"name": "Firstone", "race": 1})
+        seeded = self.service.gearswap_library(first_id, "WAR")
+        self.assertIn("function get_sets()", seeded["source"])
+        self.assertEqual(seeded["name"], "WAR.lua")
+
+        custom = seeded["source"] + "\n-- first account only\n"
+        saved = self.service.save_gearswap_library(first_id, "WAR", custom, "custom-war.lua")
+        self.assertEqual(saved["source"], custom)
+        self.assertEqual(saved["name"], "custom-war.lua")
+
+        second = self.register("second")
+        second_id = int(second.account["id"])
+        self.service.create_character(second_id, {"name": "Secondone", "race": 1})
+        other = self.service.gearswap_library(second_id, "WAR")
+        self.assertNotEqual(other["source"], custom)
+        self.assertIn("function get_sets()", other["source"])
+
+        self.service.save_gearswap_library(second_id, "WAR", "-- second account\n", "second.lua")
+        self.assertEqual(self.service.gearswap_library(first_id, "WAR")["source"], custom)
+
+        reset = self.service.reset_gearswap_library(first_id, "WAR")
+        self.assertEqual(reset["source"], seeded["source"])
+        self.assertEqual(reset["name"], "WAR.lua")
+
+    def test_new_account_copies_the_template_account_current_library(self):
+        template = self.register("onedough")
+        template_id = int(template.account["id"])
+        self.service.create_character(template_id, {"name": "Onew", "race": 1})
+        current = "-- Onedough's current RDM library\nfunction get_sets() end\n"
+        self.service.save_gearswap_library(template_id, "RDM", current, "RDM.lua")
+
+        late = self.register("late")
+        late_id = int(late.account["id"])
+        self.service.create_character(late_id, {"name": "Latecomer", "race": 1})
+        copied = self.service.gearswap_library(late_id, "RDM")
+        self.assertEqual(copied["source"], current)
+        self.assertEqual(copied["name"], "RDM.lua")
+
+        # The copy is independent: changing it does not touch the template account.
+        self.service.save_gearswap_library(late_id, "RDM", "-- late only\n", "late-rdm.lua")
+        self.assertEqual(self.service.gearswap_library(template_id, "RDM")["source"], current)
+
+    def test_gearswap_library_rejects_bad_input(self):
+        account_id = int(self.register().account["id"])
+        for job, source in (("XYZ", "sets = {}"), ("WAR", "   "), ("WAR", 42)):
+            with self.assertRaises(ApiError) as ctx:
+                self.service.save_gearswap_library(account_id, job, source)
+            self.assertEqual(ctx.exception.status, 422)
+        with self.assertRaises(ApiError) as ctx:
+            self.service.save_gearswap_library(account_id, "WAR", "x" * (512 * 1024 + 1))
+        self.assertEqual(ctx.exception.status, 422)
+
+    def test_reset_keeps_the_account_library_when_the_template_is_missing(self):
+        account_id = int(self.register().account["id"])
+        self.service.save_gearswap_library(account_id, "WAR", "-- keep me\n", "keep.lua")
+        broken_config = replace(
+            self.config, gearswap_dir=Path(self.tmp.name) / "no-gearswap-here")
+        broken = FanxiService(broken_config, self.db)
+        with self.assertRaises(ApiError) as ctx:
+            broken.reset_gearswap_library(account_id, "WAR")
+        self.assertEqual(ctx.exception.status, 404)
+        self.assertEqual(
+            self.service.gearswap_library(account_id, "WAR")["source"], "-- keep me\n")
+
     def test_battle_team_profile_round_trip(self):
         result = self.register()
         account_id = int(result.account["id"])

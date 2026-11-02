@@ -1,7 +1,7 @@
 --[[
     Fanxi GearSwap library — Onedough COR
     Updated 2026-10-29 22:42:25
-    The launcher writes sets back to this file; the first copy is kept as a .bak.
+    This is the server template; each account edits its own copy after first use.
     Source: /Users/wondochoung/Documents/GitHub/fanxi/gearswap/COR.lua
 
     Each set holds only slot = "Item" pairs so Fanxi lists every one;
@@ -567,5 +567,5 @@ function get_sets()
     }
 end
 
--- Fanxi launcher; this file is the loaded job library. The first copy was kept as a .bak.
+-- Fanxi template; each account has its own editable copy of this library.
 

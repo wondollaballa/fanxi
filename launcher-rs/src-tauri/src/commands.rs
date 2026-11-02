@@ -100,6 +100,12 @@ pub struct TeamMutation {
 #[serde(rename_all = "camelCase")]
 pub struct GearLibrary {
     pub path: String,
+    /// The file or saved-library name for the Gear page's header (e.g. ``WAR.lua``).
+    pub name: String,
+    /// The Lua text itself.  The phase plan carries this so a client on another machine
+    /// never needs to read the launcher's file, and an account library loaded from the
+    /// server can be pushed without a local file at all.
+    pub source: String,
     pub sets: BTreeMap<String, BTreeMap<String, String>>,
     pub detailed: BTreeMap<String, BTreeMap<String, GearItem>>,
     pub job: Option<JobInfo>,
@@ -135,16 +141,6 @@ pub struct ResolvedItem {
 pub struct GearSaveResult {
     pub path: String,
     pub profile: String,
-}
-
-/// Where an edited set actually landed: a bundled job library is rewritten in place, an
-/// imported one is not (`persistent` is false and the UI points at Save version instead).
-#[derive(Clone, Debug, Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct GearLibrarySaveResult {
-    pub path: String,
-    pub backup: Option<String>,
-    pub persistent: bool,
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -2356,6 +2352,65 @@ pub async fn save_gearswap_settings(state: State<'_, AppState>, config: Value) -
     api.save_gearswap_settings(&current.token, config).await
 }
 
+fn require_gearswap_token(config: &crate::config::LauncherConfig) -> AppResult<()> {
+    if config.token.is_empty() {
+        return Err(AppError::Validation(
+            "sign in to use account GearSwap libraries".to_string(),
+        ));
+    }
+    Ok(())
+}
+
+/// The tenant account's saved GearSwap library for one job.  The character id is the
+/// launcher's tenant selector: the server resolves it to the owning account and authorizes
+/// the main token for its own characters and boxes.
+#[tauri::command]
+pub async fn gearswap_library(
+    state: State<'_, AppState>,
+    character_id: i64,
+    job: String,
+) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    require_gearswap_token(&config)?;
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.gearswap_library(&config.token, character_id, &job)
+        .await
+}
+
+/// Save an imported or edited library to the account, leaving every other account alone.
+#[tauri::command]
+pub async fn save_gearswap_library(
+    state: State<'_, AppState>,
+    character_id: i64,
+    job: String,
+    source: String,
+    name: Option<String>,
+) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    require_gearswap_token(&config)?;
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.save_gearswap_library(
+        &config.token,
+        character_id,
+        json!({"job": job, "source": source, "name": name}),
+    )
+    .await
+}
+
+/// Restore one job's account library from the template (Onedough's current set).
+#[tauri::command]
+pub async fn reset_gearswap_library(
+    state: State<'_, AppState>,
+    character_id: i64,
+    job: String,
+) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    require_gearswap_token(&config)?;
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.reset_gearswap_library(&config.token, character_id, &job)
+        .await
+}
+
 #[tauri::command]
 pub async fn send_hud(state: State<'_, AppState>, port: u16, patch: Value) -> AppResult<Value> {
     if !patch.is_object() {
@@ -2579,6 +2634,29 @@ pub async fn gear_load_file(
     load_gear_file(&state, port, Path::new(&path), None).await
 }
 
+/// Parse a library the launcher already holds — an account library fetched from the server,
+/// or a file read on another machine — without needing that path to exist locally.
+#[tauri::command]
+pub async fn gear_load_source(
+    state: State<'_, AppState>,
+    port: u16,
+    source: String,
+    path: String,
+    name: Option<String>,
+    job: Option<String>,
+) -> AppResult<GearLibrary> {
+    let name = name
+        .filter(|value| !value.trim().is_empty())
+        .or_else(|| {
+            Path::new(&path)
+                .file_name()
+                .and_then(|value| value.to_str())
+                .map(ToOwned::to_owned)
+        })
+        .unwrap_or_else(|| "gearswap.lua".to_string());
+    load_gear_source(&state, port, &source, &path, &name, job).await
+}
+
 /// The text of a GearSwap library, read where the launcher can see it. A client on another machine
 /// has none of the launcher's files, so a plan and an import carry the library's own text.
 fn read_library_source(path: &Path) -> AppResult<String> {
@@ -2593,43 +2671,68 @@ async fn load_gear_file(
     known_job: Option<String>,
 ) -> AppResult<GearLibrary> {
     let source = read_library_source(path)?;
+    let name = path
+        .file_name()
+        .and_then(|value| value.to_str())
+        .unwrap_or("gearswap.lua");
+    load_gear_source(
+        state,
+        port,
+        &source,
+        &path.to_string_lossy(),
+        name,
+        known_job,
+    )
+    .await
+}
+
+async fn load_gear_source(
+    state: &State<'_, AppState>,
+    port: u16,
+    source: &str,
+    path: &str,
+    name: &str,
+    known_job: Option<String>,
+) -> AppResult<GearLibrary> {
     let client = { state.instances.lock().await.control_for(port)? };
     let raw = client
-        .gearswap_source(&source, &path.to_string_lossy())
+        .gearswap_source(source, path)
         .await
-        .map_err(|error| {
-            AppError::Control(format!("could not load {}: {error}", path.display()))
-        })?;
+        .map_err(|error| AppError::Control(format!("could not load {name}: {error}")))?;
     let sets_tree = raw.get("sets").cloned().unwrap_or(Value::Null);
     let sets = gear::flatten_sets(&sets_tree);
     let detailed = gear::flatten_sets_detailed(&sets_tree);
     let state_value = client.state().await.ok();
-    let job = gear::job_from_state(state_value.as_ref()).or_else(|| {
-        known_job.and_then(|value| {
-            let abbr = gear::job_abbr(&Value::String(value));
-            if abbr.is_empty() {
-                None
-            } else {
-                Some(JobInfo {
-                    job_id: 0,
-                    name: abbr.clone(),
-                    abbr,
-                    level: 0,
-                    sub_job_id: 0,
-                    sub_name: String::new(),
-                    sub_abbr: String::new(),
-                    sub_level: 0,
-                    character: String::new(),
-                })
-            }
-        })
+    // A caller that names the job (an account library, or a manually picked job default) knows
+    // which library it asked for; the live job could have changed in the Mog House since the
+    // click and must not relabel the sets.  Imports pass no name, so they use the live job.
+    let known = known_job.and_then(|value| {
+        let abbr = gear::job_abbr(&Value::String(value));
+        if abbr.is_empty() {
+            None
+        } else {
+            Some(JobInfo {
+                job_id: 0,
+                name: abbr.clone(),
+                abbr,
+                level: 0,
+                sub_job_id: 0,
+                sub_name: String::new(),
+                sub_abbr: String::new(),
+                sub_level: 0,
+                character: String::new(),
+            })
+        }
     });
+    let job = known.or_else(|| gear::job_from_state(state_value.as_ref()));
     Ok(GearLibrary {
         path: raw
             .get("path")
             .and_then(Value::as_str)
-            .unwrap_or_else(|| path.to_str().unwrap_or_default())
+            .unwrap_or(path)
             .to_string(),
+        name: name.to_string(),
+        source: source.to_string(),
         sets,
         detailed,
         job,
@@ -2677,6 +2780,7 @@ pub async fn gear_phase(
     state: State<'_, AppState>,
     port: u16,
     path: Option<String>,
+    source: Option<String>,
     enabled: bool,
     engaged: Option<String>,
     idle_town: Option<String>,
@@ -2684,11 +2788,16 @@ pub async fn gear_phase(
     movement: Option<String>,
     options: Option<Value>,
 ) -> AppResult<Value> {
-    // The launcher owns the library file, so the plan carries its text: a client on another
-    // machine cannot read the launcher's path, and a local one reads the same text anyway.
-    let source = match path.as_deref() {
-        Some(value) => Some(read_library_source(Path::new(value))?),
-        None => None,
+    // The launcher owns the library, so the plan carries its text: a client on another
+    // machine cannot read the launcher's path, and an account library fetched from the
+    // server has no local file at all.  A caller with only a path still works: the old
+    // bundled-default fallback reads it here.
+    let source = match source.filter(|value| !value.is_empty()) {
+        Some(value) => Some(value),
+        None => match path.as_deref() {
+            Some(value) => Some(read_library_source(Path::new(value))?),
+            None => None,
+        },
     };
     let client = { state.instances.lock().await.control_for(port)? };
     client
@@ -2799,40 +2908,34 @@ pub async fn gear_apply_set(
 }
 
 #[tauri::command]
-pub async fn gear_save_library(
-    app: AppHandle,
+pub async fn gear_save_account_library(
     state: State<'_, AppState>,
-    path: String,
+    character_id: i64,
+    job: String,
+    name: Option<String>,
     sets: BTreeMap<String, BTreeMap<String, String>>,
     character: String,
-    job: String,
     source: String,
-) -> AppResult<GearLibrarySaveResult> {
+) -> AppResult<Value> {
     let config = state.config.lock().await.clone();
-    let repo = game::resolve_repo_root_for(&config);
-    let resource = app.path().resource_dir().ok();
-    let folder = gear::defaults_dir(repo.as_deref(), resource.as_deref());
-    let file = Path::new(&path);
-    // The bundled job libraries are the launcher's own mock libraries, so a set edited on the
-    // Gear page is written back to them (first copy as .lua.bak). An imported GearSwap file is
-    // left untouched; the UI offers Save version for that case instead.
-    if !folder
-        .as_deref()
-        .is_some_and(|defaults| gear::is_default_library(file, defaults))
-    {
-        return Ok(GearLibrarySaveResult {
-            path,
-            backup: None,
-            persistent: false,
-        });
+    require_gearswap_token(&config)?;
+    let job = job.trim().to_uppercase();
+    if !gear::JOB_ABBRS.contains(&job.as_str()) {
+        return Err(AppError::Validation(format!(
+            "unknown job for a GearSwap library: {job}"
+        )));
     }
-    let (target, backup) =
-        gear::write_library(file, &sets, &character, &job, &source, Local::now())?;
-    Ok(GearLibrarySaveResult {
-        path: target.to_string_lossy().into_owned(),
-        backup: backup.map(|value| value.to_string_lossy().into_owned()),
-        persistent: true,
-    })
+    // Re-render the edited sets as the account's library.  This is the same text the old
+    // in-place writer produced, but it is stored on the account row instead of the shared
+    // checkout file, so another character cannot change it.
+    let text = gear::serialize_library_in_place(&sets, &character, &job, &source, Local::now())?;
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.save_gearswap_library(
+        &config.token,
+        character_id,
+        json!({"job": job, "source": text, "name": name}),
+    )
+    .await
 }
 
 #[tauri::command]

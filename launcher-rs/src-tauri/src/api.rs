@@ -110,6 +110,58 @@ impl ApiClient {
         .await
     }
 
+    /// One tenant account's saved GearSwap library for a job.  The server seeds a new
+    /// account from the template account the first time this is called.
+    pub async fn gearswap_library(
+        &self,
+        token: &str,
+        character_id: i64,
+        job: &str,
+    ) -> AppResult<Value> {
+        self.request(
+            Method::GET,
+            &format!("/characters/{character_id}/gearswap/library"),
+            None,
+            Some(token),
+            Some(vec![("job".to_string(), job.to_string())]),
+        )
+        .await
+    }
+
+    /// Replace one account's library; other accounts and the shared template stay untouched.
+    pub async fn save_gearswap_library(
+        &self,
+        token: &str,
+        character_id: i64,
+        body: Value,
+    ) -> AppResult<Value> {
+        self.request(
+            Method::PUT,
+            &format!("/characters/{character_id}/gearswap/library"),
+            Some(body),
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    /// Drop the account's copy and seed it from the template again.
+    pub async fn reset_gearswap_library(
+        &self,
+        token: &str,
+        character_id: i64,
+        job: &str,
+    ) -> AppResult<Value> {
+        self.request(
+            Method::DELETE,
+            &format!("/characters/{character_id}/gearswap/library"),
+            None,
+            Some(token),
+            Some(vec![("job".to_string(), job.to_string())]),
+        )
+        .await
+    }
+
     pub async fn characters(&self, token: &str) -> AppResult<Vec<Value>> {
         let value = self
             .request(Method::GET, "/characters", None, Some(token), None)

@@ -536,9 +536,25 @@ export interface GearStatQuery {
 
 export interface GearLibrary {
   path: string;
+  /** The saved-library name shown in the Gear page header, e.g. "WAR.lua". */
+  name: string;
+  /** The Lua text, sent to the client so an account library needs no local file. */
+  source: string;
   sets: Record<string, Record<string, string>>;
   detailed: Record<string, Record<string, GearItem>>;
   job: JobInfo | null;
+}
+
+/** One account's GearSwap library for a job, as stored in the game database. */
+export interface AccountGearLibrary {
+  job: string;
+  name: string;
+  source: string;
+  updated_at: string;
+}
+
+export interface AccountGearLibraryView {
+  library: AccountGearLibrary;
 }
 
 export interface GearDefaultFile {
@@ -569,12 +585,6 @@ export interface GearSetResult {
 export interface GearSaveResult {
   path: string;
   profile: string;
-}
-
-export interface GearLibrarySaveResult {
-  path: string;
-  backup: string | null;
-  persistent: boolean;
 }
 
 export interface LaunchAllResult {

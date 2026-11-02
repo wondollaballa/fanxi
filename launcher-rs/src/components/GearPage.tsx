@@ -9,6 +9,7 @@ import {
   Pencil,
   Plus,
   RefreshCw,
+  RotateCcw,
   Save,
   Shirt,
   Sparkles,
@@ -17,6 +18,7 @@ import {
   Wand2,
 } from "lucide-react";
 import type {
+  AccountGearLibraryView,
   CharacterBagItem,
   GearDefaultFile,
   GearItem,
@@ -533,7 +535,7 @@ export function GearPage({
       backend.gearPhaseOff(instance.port).catch(() => undefined);
       return;
     }
-    if (!library?.path) {
+    if (!library?.source) {
       setPhaseError("Load a GearSwap library first.");
       return;
     }
@@ -560,6 +562,7 @@ export function GearPage({
         instance.port,
         true,
         library.path,
+        library.source,
         planEngaged,
         planTown,
         planField,
@@ -679,21 +682,15 @@ export function GearPage({
   }, [library, filter]);
 
   const selectedItems = library && selected ? library.sets[selected] ?? {} : {};
-  // The library keys carry the "sets." prefix the launcher uses; the phase plan wants the
-  // dotted path alone ("engaged.tp", "idle.town", "midcast.Healing Magic").
-  // Opening the page with a live client loads that job's default library, the way the docs
-  // describe. A job change swaps a job-named default (gearswap/NIN.lua) for the new job's,
-  // while an imported custom library is left where the user put it.
+  // Opening the page with a live client loads the account's library for that job. A job
+  // change follows the live job to the same account's next job library; an import only
+  // ever replaces the current job's account copy.
   useEffect(() => {
     if (!instance || !job) return;
     if (loadedJob.current === job.abbr) return;
     loadedJob.current = job.abbr;
-    const base = library?.path.split(/[/\\]/).pop() ?? "";
-    const jobFile = /^[A-Za-z]{3}\.lua$/.test(base);
-    if (library && !jobFile) return;
-    if (base.toLowerCase() === `${job.abbr.toLowerCase()}.lua`) return;
-    void loadDefault(job.abbr);
-  }, [instance?.port, job?.abbr, library?.path]);
+    void loadJobLibrary(job.abbr);
+  }, [instance?.port, job?.abbr]);
 
   // A new library may not carry the previous job's set names; point the state choices at sets
   // it does have, without discarding a custom path the plan builder can fall back from.
@@ -815,18 +812,50 @@ export function GearPage({
     () => Object.fromEntries(gearStats.items.map((item) => [item.slot, item])),
     [gearStats.items],
   );
-  const libraryName = library?.path.split(/[/\\]/).pop() ?? "";
+  const libraryName = library?.name || library?.path.split(/[/\\]/).pop() || "";
   const librarySetCount = library ? Object.keys(library.sets).length : 0;
 
-  async function loadDefault(jobAbbr: string) {
+  /** Load this tenant account's saved library for a job.  The server seeds a brand new
+   * account from Onedough's template, so the first open already has sets to browse. */
+  async function loadJobLibrary(jobAbbr: string) {
     if (!instance || !jobAbbr) return;
+    const characterId = Number(instance.character.id);
     setBusy("default");
     setError("");
     try {
-      const value = await backend.gearLoadDefault(instance.port, jobAbbr);
+      let saved: AccountGearLibraryView;
+      try {
+        saved = await backend.gearswapLibrary(characterId, jobAbbr);
+      } catch (caught) {
+        // A server that predates account libraries has no route for this.  Keep the old
+        // bundled default working so the page is still usable while the server is updated.
+        try {
+          const value = await backend.gearLoadDefault(instance.port, jobAbbr);
+          setLibrary(value);
+          setSelected(Object.keys(value.sets)[0] ?? null);
+          loadedJob.current = jobAbbr;
+          notify(`Loaded the bundled ${jobAbbr} default`, "info");
+          return;
+        } catch {
+          throw caught;
+        }
+      }
+      // A parse error here is the account's own saved library, not a missing server route:
+      // show it so Restore template is the obvious next step.
+      const value = await backend.gearLoadSource(
+        instance.port,
+        saved.library.source,
+        `account:${jobAbbr}`,
+        saved.library.name || `${jobAbbr}.lua`,
+        jobAbbr,
+      );
       setLibrary(value);
       setSelected(Object.keys(value.sets)[0] ?? null);
-      notify(`Loaded the ${jobAbbr} default library`, "success");
+      loadedJob.current = jobAbbr;
+      notify(
+        `Loaded ${tenant?.account ? `@${tenant.account}'s ` : ""}${jobAbbr} library`,
+        "success",
+      );
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -846,10 +875,76 @@ export function GearPage({
     setError("");
     try {
       const value = await backend.gearLoadFile(instance.port, path);
+      const targetJob = (loadedJob.current || job?.abbr || value.job?.abbr || "").toUpperCase();
+      if (!targetJob) {
+        setError("Load a job library or enter the world first, so the import knows which job to replace.");
+        return;
+      }
+      const fileName = path.split(/[/\\]/).pop() || `${targetJob}.lua`;
+      const saved = await backend.saveGearswapLibrary(
+        Number(instance.character.id),
+        targetJob,
+        value.source,
+        fileName,
+      );
+      setLibrary({
+        ...value,
+        path: `account:${targetJob}`,
+        name: saved.library.name,
+        source: saved.library.source,
+      });
+      setSelected(Object.keys(value.sets)[0] ?? null);
+      loadedJob.current = targetJob;
+      notify(
+        `Imported ${fileName} into ${targetJob} for @${tenant?.account ?? "this account"}`,
+        "success",
+      );
+      openTab("manage");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : String(caught));
+    } finally {
+      setBusy(null);
+    }
+  }
+
+  /** Replace this account's job library with a fresh copy of the template. */
+  async function restoreTemplate() {
+    if (!instance || !library) return;
+    const targetJob = (
+      loadedJob.current ||
+      library.job?.abbr ||
+      job?.abbr ||
+      ""
+    ).toUpperCase();
+    if (!targetJob) {
+      setError("Load a job library first, so Restore template knows which job to replace.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Restore the ${targetJob} library to the template? @${tenant?.account ?? "this account"}'s current ${targetJob} sets will be replaced.`,
+      )
+    ) {
+      return;
+    }
+    setBusy("reset");
+    setError("");
+    try {
+      const restored = await backend.resetGearswapLibrary(
+        Number(instance.character.id),
+        targetJob,
+      );
+      const value = await backend.gearLoadSource(
+        instance.port,
+        restored.library.source,
+        `account:${targetJob}`,
+        restored.library.name,
+        targetJob,
+      );
       setLibrary(value);
       setSelected(Object.keys(value.sets)[0] ?? null);
-      notify("Imported GearSwap sets", "success");
-      openTab("manage");
+      loadedJob.current = targetJob;
+      notify(`Restored the ${targetJob} template`, "success");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
     } finally {
@@ -1183,19 +1278,21 @@ export function GearPage({
       const sets = { ...library.sets, [setPath]: items };
       const detailed = { ...library.detailed, [setPath]: details };
       const written = await persistLibrary(sets);
-      setLibrary({ ...library, path: written.path, sets, detailed });
+      setLibrary({
+        ...library,
+        path: written.path,
+        name: written.name || library.name,
+        source: written.source || library.source,
+        sets,
+        detailed,
+      });
       closePicker();
       const name = setPath.replace(/^sets\./, "");
       const what = item ? `${slotLabel(slot)} → ${item.name}` : `${slotLabel(slot)} cleared`;
       if (written.saved) {
         notify(`Saved ${what} in ${name}`, "success");
-      } else if (written.imported) {
-        notify(
-          `Changed ${what} in ${name} in this window only — imported libraries are never modified. Use Save version to keep it.`,
-          "info",
-        );
       } else {
-        notify(`Changed ${what} in this window; the library file could not be written.`, "error");
+        notify(`Changed ${what} in ${name} in this window only; it could not be saved to the account.`, "error");
       }
     } catch (caught) {
       setPickerError(caught instanceof Error ? caught.message : String(caught));
@@ -1294,27 +1391,44 @@ export function GearPage({
     });
   }
 
-  /** Write the edited sets back to the .lua the page loaded. The bundled job libraries are
-   * rewritten in place (the first copy is kept as a .bak); an imported GearSwap file is never
-   * modified, so the edit only lives in this window and Save version is the way to keep it. */
+  /** Write the edited sets back to this account's library on the server.  Other accounts
+   * and the checkout's shared gearswap/ templates are never touched. */
   async function persistLibrary(nextSets: Record<string, Record<string, string>>) {
-    if (!library) return { path: "", saved: false, imported: false };
+    const fallback = {
+      path: library?.path ?? "",
+      saved: false,
+      name: library?.name ?? "",
+      source: library?.source ?? "",
+    };
+    if (!library || !instance) return fallback;
+    const jobAbbr = (
+      loadedJob.current ||
+      library.job?.abbr ||
+      job?.abbr ||
+      ""
+    ).toUpperCase();
+    if (!jobAbbr) {
+      setError("Load a job library first, so the edit knows which job to save.");
+      return fallback;
+    }
     try {
-      const result = await backend.gearSaveLibrary({
-        path: library.path,
+      const result = await backend.gearSaveAccountLibrary({
+        characterId: Number(instance.character.id),
+        job: jobAbbr,
+        name: library.name || null,
         sets: nextSets,
-        character: instance?.name ?? "",
-        job: job?.abbr ?? "",
+        character: instance.name,
         source: library.path,
       });
       return {
-        path: result.persistent ? result.path : library.path,
-        saved: result.persistent,
-        imported: !result.persistent,
+        path: `account:${jobAbbr}`,
+        saved: true,
+        name: result.library.name,
+        source: result.library.source,
       };
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
-      return { path: library.path, saved: false, imported: false };
+      return fallback;
     }
   }
 
@@ -1357,7 +1471,14 @@ export function GearPage({
           ];
         }),
       );
-      setLibrary({ ...library, path: written.path, sets: result.sets, detailed });
+      setLibrary({
+        ...library,
+        path: written.path,
+        name: written.name || library.name,
+        source: written.source || library.source,
+        sets: result.sets,
+        detailed,
+      });
       setSelected(result.path);
       if (editor.weaponOnly) {
         setConfig((current) => ({
@@ -1368,14 +1489,9 @@ export function GearPage({
       setEditor(null);
       const name = result.path.replace(/^sets\./, "");
       if (written.saved) {
-        notify(`Saved ${name} to ${written.path.split(/[/\\]/).pop() ?? "the library"}`, "success");
-      } else if (written.imported) {
-        notify(
-          `Added ${name} in this window only — imported libraries are never modified. Use Save version to keep it.`,
-          "info",
-        );
+        notify(`Saved ${name} to ${written.name || "the account library"}`, "success");
       } else {
-        notify(`Applied ${name} in this window; the library file could not be written.`, "error");
+        notify(`Applied ${name} in this window only; it could not be saved to the account.`, "error");
       }
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : String(caught));
@@ -1391,18 +1507,20 @@ export function GearPage({
     const detailed = { ...library.detailed };
     delete detailed[selected];
     const written = await persistLibrary(sets);
-    setLibrary({ ...library, path: written.path, sets, detailed });
+    setLibrary({
+      ...library,
+      path: written.path,
+      name: written.name || library.name,
+      source: written.source || library.source,
+      sets,
+      detailed,
+    });
     setSelected(Object.keys(sets)[0] ?? null);
     const name = selected.replace(/^sets\./, "");
     if (written.saved) {
       notify(`Removed ${name} from the library`, "info");
-    } else if (written.imported) {
-      notify(
-        `Removed ${name} in this window only — imported libraries are never modified. Use Save version to keep it.`,
-        "info",
-      );
     } else {
-      notify(`Removed ${name} in this window; the library file could not be written.`, "error");
+      notify(`Removed ${name} in this window only; it could not be saved to the account.`, "error");
     }
   }
 
@@ -1498,9 +1616,9 @@ export function GearPage({
           <div className="eyebrow">Tenant · @{tenant.account}</div>
           <h1 className="page-title">Gear &amp; GearSwap</h1>
           <p className="page-subtitle">
-            The live gear and the state sets the host wears, plus the GearSwap library that feeds
-            them. Sets are saved back to the loaded job library (the first copy stays as a .bak);
-            imported files are left untouched and Save version writes a timestamped export.
+            The live gear and the state sets the host wears, plus this account's GearSwap library
+            that feeds them. Edits and imports are saved to @{tenant.account} on the server, so
+            another character or account never changes them; Save version writes an export copy.
           </p>
         </div>
         <div className="section-actions">
@@ -1712,9 +1830,9 @@ export function GearPage({
                     variant="secondary"
                     icon={<Wand2 size={15} />}
                     loading={busy === "default"}
-                    onClick={() => void loadDefault(job.abbr)}
+                    onClick={() => void loadJobLibrary(job.abbr)}
                   >
-                    Load {job.abbr} defaults
+                    Load {job.abbr} library
                   </Button>
                 </>
               ) : (
@@ -1770,6 +1888,16 @@ export function GearPage({
                 {library && (
                   <Badge tone="neutral">{libraryName}</Badge>
                 )}
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<RotateCcw size={14} />}
+                  loading={busy === "reset"}
+                  disabled={!library}
+                  onClick={() => void restoreTemplate()}
+                >
+                  Restore template
+                </Button>
                 <Button size="sm" variant="ghost" icon={<Plus size={14} />} disabled={!library} onClick={startNew}>
                   New set
                 </Button>
@@ -1787,14 +1915,14 @@ export function GearPage({
             </div>
             <div className="library-load">
               <div className="library-load-label">
-                <span className="eyebrow">Job defaults</span>
-                <span className="muted">Load a job's bundled GearSwap file.</span>
+                <span className="eyebrow">Job libraries</span>
+                <span className="muted">Load this account's saved library for another job.</span>
               </div>
               <Select
                 value=""
                 disabled={busy === "default"}
                 onChange={(event) => {
-                  if (event.target.value) void loadDefault(event.target.value);
+                  if (event.target.value) void loadJobLibrary(event.target.value);
                 }}
               >
                 <option value="">Choose a job library…</option>

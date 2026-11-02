@@ -52,6 +52,9 @@ class Config:
     tls_key: Path = field(default_factory=lambda: Path("data/tls/auth-key.pem"))
     game_dir: Path | None = None
     huffman_dir: Path | None = None
+    # The server's copy of the bundled job libraries.  New accounts are seeded from here
+    # when the template account has no saved row for a job yet.
+    gearswap_dir: Path | None = None
     # Walkable grids derived from the player's own zone collision meshes.  The cache is
     # runtime data, never committed: it is built from the game folder on first use.
     nav_dir: Path = field(default_factory=lambda: Path("data/nav"))
@@ -61,6 +64,10 @@ class Config:
     max_characters: int = 0  # 0 = no limit
     max_subs: int = 5  # server-owned sub-accounts one main may have; 0 disables them
     auto_accept_sub_invites: bool = True  # a family sub joins a party/alliance without a prompt
+    # New accounts receive a copy of this account's saved GearSwap libraries.  When the
+    # account does not exist yet (or has no saved row for a job), the checkout's
+    # gearswap/<JOB>.lua is used instead.  That is Onedough's current set on this server.
+    gearswap_template_account: str = "onedough"
     api_session_days: int = 30
     game_session_hours: int = 12
     login_token_seconds: int = 120
@@ -83,6 +90,7 @@ class Config:
             tls_key=_path(root, "FANXI_TLS_KEY", "data/tls/auth-key.pem"),
             game_dir=Path(os.path.expanduser(game_dir)).resolve() if game_dir else None,
             huffman_dir=Path(os.path.expanduser(huffman)).resolve() if huffman else None,
+            gearswap_dir=_path(root, "FANXI_GEARSWAP_DIR", "gearswap"),
             nav_dir=_path(root, "FANXI_NAV_DIR", "data/nav"),
             nav_enabled=_bool("FANXI_NAV", True),
             admin_key=_env("FANXI_ADMIN_KEY", ""),
@@ -90,6 +98,7 @@ class Config:
             max_characters=_int("FANXI_MAX_CHARACTERS", 0),
             max_subs=_int("FANXI_MAX_SUBS", 5),
             auto_accept_sub_invites=_bool("FANXI_AUTO_ACCEPT_SUB_INVITES", True),
+            gearswap_template_account=_env("FANXI_GEARSWAP_TEMPLATE_ACCOUNT", "onedough"),
             api_session_days=_int("FANXI_SESSION_DAYS", 30),
             game_session_hours=_int("FANXI_GAME_SESSION_HOURS", 12),
             login_token_seconds=_int("FANXI_LOGIN_TOKEN_SECONDS", 120),

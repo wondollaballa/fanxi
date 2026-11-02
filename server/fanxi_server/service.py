@@ -117,6 +117,11 @@ JOB_POINT_CAPACITY = 30000
 JOB_POINT_CURRENT = 500
 JOB_POINT_SPENT = 2100
 JOB_COUNT = 22
+# Per-account GearSwap libraries live in the database so an import follows the account
+# across machines, and an edit never touches the checkout's shared gearswap/*.lua files.
+GEARSWAP_JOBS = tuple(merit_menus.JOB_ABBRS[index] for index in range(1, JOB_COUNT + 1))
+MAX_GEARSWAP_LIBRARY_BYTES = 512 * 1024
+
 # The item slots the Armory offers: weapons and ammo use the hand/range slots, armour the
 # five body slots, and accessories the seven jewellery slots.
 ARMORY_SLOTS = {
@@ -4731,6 +4736,119 @@ class FanxiService:
             "config = excluded.config, updated_at = excluded.updated_at",
             (int(account_id), encoded, now_iso()))
         return config
+
+    # --- per-account GearSwap libraries --------------------------------------------------------
+    @staticmethod
+    def _gearswap_job(job) -> str:
+        text = str(job or "").strip().upper()
+        if text not in GEARSWAP_JOBS:
+            raise ApiError(422, "validation_error", "unknown job for a GearSwap library")
+        return text
+
+    def _gearswap_template_account_id(self) -> int | None:
+        """The account whose saved libraries seed a new account, when it exists."""
+        username = (self.config.gearswap_template_account or "").strip()
+        if not username:
+            return None
+        row = self.db.one(
+            "SELECT id FROM accounts WHERE username = ? AND kind = 'main'", (username,))
+        return int(row["id"]) if row is not None else None
+
+    def _gearswap_template_file(self, job: str) -> tuple[str, str]:
+        """The server's own job library: Onedough's current set on this server."""
+        folder = self.config.gearswap_dir or (self.config.root / "gearswap")
+        path = folder / f"{job}.lua"
+        try:
+            source = path.read_text(encoding="utf-8")
+        except OSError:
+            raise ApiError(
+                404, "not_found",
+                "no %s GearSwap template is installed (expected %s)" % (job, path)) from None
+        return source, "%s.lua" % job
+
+    def _gearswap_seed_source(self, account_id: int, job: str) -> tuple[str, str]:
+        """Copy the template account's row, falling back to the checkout's file.
+
+        Onedough's account is seeded from ``gearswap/<JOB>.lua`` the first time it asks
+        for a job; every later account copies Onedough's current saved row instead, so
+        changing the shared template still only happens through Onedough's own library.
+        """
+        template_id = self._gearswap_template_account_id()
+        if template_id is not None and template_id != int(account_id):
+            row = self.db.one(
+                "SELECT source, name FROM gearswap_libraries WHERE account_id = ? AND job = ?",
+                (template_id, job))
+            if row is None:
+                self.ensure_gearswap_library(template_id, job)
+                row = self.db.one(
+                    "SELECT source, name FROM gearswap_libraries WHERE account_id = ? AND job = ?",
+                    (template_id, job))
+            if row is not None:
+                return str(row["source"]), str(row["name"] or ("%s.lua" % job))
+        return self._gearswap_template_file(job)
+
+    def ensure_gearswap_library(self, account_id: int, job: str) -> dict:
+        """One account's saved library, seeded from the template on first use."""
+        job = self._gearswap_job(job)
+        row = self.db.one(
+            "SELECT account_id, job, name, source, updated_at FROM gearswap_libraries "
+            "WHERE account_id = ? AND job = ?", (int(account_id), job))
+        if row is not None:
+            return dict(row)
+        source, name = self._gearswap_seed_source(account_id, job)
+        created = now_iso()
+        with self.db.transaction() as conn:
+            conn.execute(
+                "INSERT OR IGNORE INTO gearswap_libraries "
+                "(account_id, job, name, source, updated_at) VALUES (?, ?, ?, ?, ?)",
+                (int(account_id), job, name, source, created))
+        row = self.db.one(
+            "SELECT account_id, job, name, source, updated_at FROM gearswap_libraries "
+            "WHERE account_id = ? AND job = ?", (int(account_id), job))
+        if row is None:
+            raise ApiError(503, "gearswap_unavailable",
+                           "the GearSwap library could not be created")
+        return dict(row)
+
+    def gearswap_library(self, account_id: int, job: str) -> dict:
+        row = self.ensure_gearswap_library(account_id, job)
+        return {
+            "job": row["job"],
+            "name": row["name"],
+            "source": row["source"],
+            "updated_at": row["updated_at"],
+        }
+
+    def save_gearswap_library(self, account_id: int, job: str, source,
+                              name: str | None = None) -> dict:
+        """Replace one account's library for one job; other accounts are untouched."""
+        job = self._gearswap_job(job)
+        if not isinstance(source, str):
+            raise ApiError(422, "validation_error", "the GearSwap library must be Lua text")
+        if not source.strip():
+            raise ApiError(422, "validation_error", "the GearSwap library is empty")
+        if len(source.encode("utf-8")) > MAX_GEARSWAP_LIBRARY_BYTES:
+            raise ApiError(422, "validation_error", "the GearSwap library is too large")
+        clean_name = str(name or ("%s.lua" % job)).strip() or ("%s.lua" % job)
+        if len(clean_name) > 200 or "\n" in clean_name or "\r" in clean_name:
+            raise ApiError(422, "validation_error", "that GearSwap library name is not valid")
+        self.db.execute(
+            "INSERT INTO gearswap_libraries (account_id, job, name, source, updated_at) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(account_id, job) DO UPDATE SET "
+            "name = excluded.name, source = excluded.source, updated_at = excluded.updated_at",
+            (int(account_id), job, clean_name, source, now_iso()))
+        return self.gearswap_library(account_id, job)
+
+    def reset_gearswap_library(self, account_id: int, job: str) -> dict:
+        """Replace the account's copy with a fresh template, without losing the old row on error."""
+        job = self._gearswap_job(job)
+        source, name = self._gearswap_seed_source(account_id, job)
+        self.db.execute(
+            "INSERT INTO gearswap_libraries (account_id, job, name, source, updated_at) "
+            "VALUES (?, ?, ?, ?, ?) ON CONFLICT(account_id, job) DO UPDATE SET "
+            "name = excluded.name, source = excluded.source, updated_at = excluded.updated_at",
+            (int(account_id), job, name, source, now_iso()))
+        return self.gearswap_library(account_id, job)
 
     def registration_open(self) -> bool:
         if not self.config.registration_open:

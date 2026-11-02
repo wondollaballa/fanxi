@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
+  AccountGearLibraryView,
   ArmoryAddResult,
   ArmoryItem,
   BattleState,
@@ -19,7 +20,6 @@ import type {
   GearDefaults,
   GearItemStats,
   GearLibrary,
-  GearLibrarySaveResult,
   GearStatQuery,
   GearSaveResult,
   GearSetResult,
@@ -250,6 +250,33 @@ export const backend = {
     call<GearLibrary>("gear_load_default", { port, job }),
   gearLoadFile: (port: number, path: string) =>
     call<GearLibrary>("gear_load_file", { port, path }),
+  /** Parse library text the launcher already holds, such as the account row from the server. */
+  gearLoadSource: (
+    port: number,
+    source: string,
+    path: string,
+    name: string,
+    job: string | null,
+  ) =>
+    call<GearLibrary>("gear_load_source", { port, source, path, name, job }),
+  /** The tenant account's saved library for one job; the server seeds it on first use. */
+  gearswapLibrary: (characterId: number, job: string) =>
+    call<AccountGearLibraryView>("gearswap_library", { characterId, job }),
+  saveGearswapLibrary: (
+    characterId: number,
+    job: string,
+    source: string,
+    name: string | null,
+  ) =>
+    call<AccountGearLibraryView>("save_gearswap_library", {
+      characterId,
+      job,
+      source,
+      name,
+    }),
+  /** Restore this job's account library from the template account (Onedough by default). */
+  resetGearswapLibrary: (characterId: number, job: string) =>
+    call<AccountGearLibraryView>("reset_gearswap_library", { characterId, job }),
   gearEquip: (port: number, slot: string, item: string) =>
     call<unknown>("gear_equip", { port, slot, item }),
   gearWearSet: (port: number, items: Record<string, string>) =>
@@ -258,6 +285,7 @@ export const backend = {
     port: number,
     enabled: boolean,
     path: string | null,
+    source: string | null,
     engaged: string | null,
     idleTown: string | null,
     idleField: string | null,
@@ -268,6 +296,7 @@ export const backend = {
       port,
       enabled,
       path,
+      source,
       engaged,
       idleTown,
       idleField,
@@ -280,6 +309,7 @@ export const backend = {
       port,
       enabled: false,
       path: null,
+      source: null,
       engaged: null,
       idleTown: null,
       idleField: null,
@@ -333,13 +363,15 @@ export const backend = {
     originalPath: string | null;
     keepOriginal: boolean;
   }) => call<GearSetResult>("gear_apply_set", input),
-  gearSaveLibrary: (input: {
-    path: string;
+  /** Refresh the account's Lua after a set edit and store it on the account row. */
+  gearSaveAccountLibrary: (input: {
+    characterId: number;
+    job: string;
+    name: string | null;
     sets: Record<string, Record<string, string>>;
     character: string;
-    job: string;
     source: string;
-  }) => call<GearLibrarySaveResult>("gear_save_library", input),
+  }) => call<AccountGearLibraryView>("gear_save_account_library", input),
   gearSave: (input: {
     sets: Record<string, Record<string, string>>;
     base: string;

@@ -22,7 +22,8 @@ FANXI_LOCAL_BACKUPS, FANXI_MANAGER_CONFIG.
 
 Everything runs through `ssh` with BatchMode=yes, so it never hangs waiting for a password;
 it uses the key you already use for the box. The database is only written through the server's
-own tools (`db-backup.sh`, `create-admin`), never by a query typed at the dashboard.
+own tools (`db-backup.sh`, `create-admin`, `clone_character.py`), never by a query typed at
+the dashboard.
 """
 from __future__ import annotations
 
@@ -259,6 +260,86 @@ def migration_applied(pending: list[dict]) -> str:
     return (
         f"applied {len(pending)} migration{'s' if len(pending) != 1 else ''}: "
         + _migration_names(pending)
+    )
+
+
+CHARACTER_SEARCH_SCRIPT = r"""
+python3 - <<'PY'
+import json
+import sqlite3
+from datetime import datetime, timezone
+from pathlib import Path
+
+query = __QUERY__
+escaped = query.replace("~", "~~").replace("%", "~%").replace("_", "~_")
+now = datetime.now(timezone.utc).isoformat(timespec="milliseconds").replace("+00:00", "Z")
+path = Path("data/fanxi.db")
+characters = []
+error = ""
+if not path.is_file():
+    error = "no database at %s" % path
+else:
+    try:
+        connection = sqlite3.connect(path, timeout=10)
+        connection.row_factory = sqlite3.Row
+        characters = [dict(row) for row in connection.execute(
+            "SELECT c.id, c.name, c.main_job, c.main_level, c.account_id, "
+            "EXISTS(SELECT 1 FROM game_sessions s "
+            "       WHERE s.character_id = c.id AND s.expires_at > ?) AS session "
+            "FROM characters c "
+            "WHERE c.name LIKE ? ESCAPE '~' "
+            "ORDER BY CASE WHEN c.name = ? COLLATE NOCASE THEN 0 ELSE 1 END, "
+            "         c.name COLLATE NOCASE "
+            "LIMIT 26",
+            (now, "%" + escaped + "%", query),
+        ).fetchall()]
+        connection.close()
+    except sqlite3.Error as exc:
+        error = str(exc)
+
+print("CHARACTERS=" + json.dumps({
+    "characters": characters[:25],
+    "truncated": len(characters) > 25,
+    "error": error,
+}))
+PY
+"""
+
+
+def search_characters(config: dict, query: str) -> dict:
+    """Characters whose name contains ``query``, with enough to pick one.
+
+    Read-only. ``session`` is 1 when an unexpired ``game_sessions`` row exists; that row
+    can outlive the client by hours, so it is a warning to check the target is logged out,
+    not proof it is currently in a zone.
+    """
+    remote = shlex.quote(config["remote_dir"])
+    script = CHARACTER_SEARCH_SCRIPT.replace("__QUERY__", json.dumps(query))
+    code, output = run_remote(config, "cd " + remote + " && " + script, timeout=30)
+    for line in reversed(output.splitlines()):
+        if not line.startswith("CHARACTERS="):
+            continue
+        try:
+            state = json.loads(line.split("=", 1)[1])
+        except ValueError:
+            break
+        state["ok"] = code == 0 and not state.get("error")
+        return state
+    return {
+        "ok": False,
+        "error": output.strip()[-300:] or f"ssh exited {code}",
+        "characters": [],
+        "truncated": False,
+    }
+
+
+def clone_command(config: dict, source: str, target: str) -> str:
+    """The server-side command: the clone tool's normal backup-and-apply path."""
+    remote = shlex.quote(config["remote_dir"])
+    return (
+        f"cd {remote} && sudo -u fanxi -H python3 tools/clone_character.py "
+        f"--source={shlex.quote(source)} --target={shlex.quote(target)} "
+        f"--force --apply 2>&1"
     )
 
 
@@ -525,6 +606,19 @@ ACTIONS = [
         confirm=True,
     ),
     Action(
+        "m",
+        "Clone character",
+        "Asks who to copy and searches the database for the target by part of its name, then "
+        "runs tools/clone_character.py --force --apply on the server. The tool backs up the "
+        "database first and prints the plan before it writes.",
+        "Replaces the target's jobs, level, sub job, exp, gil, merits, Home Points, inventory, "
+        "storage, locker and worn outfit with the source's. Log the target out first: --force "
+        "only covers the server's unexpired game session row, which outlives a logout. Relog the "
+        "target afterwards. The pre-clone backup is the only undo.",
+        confirm=True,
+        danger=True,
+    ),
+    Action(
         "c",
         "Server shell",
         "Opens an interactive bash on the server with your SSH key.",
@@ -774,6 +868,59 @@ class Dashboard:
         self.draw()
         return key in (ord("y"), ord("Y"))
 
+    def choose(self, title: str, options: list[str]) -> int | None:
+        """A modal list: arrows move, Enter chooses, q cancels."""
+        if not options:
+            return None
+        self.draw()
+        height, width = self.screen.getmaxyx()
+        box_width = min(82, width - 4)
+        visible = min(len(options), max(1, height - 8))
+        box_height = visible + 4
+        y0 = max(0, (height - box_height) // 2)
+        x0 = max(0, (width - box_width) // 2)
+        try:
+            window = curses.newwin(box_height, box_width, y0, x0)
+        except curses.error:
+            return None
+        selected = 0
+        offset = 0
+        try:
+            while True:
+                window.erase()
+                window.box()
+                window.addnstr(0, 2, f" {title} ", box_width - 4, self.pair(4, curses.A_BOLD))
+                for row, index in enumerate(range(offset, offset + visible)):
+                    attr = self.pair(1, curses.A_BOLD) if index == selected else 0
+                    window.addnstr(1 + row, 2, options[index], box_width - 4, attr)
+                first = offset + 1
+                last = min(offset + visible, len(options))
+                window.addnstr(
+                    box_height - 2, 2,
+                    f"{first}-{last} of {len(options)} · ↑↓ choose · Enter run · q cancels",
+                    box_width - 4, curses.A_BOLD,
+                )
+                window.refresh()
+                self.screen.timeout(-1)
+                key = self.screen.getch()
+                if key in (curses.KEY_UP, ord("k")):
+                    selected = (selected - 1) % len(options)
+                elif key in (curses.KEY_DOWN, ord("j")):
+                    selected = (selected + 1) % len(options)
+                elif key in (10, 13, curses.KEY_ENTER):
+                    return selected
+                elif key in (ord("q"), 27):
+                    return None
+                if selected < offset:
+                    offset = selected
+                elif selected >= offset + visible:
+                    offset = selected - visible + 1
+        finally:
+            self.screen.timeout(1000)
+            del window
+            self.screen.touchwin()
+            self.draw()
+
     # -- actions ------------------------------------------------------------------------------
 
     def execute(self, action: Action) -> None:
@@ -784,6 +931,7 @@ class Dashboard:
             "p": self.do_pull,
             "l": self.show_logs,
             "g": self.do_registration,
+            "m": self.do_clone,
             "a": self.do_admin,
             "c": self.do_console,
             "e": self.do_edit,
@@ -857,6 +1005,91 @@ class Dashboard:
             self.message = "registration toggled"
         else:
             self.message = "registration toggle failed"
+
+    def do_clone(self) -> None:
+        source = self.prompt("source character", "Onedough")
+        if not source:
+            self.message = "cancelled"
+            return
+        query = self.prompt("target search (part of the name)")
+        if not query:
+            self.message = "cancelled"
+            return
+
+        found = search_characters(self.config, query)
+        if not found.get("ok"):
+            self.say("character search failed: " + found.get("error", "?"))
+            self.message = "clone cancelled"
+            return
+        matches = found.get("characters") or []
+        if not matches:
+            self.say(f"no character name matches {query!r}")
+            self.message = "clone cancelled"
+            return
+        if found.get("truncated"):
+            self.say("showing the first 25 matches; a longer search narrows the list")
+
+        if len(matches) == 1:
+            target = matches[0]
+        else:
+            labels = [
+                "%s — level %s  (id %s, account %s)%s" % (
+                    row.get("name", "?"),
+                    row.get("main_level", "?"),
+                    row.get("id", "?"),
+                    row.get("account_id", "?"),
+                    "  [unexpired game session]" if row.get("session") else "",
+                )
+                for row in matches
+            ]
+            choice = self.choose(f"copy {source} onto which character?", labels)
+            if choice is None:
+                self.message = "cancelled"
+                return
+            target = matches[choice]
+
+        target_name = str(target.get("name") or "")
+        if not target_name:
+            self.say("the search result had no name; nothing cloned")
+            self.message = "clone cancelled"
+            return
+        if target_name.casefold() == source.casefold():
+            self.say("source and target are the same character; nothing cloned")
+            self.message = "clone cancelled"
+            return
+
+        session = ""
+        if target.get("session"):
+            session = (" That character has an unexpired game session row; make sure its "
+                       "client is logged out.")
+        confirmation = Action(
+            "y",
+            f"Clone {source} onto {target_name}?",
+            "Runs tools/clone_character.py --force --apply on the server.",
+            f"Replaces {target_name}'s jobs, level, sub job, exp, gil, merits, Home Points, "
+            f"inventory, storage, locker and worn outfit with {source}'s. The tool backs up the "
+            f"database first; relog {target_name} afterwards.{session}",
+            confirm=False,
+            danger=True,
+        )
+        if not self.confirm(confirmation):
+            self.message = "cancelled"
+            return
+
+        self.say(f"cloning {source} → {target_name}…")
+        self.draw()
+        code, output = run_remote(
+            self.config, clone_command(self.config, source, target_name), timeout=300
+        )
+        for line in output.strip().splitlines():
+            self.say("  " + line)
+        if code == 0:
+            self.say(f"clone finished — relog {target_name}. If its client was at character "
+                     "select, relaunch that client or restart the server.")
+            self.message = f"clone ok — relog {target_name}"
+        else:
+            self.say("clone failed — see the log; the tool backs up before it writes")
+            self.message = "CLONE FAILED — see the log"
 
     def do_admin(self) -> None:
         username = self.prompt("admin username")

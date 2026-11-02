@@ -710,8 +710,9 @@ export function SettingsPage({
             </span>
           </label>
           <p className="gear-hint">
-            Turn it on after loading a GearSwap library on the Gear page; the launcher pushes
-            that plan to every running client and remembers the choice for the next launch.
+            Turn it on to let the launcher follow each account's saved GearSwap library for the
+            live job. It fetches that account's copy from the server and pushes the plan to every
+            running client; the choice is remembered for the next launch.
           </p>
         </Card>
       </div>
@@ -725,7 +726,7 @@ export function SettingsPage({
           <StatusRow label="Fanxi" value={host64 ?? "not built yet"} ok={Boolean(host64)} mono />
           <StatusRow label="Game folder" value={gameDir ?? (gameFolder || "not found")} ok={Boolean(gameDir || gameFolder)} mono />
           <StatusRow label="Fanxi checkout" value={repoRoot ?? (repo || "not found")} ok={Boolean(repoRoot || repo)} mono />
-          <StatusRow label="GearSwap defaults" value={gearswapDir ?? "not found"} ok={Boolean(gearswapDir)} mono />
+          <StatusRow label="GearSwap templates" value={gearswapDir ?? "not found"} ok={Boolean(gearswapDir)} mono />
         </div>
       </Card>
 

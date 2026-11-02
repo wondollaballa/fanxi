@@ -113,9 +113,9 @@ processes and control ports — and the UI never sees a stored token. It:
   pulled to the leader by itself (`//warp call <name>`);
 - completes `//` commands in the game's chat line with Tab when the typed word is unique, and
   leaves an ambiguous prefix alone until another letter narrows it;
-- reads the active gear of each client, detects its live main job, loads that job's default
-  GearSwap library, and can import/edit/save timestamped versions from the **Gear** page, with a
-  launcher-wide **GearSwap** on/off switch for players who do not want auto-swapping;
+- reads the active gear of each client, detects its live main job, loads that account's saved
+  GearSwap library for the job, and can import/edit/save timestamped versions from the **Gear**
+  page, with a launcher-wide **GearSwap** on/off switch for players who do not want auto-swapping;
 - stores the game folder and finds `Fanxi`;
 - builds the client from your own game files (it creates `.venv`, installs `capstone` and
   `pefile`, and streams the build log);

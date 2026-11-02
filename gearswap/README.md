@@ -1,11 +1,18 @@
 # Mock GearSwap set libraries (one per job)
 
-Twenty-two self-contained GearSwap-style `.lua` files. They are the launcher's
-built-in defaults for each job as well as ordinary importable files. Each covers
+Twenty-two self-contained GearSwap-style `.lua` files. They are Onedough's current
+set and the server's template for new accounts as well as ordinary importable files.
+Each covers
 the gear categories the Gear window can display and equip: idle/DT, max HP, max
 PDT/MDT, TP (including accuracy, dual-wield and hybrid variants), fast cast,
 Macc/MAB midcasts, weaponskills, job abilities, enmity, and the job-specific
 pet/ranged sets.
+
+Each account gets its own database copy of every job file the first time its Gear
+page reads that job. The copy comes from the template account (Onedough by
+default) or, when that account has no saved row yet, from these files. Editing or
+importing in the launcher writes only the account's copy, never these shared
+templates, so another character or account cannot change them.
 
 These are **mock libraries**, not a claim of best-in-slot. Item names come from
 retail gear (mostly iLvl 119); the numbers behind them are not modelled anywhere in Fanxi
@@ -64,20 +71,24 @@ the reasoning.
 
 1. Start a client from the Control room.
 2. **Gear** in the sidebar (or **Gear & GearSwap** in the Control room).
-3. The window detects the live main job and loads the matching `<JOB>.lua`
-   automatically. Use the **Defaults** dropdown and **Load** to open another job,
-   or **Import your own…** to pick any GearSwap `.lua` instead.
+3. The window detects the live main job and loads this account's saved copy of
+   the matching `<JOB>.lua` automatically. A new account starts from the template
+   account's current set (Onedough's, by default) or from these files. Use the
+   **Job libraries** dropdown and **Load** to open another job's saved copy, or
+   **Import your own…** to pick any GearSwap `.lua` and save it to the account
+   for the current job.
 4. Fanxi status shows `Loaded N sets from …/WAR.lua`.
 5. Select a set to see its slot → item list. **Wear set** sends every `0x050`
    for the set in the same frame, the way GearSwap's equip burst does, so a
    precast or midcast set lands all at once instead of arriving piece by piece.
    **New set…**, **Duplicate** and **Edit set…** open the 16-slot form;
-   **Save version…** writes a timestamped copy where you choose (Downloads by
-   default); the first change asks for that folder once, then later edits
-   auto-save new versions there.
+   **Save version…** writes a timestamped export where you choose (Downloads by
+   default).
 
-Importing only parses the file. **Wear set** additionally needs the items to
-exist in the character's bags; see [Item coverage](#item-coverage) below.
+Importing parses the file and saves it as the account's library for the current
+job; the shared `gearswap/*.lua` templates are never modified. **Wear set**
+additionally needs the items to exist in the character's bags; see
+[Item coverage](#item-coverage) below.
 
 ## Precast and midcast
 

@@ -18,6 +18,8 @@ echo "== hud cooldowns"
 python3 tests/hud_cool_test.py
 echo "== magic bag"
 python3 tests/magic_bag_test.py
+echo "== equip view"
+python3 tests/equipview_hud_test.py
 echo "== corsair pickers"
 python3 tests/cor_hud_test.py
 echo "== trust actions"

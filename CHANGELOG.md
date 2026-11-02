@@ -1,5 +1,55 @@
 # Changelog
 
+## Unreleased — the Equip View wears the client's equip window
+
+- **The in-game EquipViewer now looks like the game's own equip menu.**  The window paints the
+  client's blue **Equip View** title bar and bevel, the pale set line under it (`no set`,
+  `idle.dt`, or `WS.Blitz` in gold while a weaponskill holds its set), and the thin rule the
+  client draws below the set name.  The 4×4 grid is one flush block of the game's item icons
+  (they already carry the equip screen's coloured backgrounds); the cells grew to 51 px and
+  the icons fill them.
+- **No label row under the boxes.**  A slot's name is no longer written below its icon: the
+  cells touch, and an empty cell carries its slot name as a faint watermark *inside* the box,
+  exactly like the client's item picker labels an empty tile (`Range`, `L.Ear`, `R.Ring`, …).
+  Tooltips still name the item, and a `//gs lock`ed slot keeps its red border.  Collapsed, the
+  title bar keeps naming the set and its age.
+- **The window closes its ImGui frame again.**  It had been leaving `End()` to the addon guard,
+  which also left the hub's style vars pushed until the guard cleaned them up.
+- Tests: `tests/equipview_hud_test.py` runs the real grid geometry and pins the flush cells,
+  the in-box watermark, the item-icon cells, the painted title bar and `api.End()`.
+  Added to `scripts/test.sh`.  The HUD Lua is embedded in host64, so runtime 0.2.92 makes the
+  launcher rebuild a client that still carries the old window.
+
+## Unreleased — account-owned GearSwap libraries
+
+- **A GearSwap library belongs to the account, not the checkout.**  The Gear page used to write
+  edited sets into the shared `gearswap/<JOB>.lua` files, so one character could change the
+  library every account loaded.  Migration `0177_gearswap_libraries.sql` adds a
+  `gearswap_libraries` row per account and job, and `GET/PUT/DELETE
+  /characters/{id}/gearswap/library` reads, replaces and resets it.  The launcher loads the
+  tenant account's row instead of the checkout file and sends its Lua text to the client, so a
+  box on another machine uses the same account copy.
+- **A new account starts from Onedough's current set.**  The first read of a job seeds the
+  account from `FANXI_GEARSWAP_TEMPLATE_ACCOUNT` (default `onedough`); when that account has no
+  saved row yet, the server's `FANXI_GEARSWAP_DIR/<JOB>.lua` (default `gearswap/`) is used.  The
+  copy is independent afterwards, so editing or importing on one account never reaches another.
+- **Imports and edits are saved to the account.**  **Import .lua** now stores the parsed file as
+  the current job's account library, **Restore template** puts a fresh template copy back, and
+  every set edit writes the account row instead of a shared file.  The Gear page also follows a
+  live job change to that account's library for the new job, and the auto-swap plan is pushed
+  from the same server copy.  A server that predates the route still falls back to the bundled
+  default so the page keeps working during an upgrade.
+
+## Unreleased — clone a character from the dashboard
+
+- **The admin dashboard can clone a character onto another one it finds in the database.**  The
+  new **Clone character** action (`m`) asks for the source (Onedough by default), searches
+  character names by any part of the name, shows the matches with their level and id, and runs
+  `tools/clone_character.py --force --apply` on the server after a second confirmation.  It warns
+  when the target still has an unexpired game-session row, because that usually means the client
+  should be logged out first.  The clone tool's own pre-clone backup and relog instructions are
+  unchanged.
+
 ## Unreleased — deploy verifies migrations
 
 - **The dashboard's deploy now proves the schema matches the code.**  The service still applies

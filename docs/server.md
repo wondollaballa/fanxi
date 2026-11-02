@@ -111,12 +111,26 @@ once.
 | POST | `/characters` | `{name, race, face, hair, size, nation, main_job, sub_job?}` | `201 {character}` |
 | PATCH | `/characters/{id}` | `{name}` | `{character}` |
 | PATCH | `/characters/{id}/design` | `{race?, face?, hair?, size?}` | `{character}` |
+| GET | `/characters/{id}/gearswap/library` | `?job=WAR` | `{library: {job, name, source, updated_at}}` |
+| PUT | `/characters/{id}/gearswap/library` | `{job, source, name?}` | `{library}` |
+| DELETE | `/characters/{id}/gearswap/library` | `?job=WAR` query | `{library}` reseeded from the template |
 | POST | `/launch` | `{character_id?}` | `{login_token, expires_at, account, character, world, client}` |
 | GET | `/accounts/sub` | — | `{subs: [...], limit}` |
 | POST | `/accounts/sub` | `{character?: {...}}` | `201 {sub, limit}` |
 | POST | `/accounts/sub/{id}/launch` | `{character_id?}` | same shape as `/launch` |
 | POST | `/accounts/sub/{id}/characters` | `{name?, race?, ...}` | `201 {character}` |
 | DELETE | `/accounts/sub/{id}` | `purge=1` query | suspend, or purge |
+
+`GET /characters/{id}/gearswap/library` reads the library owned by the character's account,
+not by the character. `?job=` is the three-letter job (`WAR`, `RDM`, …); the first read for an
+account copies the template account's current row for that job (`FANXI_GEARSWAP_TEMPLATE_ACCOUNT`,
+default `onedough`) or, when that account has no row yet, the server's
+`FANXI_GEARSWAP_DIR/<JOB>.lua`. `PUT` replaces only that account's row, so a character editing or
+importing a library never changes another account. `DELETE` replaces that account's row with a
+fresh template copy; the old row stays if the template cannot be read, so a reset cannot destroy a
+library when the bundled file is missing. The main account's token may use any character it owns,
+including its sub-accounts' characters; another account's character id returns `404`. Libraries are
+capped at 512 KB and the HTTP body limit is 2 MB so a full hand-written GearSwap file fits.
 
 `GET /characters/{id}/data` is the launcher's one-round-trip Data snapshot; its
 `merits.categories` list carries all 50 merit menus and 274 rows in the client's order, with
@@ -235,6 +249,7 @@ Everything is environment-driven. The command line for `run` can override the ma
 | `FANXI_DB` | `data/fanxi.db` | SQLite file |
 | `FANXI_GAME_DIR` | auto-detect | Folder containing `FFXiMain.dll` and `res/compress.dat` |
 | `FANXI_HUFFMAN` | — | Folder containing `compress.dat` (wins over game dir) |
+| `FANXI_GEARSWAP_DIR` | `gearswap` | Template folder for new account libraries (`<JOB>.lua`) |
 | `FANXI_NAV_DIR` | `data/nav` | Walkable zone grids built from the game's collision meshes |
 | `FANXI_NAV` | `1` | `0` disables collision-aware monster movement (legacy straight-line chase) |
 | `FANXI_ADMIN_KEY` | empty | If empty, only `role = admin` accounts can use admin endpoints |
@@ -242,6 +257,7 @@ Everything is environment-driven. The command line for `run` can override the ma
 | `FANXI_MAX_CHARACTERS` | `0` | Per account; `0` means unlimited |
 | `FANXI_MAX_SUBS` | `5` | Server-owned sub-accounts per main; `0` disables them |
 | `FANXI_AUTO_ACCEPT_SUB_INVITES` | `1` | Accept a party/alliance invite to a family sub without the `0x0DC` prompt |
+| `FANXI_GEARSWAP_TEMPLATE_ACCOUNT` | `onedough` | New account libraries copy this account's current saved set |
 | `FANXI_SESSION_DAYS` | `30` | Launcher token lifetime |
 | `FANXI_LOGIN_TOKEN_SECONDS` | `120` | Launch token lifetime |
 | `FANXI_GAME_SESSION_HOURS` | `12` | Game session lifetime |
@@ -365,9 +381,16 @@ server. It drives the steps above over SSH and shows the state between them:
 | `l` | scroll the journal |
 | `g` | toggle registration on/off |
 | `a` | create or reset an admin (interactive, over a tty) |
+| `m` | clone a character: asks for the source, searches the database for the target, confirms, then runs `tools/clone_character.py --force --apply` |
 | `c` | open a shell on the server |
 | `e` | edit `~/.fanxi-manager.json` |
 | `r` | refresh now |
+
+Clone character is destructive: it replaces the target's jobs, level, sub job, exp, gil, merits,
+Home Points, inventory, storage, locker and worn outfit with the source's. The target must be
+logged out; `--force` only covers the server's still-unexpired launch row for a client that is
+already back at the lobby. `clone_character.py` takes a pre-clone database backup, and the target
+needs a relog afterwards.
 
 The menu is navigable three ways — ↑↓ and Enter, a mouse click, or the hotkey in the label — and
 the pane beside it explains the selected action and states its risk. Anything that changes the
@@ -387,7 +410,8 @@ Two non-interactive modes use the same code, so they can be scripted:
 ```
 
 It uses `ssh -o BatchMode=yes` with your existing key, so it fails fast instead of prompting, and it
-only touches the database through the server's own commands (`db-backup.sh`, `create-admin`).
+only writes the database through the server's own commands (`db-backup.sh`, `create-admin`,
+`clone_character.py`); the character search is a read-only query.
 
 ### Backups
 

@@ -6382,7 +6382,7 @@ end
 hud.force_pos = { fanxi_battle = true, fanxi_party = true }
 
 local function hub_window_begin(api, title, id, x, y, width, height, opacity, summary, close,
-                                extra_flags)
+                                extra_flags, skin)
     local screen_w, screen_h = hud_screen_size(api)
     local edit = hud.state.edit
     width = math.min(width, math.max(320, screen_w - 8))
@@ -6417,6 +6417,14 @@ local function hub_window_begin(api, title, id, x, y, width, height, opacity, su
         2 + 256 + (edit and 8192 or 0) + (extra_flags or 0))
     local wx, wy = api.GetWindowPos()
     local now_collapsed = hud.collapse_observe(api, id)
+    -- A hub may paint its own frame over the ImGui title bar.  It runs after Begin (so the
+    -- caption is hidden under the paint) and before the collapsed early-out (so a minimised
+    -- bar keeps the same frame).  It gets the window rectangle and whether the window is
+    -- collapsed, and is responsible for its own clip: the content clip starts below the bar.
+    if skin then
+        local ww, wh = api.GetWindowSize()
+        skin(api, wx, wy, ww, wh, now_collapsed)
+    end
     if not open then
         api.End()
         api.PopStyleVar(2)
@@ -9462,10 +9470,14 @@ local function hub_tick()
 end
 
 -- --- Equip View ------------------------------------------------------------------------------
--- The in-game EquipViewer.  Every frame reads the worn pieces straight out of the client (the
--- same equipment indexes the launcher's gear command reads), so a swap draws the instant it
--- happens -- what the original addon bought with its 0x050 packet hook.  The collapsed title bar
--- carries the set the phase engine is wearing, the one thing the icons alone cannot say.
+-- The in-game EquipViewer, wearing the client's own equip window: the blue title bar, the set
+-- line under it, and a flush 4x4 grid of the game's item icons (which carry the coloured
+-- background the equip screen shows). Every frame reads the worn pieces straight out of the
+-- client (the same equipment indexes the launcher's gear command reads), so a swap draws the
+-- instant it happens -- what the original addon bought with its 0x050 packet hook. The collapsed
+-- title bar carries the set the phase engine is wearing, the one thing the icons alone cannot say.
+-- There is no label row under the cells: the boxes touch, and an empty box carries its slot
+-- name as a watermark inside it, the way the client's item picker labels an empty tile.
 -- Everything lives on `hud` rather than in locals: hud_init is at LuaJIT's 200-local limit,
 -- and these helpers are only ever called from hud.frame.
 
@@ -9484,6 +9496,24 @@ hud.equipview_labels = {
     ear1 = 'L.Ear', ear2 = 'R.Ear', body = 'Body', hands = 'Hands', ring1 = 'L.Ring',
     ring2 = 'R.Ring', back = 'Back', waist = 'Waist', legs = 'Legs', feet = 'Feet',
 }
+
+-- BEGIN Equip View grid geometry
+-- A cell's top-left in window-content pixels.  The four columns touch: there is no gutter and
+-- no label row, so the 4x4 grid is one flush block like the client's item picker.
+function hud.equipview_cell_rect(index, x, y, cell)
+    local col = (index - 1) % 4
+    local row = math.floor((index - 1) / 4)
+    return x + col * cell, y + row * cell
+end
+
+-- The text inside a cell: none while the slot holds an item (the icon says it), and the slot
+-- name while it is empty, drawn as the box's watermark.  It is never a label under the box.
+function hud.equipview_cell_text(id, label)
+    if (tonumber(id) or 0) > 0 then return nil end
+    return label
+end
+-- END Equip View grid geometry
+
 hud.equipview_names = {}
 
 function hud.equipview_name(id)
@@ -9515,6 +9545,7 @@ function hud.equipview_set()
     return status.actionSet or status.set or 'no set', status
 end
 
+-- BEGIN Equip View window
 function hud.equipview_window(api)
     local set_name, status = hud.equipview_set()
     local action_set = status and status.actionSet or nil
@@ -9524,59 +9555,182 @@ function hud.equipview_window(api)
         summary = set_name .. string.format('  %.1fs', status.actionMs / 1000)
     end
     local state = hud.state
+    -- 4 cells of 51 px touch with no gutter: the game's item picker lays its boxes out the same
+    -- way, which is what leaves no room for the old label row under each icon.
+    local cell = 51
+    local width, height = 216, 268
     -- A negative saved position means "not placed yet": park it in the top-right corner, out of
     -- the default action-window columns, and save the computed place after the first draw.
     local screen_w = select(1, hud_screen_size(api))
     local x, y = state.equipview.x, state.equipview.y
     if x < 0 or y < 0 then
-        x = math.max(8, screen_w - 218 - 16)
+        x = math.max(8, screen_w - width - 16)
         y = 80
     end
-    -- NoScrollbar (8): the grid is laid out to fit; ImGui's bar only took a column and clipped
-    -- the last row. The window is a few pixels taller than the old 292 to give it margin.
+
+    -- The game's equip window: a blue title bar over a dark panel.  The window keeps ImGui's
+    -- title bar (it is what drags and collapses); this paints the game's frame over it in the
+    -- window's own draw list, so it stays under every window raised after this one.  The content
+    -- clip starts below the title bar, so the paint pushes a clip for the full window.
+    local title_height = api.GetFrameHeight and api.GetFrameHeight() or 24
+    local function frame(a, wx, wy, ww, wh, collapsed)
+        local draw = a.GetWindowDrawList()
+        local bar_bottom = collapsed and wh or title_height
+        local pad_x = 4
+        if a.GetStyle then
+            local ok, style = pcall(a.GetStyle)
+            if ok and style and style.FramePadding and style.FramePadding[1] then
+                pad_x = style.FramePadding[1]
+            end
+        end
+        local clipped = draw.PushClipRect ~= nil
+        if clipped then draw:PushClipRect({ wx, wy }, { wx + ww, wy + wh }, false) end
+        if draw.AddRectFilledMultiColor then
+            draw:AddRectFilledMultiColor({ wx, wy }, { wx + ww, wy + bar_bottom },
+                hud_color(96, 130, 178, 255), hud_color(96, 130, 178, 255),
+                hud_color(43, 68, 106, 255), hud_color(43, 68, 106, 255))
+        else
+            draw:AddRectFilled({ wx, wy }, { wx + ww, wy + bar_bottom },
+                hud_color(62, 91, 134, 255))
+        end
+        -- Bevel: a lit top edge and a dark bottom edge, like the client's menu bars.
+        draw:AddRectFilled({ wx, wy }, { wx + ww, wy + 1 }, hud_color(214, 230, 250, 46))
+        draw:AddRectFilled({ wx, wy + bar_bottom - 1 }, { wx + ww, wy + bar_bottom },
+            hud_color(0, 0, 0, 110))
+        -- Caret, over ImGui's own collapse button so a click toggles the window like the game.
+        local font_size = a.GetFontSize and a.GetFontSize() or 18
+        local ax, ay = wx + pad_x + font_size * 0.5, wy + bar_bottom * 0.5
+        local white = hud_color(242, 247, 253, 255)
+        if collapsed then
+            draw:AddTriangleFilled({ ax - 3, ay - 4 }, { ax - 3, ay + 4 }, { ax + 3, ay }, white)
+        else
+            draw:AddTriangleFilled({ ax - 4, ay - 3 }, { ax + 4, ay - 3 }, { ax, ay + 3 }, white)
+        end
+        local tx = wx + pad_x + font_size + 8
+        local ty = wy + math.floor((bar_bottom - 16) / 2)
+        a.PushFont(nil, 16)
+        draw:AddText({ tx + 1, ty + 1 }, hud_color(0, 0, 0, 130), 'Equip View')
+        draw:AddText({ tx, ty }, white, 'Equip View')
+        local tw = a.CalcTextSize('Equip View')
+        a.PopFont()
+        if collapsed and summary ~= '' then
+            a.PushFont(nil, 11)
+            local sx = tx + tw + 9
+            local sy = wy + math.floor((bar_bottom - 11) / 2) + 1
+            draw:AddText({ sx + 1, sy + 1 }, hud_color(0, 0, 0, 110), summary)
+            draw:AddText({ sx, sy }, hud_color(206, 221, 241, 235), summary)
+            a.PopFont()
+        end
+        -- The client frames each menu window with a 1 px pale border.
+        draw:AddRect({ wx + 0.5, wy + 0.5 }, { wx + ww - 0.5, wy + wh - 0.5 },
+            hud_color(150, 163, 180, 66), 0, 0, 1)
+        if clipped then draw:PopClipRect() end
+    end
+
+    -- Even if an old host cannot paint the frame, the title bar is still blue and the caption
+    -- still white; the paint only replaces it when every primitive is there.
+    local tinted = api.PushStyleColor ~= nil
+    if tinted then
+        api.PushStyleColor(2, hud_color(21, 24, 32, 255))   -- WindowBg
+        api.PushStyleColor(10, hud_color(58, 88, 132, 255)) -- TitleBg
+        api.PushStyleColor(11, hud_color(64, 96, 142, 255)) -- TitleBgActive
+        api.PushStyleColor(12, hud_color(52, 80, 120, 255)) -- TitleBgCollapsed
+    end
+    -- NoScrollbar (8) + NoScrollWithMouse (16): the 4x4 block is sized to fit; the wheel must
+    -- not shift a window that never shows a bar.
     local open = hub_window_begin(api, 'Equip View', 'fanxi-equipview',
-        x, y, 218, 300, state.opacity, summary, nil, 8)
-    if not open then return end
+        x, y, width, height, state.opacity, summary, nil, 24, frame)
+    if not open then
+        if tinted then api.PopStyleColor(4) end
+        return
+    end
     local px, py = api.GetWindowPos()
     state.equipview.x, state.equipview.y = px, py
 
-    -- The live set: gold while an action holds its own set (a weaponskill's), plain otherwise.
-    hub_text(api, action_set and HUB_C.gold or HUB_C.text, set_name)
+    local draw = api.GetWindowDrawList()
+    local cx, cy = api.GetCursorScreenPos()
+    local content_w = cell * 4
+
+    -- The set line, in the game's pale grey; gold while an action holds its own set.
+    api.PushFont(nil, 16)
+    local name_color = action_set and hub_rgba(HUB_C.gold) or hud_color(218, 223, 230, 255)
+    draw:AddText({ cx + 1, cy + 2 }, hud_color(0, 0, 0, 120), set_name)
+    draw:AddText({ cx, cy + 1 }, name_color, set_name)
+    local name_w = api.CalcTextSize(set_name)
+    api.PopFont()
     if action_set and status and status.actionMs then
-        api.SameLine(0, 8)
-        hub_text(api, HUB_C.dim, string.format('%.1fs', status.actionMs / 1000))
+        api.PushFont(nil, 11)
+        draw:AddText({ cx + name_w + 9, cy + 4 },
+            hud_color(152, 163, 178, 255), string.format('%.1fs', status.actionMs / 1000))
+        api.PopFont()
     end
-    api.Separator()
+    -- The thin rule the client draws under the set line.
+    draw:AddRectFilled({ cx, cy + 21 }, { cx + content_w, cy + 22 },
+        hud_color(150, 162, 178, 58))
 
     local locked = {}
     if status and type(status.lockedSlots) == 'table' then
         for _, index in ipairs(status.lockedSlots) do locked[index] = true end
     end
-    local draw = api.GetWindowDrawList()
-    local size = 40
+    local grid_top = cy + 27
+    local edge = hud_color(142, 155, 172, 155)
+    local edge_hot = hud_color(232, 242, 253, 235)
+    local tile = hud_color(10, 12, 17, 220)
+    local slot = hud_color(38, 43, 54, 232)
     for i, entry in ipairs(hud.equipview_slots) do
-        if (i - 1) % 4 > 0 then api.SameLine(0, 4) end
-        api.BeginGroup()
+        local x0, y0 = hud.equipview_cell_rect(i, cx, grid_top, cell)
+        local x1, y1 = x0 + cell, y0 + cell
+        -- An invisible button per box gives the tooltip and the hover edge without drawing a
+        -- second copy of the cell over the icon.
+        api.SetCursorScreenPos({ x0, y0 })
+        api.InvisibleButton('##fanxi-equipview-' .. entry.key, { cell, cell })
+        local hovered = api.IsItemHovered()
         local id = hud.equipview_worn(entry.kind)
+        -- The client's item icons already carry the coloured background the equip screen shows
+        -- (green/blue/white by item kind), so they are drawn edge to edge in the cell.
         local texture = id > 0 and hud_item_texture(id) or nil
+        draw:AddRectFilled({ x0, y0 }, { x1, y1 }, texture and tile or slot)
         if texture then
-            api.Image(texture, { size, size })
+            if draw.AddImageRounded then
+                draw:AddImageRounded(texture, { x0 + 1, y0 + 1 }, { x1 - 1, y1 - 1 },
+                    { 0, 0 }, { 1, 1 }, hud_color(255, 255, 255, 255), 2, 0)
+            else
+                draw:AddImage(texture, { x0 + 1, y0 + 1 }, { x1 - 1, y1 - 1 },
+                    { 0, 0 }, { 1, 1 }, hud_color(255, 255, 255, 255))
+            end
         else
-            api.Dummy({ size, size })
+            -- No label row under the grid any more: an empty box wears its slot name as the
+            -- watermark the client's item picker puts in an empty tile.
+            local label = hud.equipview_cell_text(id, hud.equipview_labels[entry.key])
+            if label then
+                draw:AddRectFilled({ x0 + 2, y0 + 1 }, { x1 - 2, y0 + 2 },
+                    hud_color(255, 255, 255, 14))
+                api.PushFont(nil, 13)
+                local lw, lh = api.CalcTextSize(label)
+                if lw > cell - 4 then
+                    api.PopFont()
+                    api.PushFont(nil, 11)
+                    lw, lh = api.CalcTextSize(label)
+                end
+                local lx = x0 + (cell - lw) / 2
+                local ly = y0 + (cell - lh) / 2
+                draw:AddText({ lx + 1, ly + 1 }, hud_color(0, 0, 0, 120), label)
+                draw:AddText({ lx, ly }, hud_color(228, 237, 248, 104), label)
+                api.PopFont()
+            end
         end
-        local x0, y0 = api.GetItemRectMin()
-        local x1, y1 = api.GetItemRectMax()
+        local pinned = locked[entry.kind] == true
         draw:AddRect({ x0, y0 }, { x1, y1 },
-            locked[entry.kind] and hud_color(220, 74, 74, 255) or HUD_COLOR_BORDER, 3, 0,
-            locked[entry.kind] and 2 or 1)
-        api.PushFont(nil, 9)
-        hub_text(api, HUB_C.dim, hud.equipview_labels[entry.key])
-        api.PopFont()
-        api.EndGroup()
+            pinned and hud_color(228, 76, 84, 245) or (hovered and edge_hot or edge),
+            2, 0, pinned and 2 or 1)
         local name = hud.equipview_name(id)
         api.SetItemTooltip((name or '(empty)') .. '\n' .. hud.equipview_labels[entry.key])
     end
+    api.End()
+    api.PopStyleVar(2)
+    if tinted then api.PopStyleColor(4) end
 end
+-- END Equip View window
 
 local function hub_draw(api)
     if hud.state.show_inventory then

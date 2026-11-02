@@ -70,9 +70,9 @@ function liveJobAbbr(state: unknown): string {
   return job >= 1 && job <= JOB_ABBRS.length ? JOB_ABBRS[job - 1] : "";
 }
 
-// The plan's library is stored from the last session. When the character logs in on another
-// job, a job-named default (gearswap/NIN.lua) has to follow the live job, or the first push
-// would keep the old job's sets until the Gear page is opened.
+// Fallback for an older server without account libraries: the plan's last local path is used,
+// and a job-named default (gearswap/NIN.lua) follows the live job so the first push does not
+// keep the old job's sets until the Gear page is opened.
 async function libraryForLiveJob(library: string, state: unknown): Promise<string> {
   const abbr = liveJobAbbr(state);
   if (!abbr) return library;
@@ -87,6 +87,21 @@ async function libraryForLiveJob(library: string, state: unknown): Promise<strin
     // Fall through to the sibling path; the client's host reloads the job file itself too.
   }
   return library.replace(/[^/\\]+$/, `${abbr}.lua`);
+}
+
+/** The tenant account's saved library for the live job, or null when the server route is
+ * unavailable (an older server) so the local-file fallback can take over. */
+async function accountLibraryFor(
+  characterId: number,
+  job: string,
+): Promise<{ path: string; source: string } | null> {
+  if (!characterId || !job) return null;
+  try {
+    const saved = await backend.gearswapLibrary(characterId, job);
+    return { path: `account:${job}`, source: saved.library.source };
+  } catch {
+    return null;
+  }
 }
 const PAGES: Page[] = [
   "home",
@@ -347,8 +362,9 @@ export default function App() {
     }
 
     phaseOffSent.current.clear();
-    const library = localStorage.getItem("fanxi.phase.library");
-    if (!library) return;
+    // The account row is the normal source now.  This cached path is only the fallback for a
+    // server that predates per-account libraries.
+    const storedLibrary = localStorage.getItem("fanxi.phase.library") ?? "";
     const config = loadPhaseConfig();
     const engaged = config.engaged;
     const idleTown = config.idleTown;
@@ -381,13 +397,33 @@ export default function App() {
           // The switch can be turned off while this request is in flight; do not let a late
           // push re-arm a client the user just stopped.
           if (!gearSwapOnRef.current) return;
-          const liveLibrary = await libraryForLiveJob(library, state);
+          const liveJob = liveJobAbbr(state);
+          const view = instances.find((item) => item.port === port);
+          const characterId = Number(view?.character?.id ?? 0);
+          let liveLibrary = "";
+          let librarySource: string | null = null;
+          const accountLibrary = await accountLibraryFor(characterId, liveJob);
+          if (accountLibrary) {
+            liveLibrary = accountLibrary.path;
+            librarySource = accountLibrary.source;
+            localStorage.setItem("fanxi.phase.library", liveLibrary);
+          } else {
+            const fallback = localStorage.getItem("fanxi.phase.library") ?? storedLibrary;
+            // "account:WAR" is a server row, not a file.  If the row could not be read, wait
+            // for the next poll instead of handing the path to the file reader.
+            if (!fallback || fallback.startsWith("account:")) return;
+            liveLibrary = await libraryForLiveJob(fallback, state);
+            if (!liveLibrary) return;
+            if (liveLibrary !== fallback) {
+              localStorage.setItem("fanxi.phase.library", liveLibrary);
+            }
+          }
           if (!gearSwapOnRef.current) return;
-          if (liveLibrary !== library) localStorage.setItem("fanxi.phase.library", liveLibrary);
           const status = await backend.gearPhase(
             port,
             true,
             liveLibrary,
+            librarySource,
             engaged,
             idleTown,
             idleField,
@@ -402,7 +438,7 @@ export default function App() {
           }
           if (!status?.player || !(status.rules ?? 0)) return;
           phasePushed.current.add(port);
-          phasePushedJob.current.set(port, liveJobAbbr(state));
+          phasePushedJob.current.set(port, liveJob);
           // The first push can land while the client is still filling its bags, which leaves a
           // plan that wears only some of a set. A second push a few seconds later is complete.
           if (!phaseRepush.current.has(port)) {
@@ -414,6 +450,7 @@ export default function App() {
                   port,
                   true,
                   liveLibrary,
+                  librarySource,
                   engaged,
                   idleTown,
                   idleField,

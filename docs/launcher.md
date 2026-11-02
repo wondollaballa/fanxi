@@ -437,6 +437,11 @@ select when the copy ran, relaunch that client or restart the server. A prepared
 a parked zone-change session keeps its old character dict through the next login, so the first
 login can still show level 1 and fail every equip check even though the database row is correct.
 
+The admin dashboard's **Clone character** action (`m` in `tools/fanxi_tui.py`) does the same over
+SSH: it asks for the source (Onedough is the default), searches the database by part of the target's
+name and lets you pick from the matches, then runs `clone_character.py --force --apply` after a
+confirmation.
+
 If only the **items** should match — keeping each mule's jobs, gil, merits and progression — use
 the inventory-only tool:
 
@@ -485,21 +490,26 @@ LIVE PARTY row, or with **Gear / GearSwap** beside the command console. **change
 name and sends the client's own `0x050` equip packet if the item is in one of its bags.
 
 On open the window asks the client for its `state`, shows the live **main and support job** pair
-(with both levels) in the **Live job** header, and loads the main job's default library from the
-checkout's `gearswap/<JOB>.lua` (bundled into
-the macOS app; `FANXI_GEARSWAP_DIR` overrides the folder). While the client is still at the
-character-select screen there is no live job, so the character's saved main and support jobs are
-used instead and
+(with both levels) in the **Live job** header, and loads **this account's saved library** for the
+main job from the game database. A new account is seeded on its first read: every job's copy comes
+from the template account (`FANXI_GEARSWAP_TEMPLATE_ACCOUNT`, Onedough by default), or from the
+server's `gearswap/<JOB>.lua` (`FANXI_GEARSWAP_DIR` on the server; the launcher's bundled copy is
+only the fallback when that server route is unavailable) when the template account has no saved
+row yet. That is how a new account starts from Onedough's current set without sharing a file with
+anyone. While the client is still at the character-select screen there is no live job, so the
+character's saved main and support jobs are used instead and
 the header says **saved job**; press **Refresh** after entering the world for the live one. The
-launcher reads the library itself and sends its text to the client, so the same window works for a
+launcher reads the saved Lua itself and sends its text to the client, so the same window works for a
 box on another machine (see [headless-multibox.md](headless-multibox.md)): that host never needs a
 copy of the checkout's `gearswap/` folder.
 
 The window is split into two tabs. **Sets** holds the live gear, the live job and the state groups.
 **Manage** holds the GearSwap library browser, the set editor and the saved versions. Its **Job
-defaults** dropdown loads any of the 22 bundled job libraries, and **Import .lua** reads a GearSwap
-file with the same sandbox as before. The strip at the top names the loaded library and its set
-count, marks **Sets** while auto-swap is on, and jumps to **Manage** after an import.
+libraries** dropdown loads the account's saved library for any of the 22 jobs, **Import .lua**
+reads a GearSwap file with the same sandbox as before and saves it to the account for the current
+job, and **Restore template** replaces that job's copy with a fresh one from the template account.
+The strip at the top names the loaded library and its set count, marks **Sets** while auto-swap is
+on, and jumps to **Manage** after an import.
 
 Sets can be managed without leaving the window:
 
@@ -517,9 +527,8 @@ Sets can be managed without leaving the window:
   click immediately.
 - **The selected set's preview is an inline editor for one piece.** Clicking a slot opens the same
   bag list, filtered and marked **in set** for the copy the set already holds; the row you click
-  replaces that slot in the set and writes the library right away (an imported library stays a
-  window-only change), and **Clear slot** removes the piece. Use **Edit** for a multi-slot change
-  and **Wear set** to put the set on.
+  replaces that slot in the set and saves the account's library right away, and **Clear slot**
+  removes the piece. Use **Edit** for a multi-slot change and **Wear set** to put the set on.
 
 The selected set's preview is more than icons. Each slot card lists the item's own tooltip (the
 base stats the client draws) followed by the augment lines stored on that slot in the GearSwap
@@ -556,12 +565,14 @@ then the card says it is waiting for the live sheet. The refresh button re-reads
 Manage tab's **Set totals** remain the client-tooltip/augment view for a GearSwap set; they are a
 set preview, not the live character sheet.
 
-Editing a bundled job library writes the sets back to `gearswap/<JOB>.lua` as soon as they
-change, so a new weaponset or an edited idle set survives a logout, a relaunch and a job change.
-The first write keeps the previous file as `gearswap/<JOB>.lua.bak`. An imported GearSwap file is
-still never modified: an edit there lives in the window until **Save version…** writes a
-timestamped copy (includes and event code are not evaluated, so that copy holds only the sets the
-launcher showed).
+Editing any library saves the sets back to the account's row for that job as soon as they change,
+so a new weaponset or an edited idle set survives a logout, a relaunch and a job change. The
+checkout's `gearswap/<JOB>.lua` files are only templates now and are never written by the Gear
+page, so a change on one account cannot affect another. An imported GearSwap file is stored as the
+account's library for the current job; later edits are saved over it. The editor round-trips the
+flattened set table only (includes and event code are not evaluated), so a file with custom
+functions is preserved on import until the first edit and **Save version…** remains the way to keep
+a timestamped export outside the account row.
 
 On the Sets tab, the phase engine is split into the groups the player thinks in:
 
@@ -605,7 +616,8 @@ Phase settings are stored in the game database, not only in the WebView's localS
 `gearswap_settings` row is keyed by account; the launcher hydrates the localStorage cache from it
 during bootstrap, writes the account row back after a short debounce, and folds in-game `//modes`
 changes through `phase_status`. An existing localStorage config is migrated to the DB on the first
-signed-in bootstrap.
+signed-in bootstrap. The Lua itself lives in `gearswap_libraries`, one row per account and job, so
+it is separate from the shared templates and from every other account's copy.
 
 The phase header shows the live state and set (`Kiting · idle.pdt`), the rule counts and the
 launcher-wide **Turn GearSwap off/on** switch. The same switch is in **Settings → GearSwap**. It
@@ -618,17 +630,19 @@ suppresses every automatic swap until **Unlock** or **a job change** — the new
 releases the lock and the session pins, so the new job's weapon is worn instead of the old one's.
 Its action windows may still wear their own armour, and the four weapon slots stay as locked
 except for the two sanctioned swaps (a cast while disengaged, a Bard's Nitro song), which are
-restored when the action resolves. A job change reloads the job-named default library and
-re-pushes the plan, from the gear page or the launcher's own poll, so a box on another machine
-gets the new job's sets too; the Home dashboard and Live job card follow the running client's own
-job and zone. See
+restored when the action resolves. A job change reloads the account's saved library for the new job
+(each account has one copy per job) and re-pushes the plan, from the gear page or the launcher's
+own poll, so a box on another machine gets the new job's sets too; the Home dashboard and Live job
+card follow the running client's own job and zone. The launcher fetches the library for the live
+job from the server and sends its Lua text with the plan, so the phase engine follows the same
+per-account copy the Gear page edits. See
 [control-panel.md](control-panel.md#precast-midcast-and-idle-states) for the mapping and timing.
 
 **Save version…** asks where to write the file (the OS Downloads folder by default) and saves a
 new GearSwap `.lua` named `<character>-<JOB>-YYYYMMDD-HHMMSS.lua`. The name is a timestamped
 version: the previous files are never overwritten. A JSON copy is written to
 `<data dir>/gearswap/<version>.json` for the Control room's **Saved Gear Versions** list. This is
-an export, separate from the in-place save of the bundled job library.
+an export, separate from the account row that already holds the current sets.
 
 Migration `0066_gearswap_grant.sql` resolves the names in the default libraries to real item ids
 and grants the missing ones to the first character's wardrobes; `0089_gearswap_reforged_grant.sql`
@@ -641,13 +655,14 @@ in. Items put into storage with `//storage store` need `//storage grab <job|all>
 `//storage organize`) first.
 
 If no job can be read yet (the client has not reached its first frame), the window says so;
-**Refresh** retries, or pick a job in Manage's **Job defaults** dropdown.
+**Refresh** retries, or pick a job in Manage's **Job libraries** dropdown.
 
 Limitations:
 
-- an imported GearSwap file is read, never modified; edits are saved to a new version. A bundled
-  job library is the launcher's own mock library and is rewritten in place (first copy as
-  `.lua.bak`) so the sets survive a relog;
+- an imported GearSwap file is stored as the account's library for the current job; the first edit
+  re-renders it from the flattened set table, so custom functions and comments from the original
+  file are not round-tripped. The shared `gearswap/<JOB>.lua` templates are never modified by the
+  Gear page, so no character can change another account's library;
 - the reforged set rows were placeholders: migration 92 fills their `item_mods` and skill
   bonuses from the client's stat lines, so the stats are real. Migration 95 fills every visible
   item's grap model (the reforged sets get their original tier's look) and installs triggers that

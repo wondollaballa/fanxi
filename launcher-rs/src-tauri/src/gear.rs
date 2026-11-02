@@ -474,8 +474,20 @@ pub fn serialize_library(
     serialize_library_with(sets, character, job, source, when, false)
 }
 
-/// `in_place` writes the file the Gear page loaded, so the header says the launcher edits it
-/// instead of telling the reader to re-import a timestamped copy.
+/// Rewrite the account's saved library after a set edit.  This is the old in-place file
+/// rendering, except the text goes to the server row instead of a shared checkout file.
+pub fn serialize_library_in_place(
+    sets: &BTreeMap<String, BTreeMap<String, String>>,
+    character: &str,
+    job: &str,
+    source: &str,
+    when: DateTime<Local>,
+) -> AppResult<String> {
+    serialize_library_with(sets, character, job, source, when, true)
+}
+
+/// `in_place` renders the account's saved library, so the header says the launcher edits that
+/// account's copy instead of telling the reader to re-import a timestamped export.
 fn serialize_library_with(
     sets: &BTreeMap<String, BTreeMap<String, String>>,
     character: &str,
@@ -500,7 +512,7 @@ fn serialize_library_with(
         writeln!(out, "    Updated {}", when.format("%Y-%m-%d %H:%M:%S")).ok();
         writeln!(
             out,
-            "    The launcher writes sets back to this file; the first copy is kept as a .bak."
+            "    This is this account's saved library; other accounts and the shared templates are separate."
         )
         .ok();
     } else {
@@ -578,7 +590,7 @@ fn serialize_library_with(
     if in_place {
         writeln!(
             out,
-            "-- Fanxi launcher; this file is the loaded job library. The first copy was kept as a .bak."
+            "-- Fanxi account library; edits are saved to this account, not to another account or the template."
         )
         .ok();
     } else {
@@ -590,39 +602,6 @@ fn serialize_library_with(
     }
     writeln!(out).ok();
     Ok(out)
-}
-
-/// Write the edited sets back to the library the Gear page loaded. The first copy of the file is
-/// kept as `<name>.lua.bak`, so the launcher does not destroy a library it was told to edit.
-pub fn write_library(
-    path: &Path,
-    sets: &BTreeMap<String, BTreeMap<String, String>>,
-    character: &str,
-    job: &str,
-    source: &str,
-    when: DateTime<Local>,
-) -> AppResult<(PathBuf, Option<PathBuf>)> {
-    if path.extension().and_then(|ext| ext.to_str()) != Some("lua") {
-        return Err(AppError::Validation(format!(
-            "{} is not a .lua library",
-            path.display()
-        )));
-    }
-    let text = serialize_library_with(sets, character, job, source, when, true)?;
-    let mut backup = None;
-    if path.is_file() {
-        let name = path
-            .file_name()
-            .and_then(|name| name.to_str())
-            .unwrap_or("library.lua");
-        let candidate = path.with_file_name(format!("{name}.bak"));
-        if !candidate.exists() {
-            std::fs::copy(path, &candidate)?;
-        }
-        backup = Some(candidate);
-    }
-    std::fs::write(path, text)?;
-    Ok((path.to_path_buf(), backup))
 }
 
 pub fn sanitize_name(value: &str) -> String {
@@ -765,13 +744,6 @@ fn has_lua(folder: &Path) -> bool {
         .unwrap_or(false)
 }
 
-/// Whether a loaded library came from the bundled job defaults folder. Those are the libraries
-/// the launcher owns and may write back; an imported file is never modified in place.
-pub fn is_default_library(path: &Path, folder: &Path) -> bool {
-    let canon = |value: &Path| std::fs::canonicalize(value).unwrap_or_else(|_| value.to_path_buf());
-    canon(path).starts_with(canon(folder))
-}
-
 pub fn default_file(folder: &Path, job: &str) -> Option<PathBuf> {
     let abbr = job_abbr(&Value::String(job.to_string()));
     if abbr.is_empty() {
@@ -900,31 +872,7 @@ mod tests {
     }
 
     #[test]
-    fn only_bundled_libraries_are_written() {
-        let folder = std::env::temp_dir().join(format!(
-            "fanxi-gear-defaults-{}-{}",
-            std::process::id(),
-            when().timestamp()
-        ));
-        std::fs::create_dir_all(&folder).unwrap();
-        let inside = folder.join("NIN.lua");
-        std::fs::write(&inside, "-- sets\n").unwrap();
-        assert!(is_default_library(&inside, &folder));
-        let outside = std::env::temp_dir().join("SomebodyElses.lua");
-        assert!(!is_default_library(&outside, &folder));
-        std::fs::remove_dir_all(&folder).ok();
-    }
-
-    #[test]
-    fn writes_a_library_back_with_one_backup() {
-        let folder = std::env::temp_dir().join(format!(
-            "fanxi-gear-write-{}-{}",
-            std::process::id(),
-            when().timestamp()
-        ));
-        std::fs::create_dir_all(&folder).unwrap();
-        let file = folder.join("NIN.lua");
-        std::fs::write(&file, "-- original\n").unwrap();
+    fn serializes_an_account_library_in_place() {
         let mut sets = BTreeMap::new();
         sets.insert(
             "sets.weaponset.katana".to_string(),
@@ -933,20 +881,15 @@ mod tests {
                 ("sub".to_string(), "Kikoku".to_string()),
             ]),
         );
-        let (target, backup) = write_library(&file, &sets, "Onedough", "NIN", "", when()).unwrap();
-        assert_eq!(target, file);
-        let backup = backup.expect("the first write keeps the original");
-        assert!(backup.exists());
-        assert_eq!(std::fs::read_to_string(&backup).unwrap(), "-- original\n");
-        let text = std::fs::read_to_string(&file).unwrap();
+        let text =
+            serialize_library_in_place(&sets, "Onedough", "NIN", "account:NIN", when()).unwrap();
         assert!(text.contains("sets.weaponset.katana = {"));
         assert!(text.contains("sub = \"Kikoku\""));
-        assert!(text.contains("kept as a .bak"));
-        // A second write reuses the first backup instead of replacing it.
-        let (_, second) = write_library(&file, &sets, "Onedough", "NIN", "", when()).unwrap();
-        assert_eq!(second.as_deref(), Some(backup.as_path()));
-        assert_eq!(std::fs::read_to_string(&backup).unwrap(), "-- original\n");
-        std::fs::remove_dir_all(&folder).ok();
+        assert!(text.contains("Updated 2026-10-21 09:23:19"));
+        assert!(text.contains("Source: account:NIN"));
+        assert!(text.contains("this account's saved library"));
+        assert!(!text.contains(".bak"));
+        assert!(!text.contains("Re-import this file"));
     }
 
     #[test]

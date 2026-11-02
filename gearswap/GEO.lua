@@ -4,7 +4,7 @@
 
     Import : Launcher -> Gear -> Import GearSwap file... -> GEO.lua
     Wear   : select a set, then "Wear set". Items must be in bags 0-17.
-    Save   : "Save profile" writes JSON under the launcher's gearswap folder.
+    Template: each account starts from this copy and edits its own saved library.
 
     This file is a static set library: no includes, no windower/player calls,
     no rules.  Fanxi's importer runs get_sets() in a Lua 5.1 sandbox and shows

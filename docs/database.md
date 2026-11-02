@@ -64,6 +64,7 @@ The current schema is migrations `0001_initial.sql`, `0002_world_content.sql` an
 | `char_locker` | Hidden 9,999-slot locker | `character_id`, `item_id`, `extra`, `quantity`, `stored_at` |
 | `char_live_state` | What a reconnect gets back (migration 0145) | `character_id` (primary key), `effects`, `food`, `recasts` (JSON), `updated_at` |
 | `char_settings` | Per-character gameplay preferences (migration 0133) | `character_id`, `key` (`auto_open_doors`, `battle_profile`, `joachim_songs`, `trust_actions`), `value` |
+| `gearswap_libraries` | Per-account GearSwap Lua, one row per job (migration 0177) | `account_id`, `job`, `name`, `source`, `updated_at`; the first read seeds from the template account or `gearswap/<JOB>.lua` |
 | `quests` | Quest definitions | `quest_key`, `name`, reward, `required_template_id`, `required_kills` |
 | `char_quests` | Quest progress | `character_id`, `quest_id`, `state` (`active`/`complete`), `progress` |
 

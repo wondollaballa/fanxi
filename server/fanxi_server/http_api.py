@@ -22,7 +22,10 @@ from .game import augment_gear, capes, glyptics, magian, mezzotint, moonshade, s
 from .service import ApiError, FanxiService, GIL_MAX
 
 log = logging.getLogger("fanxi.http")
-MAX_BODY = 64 * 1024
+# A GearSwap library is sent as JSON text; a full job file is ~40 KB and a hand-written
+# one can be larger.  2 MB leaves room for JSON escaping while the service still caps the
+# stored library itself at 512 KB.
+MAX_BODY = 2 * 1024 * 1024
 
 
 @dataclass
@@ -128,6 +131,14 @@ class Api:
         route("POST", r"/api/v1/launch")(self.launch)
         route("GET", r"/api/v1/gearswap")(self.gearswap_settings)
         route("POST", r"/api/v1/gearswap")(self.save_gearswap_settings)
+        # Per-account GearSwap libraries follow the tenant character, so the main token can
+        # read and edit its boxes' libraries without a second login.
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/gearswap/library")(
+            self.gearswap_library)
+        route("PUT", r"/api/v1/characters/(?P<character_id>\d+)/gearswap/library")(
+            self.save_gearswap_library)
+        route("DELETE", r"/api/v1/characters/(?P<character_id>\d+)/gearswap/library")(
+            self.reset_gearswap_library)
         route("GET", r"/api/v1/battle/team")(self.battle_team)
         route("PUT", r"/api/v1/battle/team/(?P<character_id>\d+)")(self.save_battle_profile)
         # server-owned sub-accounts; the main account's token is the only key
@@ -286,6 +297,30 @@ class Api:
         saved = self.service.save_gearswap_settings(
             int(request.account["id"]), body.get("config"))
         return json_response(200, {"config": saved})
+
+    # --- per-account GearSwap libraries --------------------------------------------------------
+    def gearswap_library(self, request: Request) -> Response:
+        """The tenant account's saved library for one job (`?job=WAR`), seeded on first use."""
+        row = self._data_character(request)
+        library = self.service.gearswap_library(
+            int(row["account_id"]), request.arg("job") or "")
+        return json_response(200, {"library": library})
+
+    def save_gearswap_library(self, request: Request) -> Response:
+        """Store one account's library after an import or a set edit."""
+        row = self._data_character(request)
+        body = request.json()
+        library = self.service.save_gearswap_library(
+            int(row["account_id"]), body.get("job"), body.get("source"),
+            body.get("name"))
+        return json_response(200, {"library": library})
+
+    def reset_gearswap_library(self, request: Request) -> Response:
+        """Drop the account's copy and seed it from the template again."""
+        row = self._data_character(request)
+        library = self.service.reset_gearswap_library(
+            int(row["account_id"]), request.arg("job") or "")
+        return json_response(200, {"library": library})
 
     def battle_team(self, request: Request) -> Response:
         assert request.account

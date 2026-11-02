@@ -80,7 +80,9 @@ Commands the launcher uses:
 In the launcher, the Gear window is under **Gear** in the sidebar (or **Gear & GearSwap** in the
 Control room, or by double-clicking a live row). It follows the global tenant bar: the selected
 tenant's running client supplies the live gear. Its **Import GearSwap file…** button is the entry
-point for a user's `.lua` sets.
+point for a user's `.lua` sets; the parsed file is saved as that account's library for the current
+job, and the Gear page edits the same row. The shared `gearswap/<JOB>.lua` files are only the
+template for a new account.
 
 ### Follow
 
@@ -335,21 +337,25 @@ for HTTP and libcurl through LuaJIT FFI for HTTPS.
 
 ![Target Debuffs title-bar collapse, close and Hide controls](images/target-debuffs-controls.png)
 
-**Equip View.** The in-game EquipViewer: a 4×4 grid of the worn pieces in Windower's order
-(main/sub/range/ammo, head/neck/ears, body/hands/rings, back/waist/legs/feet), drawn with the
-game's own item icons and read from the client every frame, so a gear swap draws the instant it
-happens — what the original addon bought with its `0x050` packet hook. Each cell labels its slot
-and its tooltip names the item; a pinned slot (`//gs lock`) draws a red border. Minimised, the
-title bar carries the set the GearSwap engine is wearing: `WS.Blitz` in gold, with its age, while
-a weaponskill holds its own set, otherwise the state set (`idle.dt`, `engaged.tp`, …). It is on by
-default; `//equipview on|off|toggle|reset` (or the **Equip View** switch in the Control room)
-toggles it, and `reset` parks it in the top-right corner. Position and collapsed state persist per
-character.
+**Equip View.** The in-game EquipViewer, styled as the client's own equip window: the blue
+**Equip View** title bar, the set line under it, and a flush 4×4 grid of the worn pieces in
+Windower's order (main/sub/range/ammo, head/neck/ears, body/hands/rings, back/waist/legs/feet).
+The cells touch — there is no label row under the icons — and the game's own item icons fill
+them, carrying the equip screen's coloured backgrounds. An empty slot names itself *inside* the
+box as a faint watermark, the way the client's item picker labels an empty tile; a tooltip names
+every item, and a pinned slot (`//gs lock`) draws a red border.
+The window is read from the client every frame, so a gear swap draws the instant it happens —
+what the original addon bought with its `0x050` packet hook. Minimised, the title bar carries the
+set the GearSwap engine is wearing: `WS.Blitz` in gold, with its age, while a weaponskill holds
+its own set, otherwise the state set (`idle.dt`, `engaged.tp`, …). It is on by default;
+`//equipview on|off|toggle|reset` (or the **Equip View** switch in the Control room) toggles it,
+and `reset` parks it in the top-right corner. Position and collapsed state persist per character.
 
-![Equip View showing the worn idle.dt set, with the set name above the 4x4 grid](images/equip-view.png)
+![Equip View showing the worn idle.dt set](images/equip-view.png)
 
 **Collapsing hubs.** Every hub keeps the normal ImGui title bar: click the **caret** to collapse it
-to that one title bar, and click again to expand. While collapsed, the title bar shows the hub's
+to that one title bar, and click again to expand. (Equip View paints the game's blue bar over its
+title bar but keeps that caret and the drag.) While collapsed, the title bar shows the hub's
 key status:
 
 - **Stats**: DPS, TP/sec and FPS.
@@ -870,10 +876,12 @@ The original ammo is put back about 1.2 seconds after the action, with retries. 
 ammo is in the bags, the action is blocked and the chat log says why. Typed `/ra`, `/throw`,
 `/shoot` and `/ranged` commands are guarded before they reach the client as well.
 
-A job change reloads a job-named default library (`gearswap/NIN.lua` for NIN) in the host and in
-the launcher, so the new job's sets are worn without reopening the page. The plan is rebuilt when
-the library, the client, the job or a set choice changes; it is not re-resolved for every action,
-so items moved out of the slot the plan recorded are simply not equipped.
+A job change reloads the account's saved library for the new job in the host and in
+the launcher, so the new job's sets are worn without reopening the page. The launcher fetches the
+Lua from the server and sends its text, so a box on another machine uses the same account copy.
+The plan is rebuilt when the library, the client, the job or a set choice changes; it is not
+re-resolved for every action, so items moved out of the slot the plan recorded are simply not
+equipped.
 
 ### EquipViewer
 
@@ -936,8 +944,9 @@ burst, so a set lands atomically instead of one slot per frame; pieces already w
 alone and the notice shows the round trip (for example `Wore 16 pieces in 31 ms`).
 
 The window also loads the live client's main job from `state` (or the character's saved main job
-while the client is still at the character-select screen) and its default `gearswap/<JOB>.lua`
-library. **New set…** / **Duplicate** / **Edit set…** open a 16-slot editor, and
+while the client is still at the character-select screen) and that account's saved library for the
+job. A new account is seeded from the template account's current set (Onedough by default) or the
+server's `gearswap/<JOB>.lua`. **New set…** / **Duplicate** / **Edit set…** open a 16-slot editor, and
 **Save version…** serializes the current `sets` table back to a GearSwap `.lua`. The version name is
 `<character>-<JOB>-YYYYMMDD-HHMMSS.lua`, written where the user chooses (Downloads by default);
 later edits auto-save another timestamped file in the same folder. A JSON copy is written to
@@ -945,7 +954,8 @@ later edits auto-save another timestamped file in the same folder. A JSON copy i
 
 This is intentionally a safe subset:
 
-- the source file is never written;
+- the shared `gearswap/<JOB>.lua` templates and other accounts' rows are never written; edits go to
+  the selected tenant account's own `gearswap_libraries` row;
 - included libraries are not evaluated;
 - augments are carried as data and shown read-only in the Gear window (`*`, or `R30` for
   Odyssey armour and weapons); same-name cape and Nyame builds flatten to one base name for Wear
@@ -984,7 +994,7 @@ account flow, but mule targeting and unlimited characters need the new server.
 | session expired | that account's token was revoked; **Accounts → Sign in again** |
 | GearSwap parse/load error | the file uses an include or a global the sandbox does not stub |
 | `not in this character's bags` | the item name did not match an item in bags 0–17 |
-| `No WAR default library found` | `gearswap/WAR.lua` is missing; set `FANXI_GEARSWAP_DIR` or use **Import your own…** |
+| `No WAR default library found` | the server has no saved row for the account and no `gearswap/WAR.lua` template; set the server's `FANXI_GEARSWAP_DIR` or use **Import your own…** |
 
 ## Next steps
 
