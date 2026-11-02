@@ -262,6 +262,23 @@ heal = floor(maxHP * fTP(spent TP))
 
 The TP value is the bar at the moment the move finishes, before the server empties it.
 
+## Base damage
+
+For every weapon except hand-to-hand, the weapon damage in stage 1 is the item's
+listed `DMG`.  Hand-to-hand is additive: retail gives a character a natural fist
+damage rating from H2H skill and then adds the weapon's own DMG to it.
+
+```
+natural_h2h = floor(H2H_skill * 0.11) + 3
+weapon_DMG  = item_DMG + natural_h2h        -- H2H only
+```
+
+At level 99 a MNK has 424 H2H skill; an iLvl 119 III Prime weapon carries
+`Hand-to-Hand skill +277`, so the skill used here is 701 and the natural term is 80.
+A Varga Purnikawa (DMG 213) therefore contributes **293**, not 213, to every
+auto-attack and Maru Kala hit.  The term is not part of `weapon_rank` (below): the
+rank stays `floor((item_DMG + 3) / 9)`, which is 24 for that weapon.
+
 ## fSTR
 
 The STR-versus-VIT term added to weapon damage. Players use weapon rank:
@@ -917,8 +934,10 @@ they are easy to revisit:
   are importer placeholders (`5 + 2*level`, `level/2`, `75 + level`, `10 + level`), not
   retail stats. The derived curve above is the authority; the columns stay for future
   family data.
-- **Hand-to-hand** is one hit per attack round. Retail lands two (one per fist), so H2H
-  currently swings at half the real rate.
+- **Hand-to-hand** swings twice per attack round, one result per fist.  Both use the
+  main-hand fighter (the same knuckle, full STR/Attack); the second result carries
+  animation 1 so the client plays the left-hand punch.  The natural H2H skill damage
+  is part of the weapon rating for those hits and for H2H weapon skills.
 - **Parry, guard and block reductions.** The proc rates are retail; how much damage each
   one removes is not modelled by the reference server, so the numbers in `combat.py` are
   documented approximations.  A block is worth more than a parry, and both are worth more

@@ -409,6 +409,10 @@ models while the lock is on, so an equipment change cannot repaint the character
 Main and sub are the exception: they always follow the equipped weapon, so a two-hander
 becoming a one-hander plus a shield (or any other weapon swap) draws the new graphics even
 with the lock on; the armour keeps the locked look.
+An H2H main hand is the one case where the sub look is not a sub item: retail writes the
+same model with the `+0x1000` left-fist tag into the sub slot (wire value `model + 0x8000`),
+and without it the client draws only the main-hand knuckle.  `_apply_equip_model` mirrors
+an H2H main hand into the sub look and clears it when another main hand is equipped.
 A job change clears the lock and forgets its models, as in retail, and sends message 268 when
 the lock was on. The server-side `//job` command then locks the outfit it just dressed: it
 snapshots the new models, sends message 267 with a fresh `0x051`, and replaces the character's

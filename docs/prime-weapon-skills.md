@@ -4,6 +4,56 @@ Research note and implementation, 2026-10-25.  It answers why the Prime dagger s
 looked weak in the 2026-10-25 session, lists the retail mechanics Fanxi did not model, and
 documents the physical Prime Aftermath added in this pass.
 
+## Update, 2026-11-02 — Varga Purnikawa: the missing natural H2H damage
+
+A MNK with the iLvl 119 III **Varga Purnikawa** reported two problems: the left hand
+looked bare and never punched, and **Maru Kala** was weaker than retail on the same
+mob.  Both were server-side.
+
+- **The H2H natural damage was missing from the base.**  `stats._damage_rating` used
+  the item's DMG whenever `weapon.dmg > 0` and only fell back to the natural fist
+  rating for an unarmed hand.  Retail is additive (BG-wiki, "Hand-to-Hand"): base H2H
+  damage is `floor(H2H skill × 0.11) + 3`, and the weapon's DMG is added to it.  At
+  701 H2H skill (424 at level 99 + the weapon's `Hand-to-Hand skill +277`) the
+  natural term is **80**, so Varga contributes **293**, not 213, to every auto-attack
+  and every Maru Kala hit.  That is a 37% larger weapon rating before fTP and pDIF.
+- **The rank was computed from the wrong number.**  Weapon rank stays
+  `floor((item DMG + 3) / 9)` = 24 for Varga; it does not include the natural term.
+  `build_character` now passes the item's DMG to `combat.weapon_rank`, which leaves
+  the fSTR cap at retail's value instead of overstating it by the 80-point term.
+- **The client had no left-hand H2H model.**  Retail sends the H2H model a second
+  time in the sub look with the `+0x1000` tag (`charutils.cpp` sets
+  `look.sub = model + 0x1000`, which the packet writes as `model + 0x8000`).
+  Fanxi sent 0 there whenever the sub slot was empty, so the client drew only the
+  main-hand knuckle.  `_apply_equip_model` now mirrors an H2H main hand into the sub
+  look and removes the mirror when another main hand is equipped.
+- **Auto-attacks were one fist.**  The attack round only iterated two hands when a
+  sub weapon made a `sub_fighter`; H2H had none, so a round sent one result and the
+  client played one punch.  H2H rounds now send two results, `[0, 1]`, both from the
+  main-hand fighter: the left fist is the same knuckle, not a half-STR off-hand.
+
+**Expected change.**  Maru Kala at 1,000 TP gets 80 more base on each of its two hits
+before fTP: roughly `80 × 3.128` on the first and `80 × 1.0` on the second, then pDIF
+and the target's damage taken.  The auto-attack round also lands twice per delay
+instead of once, so TP per round and auto-attack DPS roughly double.  The WS's own
+fTP, WSC and hit count were already retail's.
+
+**The self-chain was already server-correct.**  Maru Kala's three properties
+(`Detonation, Compression, Distortion`) close Gravitation and then Darkness; see
+`docs/skillchains.md` ("Self-chains") and the new
+`test_skillchain.SkillchainTest.test_maru_kala_self_chains_gravitation_then_darkness`.
+The in-game Battle hub/control HUD tables were stale, though: they carried only WS ids
+1-16 and 239, so Maru Kala (231) was unknown to the planner.  Both tables are now
+generated from `data/weapon_skill_properties.json`.  The runtime still requires a close
+**more than 3 s** after the previous WS, inside the 11 s/10 s windows, and 1,000 TP per
+cast; a property-only planner will show the chain even when the TP cycle cannot.
+
+Tests: `test_combat.HandToHandSheetTest` pins the 293 rating and the rank of 24;
+`test_world.CombatStatsTest.test_hand_to_hand_swings_both_fists` pins the `[0, 1]`
+round; and `test_world.EquipBatchTest.test_hand_to_hand_wears_its_model_on_both_hands`
+pins the two-hand model.  The formulas are also in `docs/combat-damage.md`
+("Base damage").
+
 ## Update, 2026-10-27
 
 The weapon-skill path now resolves the whole round — the skill's native hits, Double/Triple/
@@ -258,7 +308,7 @@ case).
 | Area | What happens now | Effect |
 |---|---|---|
 | Ranged WS path | `World.player_attack` always uses `sheet.fighter` (main hand); there is no ranged attack round | Sarv (Pinaka) and Terminus (Earp) use the melee weapon's DMG/skill.  A RNG with a dagger main hand gets dagger damage. |
-| Hand-to-hand | One swing per attack round | Maru Kala's owner loses half auto-attack DPS; the WS itself is two hits and is fine. |
+| Hand-to-hand | Two swings per round (one per fist), and the base includes the natural H2H damage | Maru Kala's auto-attacks and both WS hits now use the full `item DMG + natural H2H` rating. |
 | Origin | No `weapon_skill_effects` row | HP/MP absorb missing.  Retail is roughly 5–10% of damage as HP and 0.5–1% as MP, and undead are immune. |
 | Prime item stat blocks | Migration 165 gives every iLvl 119 III Prime its skill cap, STR/DEX/VIT/INT/MND, Accuracy, Magic Accuracy, weapon traits and Parrying/Guarding/Shield rows.  Two non-physical lines are not modelled: `Magic Accuracy skill +277` (no magic-accuracy skill stat in this engine) and Duban's `All status ailment resistance +20`. | The physical numbers are retail's.  Only those two non-physical lines are absent. |
 | Earlier Prime forms | Migration 164 retargets stage 1–4 items in bags, slips, locker, equipped set and purchase history to the final iLvl 119 III id; the Armory sells only that id. | A character cannot end up fighting with a Non AG Prime by buying or holding an earlier stage. |
@@ -269,19 +319,22 @@ case).
 
 ## Is the damage formula wrong?
 
-No.  The physical skill path is doing what it says:
+It was, for hand-to-hand.  The physical skill path is otherwise doing what it says:
 
 - WSC is summed per stat and floored (`weapon_skills.py`, `wsc_for`).
 - fTP is interpolated at the effective TP and applied to the first hit; later hits use
   1.0 unless `multi_hit_ftp` (`zone.py` around line 5232).
 - The base is `weapon DMG + fSTR + WSC`, then `× fTP × pDIF`
-  (`combat.py` around line 712).
+  (`combat.py` around line 712).  For H2H, `weapon DMG` must include the natural
+  `floor(H2H skill × 0.11) + 3` term; it did not, which is why Varga's Maru Kala read
+  low.  The fix is in `stats._damage_rating` (see the 2026-11-02 update above).
 - WSD gear, Fotia fTP, Fencer, critical rate and `DAMAGE_LIMIT(P)` all reach the roll.
 - The target's HP cutoff is intentional.
 
-The apparent "low damage" comes from the test setup (truncated multi-hit, different
-sets/TP) and from the previously missing Prime Aftermath, not from a broken WSC/fTP
-formula.
+The apparent "low damage" in the older Dagger/DRK reports came from the test setup
+(truncated multi-hit, different sets/TP) and from the previously missing Prime
+Aftermath.  For a hand-to-hand weapon, though, the missing natural term was a real
+formula bug, not a test artifact.
 
 ## How to test a Prime WS properly
 

@@ -48,6 +48,7 @@ also absent from the reference SQL and comes from BG-wiki.  Examples:
 | Tachi: Kasha | Fusion, Compression, none |
 | Vorpal Blade | Scission, Impaction, none |
 | Zesho Meppo | Induration, Reverberation, Fusion |
+| Maru Kala | Detonation, Compression, Distortion |
 
 ### Transition map
 
@@ -73,6 +74,26 @@ reference map wins.  The map is directional.  Examples that are easy to get back
 
 The full 29-pair table is in `skillchain.TRANSITIONS`, transcribed from
 `battleutils.cpp`'s `skillchain_map`.
+
+### Self-chains
+
+A skill can close its own chain because each weapon skill carries three properties and
+the matcher walks them in the stored order.  Maru Kala is the clean three-step example:
+
+1. first Maru Kala opens with `(Detonation, Compression, Distortion)`;
+2. second Maru Kala matches **Compression against Detonation** → **Gravitation**;
+3. third Maru Kala matches **Distortion against Gravitation** → **Darkness**.
+
+The properties come from `data/weapon_skill_properties.json` (Maru Kala is id 231).
+The chain is still subject to the runtime rules below: each close must land **more than
+3 s** after the previous skill and inside the 11 s opener / 10 s Gravitation window, and
+each cast spends 1,000 TP.  A planner that only checks properties (the web chain builders
+people use) will show Gravitation and Darkness even when the TP cycle or the 3 s lockout
+makes the sequence impossible in play.
+
+The in-game Battle hub planner and the control HUD carry the same property table; both
+are generated from `data/weapon_skill_properties.json`, and
+`test_skillchain.AddonSkillchainTableTest` pins them to it.
 
 ### State and timing
 

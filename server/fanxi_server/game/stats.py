@@ -209,7 +209,7 @@ def _str_multiplier(weapon: Weapon) -> float:
 
 
 def _natural_h2h_damage(skill: int) -> int:
-    """Bare fists: the H2H skill turns into a small damage rating."""
+    """The natural fist damage every H2H hit adds: skill x 0.11 + 3."""
     return int(skill * 0.11) + 3
 
 
@@ -218,10 +218,19 @@ def _weapon_skill_value(weapon: Weapon, skill_values: dict[int, int]) -> int:
 
 
 def _damage_rating(weapon: Weapon, skill_value: int) -> int:
+    """The weapon's base damage rating for auto-attacks and weapon skills.
+
+    Hand-to-hand is the one family whose rating is not just the item's listed DMG:
+    retail adds the natural fist damage (H2H skill x 0.11 + 3) to it, so a Varga
+    Purnikawa at 701 H2H skill is 213 + 80, not 213.  That total is the base every
+    physical hit and weapon skill rolls from.  The weapon rank is different: it uses
+    the item's own DMG only (see ``build_character``), which is why the natural term
+    is not folded into ``combat.weapon_rank``.
+    """
+    if weapon.skill == combat.H2H_SKILL:
+        return int(weapon.dmg) + _natural_h2h_damage(skill_value)
     if weapon.dmg > 0:
         return int(weapon.dmg)
-    if weapon.skill == combat.H2H_SKILL:
-        return _natural_h2h_damage(skill_value)
     return 0
 
 
@@ -357,7 +366,7 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
         strength=attributes["str"], dexterity=attributes["dex"],
         vitality=attributes["vit"], agility=attributes["agi"], is_pc=True,
         weapon_skill=weapon_skill, weapon_dmg=damage_rating,
-        weapon_rank=combat.weapon_rank(damage_rating, h2h=weapon.h2h),
+        weapon_rank=combat.weapon_rank(weapon.dmg, h2h=weapon.h2h),
         two_handed=weapon.two_handed, h2h=weapon.h2h, mods=dict(mods),
         skill_value=skill_value,
         parry_skill=parry_skill, guard_skill=guard_skill,
@@ -387,7 +396,7 @@ def build_character(char: dict, mods: dict[int, int], skill_values: dict[int, in
             strength=attributes["str"], dexterity=attributes["dex"],
             vitality=attributes["vit"], agility=attributes["agi"], is_pc=True,
             weapon_skill=sub_weapon.skill, weapon_dmg=sub_damage,
-            weapon_rank=combat.weapon_rank(sub_damage, h2h=sub_weapon.h2h),
+            weapon_rank=combat.weapon_rank(sub_weapon.dmg, h2h=sub_weapon.h2h),
             two_handed=False, h2h=sub_weapon.h2h, off_hand=True, mods=dict(mods),
             skill_value=sub_skill_value,
             parry_skill=parry_skill, guard_skill=guard_skill,

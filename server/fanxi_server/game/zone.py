@@ -4787,7 +4787,11 @@ class ZoneSession:
         self.refresh_character()
         for kind, (container, slot, equipped_id) in list(self.equipped.items()):
             if int(equipped_id) == int(item_id):
-                self._apply_equip_model(kind, {"model": int(model)})
+                # Keep the inventory row's skill: a H2H model has to be mirrored into
+                # the sub look, and a bare {"model": n} would lose that.
+                look = dict(self._equipped_item(kind) or {})
+                look["model"] = int(model)
+                self._apply_equip_model(kind, look)
         self.queue.append(self.grap_list())
         self.say("%s now uses model %d (re-equip it to redraw; //modelnext for the "
                  "next one)." % (name, int(model)))
@@ -4809,6 +4813,17 @@ class ZoneSession:
             return
         if kind == 0:
             self.char["main"] = model
+            # Retail's H2H look carries the same model in the sub slot with the +0x1000
+            # "left fist" tag (LandSandBoat's charutils.cpp).  Fanxi's looks() adds the
+            # slot's 0x7000 itself, so the stored sub look is model + 0x1000 and the
+            # wire value becomes model + 0x8000.  Without that entry the client draws
+            # only the main-hand knuckle and plays only the right-hand punch.
+            if self._is_h2h(item):
+                self.char["sub"] = model + 0x1000
+            elif 1 not in self.equipped:
+                # A different main hand must remove the left-fist copy, but a real sub
+                # item (shield, grip, off-hand weapon) keeps its own model.
+                self.char["sub"] = 0
         elif kind == 1:
             self.char["sub"] = model
         elif kind == 2:
@@ -4825,10 +4840,30 @@ class ZoneSession:
             self.char["feet"] = model
 
     def _clear_equip_model(self, kind: int) -> None:
-        for key, slot in (("main", 0), ("sub", 1), ("ranged", 2), ("head", 4), ("body", 5),
+        if kind == 0:
+            self.char["main"] = 0
+            # The left-fist copy lives in the sub look but is not a sub item.  Leave a
+            # real sub item's model alone; only clear the mirror when the hand is empty.
+            if 1 not in self.equipped:
+                self.char["sub"] = 0
+            return
+        if kind == 1:
+            # Removing a shield or off-hand weapon from an H2H main hand restores the
+            # mirrored left fist instead of leaving that hand bare.
+            main = self._equipped_item(0)
+            main_model = int(self.char.get("main") or 0)
+            self.char["sub"] = (main_model + 0x1000
+                                if main_model and self._is_h2h(main) else 0)
+            return
+        for key, slot in (("ranged", 2), ("head", 4), ("body", 5),
                           ("hands", 6), ("legs", 7), ("feet", 8)):
             if slot == kind:
                 self.char[key] = 0
+
+    @staticmethod
+    def _is_h2h(item: dict | None) -> bool:
+        """True when the item is a hand-to-hand weapon (skill id 1)."""
+        return bool(item) and int(item.get("skill") or 0) == combat.H2H_SKILL
 
     @staticmethod
     def _is_grip(item: dict | None) -> bool:
@@ -12192,10 +12227,20 @@ class ZoneSession:
         # plays the results in order from the target's result count.  Sending one packet
         # per hand in the same update made it drop the main hand, so only the off hand
         # swung and only its damage showed.
+        #
+        # H2H is not a one-handed/two-handed pair: retail throws a right and a left
+        # punch every round from the same weapon.  The second fist uses the main-hand
+        # fighter again (so its damage and accuracy are the knuckle's, not a 0.5-STR
+        # off-hand) but animation 1, which is what makes the client play the left hand.
         results: list[dict] = []
         hp_left = entity.hp
-        hands = (False, True) if sheet.sub_fighter is not None else (False,)
-        for off_hand in hands:
+        if sheet.sub_fighter is not None:
+            hands = ((False, 0), (True, 1))
+        elif sheet.fighter.h2h:
+            hands = ((False, 0), (False, 1))
+        else:
+            hands = ((False, 0),)
+        for off_hand, animation in hands:
             if not entity.alive or (results and results[-1]["defeated"]):
                 break
             hits = min(self._multi_attack_hits(sheet),
@@ -12208,7 +12253,8 @@ class ZoneSession:
                          int(sheet.fighter.mods.get(mod.QUADRUPLE_ATTACK, 0)))
             for _ in range(hits):
                 result = self._resolve_swing(entity, sheet, off_hand=off_hand,
-                                             hp_left=hp_left, first_swing=not results)
+                                             hp_left=hp_left, first_swing=not results,
+                                             animation=animation)
                 results.append(result)
                 if result["defeated"]:
                     break
@@ -12226,8 +12272,8 @@ class ZoneSession:
                     chance = chance / 4.0 if self.has_effect(effects.HASSO) else 0.0
                 if chance and self.world.rng.random() < chance:
                     extra = self._resolve_swing(entity, sheet, off_hand=off_hand,
-                                                hp_left=hp_left, first_swing=False)
-                    extra["animation"] = int(last.get("animation", 0))
+                                                hp_left=hp_left, first_swing=False,
+                                                animation=animation)
                     results.append(extra)
                     if not extra["miss"]:
                         hp_left = max(0, hp_left - extra["damage"]
@@ -12324,8 +12370,13 @@ class ZoneSession:
         return max(0, bonus), max(0, percent)
 
     def _resolve_swing(self, entity, sheet, *, off_hand: bool = False,
-                       hp_left: int | None = None, first_swing: bool = True) -> dict:
+                       hp_left: int | None = None, first_swing: bool = True,
+                       animation: int | None = None) -> dict:
         """Roll one hand of an attack round; 0 main hand, 1 off hand.
+
+        ``animation`` overrides the result's sub-kind when the swing is not the sub
+        weapon: a H2H left fist uses the main-hand fighter (off_hand False) but still
+        needs animation 1, or the client plays only the right-hand punch.
 
         The en-spell is part of the same result: the additional-effect block carries
         its element and damage, and its damage counts towards whether this round kills.
@@ -12340,7 +12391,8 @@ class ZoneSession:
         enspell_damage = int(enspell["damage"]) if enspell is not None else 0
         defeated = (not miss) and remaining - damage - enspell_damage <= 0
         result = {"damage": damage, "miss": miss, "critical": critical,
-                  "defeated": defeated, "animation": 1 if off_hand else 0,
+                  "defeated": defeated,
+                  "animation": (1 if off_hand else 0) if animation is None else int(animation),
                   "off_hand": bool(off_hand), "enspell_damage": enspell_damage}
         if enspell is not None and enspell_damage > 0:
             result.update(add_effect=int(enspell["element"]), add_value=enspell_damage,

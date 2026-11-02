@@ -5089,6 +5089,42 @@ class EquipBatchTest(unittest.TestCase):
         self.assertNotIn(20584, [int(row["item_id"]) for row in rows])
         self.assertNotIn(20585, [int(row["item_id"]) for row in rows])
 
+    def test_hand_to_hand_wears_its_model_on_both_hands(self):
+        """H2H is one item in the main slot but the client draws a fist on each hand.
+
+        Retail carries the model a second time in the sub look with the +0x1000 tag
+        (LandSandBoat's charutils.cpp); with an empty sub slot Fanxi sent 0 there, so
+        the client drew only the main-hand knuckle.
+        """
+        self.session.char.update(main_job=2, main_level=99, sub_job=0, sub_level=0)
+        self.session._trait_cache = None
+        self.give(0, 10, 21535)  # Varga Purnikawa
+        self.equip(10, 0)
+        self.assertEqual(int(self.session.char["main"]), 474)
+        self.assertEqual(int(self.session.char["sub"]), 474 + 0x1000)
+        looks = self.session.looks()
+        self.assertEqual(looks[6], 474 + 0x6000)     # main hand
+        self.assertEqual(looks[7], 474 + 0x8000)     # left fist
+
+        # A different H2H weapon replaces the mirrored model on both hands.
+        self.give(0, 11, 21527)  # Sakpata's Fists, model 477
+        self.equip(11, 0)
+        self.assertEqual(int(self.session.char["main"]), 477)
+        self.assertEqual(int(self.session.char["sub"]), 477 + 0x1000)
+
+        # A non-H2H main hand clears the left-fist copy.  (Varga is MNK/PUP only, so
+        # switch the job before putting a Warrior sword on.)
+        self.session.char.update(main_job=1, main_level=99)
+        self.give(0, 12, 16534)  # Onion Sword, model 264
+        self.equip(12, 0)
+        self.assertEqual(int(self.session.char["main"]), 264)
+        self.assertEqual(int(self.session.char["sub"]), 0)
+
+        # And taking the weapon off clears both hands.
+        self.equip(0, 0)  # slot 0 is the client's "remove from this slot" form
+        self.assertEqual(int(self.session.char["main"]), 0)
+        self.assertEqual(int(self.session.char["sub"]), 0)
+
 
 class CombatStatsTest(unittest.TestCase):
     """The retail damage engine as the server actually calls it.
@@ -5290,6 +5326,53 @@ class CombatStatsTest(unittest.TestCase):
         # One action for the round, two results: the client plays the main-hand swing
         # and then the off-hand one from the result count.  Two separate packets in
         # the same update made it drop the main hand entirely.
+        self.assertEqual(len(actions), 1)
+        self.assertEqual(action_animations(actions[0]), [0, 1])
+
+    def test_hand_to_hand_swings_both_fists(self):
+        """A MNK throws a right and a left punch every round, from one weapon.
+
+        Both fists use the main-hand fighter (unlike a dual-wield off hand, which is a
+        second weapon with half-STR Attack), and the second result's animation 1 is
+        what the client plays as the left-hand punch.
+        """
+        self.session.char.update(main_job=2, main_level=99, sub_job=0, sub_level=0)
+        self.session._trait_cache = None
+        self.equip({0: 21535})  # Varga Purnikawa, H2H
+        sheet = self.session.stat_sheet()
+        self.assertTrue(sheet.fighter.h2h)
+        self.assertIsNone(sheet.sub_fighter)
+        # The base is the item's DMG plus the natural H2H damage, not the DMG alone.
+        natural = int(sheet.fighter.skill_value * 0.11) + 3
+        self.assertGreaterEqual(natural, 80)
+        self.assertEqual(sheet.fighter.weapon_dmg, 213 + natural)
+
+        self.session.zone = 100
+        self.session.pos = list(self.world.zones.position(100))
+        self.session.load_zone_entities()
+        self.session.zone_loaded = True
+        mob = next(entity for entity in self.session.entities
+                   if entity.kind == "mob" and entity.alive)
+        mob.hp = mob.hp_max = 20000
+        self.session.pos = [mob.x, mob.y, mob.z, 0]
+        self.session.engaged_id = mob.id
+        self.session.engaged_targid = mob.targid
+        self.session.next_attack_at = 0.0
+        self.session.queue.clear()
+
+        seen = []
+        original = self.world.player_attack
+
+        def attack(session, entity, **kwargs):
+            seen.append(bool(kwargs.get("off_hand")))
+            return original(session, entity, **kwargs)
+
+        with mock.patch.object(self.world, "player_attack", side_effect=attack):
+            self.session.tick(time.time())
+        # Both fists come from the main hand; the second is not an off-hand weapon.
+        self.assertEqual(seen, [False, False])
+        actions = [message for message in self.session.queue
+                   if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x028]
         self.assertEqual(len(actions), 1)
         self.assertEqual(action_animations(actions[0]), [0, 1])
 

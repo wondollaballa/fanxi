@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased — H2H swings twice and uses its natural damage
+
+- **Maru Kala was low because the H2H natural damage was dropped.**  `stats._damage_rating`
+  returned the item's DMG whenever it had one, so a MNK's natural fist damage
+  (`floor(H2H skill × 0.11) + 3`) only existed for an empty hand.  Retail adds the two:
+  at 701 H2H skill (424 base + the Prime weapon's `Hand-to-Hand skill +277`) Varga
+  Purnikawa is 213 + **80** = 293 base, not 213, for auto-attacks and every weapon-skill
+  hit.  Weapon rank still uses the item's own DMG (`floor((213 + 3) / 9)` = 24), so fSTR
+  does not inflate with the natural term.
+- **The left fist was invisible and never swung.**  An H2H main hand now mirrors its
+  model into the sub look with the `+0x1000` tag retail uses (`look.sub = model +
+  0x1000`, written as `+0x8000`), and an attack round sends two results, main hand then
+  animation 1, both from the main-hand fighter.  Before, `sub_fighter` was `None`, so
+  the client got one punch and one hand's model.
+- Tests: `test_combat.HandToHandSheetTest`, plus `test_world`'s
+  `test_hand_to_hand_swings_both_fists` and
+  `test_hand_to_hand_wears_its_model_on_both_hands`.  The formulas are documented in
+  `docs/combat-damage.md` and `docs/prime-weapon-skills.md`.
+
+## Unreleased — Maru Kala self-chain and the planners' property tables
+
+- **Maru Kala already self-chains on the server.**  `(Detonation, Compression,
+  Distortion)` opens, the second cast matches Compression against Detonation for
+  **Gravitation**, and the third matches Distortion against Gravitation for **Darkness**.
+  The server path was verified end to end (the 3 s lockout and the 11 s / 10 s windows
+  still apply) and is pinned by
+  `test_skillchain.SkillchainTest.test_maru_kala_self_chains_gravitation_then_darkness`.
+- **The Battle hub planner's property table was stale.**  `battle.lua` carried a
+  hand-copied subset (ids 1-16 and 239) with no Prime weapon skills, so Maru Kala (231)
+  and the other Prime WSs were "unknown" to the in-game planner.  It also had older
+  property orders for about twenty skills.  Both `battle.lua`'s `SC_WS_PROPS` and
+  `control.lua`'s `HUD_WS_SC` are now generated from
+  `data/weapon_skill_properties.json`; a test compares both tables to the data.
+- The runtime window is unchanged: a close must land **more than 3 s** after the
+  previous WS and inside the 11 s opener / 10 s Gravitation window.  A property-only
+  planner (the web chain builders) does not model that or the 1,000 TP each cast needs.
+
 ## Unreleased — item cards on every EquipViewer slot
 
 - **Hovering a slot shows the item's card, the way the game shows it.**  Every EquipViewer grid —

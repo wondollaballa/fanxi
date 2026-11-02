@@ -1,6 +1,8 @@
 """Skillchains and Magic Bursts: the window, the chain hit and the burst bonus."""
 from __future__ import annotations
 
+import json
+import re
 import struct
 import tempfile
 import time
@@ -202,6 +204,30 @@ class SkillchainTest(unittest.TestCase):
         self.assertEqual(99999, chain["damage"])
         self.assertEqual(500000 - 99999, mob.hp)
 
+    def test_maru_kala_self_chains_gravitation_then_darkness(self):
+        """Maru Kala (Detonation/Compression/Distortion) can close its own chain.
+
+        First Maru Kala opens with all three properties; the second matches
+        Compression against Detonation (Gravitation); the third matches Distortion
+        against Gravitation (Darkness).  This is the Varga Purnikawa self-chain the
+        Battle hub planner shows, and it is the same property order as
+        data/weapon_skill_properties.json entry 231.
+        """
+        now = time.time()
+        mob = self.mob()
+        mob.hp = mob.hp_max = 50000
+        self.assertIsNone(self.session._advance_skillchain(mob, {"id": 231}, 800, now))
+        self.assertEqual(0, mob.skillchain.tier)
+        chain = self.session._advance_skillchain(mob, {"id": 231}, 800, now + 5.0)
+        self.assertIsNotNone(chain)
+        self.assertEqual(int(skillchain.SC.GRAVITATION), mob.skillchain.sc)
+        self.assertEqual(1, mob.skillchain.count)
+        # Gravitation's window is 11 - 1 = 10 s; the third cast at +5 s must close it.
+        chain = self.session._advance_skillchain(mob, {"id": 231}, 800, now + 10.0)
+        self.assertIsNotNone(chain)
+        self.assertEqual(int(skillchain.SC.DARKNESS), mob.skillchain.sc)
+        self.assertEqual(2, mob.skillchain.count)
+
     def test_a_landed_pair_forms_the_chain_and_damages_the_mob(self):
         now = time.time()
         mob = self.mob()
@@ -295,6 +321,60 @@ class SkillchainTest(unittest.TestCase):
         numbers = self.session._cast_numbers(spell, effects.for_spell("Fire"), mob,
                                              healing=False)
         self.assertEqual(0, numbers["magic_burst"])
+
+
+class AddonSkillchainTableTest(unittest.TestCase):
+    """The Battle hub planner must know every weapon skill the server does.
+
+    ``battle.lua`` used to carry a hand-copied subset (ids 1-16 and 239), so a Prime
+    weapon skill such as Maru Kala (231) was "unknown" in the in-game planner even
+    though the server chained it.  Compare both addon tables to the generated
+    ``data/weapon_skill_properties.json`` instead of trusting a hand-maintained list.
+    """
+
+    @classmethod
+    def setUpClass(cls):
+        root = Path(__file__).resolve().parents[2]
+        cls.data = {
+            int(key): tuple(int(value) for value in values)
+            for key, values in json.loads(
+                (root / "data" / "weapon_skill_properties.json").read_text(
+                    encoding="utf-8"))["weapon_skills"].items()}
+
+        def table(path: Path, name: str) -> dict[int, tuple[int, int, int]]:
+            text = path.read_text(encoding="utf-8")
+            match = re.search(r"local %s = \{\n(.*?)\n\}" % re.escape(name),
+                              text, re.S)
+            if match is None:
+                raise AssertionError("%s not found in %s" % (name, path))
+            out = {}
+            for key, a, b, c in re.findall(
+                    r"\[(\d+)\] = \{ (\d+), (\d+), (\d+) \}", match.group(1)):
+                out[int(key)] = (int(a), int(b), int(c))
+            return out
+
+        cls.battle = table(root / "host" / "addons" / "lua" / "battle.lua",
+                           "SC_WS_PROPS")
+        cls.control = table(root / "host" / "addons" / "lua" / "control.lua",
+                            "HUD_WS_SC")
+
+    def test_the_battle_hub_table_matches_the_server_properties(self):
+        for ws_id, values in self.data.items():
+            padded = tuple(values) + (0,) * (3 - len(values))
+            self.assertIn(ws_id, self.battle, "battle.lua is missing WS %d" % ws_id)
+            self.assertEqual(padded, self.battle[ws_id], ws_id)
+        # Extra zero-only rows (a skill the reference SQL lists with no properties)
+        # are harmless; a non-zero property the server does not have is not.
+        for ws_id, values in self.battle.items():
+            if ws_id not in self.data:
+                self.assertEqual((0, 0, 0), values, ws_id)
+
+    def test_the_control_hud_table_matches_the_battle_hub_table(self):
+        for ws_id, values in self.battle.items():
+            self.assertEqual(values, self.control.get(ws_id), ws_id)
+        for ws_id, values in self.control.items():
+            if ws_id not in self.battle:
+                self.assertEqual((0, 0, 0), values, ws_id)
 
 
 if __name__ == "__main__":

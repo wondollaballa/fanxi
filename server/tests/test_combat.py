@@ -629,6 +629,41 @@ class DualWieldTest(unittest.TestCase):
         self.assertEqual(sheet.delay, 227)
 
 
+class HandToHandSheetTest(unittest.TestCase):
+    """H2H base damage is the weapon's DMG plus the natural fist damage.
+
+    BG-wiki: "Base Hand-to-Hand damage is calculated simply by multiplying
+    Hand-to-Hand skill by 0.11 and adding 3 ... The Damage and Delay on Hand-to-Hand
+    weapons indicate the amount of Damage and Delay added to the base damage and
+    delay."  The weapon rank is the exception: it uses the displayed DMG + 3 only.
+    """
+
+    char = {"race": 1, "main_job": 2, "main_level": 99, "sub_job": 0, "sub_level": 0}
+    varga = stats.Weapon(skill=1, dmg=213, delay=596, ilvl_skill=277)
+
+    def test_h2h_weapon_damage_includes_the_natural_fist_damage(self):
+        sheet = stats.build_character(self.char, {}, {1: 424}, self.varga)
+        # 424 base H2H + 277 from the iLvl 119 III weapon = 701 skill.
+        natural = int(701 * 0.11) + 3
+        self.assertEqual(natural, 80)
+        self.assertEqual(sheet.fighter.weapon_dmg, 213 + natural)
+        self.assertTrue(sheet.fighter.h2h)
+        self.assertIsNone(sheet.sub_fighter)
+        self.assertFalse(sheet.dual_wield)
+
+    def test_h2h_weapon_rank_uses_the_items_own_damage_only(self):
+        sheet = stats.build_character(self.char, {}, {1: 424}, self.varga)
+        # Not floor((213 + 80 + 3) / 9) = 32: the natural damage is not part of the rank.
+        self.assertEqual(sheet.fighter.weapon_rank, (213 + 3) // 9)
+        self.assertEqual(sheet.fighter.weapon_rank, 24)
+
+    def test_bare_fists_are_still_natural_damage_only(self):
+        sheet = stats.build_character(
+            self.char, {}, {1: 300}, stats.Weapon(skill=1, delay=480))
+        self.assertEqual(sheet.fighter.weapon_dmg, int(300 * 0.11) + 3)
+        self.assertEqual(sheet.fighter.weapon_rank, 0)
+
+
 class TpReturnTest(unittest.TestCase):
     """The current retail TP curve and Dual Wield's per-hand delay."""
 
