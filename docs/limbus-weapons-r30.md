@@ -52,7 +52,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Knuckles
 
 - **Item:** 21549, **slot:** main, **bundle:** 497
-- **Model:** 951 -- derived — H2H opens the block (skill order)
+- **Model:** 490 -- confirmed in game (Onedough) — the H2H model group, not the melee block
 - **Jobs:** MNK / PUP
 - **Stats:** DMG:173 Delay:91 Accuracy+32 Magic Accuracy+32 Hand-to-Hand skill +255 Guard skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Automaton: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -165,7 +165,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Saber
 
 - **Item:** 22188, **slot:** main, **bundle:** 500
-- **Model:** 968 -- tentative — compare with the Sword (958); try 956, 955, 954, 953, 952
+- **Model:** 968 -- tentative — 968; if it is not a saber, it is probably 958 (shared with the Sword)
 - **Jobs:** RDM / BLU / COR
 - **Stats:** DMG:157 Delay:233 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +52 Magic damage +250 Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%
 
@@ -236,7 +236,7 @@ main DAT only.  H2H, Archery and the shield sit in their own groups.
 | Weapon | Group | Model | Note |
 | --- | --- | --- | --- |
 | Telopanos Grip | Grips | none (grips are invisible) | - |
-| Telopanos Knuckles | Hand-to-Hand | 951 | derived — H2H opens the block (skill order) |
+| Telopanos Knuckles | Hand-to-Hand | 490 | confirmed in game (Onedough) — the H2H model group, not the melee block |
 | Telopanos Knife | Dagger | 957 | derived — Dagger follows H2H |
 | Telopanos Axe | Axe | 960 | derived — Axe in skill order |
 | Telopanos Chopper | Great Axe | 961 | derived — G.Axe two-hand, main-only |
@@ -246,7 +246,7 @@ main DAT only.  H2H, Archery and the shield sit in their own groups.
 | Telopanos Katana | Great Katana | 965 | derived — G.Katana two-hand, main-only |
 | Telopanos Bow | Archery | 156 | derived — the only new ranged model in ROM/386 |
 | Telopanos Sword | Sword | 958 | confirmed in game (Onedough) |
-| Telopanos Saber | Sword | 968 | tentative — compare with the Sword (958); try 956, 955, 954, 953, 952 |
+| Telopanos Saber | Sword | 968 | tentative — 968; if it is not a saber, it is probably 958 (shared with the Sword) |
 | Telopanos Maul | Club | 966 | derived — Club one-hand, main+sub |
 | Telopanos Staff | Staff | 967 | derived — Staff closes the block |
 | Telopanos Claymore | Great Sword | 959 | confirmed in game (Onedough) |
