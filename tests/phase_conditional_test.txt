@@ -1,0 +1,30 @@
+# Conditional action sets (host/addons/phase.c).  The launcher turns a set name such as
+# "Victory Smite (Impetus)" into a rule with buffs={461}; the engine must pick it only while
+# every named buff is up, fall back to the plain action set otherwise, and prefer the rule
+# with the most matching conditions.  Run by tests/phase_conditional_test.sh.
+frames 2
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=2, sets={{{1,0,0}},{{2,0,0}},{{3,0,0}},{{4,0,0}}}, names={'engaged','WS.Victory Smite','WS.Victory Smite (Impetus)','WS.Victory Smite (Impetus, Focus)'}, engage=1, idle=1, town=1, rules={{category=7, action=42, pre=2},{category=7, action=42, pre=3, buffs={461}},{category=7, action=42, pre=4, buffs={461,77}}}} return xi.phase.status().rules
+echo --- no buffs: the plain Victory Smite set is on
+lua control xi.phase.buffs{} return xi.phase.status().rules
+packet_out 1a00000000000000000007002a00
+lua control local s = xi.phase.status() return s.actionSet
+packet_in 280000000004030201008c1300000000
+echo --- Impetus: the (Impetus) set wins
+lua control xi.phase.buffs{461}
+packet_out 1a00010000000000000007002a00
+lua control local s = xi.phase.status() return s.actionSet
+packet_in 280000000004030201008c1300000000
+echo --- Focus alone does not satisfy (Impetus, Focus)
+lua control xi.phase.buffs{77}
+packet_out 1a00020000000000000007002a00
+lua control local s = xi.phase.status() return s.actionSet
+packet_in 280000000004030201008c1300000000
+echo --- both buffs: the more specific variant wins
+lua control xi.phase.buffs{461,77}
+packet_out 1a00030000000000000007002a00
+lua control local s = xi.phase.status() return s.actionSet
+packet_in 280000000004030201008c1300000000
+echo --- buffs gone again: the base set is back
+lua control xi.phase.buffs{}
+packet_out 1a00040000000000000007002a00
+lua control local s = xi.phase.status() return s.actionSet

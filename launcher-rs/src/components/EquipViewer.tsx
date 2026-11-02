@@ -1,6 +1,14 @@
-import { useEffect, useMemo, useState, type CSSProperties } from "react";
+import {
+  useEffect,
+  useMemo,
+  useState,
+  type CSSProperties,
+  type FocusEvent,
+  type MouseEvent,
+} from "react";
+import { createPortal } from "react-dom";
 import { ImageOff, RotateCcw, Settings2 } from "lucide-react";
-import type { GearSlot } from "../types";
+import type { GearSlot, GearStatQuery } from "../types";
 import { backend } from "../lib/api";
 import {
   VIEWER_LABELS,
@@ -9,6 +17,8 @@ import {
   useViewerSettings,
   type ViewerSlot,
 } from "../lib/equipviewer";
+import { augmentsForSlot, useBagAugments, useItemCard } from "../lib/itemcard";
+import { ItemCard } from "./ItemCard";
 import { cn } from "./ui";
 
 /** The launcher's icon cache, keyed by item id. Shared by every EquipViewer on screen. */
@@ -133,6 +143,9 @@ export function EquipViewer({
   compact = false,
   emptyLabel,
   locked,
+  augments,
+  characterId,
+  showCards = true,
 }: {
   port: number | null;
   slots?: Record<string, GearSlot>;
@@ -145,9 +158,16 @@ export function EquipViewer({
   className?: string;
   compact?: boolean;
   emptyLabel?: string;
+  /** Augment rows per slot, from the GearSwap set or the equipped bag copy. */
+  augments?: Record<string, string[] | undefined>;
+  /** The character whose bags hold the equipped copies, when the caller has no augment map. */
+  characterId?: number | null;
+  /** Hovering a slot opens the item's full tooltip card (the game's equip-view card). */
+  showCards?: boolean;
 }) {
   const { settings, update, reset, background } = useViewerSettings();
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [hover, setHover] = useState<{ slot: ViewerSlot; anchor: DOMRect } | null>(null);
 
   const ids = useMemo(
     () =>
@@ -155,6 +175,59 @@ export function EquipViewer({
     [slots],
   );
   const { icons, loading, error } = useItemIcons(port, ids);
+
+  const hoveredItem = hover && showCards ? slotOf(slots, hover.slot) : undefined;
+  const hoveredName = String(hoveredItem?.name ?? "");
+  // A caller with a GearSwap set hands over its augment rows. The Home and Control pages
+  // watch a live grid without one, so their first hover asks the server for the bags instead.
+  const bagRows = useBagAugments(
+    characterId ?? null,
+    showCards && !augments && !!hover && !!characterId,
+  );
+  const hoveredAugments = hover
+    ? augments
+      ? augments[hover.slot] ?? []
+      : augmentsForSlot(bagRows, hoveredItem)
+    : [];
+  const hoveredQuery: GearStatQuery | null =
+    hover && hoveredName
+      ? {
+          slot: hover.slot,
+          name: hoveredName,
+          augments: hoveredAugments,
+          id: Number(hoveredItem?.id ?? 0),
+        }
+      : null;
+  const card = useItemCard(port, hoveredQuery);
+
+  // A fixed card pinned to the cell must go away when the page moves under it.
+  useEffect(() => {
+    if (!hover) return;
+    const clear = () => setHover(null);
+    window.addEventListener("scroll", clear, true);
+    window.addEventListener("resize", clear);
+    window.addEventListener("blur", clear);
+    return () => {
+      window.removeEventListener("scroll", clear, true);
+      window.removeEventListener("resize", clear);
+      window.removeEventListener("blur", clear);
+    };
+  }, [hover]);
+
+  /** Point at a slot: the native title only names an empty cell, the card shows every line. */
+  const hoverHandlers = (slot: ViewerSlot) => {
+    if (!showCards) return {};
+    const enter = (element: HTMLElement) =>
+      setHover({ slot, anchor: element.getBoundingClientRect() });
+    const leave = () =>
+      setHover((current) => (current?.slot === slot ? null : current));
+    return {
+      onMouseEnter: (event: MouseEvent<HTMLElement>) => enter(event.currentTarget),
+      onFocus: (event: FocusEvent<HTMLElement>) => enter(event.currentTarget),
+      onMouseLeave: leave,
+      onBlur: leave,
+    };
+  };
 
   const ammo = slotOf(slots, "ammo");
   const ammoCount = Number(ammo?.count ?? 0);
@@ -202,19 +275,29 @@ export function EquipViewer({
               loading && id > 0 && !icon && "loading",
               pinned && "locked",
             );
+            const hovered = hoverHandlers(slot);
+            // An item cell's tooltip is the card below; an empty cell keeps the native one.
+            const nativeTitle = item?.name ? undefined : title;
             return onSlotClick ? (
               <button
                 key={slot}
                 type="button"
                 className={classes}
-                title={title}
+                title={nativeTitle}
                 aria-label={title}
                 onClick={() => onSlotClick(slot)}
+                {...hovered}
               >
                 {content}
               </button>
             ) : (
-              <div key={slot} className={classes} title={title} aria-label={title}>
+              <div
+                key={slot}
+                className={classes}
+                title={nativeTitle}
+                aria-label={title}
+                {...hovered}
+              >
                 {content}
               </div>
             );
@@ -338,6 +421,21 @@ export function EquipViewer({
           <ImageOff size={12} /> {error}
         </p>
       )}
+
+      {hover && hoveredName
+        ? createPortal(
+            <ItemCard
+              name={hoveredName}
+              slotLabel={VIEWER_LABELS[hover.slot]}
+              augments={hoveredAugments}
+              stats={card.stats}
+              loading={card.loading}
+              error={card.error}
+              anchor={hover.anchor}
+            />,
+            document.body,
+          )
+        : null}
     </div>
   );
 }

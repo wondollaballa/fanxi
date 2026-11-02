@@ -557,3 +557,61 @@ export function phaseStateLabel(state?: string): string {
       return "Idle";
   }
 }
+
+/** One `sets.WS.*` name, split at a trailing `(Buff, Buff)` condition. */
+export interface WsSetName {
+  /** The library's full name, e.g. "Victory Smite (Impetus)". */
+  raw: string;
+  /** The action's name, e.g. "Victory Smite". */
+  base: string;
+  /** Active statuses required for this set, in the order the library wrote them. */
+  conditions: string[];
+}
+
+/** A weaponskill and every conditional variant the library has for it. */
+export interface WsSetGroup {
+  base: string;
+  variants: WsSetName[];
+  /** The library has a plain set for the action, not only conditional variants. */
+  hasBase: boolean;
+}
+
+const WS_CONDITION_RE = /^(.*?)\s*\(([^()]*)\)\s*$/;
+
+/**
+ * Split a GearSwap WS set name at its trailing condition: `Victory Smite (Impetus)` is the
+ * Victory Smite action under Impetus; `(Impetus, Focus)` requires both. A name without the
+ * suffix is the action's unconditional set.
+ */
+export function parseWsSetName(raw: string): WsSetName {
+  const match = WS_CONDITION_RE.exec(raw);
+  if (!match) return { raw, base: raw, conditions: [] };
+  const base = match[1].trim();
+  const conditions = match[2]
+    .split(",")
+    .map((part) => part.trim().replace(/^"(.*)"$/, "$1").trim())
+    .filter(Boolean);
+  if (!base || conditions.length === 0) return { raw, base: raw, conditions: [] };
+  return { raw, base, conditions };
+}
+
+/** Group a library's WS set names by the action they belong to, variants after the base. */
+export function groupWsNames(names: string[]): WsSetGroup[] {
+  const groups = new Map<string, WsSetGroup>();
+  for (const raw of names) {
+    const parsed = parseWsSetName(raw);
+    let group = groups.get(parsed.base);
+    if (!group) {
+      group = { base: parsed.base, variants: [], hasBase: false };
+      groups.set(parsed.base, group);
+    }
+    group.variants.push(parsed);
+    if (parsed.conditions.length === 0) group.hasBase = true;
+  }
+  return Array.from(groups.values())
+    .sort((a, b) => a.base.localeCompare(b.base))
+    .map((group) => ({
+      ...group,
+      variants: [...group.variants].sort((a, b) => a.raw.localeCompare(b.raw)),
+    }));
+}

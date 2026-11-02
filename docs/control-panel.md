@@ -658,7 +658,7 @@ keyed by:
 | 2 | `/attack` | the engaged set |
 | 3 | casting | precast, then `sets.midcast.<skill>` |
 | 4 | `/attack off` | none — the server's `0x00D` decides whether the engagement really ended |
-| 7 | a weaponskill | `sets.WS.<name>` (precast) |
+| 7 | a weaponskill | `sets.WS.<name>` (precast), including `(Buff, Buff)` conditional variants |
 | 9 | a job ability | `sets.JA.<name>` (precast) |
 
 Everything else (talk 0, ranged 16, …) passes through untouched. Engaging is a whole-category
@@ -758,6 +758,7 @@ The plan comes from a GearSwap library, the same one the Gear page loads:
 | Library path | Becomes |
 |---|---|
 | `sets.WS.<name>` | a weaponskill rule (category 7, the ability's id): precast |
+| `sets.WS.<name> (Buff, Buff)` | the same action, but the rule matches only while every named buff is up (client buff names, case-insensitive, up to 8); the most specific matching rule wins, and the plain set is the fallback |
 | `sets.JA.<name>` | a job-ability rule (category 9, the action id above): precast |
 | `sets.precast.WS` / `sets.precast.JA` | the fallback for a skill or ability with no named set |
 | `sets.precast.FC` (or `sets.precast`) | every spell's precast (category 3) |
@@ -799,7 +800,7 @@ The Gear page groups the plan the way the player thinks about it:
 | **Engaged** | the TP set and the default WS set (the fallback for a WS the library has no `sets.WS.<name>` for) |
 | **Kiting** | a forced set that stays on until **Stop kiting** (or `//gs kite off`), even while engaged or moving |
 | **Weaponset** | a main/sub/ranged/ammo set picked from the client's own bags (a single copy can fill Main or Sub; a second copy unlocks the other), worn and optionally pinned; a main or support job change (or a logout) releases the pins and the gear lock |
-| **Weaponskills** | a full-width card with a default and one card per `sets.WS.*` name; empty uses the library's WS set, then the default |
+| **Weaponskills** | a full-width card with a default and one group per WS action; a `(Buff, Buff)` suffix adds a conditional row, each row has its own set picker, and empty uses the library's set, then the default |
 | **Job abilities** | a full-width card with a default JA set and one row per main/sub ability; empty uses the default, then the library's `precast.JA` |
 | **Resting** | a manual resting set; this server has no rest packet, so it is a toggle |
 | **Spells** | a precast set, a midcast default for every spell, mode groups (enfeebles macc/duration, enhancing potency/duration, enspell damage, curing potency/cast, nuking MAB/magic damage, helix MAB/duration) and per-spell overrides (picked from the current job's spell list) |
@@ -810,7 +811,10 @@ the result packet (land or miss), which is the same result path as the action ti
 spell default replaces the library's skill sets for every spell; an override is keyed by the
 spell-table id and wins over the default. A per-WS card wins over the library's
 `sets.WS.<name>`; an empty card uses that library set, and only a WS with no set of its own
-falls back to the default WS set, then `precast.WS`. For a job ability the empty card uses the
+falls back to the default WS set, then `precast.WS`. A trailing `(Buff, Buff)` in a set name
+makes it conditional: while all of those buffs are up the host wears that set, and the plain
+action set (or the default WS set) is the fallback. The page groups those variants under their
+action and shows one set picker per condition. For a job ability the empty card uses the
 default JA set, then the library's `precast.JA`. The per-WS, per-JA and
 per-spell choices ride in the `phase` command's options object (`ws_overrides`, `ja_overrides`,
 `spell_overrides`, `spell_category_overrides`), so the host builds exactly what the page shows.

@@ -1,5 +1,41 @@
 # Changelog
 
+## Unreleased — item cards on every EquipViewer slot
+
+- **Hovering a slot shows the item's card, the way the game shows it.**  Every EquipViewer grid —
+  the Sets tab's live read, the set preview, Manage's set editor and the Home and Control page
+  grids — draws a card over the hovered cell: the client's tooltip verbatim (its `Set:` and
+  `Unity Ranking:` blocks included), the augment rows that copy carries, then `iLv`, `Lv.` and
+  the jobs that can wear it.  The tooltip and the job/race masks come from the client's item
+  resources through `gear_item_stats`, so the card follows the running game; augments come from
+  the GearSwap set, or from the equipped bag row on the live grids, so two copies of one item
+  show their own rows.  The card is display-only and never blocks the pointer.
+- **The Sets tab no longer edits gear.**  Clicking a cell in the live grid, a row in its legend or
+  a slot in the selected set's preview used to open the bag picker — a stray click could re-equip
+  the character or rewrite the library.  Those are read-only now: worn gear is changed from the
+  Manage tab's new **Worn now** grid, and a set's pieces from its editor.  **Wear set** stays an
+  explicit button on the Sets tab.
+- Rebuild the launcher for this: the card's tooltip and `Lv.99 MNK` line come from new
+  `gear_item_stats` fields (`description`, `jobs`, `races`).  An older binary still draws the
+  stat lines and the augments, just without the verbatim tooltip and the job list.
+- Tests: `cargo test` covers the new tooltip/job-mask fields; `npm run check` and `npm run build`
+  cover the card and the tab split.
+
+## Unreleased — Set totals stop inventing stats
+
+- **The Gear page's Set totals no longer show a "To 30" or "All BP -30" row.**  Hoxne
+  Earring's tooltip has `Mastery Rank: All BP -30 to +30`; the stat expression read the
+  range as two stats, `All BP -30` and `to +30`.  `player_lines` now stops at a
+  `Mastery Rank:` block like it already did at `Set:`, `Pet:` and `Unity Ranking:`.
+- **`Dbl.Atk` is Double Attack.**  The Odyssey B augments and other libraries abbreviate
+  the stat; without an alias the totals showed `Double Attack` and `Dbl.Atk` as separate
+  rows.  `Dbl.Atk`, `Dbl. Atk`, `Dbl Atk`, `Double Atk`, `Triple Atk`, `Quad. Atk` and
+  `Quad Atk` now share the canonical key.  `Guarding skill` also merges into `Guard
+  skill`, and `Skillchain Bonus` is shown as a percentage.
+- Tests: `gear_stats::tests` pins the Mastery Rank exclusion, the abbreviation merge and
+  the Skillchain Bonus unit; the full launcher library suite stays green (78 tests).
+  Rebuild the launcher to pick this up.
+
 ## Unreleased — Null Masque's own look
 
 - **Null Masque no longer draws as the THF artifact bonnet.**  The full catalogue

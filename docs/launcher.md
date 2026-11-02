@@ -520,26 +520,33 @@ Sets can be managed without leaving the window:
 - **Wear set** sends every `0x050` for the set in one frame (the GearSwap equip burst), and skips
   the pieces already worn. Items must be in the character's bags; the panel reports every item it
   could not find and the measured round trip.
-- **EquipViewer slots are searchable pickers.** Clicking a cell in the live grid or a row in its
-  legend opens every copy in the character's bags that fits that slot and the live main/support
-  job pair (both levels are checked). The list shows the bag, iLv/Lv, stack count and augment rows,
-  searches by item name or augment, marks the copy currently **worn**, and equips the row you
-  click immediately.
-- **The selected set's preview is an inline editor for one piece.** Clicking a slot opens the same
-  bag list, filtered and marked **in set** for the copy the set already holds; the row you click
-  replaces that slot in the set and saves the account's library right away, and **Clear slot**
-  removes the piece. Use **Edit** for a multi-slot change and **Wear set** to put the set on.
+- **Worn gear is changed in Manage.** The Manage tab's **Worn now** grid is the one place a live
+  slot is a picker: clicking a cell opens every copy in the character's bags that fits that slot
+  and the live main/support job pair (both levels are checked). The list shows the bag, iLv/Lv,
+  stack count and augment rows, searches by item name or augment, marks the copy currently
+  **worn**, and equips the row you click immediately.
+- **The Sets tab is for looking.** Its live grid, the legend rows under it and the selected set's
+  preview are read-only, so a stray click while reading a set cannot re-equip the character or
+  rewrite the library. Editing a piece happens in Manage's set editor (its item rows are the same
+  bag picker); **Wear set** stays an explicit button on the Sets tab.
+- **Every EquipViewer slot has the game's item card on hover.** Hovering a cell in any grid — the
+  Sets tab, Manage's set editor, the Home page and the Control page — draws the card the game
+  puts over an item: the client tooltip verbatim, `Set:`/`Unity Ranking:` blocks included, then
+  the copy's augment rows (from the GearSwap set, or the equipped bag row), `iLv`, `Lv.` and the
+  jobs that can wear it. It is a hover card only: it never blocks the pointer and nothing in it
+  is clickable.
 
-The selected set's preview is more than icons. Each slot card lists the item's own tooltip (the
-base stats the client draws) followed by the augment lines stored on that slot in the GearSwap
-file. Under the EquipViewer, **Set totals** adds every numeric stat from both sources, keeping flat
-values and percentages apart, so changing a cape, ring or earring and reading the same column is a
-quick best-in-slot check. The descriptions are read from the running client's item resources
+The selected set's preview is more than icons. Hovering a slot draws the full card above; the
+inline list under the preview also keeps the item's own tooltip (the base stats the client draws)
+next to the augment lines stored on that slot in the GearSwap file. Under the EquipViewer, **Set
+totals** adds every numeric stat from both sources, keeping flat values and percentages apart, so
+changing a cape, ring or earring and reading the same column is a quick best-in-slot check. The
+descriptions are read from the running client's item resources
 through the control port's `lua` command; an item the client cannot resolve still shows its
 augment lines and their totals. Conditional `Set:` and `Unity Ranking:` blocks and the
-pet/avatar/automaton lines are left out of the cards and totals because they do not describe the
-player's own piece; `Aftermath:`, `Latent effect:` and `Additional effect:` lines stay on the card
-but are not added to the totals.
+pet/avatar/automaton lines are left out of the totals because they do not describe the player's
+own piece — the hover card still prints them, the way the game's tooltip does. `Aftermath:`,
+`Latent effect:` and `Additional effect:` lines stay on the card but are not added to the totals.
 
 The **Sets** tab shows the server's own sheet for the gear the client is actually wearing. **Live
 set stats** under the EquipViewer is deliberately compact: one **Stat** and its **Total**, using the
@@ -600,8 +607,10 @@ On the Sets tab, the phase engine is split into the groups the player thinks in:
   stack-1 ammo is never thrown; the addon swaps in a stackable shuriken/stone (or arrows/bolts/
   bullets with a ranged weapon), waits for the equipment echo, then restores the original ammo.
   With no suitable ammo in the bags the throw is blocked and explained in chat.
-- **Weaponskills** — a full-width card with a default plus one row per `sets.WS.*` WS, each with
-  its own set. The TP set returns when the WS result lands or misses.
+- **Weaponskills** — a full-width card with a default plus one group per WS action. A library set
+  named `sets.WS.<name> (Buff, Buff)` appears as a conditional row under that action, with its own
+  set picker; the host wears it only while every listed buff is up and falls back to the plain set
+  otherwise. The TP set returns when the WS result lands or misses.
 - **Job abilities** — a full-width card with a default JA set and one row for every ability the
   client's current main/sub job pair lists. A row's set wins over the library's `sets.JA.<name>`;
   an empty row uses the default JA set, then the library's `precast.JA`. The action is matched by

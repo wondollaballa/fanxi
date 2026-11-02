@@ -517,6 +517,13 @@ export interface GearItemStats {
   itemLevel: number;
   /** Readable base-stat lines, without conditional Set/Pet/Unity blocks. */
   baseLines: string[];
+  /** The client tooltip verbatim (newlines kept): the hover card draws this, so `Set:` and
+   * `Unity Ranking:` blocks show the way the game prints them. Older clients leave it empty. */
+  description: string;
+  /** Job bitmask in the launcher's layout (bit 0 = WAR), for the card's `Lv.99 MNK` line. */
+  jobs: number;
+  /** Race bitmask as the client stores it; 0x1FE (510) is All Races. */
+  races: number;
   /** The tooltip's numeric stats on their own. */
   baseStats: GearStat[];
   /** The numeric stats this slot's augment strings add. */

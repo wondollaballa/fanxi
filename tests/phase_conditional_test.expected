@@ -1,0 +1,16 @@
+[harness] = 3
+--- no buffs: the plain Victory Smite set is on
+[harness] = 3
+[harness] = WS.Victory Smite
+--- Impetus: the (Impetus) set wins
+[harness] = 1
+[harness] = WS.Victory Smite (Impetus)
+--- Focus alone does not satisfy (Impetus, Focus)
+[harness] = 1
+[harness] = WS.Victory Smite
+--- both buffs: the more specific variant wins
+[harness] = 2
+[harness] = WS.Victory Smite (Impetus, Focus)
+--- buffs gone again: the base set is back
+[harness] = 0
+[harness] = WS.Victory Smite

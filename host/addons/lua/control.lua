@@ -1114,6 +1114,30 @@ local function watch_phase()
     while phase_watch do
         if phase_job_seen and xi.clock() >= phase_job_at + 1.5 then reload_for_job(phase_job_seen) end
         if xi.phase.nitro then xi.phase.nitro(brd_nitro_on()) end
+        -- Conditional gear sets ("Victory Smite (Impetus)"): the phase engine matches a rule
+        -- against the player's live buff ids, but it cannot read guest memory on the network
+        -- thread.  Push the list here every frame, and only when it actually changes: Impetus
+        -- can be pressed and a WS sent in the same second.
+        if xi.phase.buffs and phase_plan then
+            local now = xi.clock()
+            if now > (phase_plan.buff_at or -1) then
+                phase_plan.buff_at = now
+                local ok, buffs = pcall(function() return game.player('Buffs') end)
+                if ok and type(buffs) == 'table' then
+                    local ids = {}
+                    for _, raw in ipairs(buffs) do
+                        local id = tonumber(raw) or 0
+                        if id > 0 and id ~= 255 and id ~= 0xFFFF then ids[#ids + 1] = id end
+                    end
+                    table.sort(ids)
+                    local signature = table.concat(ids, ',')
+                    if phase_plan.buff_sig ~= signature then
+                        phase_plan.buff_sig = signature
+                        xi.phase.buffs(ids)
+                    end
+                end
+            end
+        end
         local index = game.player_index() or 0
         local x = index > 0 and game.entity(index, 'Movement.LocalPosition.X') or nil
         local y = index > 0 and game.entity(index, 'Movement.LocalPosition.Y') or nil
@@ -1292,7 +1316,10 @@ phase = function(a)
     end
 
     -- Weaponskills: a per-WS override wins over the library's sets.WS.<name>; the default set
-    -- is the fallback for a WS with no card of its own.
+    -- is the fallback for a WS with no card of its own.  A trailing "(Buff, Buff)" in the set
+    -- name makes the set conditional: Victory Smite (Impetus) is worn only while every named
+    -- buff is up.  The phase engine picks the most specific matching rule, so a plain
+    -- Victory Smite card stays the no-buff fallback.
     local ws_override = {}
     if type(a.ws_overrides) == 'table' then
         for name, path in pairs(a.ws_overrides) do
@@ -1300,28 +1327,90 @@ phase = function(a)
             if index then ws_override[tostring(name)] = index end
         end
     end
+
+    -- Buff names in the condition are the client's own status names, case-insensitive.  Cache
+    -- the id table on xi: the plan is rebuilt on every library/config push, and control.lua is at
+    -- Lua's chunk-local limit, so this cannot be another chunk-level local.
+    if not xi.phase_buff_names then
+        local names = {}
+        local ok, ids = pcall(res.status_ids)
+        if ok and type(ids) == 'table' then
+            for _, id in ipairs(ids) do
+                local status = res.status(id)
+                if status then
+                    local text = status.name_utf8 and status.name_utf8.en
+                        or (type(status.name) == 'table' and status.name.en) or nil
+                    for _, value in ipairs({ text or '', status.log_name or '' }) do
+                        local key = tostring(value):lower():match('^%s*(.-)%s*$')
+                        key = key and key:gsub('^"(.*)"$', '%1') or ''
+                        if key ~= '' and not names[key] then names[key] = id end
+                    end
+                end
+            end
+        end
+        if next(names) ~= nil then xi.phase_buff_names = names end
+    end
+
+    local function ws_split(raw)
+        local text = tostring(raw or '')
+        local base, condition = text:match('^(.-)%s*%(([^()]*)%)%s*$')
+        if not base or base == '' then return text, {} end
+        local labels = {}
+        for part in condition:gmatch('[^,]+') do
+            local label = part:match('^%s*(.-)%s*$'):gsub('^"(.*)"$', '%1')
+            label = label:match('^%s*(.-)%s*$')
+            if label ~= '' then labels[#labels + 1] = label end
+        end
+        if #labels == 0 then return text, {} end
+        if #labels > 8 then
+            xi.log('phase: WS set "' .. text .. '" names more than 8 buffs; ignored')
+            return text, {}
+        end
+        return base, labels
+    end
+
+    local function ws_rule(raw, index)
+        local base, labels = ws_split(raw)
+        local ability = res.ability_by_name(base)
+        if not ability or not index then return false end
+        local buffs = {}
+        for _, label in ipairs(labels) do
+            local id = xi.phase_buff_names and xi.phase_buff_names[label:lower()]
+            if not id then
+                xi.log('phase: WS set "' .. tostring(raw) ..
+                    '" names an unknown buff "' .. label .. '"')
+                return false
+            end
+            buffs[#buffs + 1] = id
+        end
+        local rule = { category = PHASE_WS, action = ability.id, pre = index }
+        if #buffs > 0 then rule.buffs = buffs end
+        rules[#rules + 1] = rule
+        return true
+    end
+
+    local ws_done, ws_names, ws_sets = {}, {}, {}
+    if type(sets.WS) == 'table' then
+        for name, value in pairs(sets.WS) do
+            local raw = tostring(name)
+            ws_names[#ws_names + 1] = raw
+            ws_sets[raw] = value
+        end
+    end
+    -- Sorted so two equally specific variants pick the same rule on every push.
+    table.sort(ws_names)
+    for _, raw in ipairs(ws_names) do
+        ws_done[raw] = true
+        ws_rule(raw, ws_override[raw] or add_set(ws_sets[raw], 'WS.' .. raw))
+    end
+    local override_names = {}
+    for name in pairs(ws_override) do
+        if not ws_done[name] then override_names[#override_names + 1] = name end
+    end
+    table.sort(override_names)
+    for _, raw in ipairs(override_names) do ws_rule(raw, ws_override[raw]) end
     local ws_fallback = path_set(tostring(a.default_ws or ''), 'WS.default')
         or (sets.precast and add_set(sets.precast.WS, 'precast.WS'))
-    local ws_seen = {}
-    if type(sets.WS) == 'table' then
-        for name, t in pairs(sets.WS) do
-            local ws_name = tostring(name)
-            local ability = res.ability_by_name(ws_name)
-            local index = ws_override[ws_name] or add_set(t, 'WS.' .. ws_name)
-            if ability and index then
-                rules[#rules + 1] = { category = PHASE_WS, action = ability.id, pre = index }
-                ws_seen[ws_name] = true
-            end
-        end
-    end
-    for name, index in pairs(ws_override) do
-        if not ws_seen[name] then
-            local ability = res.ability_by_name(name)
-            if ability then
-                rules[#rules + 1] = { category = PHASE_WS, action = ability.id, pre = index }
-            end
-        end
-    end
     if ws_fallback then rules[#rules + 1] = { category = PHASE_WS, action = 0, pre = ws_fallback } end
 
     -- Job abilities: a per-ability override wins over the library's sets.JA.<name>; the default
@@ -1576,6 +1665,9 @@ phase = function(a)
         song_overrides = a.song_overrides,
         spell_category_overrides = a.spell_category_overrides, focus = a.focus,
         spell_modes = spell_modes, sets = sets,
+        -- Force the watch loop to push the current buff list for this new rule table.  false is
+        -- not a possible signature (an empty buff list is ''), so an empty list is pushed too.
+        buff_at = -1, buff_sig = false,
     }
     phase_job_seen = nil
     -- A plan pushed during a zone or job load must not wear the whole outfit on top of the

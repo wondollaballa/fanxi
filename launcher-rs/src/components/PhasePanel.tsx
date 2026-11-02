@@ -4,6 +4,7 @@ import type { JobAbility, JobSpell, PhaseStatus } from "../types";
 import {
   FOCUS_MODES,
   SPELL_GROUPS,
+  groupWsNames,
   phaseStateLabel,
   slotLabelOf,
   type PhaseConfig,
@@ -194,6 +195,12 @@ export function PhasePanel({
     0,
   );
   const jaOverrideCount = Object.keys(config.jaOverrides).length;
+  const wsGroups = useMemo(() => groupWsNames(wsNames), [wsNames]);
+  const wsConditionCount = wsGroups.reduce(
+    (count, group) =>
+      count + group.variants.filter((variant) => variant.conditions.length > 0).length,
+    0,
+  );
   const now = status?.state ? `${phaseStateLabel(status.state)}` : "—";
   const activeSet = status?.set ?? null;
 
@@ -377,8 +384,15 @@ export function PhasePanel({
       <Group
         title="Weaponskills"
         wide
-        badge={<Badge tone="neutral">{wsNames.length} WS</Badge>}
-        hint="Every WS gets a card. A card wins; an empty card uses the library's sets.WS.&lt;name&gt; first, then the default set (or the library's precast.WS) for a WS the library has no set for. The TP set returns the moment the WS result lands or misses."
+        badge={
+          <Badge tone="neutral">
+            {wsGroups.length} WS
+            {wsConditionCount
+              ? ` · ${wsConditionCount} conditional`
+              : ""}
+          </Badge>
+        }
+        hint="Every WS gets a base row. A trailing (Buff, Buff) in the set name adds a conditional row: it is worn only while all listed buffs are up, and the row with the most matching buffs wins. A row's set wins; an empty row uses the library's set, then the default set (or the library's precast.WS) for a WS the library has no set for. The TP set returns the moment the WS result lands or misses."
       >
         <div className="phase-row">
           <SetSelect
@@ -390,27 +404,71 @@ export function PhasePanel({
             onChange={(defaultWs) => onConfig({ defaultWs })}
           />
         </div>
-        {wsNames.length === 0 ? (
+        {wsGroups.length === 0 ? (
           <p className="muted padded">This library has no sets.WS.* cards.</p>
         ) : (
-          <div className="phase-cards">
-            {wsNames.map((name) => (
-              <div key={name} className="phase-card-row">
-                <span className="phase-card-name">{name}</span>
-                <InlineSetSelect
-                  value={config.wsOverrides[name] ?? ""}
-                  sets={sets}
-                  prefixes={["WS."]}
-                  empty="— library WS set —"
-                  onChange={(path) => {
-                    const next = { ...config.wsOverrides };
-                    if (path) next[name] = path;
-                    else delete next[name];
-                    onConfig({ wsOverrides: next });
-                  }}
-                />
-              </div>
-            ))}
+          <div className="phase-cards phase-ws-groups">
+            {wsGroups.map((group) => {
+              const conditional = group.variants.filter(
+                (variant) => variant.conditions.length > 0,
+              );
+              return (
+                <div className="phase-ws-group" key={group.base}>
+                  <div className="phase-ws-group-head">
+                    <span className="phase-ws-group-title">{group.base}</span>
+                    {conditional.length > 0 ? (
+                      <span className="phase-ws-group-note">
+                        {conditional.length} condition{conditional.length === 1 ? "" : "s"}
+                      </span>
+                    ) : null}
+                  </div>
+                  <div className="phase-card-row">
+                    <span className="phase-card-name">
+                      Always
+                      <em>base set</em>
+                    </span>
+                    <InlineSetSelect
+                      value={config.wsOverrides[group.base] ?? ""}
+                      sets={sets}
+                      prefixes={["WS."]}
+                      empty={group.hasBase ? "— library WS set —" : "— none —"}
+                      onChange={(path) => {
+                        const next = { ...config.wsOverrides };
+                        if (path) next[group.base] = path;
+                        else delete next[group.base];
+                        onConfig({ wsOverrides: next });
+                      }}
+                    />
+                  </div>
+                  {conditional.map((variant) => (
+                    <div className="phase-card-row phase-card-subrow" key={variant.raw}>
+                      <span className="phase-card-name" title={`sets.WS.${variant.raw}`}>
+                        <span className="phase-condition-list">
+                          {variant.conditions.map((condition, index) => (
+                            <span className="phase-condition" key={`${condition}-${index}`}>
+                              {condition}
+                            </span>
+                          ))}
+                        </span>
+                        <em>while active</em>
+                      </span>
+                      <InlineSetSelect
+                        value={config.wsOverrides[variant.raw] ?? ""}
+                        sets={sets}
+                        prefixes={["WS."]}
+                        empty="— library WS set —"
+                        onChange={(path) => {
+                          const next = { ...config.wsOverrides };
+                          if (path) next[variant.raw] = path;
+                          else delete next[variant.raw];
+                          onConfig({ wsOverrides: next });
+                        }}
+                      />
+                    </div>
+                  ))}
+                </div>
+              );
+            })}
           </div>
         )}
       </Group>

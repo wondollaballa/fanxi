@@ -1321,6 +1321,7 @@ export function ControlPage({
                   port={selected.port}
                   slots={selected.metrics?.gear?.slots}
                   encumbrance={selected.metrics?.gear?.encumbrance ?? 0}
+                  characterId={selected.character?.id ?? null}
                   compact
                   showSettings={false}
                 />

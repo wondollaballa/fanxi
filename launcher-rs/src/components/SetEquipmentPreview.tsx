@@ -67,6 +67,7 @@ export function SetEquipmentPreview({
   compact = false,
   showSettings = false,
   emptyLabel = "This set is empty.",
+  augments,
 }: {
   port: number | null;
   items: Record<string, string>;
@@ -74,6 +75,8 @@ export function SetEquipmentPreview({
   compact?: boolean;
   showSettings?: boolean;
   emptyLabel?: string;
+  /** Augment rows per slot, so the hover card can show what this set builds. */
+  augments?: Record<string, string[] | undefined>;
 }) {
   const names = SLOT_KEYS.map((slot) => items[slot] ?? "").filter(Boolean);
   const resolved = useResolvedNames(port, names);
@@ -93,6 +96,7 @@ export function SetEquipmentPreview({
       compact={compact}
       showSettings={showSettings}
       emptyLabel={emptyLabel}
+      augments={augments}
     />
   );
 }

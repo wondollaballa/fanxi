@@ -59,6 +59,15 @@ pub struct GearItemStats {
     pub item_level: i64,
     /// Readable base-stat lines from the client tooltip, excluding conditional Set/Pet/Unity lines.
     pub base_lines: Vec<String>,
+    /// The client tooltip verbatim, newlines kept. The hover card draws this so the `Set:`,
+    /// `Unity Ranking:` and `Mastery Rank:` blocks show the way the game prints them, while
+    /// `base_lines` stays the stat-only view the totals use.
+    pub description: String,
+    /// Job bitmask in the launcher's own layout (bit 0 = WAR), for the card's `Lv.99 MNK` line.
+    /// The client stores the same mask shifted one bit (bit 1 = WAR), so it is shifted here.
+    pub jobs: u32,
+    /// Race bitmask as the client stores it; `0x1FE` (510) is All Races.
+    pub races: u32,
     /// The tooltip's numeric stats on their own.
     pub base_stats: Vec<GearStat>,
     /// The numeric stats the slot's augment strings add.
@@ -74,6 +83,10 @@ pub struct ClientItem {
     pub description: String,
     pub level: i64,
     pub item_level: i64,
+    /// The client's job mask, still in its own layout (bit 1 = WAR).
+    pub jobs: u32,
+    /// The client's race mask: bit 1 = Hume male … bit 8 = Galka, `0x1FE` = All Races.
+    pub races: u32,
 }
 
 /// A tooltip stat: a label, an optional sign, a whole number and an optional percent. The label may
@@ -108,12 +121,15 @@ static BARE_HASTE_RE: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(r"(?i)\bHaste\s*(\d+)\s*%").expect("valid bare-haste regular expression")
 });
 
-/// `Set:` bonuses depend on other pieces, the pet/avatar lines belong to another entity and
-/// `Unity Ranking:` values depend on Unity standing. They are not one piece's player stats, so the
-/// card stops before them and the totals never see them.
+/// `Set:` bonuses depend on other pieces, the pet/avatar lines belong to another entity,
+/// `Unity Ranking:` values depend on Unity standing and `Mastery Rank:` is a displayed range
+/// (`All BP -30 to +30`), not a stat. They are not one piece's player stats, so the card stops
+/// before them and the totals never see them.
 static MARKER_RE: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"(?i)(?:^|\s)(Set:|Pet:|Avatar:|Automaton:|Wyvern:|Luopan:|Fellow:|Unity Ranking:)")
-        .expect("valid conditional-stat regular expression")
+    Regex::new(
+        r"(?i)(?:^|\s)(Set:|Pet:|Avatar:|Automaton:|Wyvern:|Luopan:|Fellow:|Unity Ranking:|Mastery Rank:)",
+    )
+    .expect("valid conditional-stat regular expression")
 });
 
 /// The `lua` code that asks the client for every item description in one game-thread call.
@@ -150,7 +166,7 @@ pub fn item_query_code(items: &[GearStatRequest]) -> String {
              if item.name_utf8 and item.name_utf8.en then name = item.name_utf8.en end\n\
              local description = ''\n\
              if item.description_utf8 and item.description_utf8.en then description = item.description_utf8.en end\n\
-             out[i] = { id = item.id or 0, name = name, description = description, level = item.level or 0, item_level = item.item_level or 0 }\n\
+             out[i] = { id = item.id or 0, name = name, description = description, level = item.level or 0, item_level = item.item_level or 0, jobs = tonumber(item.jobs) or 0, races = tonumber(item.races) or 0 }\n\
            elseif type(key) == 'string' then\n\
              out[i] = { name = key }\n\
            else\n\
@@ -209,6 +225,8 @@ pub fn parse_lua_reply(reply: &Value) -> Vec<Option<ClientItem>> {
                 description,
                 level: row.get("level").and_then(value_i64).unwrap_or(0),
                 item_level: row.get("item_level").and_then(value_i64).unwrap_or(0),
+                jobs: row.get("jobs").and_then(value_u32).unwrap_or(0),
+                races: row.get("races").and_then(value_u32).unwrap_or(0),
             })
         })
         .collect()
@@ -218,6 +236,13 @@ fn value_i64(value: &Value) -> Option<i64> {
     value
         .as_i64()
         .or_else(|| value.as_u64().and_then(|number| i64::try_from(number).ok()))
+        .or_else(|| value.as_str().and_then(|text| text.parse().ok()))
+}
+
+fn value_u32(value: &Value) -> Option<u32> {
+    value
+        .as_u64()
+        .and_then(|number| u32::try_from(number).ok())
         .or_else(|| value.as_str().and_then(|text| text.parse().ok()))
 }
 
@@ -252,6 +277,13 @@ pub fn build_stats(
                 level: client.map(|item| item.level).unwrap_or(0),
                 item_level: client.map(|item| item.item_level).unwrap_or(0),
                 base_lines,
+                description: client
+                    .map(|item| item.description.clone())
+                    .unwrap_or_default(),
+                // The client's job mask starts at bit 1; the launcher's item rows and the
+                // job list start at bit 0, so shift it into the layout the card reads.
+                jobs: client.map(|item| item.jobs >> 1).unwrap_or(0),
+                races: client.map(|item| item.races).unwrap_or(0),
                 base_stats,
                 augment_stats,
                 stats,
@@ -427,6 +459,7 @@ fn percent_default(key: &str) -> bool {
             | "weapon skill damage"
             | "magic burst damage"
             | "magic burst damage ii"
+            | "skillchain bonus"
             | "double attack"
             | "triple attack"
             | "quadruple attack"
@@ -655,8 +688,15 @@ const ALIASES: &[(&str, &str, &str)] = &[
     ("skillchain damage", "skillchain bonus", "Skillchain Bonus"),
     ("skillchain dmg", "skillchain bonus", "Skillchain Bonus"),
     ("double attack", "double attack", "Double Attack"),
+    ("double atk", "double attack", "Double Attack"),
+    ("dbl.atk", "double attack", "Double Attack"),
+    ("dbl. atk", "double attack", "Double Attack"),
+    ("dbl atk", "double attack", "Double Attack"),
     ("triple attack", "triple attack", "Triple Attack"),
+    ("triple atk", "triple attack", "Triple Attack"),
     ("quadruple attack", "quadruple attack", "Quadruple Attack"),
+    ("quad. atk", "quadruple attack", "Quadruple Attack"),
+    ("quad atk", "quadruple attack", "Quadruple Attack"),
     ("subtle blow", "subtle blow", "Subtle Blow"),
     ("subtle blow ii", "subtle blow ii", "Subtle Blow II"),
     ("dual wield", "dual wield", "Dual Wield"),
@@ -929,6 +969,7 @@ const ALIASES: &[(&str, &str, &str)] = &[
     ("shield skill", "shield skill", "Shield skill"),
     ("parrying skill", "parrying skill", "Parrying skill"),
     ("guard skill", "guard skill", "Guard skill"),
+    ("guarding skill", "guard skill", "Guard skill"),
     ("all magic skills", "all magic skills", "All magic skills"),
     ("magic skills", "all magic skills", "All magic skills"),
     ("all attributes", "all attributes", "All attributes"),
@@ -1145,6 +1186,41 @@ mod tests {
     }
 
     #[test]
+    fn mastery_rank_is_a_range_not_a_stat() {
+        // Hoxne Earring prints "Mastery Rank: All BP -30 to +30".  Without stopping at the
+        // Mastery Rank marker, the stat expression read "All BP -30" and then "to +30", so
+        // the Set totals grew an "All BP -30" row and a "To 30" row that are not stats.
+        let (lines, stats) = parse_description("Mastery Rank: All BP -30 to +30");
+        assert!(lines.is_empty());
+        assert!(stats.is_empty());
+    }
+
+    #[test]
+    fn merges_the_dbl_atk_spelling() {
+        // The Odyssey B pieces and other augments abbreviate Double Attack; without the
+        // alias the Set totals showed "Double Attack" and "Dbl.Atk" as two stats.
+        let stats: Vec<GearStat> = ["\"Dbl.Atk.\"+5%", "\"Double Attack\"+7%", "Dbl.Atk+10"]
+            .iter()
+            .flat_map(|augment| parse_augment(augment))
+            .collect();
+        let double_attack: Vec<&GearStat> = stats
+            .iter()
+            .filter(|stat| stat.key == "double attack")
+            .collect();
+        assert_eq!(double_attack.len(), 3, "{stats:?}");
+        assert!(double_attack.iter().all(|stat| stat.percent));
+        assert!(double_attack.iter().all(|stat| stat.label == "Double Attack"));
+    }
+
+    #[test]
+    fn skillchain_bonus_is_a_percentage() {
+        let stats = parse_augment("\"Skillchain Bonus\"+5");
+        let bonus = stat(&stats, "Skillchain Bonus");
+        assert_eq!(bonus.value, 5);
+        assert!(bonus.percent);
+    }
+
+    #[test]
     fn conditional_lines_show_but_do_not_total() {
         let (lines, stats) = parse_description(
             "DEF:40\nLatent effect: Accuracy+10\nAftermath: Attack+10\nAdditional effect: Accuracy+5\nMagic accuracy skill +228",
@@ -1222,6 +1298,8 @@ mod tests {
                 description: "DEF:20 VIT+10".to_string(),
                 level: 99,
                 item_level: 0,
+                jobs: 0,
+                races: 0,
             }),
             Some(ClientItem {
                 id: 26112,
@@ -1229,6 +1307,8 @@ mod tests {
                 description: "DEF:20 VIT+10".to_string(),
                 level: 99,
                 item_level: 0,
+                jobs: 0,
+                races: 0,
             }),
         ];
         let stats = build_stats(&requests, &resolved);
@@ -1252,6 +1332,8 @@ mod tests {
             description: "DEF:15\nAccuracy+10\nEnhancing magic duration +20%".to_string(),
             level: 99,
             item_level: 0,
+            jobs: 0,
+            races: 0,
         })];
         let mut items = build_stats(&requests, &resolved);
         let item = items.remove(0);
@@ -1296,6 +1378,9 @@ mod tests {
         assert!(code.contains("if type(key) == 'number' then"));
         assert!(code.contains("pcall(res.item, key)"));
         assert!(code.contains("pcall(res.item_by_name, key, 2)"));
+        // The hover card's `Lv.99 MNK` line and its race tag ride along with the tooltip.
+        assert!(code.contains("jobs = tonumber(item.jobs) or 0"));
+        assert!(code.contains("races = tonumber(item.races) or 0"));
     }
 
     #[test]
@@ -1318,7 +1403,9 @@ mod tests {
                 "name": "Sucellos's Cape",
                 "description": "DEF:15\nEnfeebling magic effect +10\nEnhancing magic duration +20%",
                 "level": 99,
-                "item_level": 0
+                "item_level": 0,
+                "jobs": 2,
+                "races": 510
             },
             {"name": "Not an item"}
         ]);
@@ -1326,6 +1413,34 @@ mod tests {
         assert_eq!(items.len(), 2);
         assert_eq!(items[0].as_ref().unwrap().id, 26250);
         assert!(items[1].is_none());
+    }
+
+    #[test]
+    fn card_fields_keep_the_full_tooltip_and_shift_the_job_mask() {
+        // The hover card draws the whole tooltip (Set: blocks included) and the client's
+        // `Lv.99 MNK` line. The client stores WAR at bit 1, the launcher's job list at bit 0.
+        let requests = vec![GearStatRequest {
+            slot: "hands".to_string(),
+            name: "Tatena. Gote +1".to_string(),
+            augments: vec!["Accuracy+40".to_string()],
+            id: 27149,
+        }];
+        let resolved = vec![Some(ClientItem {
+            id: 27149,
+            name: "Tatena. Gote +1".to_string(),
+            description: "DEF:104 HP+27\nSet: Augments \"Kick Attacks\"\nLv.99 MNK".to_string(),
+            level: 99,
+            item_level: 119,
+            jobs: 7171 * 2,
+            races: 510,
+        })];
+        let item = build_stats(&requests, &resolved).remove(0);
+        assert_eq!(item.description, "DEF:104 HP+27\nSet: Augments \"Kick Attacks\"\nLv.99 MNK");
+        assert_eq!(item.base_lines, vec!["DEF:104 HP+27"]);
+        assert_eq!(item.jobs, 7171);
+        assert_eq!(item.races, 510);
+        assert_eq!(item.level, 99);
+        assert_eq!(item.item_level, 119);
     }
 
     #[test]

@@ -53,6 +53,7 @@ import { SetStatTotals } from "./SetStatTotals";
 import { LiveSetStats } from "./LiveSetStats";
 import { useCharacterStatReport } from "../lib/characterstats";
 import { useGearStats } from "../lib/gearstats";
+import { augmentsForSlot, splitAugments } from "../lib/itemcard";
 import {
   Badge,
   Button,
@@ -812,6 +813,34 @@ export function GearPage({
     () => Object.fromEntries(gearStats.items.map((item) => [item.slot, item])),
     [gearStats.items],
   );
+
+  // The hover card's augment rows. A GearSwap set keeps them with the piece; the live grid has
+  // to read them back from the equipped bag copy, because two copies of one item can differ.
+  const selectedAugments = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    for (const [slot, detail] of Object.entries(selectedDetails)) {
+      if (detail?.augments?.length) out[slot] = detail.augments;
+    }
+    return out;
+  }, [selectedDetails]);
+  const editorAugments = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    for (const [slot, picked] of Object.entries(editor?.details ?? {})) {
+      const rows = splitAugments(picked?.augments);
+      if (rows.length) out[slot] = rows;
+    }
+    return out;
+  }, [editor?.details]);
+  const liveAugments = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    if (!bagItems.length) return out;
+    for (const slot of SLOT_KEYS) {
+      const rows = augmentsForSlot(bagItems, slots[slot]);
+      if (rows.length) out[slot] = rows;
+    }
+    return out;
+  }, [slots, bagItems]);
+
   const libraryName = library?.name || library?.path.split(/[/\\]/).pop() || "";
   const librarySetCount = library ? Object.keys(library.sets).length : 0;
 
@@ -1776,21 +1805,17 @@ export function GearPage({
                   slots={slots}
                   encumbrance={encumbrance}
                   locked={Array.from(lockedSlots)}
-                  onSlotClick={(slot) => openItemPicker(slot, "equip")}
+                  augments={liveAugments}
                 />
                 <div className="active-gear-legend">
                   {SLOT_KEYS.filter((slot) => slots[slot]?.name).map((slot) => (
-                    <button
-                      key={slot}
-                      className="gear-legend-row"
-                      onClick={() => openItemPicker(slot, "equip")}
-                    >
+                    <div key={slot} className="gear-legend-row readonly">
                       <span>{slotLabel(slot)}</span>
                       <strong>{slots[slot]?.name}</strong>
                       {(slots[slot]?.count ?? 0) > 1 ? (
                         <em>×{slots[slot]?.count}</em>
                       ) : null}
-                    </button>
+                    </div>
                   ))}
                   {!SLOT_KEYS.some((slot) => slots[slot]?.name) && (
                     <span className="muted">No gear read from the client yet.</span>
@@ -1806,8 +1831,9 @@ export function GearPage({
               />
               <p className="gear-hint">
                 The same 4×4 layout, size, alpha, ammo count and encumbrance X as Windower's
-                EquipViewer. Click a slot to change it; the totals above are the server's live
-                sheet, and clicking one opens every source behind it.
+                EquipViewer. Hover a slot for the item's full card — tooltip, augments and jobs.
+                This tab is read-only; edit gear in the Manage tab. The totals above are the
+                server's live sheet, and clicking one opens every source behind it.
               </p>
             </Card>
 
@@ -1881,6 +1907,29 @@ export function GearPage({
           role="tabpanel"
           aria-labelledby="gear-tab-manage"
         >
+          <Card className="gear-worn">
+            <div className="card-topline">
+              <span className="eyebrow">Worn now · EquipViewer</span>
+              <div className="inline-actions">
+                {loading ? <Spinner /> : <Badge tone="success" dot>live</Badge>}
+              </div>
+            </div>
+            <div className="gear-worn-body">
+              <EquipViewer
+                port={instance.port}
+                slots={slots}
+                encumbrance={encumbrance}
+                locked={Array.from(lockedSlots)}
+                augments={liveAugments}
+                onSlotClick={(slot) => openItemPicker(slot, "equip")}
+              />
+              <span className="muted">
+                Click a slot to change what the character is wearing. Hover a slot for the
+                piece's full card. The Sets tab shows the same grid read-only.
+              </span>
+            </div>
+          </Card>
+
           <Card className="gear-library">
             <div className="card-topline">
               <span className="eyebrow">GearSwap library</span>
@@ -2002,11 +2051,12 @@ export function GearPage({
                           <SetEquipmentPreview
                             port={instance.port}
                             items={selectedItems}
-                            onSlotClick={(slot) => openItemPicker(slot, "library")}
+                            augments={selectedAugments}
                             emptyLabel="This set has no items."
                           />
                           <span className="muted">
-                            Click a slot to change that piece; the library saves it.
+                            Hover a slot for the piece's card. Editing happens in the Manage
+                            tab, so a glance at a set cannot change it.
                           </span>
                           {statQueries.length > 0 ? (
                             <SetStatTotals
@@ -2205,6 +2255,7 @@ export function GearPage({
                 <SetEquipmentPreview
                   port={instance.port}
                   items={editor.items}
+                  augments={editorAugments}
                   emptyLabel={
                     editor.weaponOnly
                       ? "Pick weapons and their icons appear here."
@@ -2212,7 +2263,8 @@ export function GearPage({
                   }
                 />
                 <span className="muted">
-                  The same 4×4 grid the client shows, updated as you edit.
+                  The same 4×4 grid the client shows, updated as you edit. Hover a slot for
+                  the item's card and its augments.
                 </span>
               </div>
             </div>

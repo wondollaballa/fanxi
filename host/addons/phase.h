@@ -91,6 +91,9 @@ int xi_phase_lock_slots(unsigned mask, PhasePlan* plan);
 /* Nightingale + Troubadour are both up: a Bard song may take its instrument off a pinned hand
  * for the action's window, and the locked hand is restored when the song resolves. */
 void xi_phase_nitro(int on);
+/* The player's active status ids, pushed by the addon from the client's buff block.  A rule
+ * whose `buffs` list names a set (Victory Smite (Impetus)) only matches while all are up. */
+void xi_phase_buffs(const uint16_t* ids, int n);
 /* One-shot gear worn in front of the next action, merged into its precast set.  The addon's
  * jug picker uses it to re-assert the chosen jug in the held Call Beast/Bestial Loyalty packet;
  * the buffer is cleared by that next action. */

@@ -3176,6 +3176,24 @@ code {
   min-height: 340px;
 }
 
+/* The Manage tab's live grid: the only place a worn slot can be changed from the launcher. */
+.gear-worn {
+  margin-bottom: 14px;
+}
+
+.gear-worn-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 18px;
+  flex-wrap: wrap;
+  margin-top: 4px;
+}
+
+.gear-worn-body .muted {
+  max-width: 280px;
+  font-size: 11px;
+}
+
 .library-load {
   display: flex;
   align-items: center;
@@ -4347,6 +4365,11 @@ button.ev-cell {
   cursor: pointer;
 }
 
+/* A read-only grid still says "there is a card here" without looking like a button. */
+.ev-cell:not(.empty):not(button) {
+  cursor: help;
+}
+
 .ev-cell img {
   display: block;
   width: 100%;
@@ -4577,6 +4600,134 @@ button.ev-cell:hover {
   text-overflow: ellipsis;
 }
 
+/* ---------- Equipped-item hover card (the game's equip-view tooltip) ---------- */
+
+.item-card {
+  position: fixed;
+  /* Above the modal backdrop (50) because the set editor's preview lives in a modal;
+     below toasts (80) and the full-window stat sheet. */
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-height: min(64vh, 420px);
+  overflow: auto;
+  padding: 10px 12px 9px;
+  border: 1px solid rgba(120, 178, 220, 0.34);
+  border-radius: 8px;
+  background: linear-gradient(180deg, rgba(9, 20, 33, 0.98), rgba(5, 12, 21, 0.98));
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.55), inset 0 0 0 1px rgba(255, 255, 255, 0.03);
+  color: var(--text);
+  font-size: 11px;
+  line-height: 1.35;
+  pointer-events: none;
+  animation: item-card-in 90ms ease-out;
+}
+
+@keyframes item-card-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.item-card-head {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.item-card-name {
+  color: #ffffff;
+  font-size: 12.5px;
+  letter-spacing: 0.01em;
+}
+
+.item-card-tags {
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.item-card-slot,
+.item-card-races {
+  color: var(--gold);
+}
+
+.item-card-lines {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.item-card-line {
+  color: #d2e7f7;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Set:, Pet:, Unity Ranking: and Mastery Rank: blocks are conditional, not always-on stats. */
+.item-card-line.conditional {
+  color: #8fbcff;
+}
+
+.item-card-augments {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.item-card-sect {
+  color: var(--accent);
+  font-size: 8.5px;
+  font-weight: 700;
+  letter-spacing: 0.09em;
+  text-transform: uppercase;
+}
+
+.item-card-augment {
+  color: var(--accent);
+  overflow-wrap: anywhere;
+}
+
+.item-card-foot {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 2px;
+  padding-top: 6px;
+  border-top: 1px solid var(--border-soft);
+  color: var(--muted);
+  font-size: 10px;
+}
+
+.item-card-level {
+  display: inline-flex;
+  gap: 6px;
+  color: var(--text);
+}
+
+.item-card-level em {
+  color: var(--muted);
+  font-style: normal;
+}
+
+.item-card-note {
+  color: var(--muted-2);
+  font-size: 9.5px;
+}
+
+.item-card-error {
+  color: var(--gold);
+  font-size: 9.5px;
+}
+
 /* ---------- EquipViewer integration ---------- */
 
 .live-party-body {
@@ -4703,6 +4854,17 @@ button.ev-cell:hover {
 .gear-legend-row:hover {
   color: var(--text);
   border-bottom-color: var(--border-soft);
+}
+
+/* The Sets tab shows what is worn; editing lives in the Manage tab, so a legend row is
+   text there and must not look like a button. */
+.gear-legend-row.readonly {
+  cursor: default;
+}
+
+.gear-legend-row.readonly:hover {
+  color: var(--muted);
+  border-bottom-color: transparent;
 }
 
 .gear-legend-row span {
@@ -5626,6 +5788,69 @@ button.ev-cell:hover {
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 8px 14px;
   margin-top: 12px;
+}
+
+/* Weaponskill groups: one card per action, with its conditional variants indented under it. */
+.phase-ws-groups {
+  grid-template-columns: 1fr;
+  gap: 10px;
+}
+
+.phase-ws-group {
+  display: grid;
+  gap: 7px;
+  padding: 10px 12px;
+  border: 1px solid var(--border-soft);
+  border-radius: 6px;
+  background: rgba(11, 27, 43, 0.32);
+}
+
+.phase-ws-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.phase-ws-group-title {
+  color: var(--text);
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.phase-ws-group-note {
+  color: var(--muted-2);
+  font-size: 8.5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.phase-card-subrow {
+  padding-left: 12px;
+}
+
+.phase-card-subrow .phase-card-name {
+  flex-basis: 132px;
+  white-space: normal;
+}
+
+.phase-condition-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px;
+  margin-bottom: 2px;
+}
+
+.phase-condition {
+  display: inline-block;
+  padding: 1px 5px;
+  border: 1px solid rgba(89, 216, 242, 0.28);
+  border-radius: 3px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 8px;
+  font-weight: 600;
+  white-space: nowrap;
 }
 
 .phase-category-heading {

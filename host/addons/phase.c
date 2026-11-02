@@ -41,6 +41,12 @@
  * hundred, so the set table is sized for a whole job's worth: at 96 the field, movement and
  * focus sets fell off the end and the client silently wore the town set instead. */
 enum { PHASE_SETS = 256, PHASE_RULES = 4096, PHASE_NAME = 48 };
+/* Conditional rules: a set named "Victory Smite (Impetus, Focus)" matches only while every
+ * listed buff is up.  The buff ids are the client's status ids (Impetus is 461); the addon
+ * pushes the live list from the player's own buff block every frame or so. */
+enum { PHASE_RULE_BUFFS = 8 };
+/* The client's status ids are 0..4095; one bit each is 512 bytes. */
+enum { PHASE_BUFF_IDS = 4096, PHASE_BUFF_WORDS = PHASE_BUFF_IDS / 32 };
 /* 0x01A action categories: what the client is doing. */
 enum
 {
@@ -84,6 +90,8 @@ typedef struct PhaseRule
     uint16_t category, action;
     int16_t pre, mid; /* indices into sets, -1 for none */
     uint8_t song;     /* a Bard song: the only magic set allowed the Nitro instrument swap */
+    uint8_t n_buffs;  /* 0: the unconditional set for this action */
+    uint16_t buffs[PHASE_RULE_BUFFS]; /* all must be active (AND) */
 } PhaseRule;
 
 typedef struct PhaseTable
@@ -107,6 +115,11 @@ typedef struct PhaseTable
 
 static _Atomic(PhaseTable*) g_table;
 static _Atomic unsigned g_actions, g_seen, g_held, g_restored, g_stale, g_swapped;
+/* The player's active status ids, as a bitmap.  The addon writes the whole list from the game
+ * thread; the packet hook reads it on the network thread.  An even epoch means the bitmap is
+ * stable; a reader that catches an update retries. */
+static _Atomic unsigned g_buff_epoch;
+static _Atomic uint32_t g_buff_bits[PHASE_BUFF_WORDS];
 /* Engagement comes from the client's own /attack and from the server's animation for the
  * player.  /attack off is not read here: the server answers a real disengage with animation 0,
  * and an ignored range disengage must not move the gear. Movement is sampled by the addon. */
@@ -304,16 +317,62 @@ static uint32_t packet_u32(const uint8_t* p)
     return (uint32_t)p[0] | (uint32_t)p[1] << 8 | (uint32_t)p[2] << 16 | (uint32_t)p[3] << 24;
 }
 
+/* 1 when every buff a conditional rule names is up.  A rule with no condition is always on. */
+static int rule_buffs_active(const PhaseRule* rule)
+{
+    for (int i = 0; i < rule->n_buffs; ++i)
+    {
+        uint16_t id = rule->buffs[i];
+        if (id >= PHASE_BUFF_IDS)
+            return 0;
+        for (;;)
+        {
+            unsigned before = atomic_load_explicit(&g_buff_epoch, memory_order_acquire);
+            if (before & 1u)
+                continue; /* the addon is rewriting the list; the write is very short */
+            uint32_t word = atomic_load_explicit(&g_buff_bits[id >> 5],
+                                                 memory_order_relaxed);
+            unsigned after = atomic_load_explicit(&g_buff_epoch, memory_order_acquire);
+            if (before == after)
+            {
+                if (!((word >> (id & 31)) & 1u))
+                    return 0;
+                break;
+            }
+        }
+    }
+    return 1;
+}
+
+/* Pick the exact rule for this action.  A conditional rule beats the unconditional one, and a
+ * rule that names more buffs beats one that names fewer, so "(Impetus, Focus)" wins over
+ * "(Impetus)" while both are up.  A category rule with action 0 stays the last fallback. */
 static const PhaseRule* find_rule(const PhaseTable* t, uint16_t category, uint16_t action)
 {
-    /* The exact rule wins; a category rule with action 0 is the fallback (precast.WS,
-     * precast.JA, precast.FC) for an action the library has no named set for. */
+    const PhaseRule* best = NULL;
+    int best_buffs = -1;
     for (int i = 0; i < t->nrules; ++i)
-        if (t->rules[i].category == category && t->rules[i].action == action)
-            return &t->rules[i];
+    {
+        const PhaseRule* rule = &t->rules[i];
+        if (rule->category != category || rule->action != action)
+            continue;
+        if (!rule_buffs_active(rule))
+            continue;
+        if ((int)rule->n_buffs > best_buffs)
+        {
+            best = rule;
+            best_buffs = (int)rule->n_buffs;
+        }
+    }
+    if (best)
+        return best;
     for (int i = 0; i < t->nrules; ++i)
-        if (t->rules[i].category == category && t->rules[i].action == 0)
-            return &t->rules[i];
+    {
+        const PhaseRule* rule = &t->rules[i];
+        if (rule->category == category && rule->action == 0
+                && rule_buffs_active(rule))
+            return rule;
+    }
     return NULL;
 }
 
@@ -1155,6 +1214,19 @@ void xi_phase_nitro(int on)
     atomic_store_explicit(&g_nitro, on ? 1 : 0, memory_order_release);
 }
 
+void xi_phase_buffs(const uint16_t* ids, int n)
+{
+    uint32_t bits[PHASE_BUFF_WORDS] = { 0 };
+    for (int i = 0; i < n; ++i)
+        if (ids[i] < PHASE_BUFF_IDS)
+            bits[ids[i] >> 5] |= (uint32_t)1u << (ids[i] & 31);
+    /* Odd epoch: a reader that sees it waits for the even one rather than a half-updated list. */
+    atomic_fetch_add_explicit(&g_buff_epoch, 1, memory_order_acq_rel);
+    for (int i = 0; i < PHASE_BUFF_WORDS; ++i)
+        atomic_store_explicit(&g_buff_bits[i], bits[i], memory_order_relaxed);
+    atomic_fetch_add_explicit(&g_buff_epoch, 1, memory_order_release);
+}
+
 void xi_phase_precache(uint16_t action, const PhaseEquip* equips, int n)
 {
     if (n < 0)
@@ -1354,6 +1426,23 @@ static int p_set(lua_State* L)
                 lua_pop(L, 1);
                 lua_getfield(L, -1, "song");
                 r.song = lua_toboolean(L, -1) ? 1 : 0;
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "buffs");
+                if (lua_istable(L, -1))
+                {
+                    int nb = (int)lua_objlen(L, -1);
+                    for (int b = 1; b <= nb && r.n_buffs < PHASE_RULE_BUFFS; ++b)
+                    {
+                        lua_rawgeti(L, -1, b);
+                        if (lua_isnumber(L, -1))
+                        {
+                            int id = (int)lua_tointeger(L, -1);
+                            if (id > 0 && id < PHASE_BUFF_IDS)
+                                r.buffs[r.n_buffs++] = (uint16_t)id;
+                        }
+                        lua_pop(L, 1);
+                    }
+                }
                 lua_pop(L, 1);
                 if (r.pre >= t->nsets)
                     r.pre = -1;
@@ -1734,6 +1823,26 @@ static int p_nitro(lua_State* L)
     return 1;
 }
 
+/* The control addon's live buff list: a table of the client's status ids.  It is pushed once
+ * per frame or so and replaces the previous snapshot. */
+static int p_buffs(lua_State* L)
+{
+    luaL_checktype(L, 1, LUA_TTABLE);
+    uint16_t ids[64];
+    int n = (int)lua_objlen(L, 1);
+    if (n > (int)(sizeof ids / sizeof ids[0]))
+        n = (int)(sizeof ids / sizeof ids[0]);
+    for (int i = 0; i < n; ++i)
+    {
+        lua_rawgeti(L, 1, i + 1);
+        ids[i] = (uint16_t)lua_tointeger(L, -1);
+        lua_pop(L, 1);
+    }
+    xi_phase_buffs(ids, n);
+    lua_pushnumber(L, n);
+    return 1;
+}
+
 /* A manual equip from the addon (the launcher's Wear set, a single-slot change): the engine no
  * longer knows what the slot holds, so the next state set writes it back. */
 static int p_forget(lua_State* L)
@@ -1789,7 +1898,7 @@ void xi_phase_open(lua_State* L)
         { "pending", p_pending }, { "stale", p_stale }, { "zone", p_zone }, { "job", p_job },
         { "lock", p_lock }, { "kiting", p_kiting }, { "resting", p_resting },
         { "focus", p_focus }, { "lock_slots", p_lock_slots }, { "precache", p_precache },
-        { "nitro", p_nitro },
+        { "nitro", p_nitro }, { "buffs", p_buffs },
         { "forget", p_forget }, { "forget_slot", p_forget_slot }, { "remember", p_remember },
         { NULL, NULL },
     };

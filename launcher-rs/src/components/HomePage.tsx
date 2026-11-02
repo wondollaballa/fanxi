@@ -171,6 +171,7 @@ export function HomePage({
                     port={thisCharacterRunning?.port ?? null}
                     slots={gearSlots}
                     encumbrance={thisCharacterRunning?.metrics?.gear?.encumbrance ?? 0}
+                    characterId={thisCharacterRunning?.character?.id ?? null}
                     emptyLabel={
                       thisCharacterRunning
                         ? "The client has not sent its first gear read yet."
