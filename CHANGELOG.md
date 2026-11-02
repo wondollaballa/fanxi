@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased — Limbus weapons on the RP card
+
+- **All sixteen Telopanos weapons joined the Data page's RP card.**  The Limbus
+  furnaces' Superior 5 weapons — one per weapon skill plus the shield and the
+  grip — were missing from the card entirely: the RP registry had no paths for
+  them and their item rows carried no stats, so a copy in a bag could not be
+  capped and showed nothing on the stat sheet.
+  `data/limbus_weapons_r30.json` now holds each weapon's client stat line and its
+  Rank 30 rows, and `tools/gen_limbus_weapons.py` writes
+  `database/migrations/0175_limbus_weapons_r30.sql` (base modifiers, client skill
+  bonuses, the tooltip description, and one unaugmented copy of each weapon for
+  characters 1 and 2) and `docs/limbus-weapons-r30.md` from it.  The card caps a
+  path exactly like the Limbus suits: rank 30 / tier 3 / 55,800 RP (curve B) and
+  the piece's own client bundle.
+- **Each weapon carries a real client bundle.**  The client's augment table has
+  512 entries; 497-512 are this family (bundle 500 is the Saber's
+  `Damage+18 / Magic Damage+25 / HP+150`), and every one was matched to its wiki
+  Rank 30 rows by content.  A capped copy therefore prints its rows on the
+  tooltip, `//r30 telopanos saber` prints them in chat and `//rp30` re-stamps
+  weapons alongside the armour.
+- **`Damage+n` augments now raise the weapon's damage rating.**  Retail adds the
+  row to the weapon, not to a modifier, so it was previously display-only for
+  every weapon that carries one (the Telopanos weapons and Oboro's HQ2 paths).
+  `augment_stats.weapon_damage` reads the row from the block and
+  `FanxiService.equipped_weapons` adds it to `item_weapon.dmg`, which the attack
+  round and the weaponskill formula already read.  A Rank 30 Saber swings at
+  157+18.
+- **The shared stat-line parser learned four more tooltip spellings.**  Unquoted
+  `Magic Attack Bonus +n`, lower-case `Magic damage +n`, unquoted
+  `Snapshot +n`, and the shield's one-line `Damage taken II -5%` (which feeds
+  both uncapped pools) used to be dropped; the Telopanos data needs all four.
+  `Magic Accuracy skill +n` still has no client skill id and stays un-stored.
+- Tests: `test_limbus.py` walks the 16 entries, their bundles and the registry;
+  `test_augment_stats.py` covers the Saber's rows and the damage rating (and
+  Oboro's HQ2 `DMG:+12`); `test_api.py` buys a Saber and caps it through the RP
+  card.  Docs: `docs/limbus-weapons-r30.md`, plus the launcher/control-panel
+  passages that describe the card and `//r30`.
+
 ## Unreleased — Target Debuffs and Battle HUD over HTTPS
 
 - **The HUD's API client now speaks HTTPS.** `battle.http_json` only parsed `http://`, so with

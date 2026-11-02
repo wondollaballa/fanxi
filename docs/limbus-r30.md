@@ -34,6 +34,10 @@ equipped piece back to its inventory copy, `augment_stats` decodes the rank-30
 block and adds the piece's four rows, so Revelation's five `"Double Attack"+7%`
 style rows (34% total) reach the attack round's per-hand multi-attack roll.
 
+The furnaces' other Superior 5 gear -- the sixteen **Telopanos weapons** -- works
+the same way (Rank 30, RP curve B, a client bundle each) and is documented
+separately in [limbus-weapons-r30.md](limbus-weapons-r30.md).
+
 ## Duty Armor Set
 
 - **Family:** Justice (Justice Armor Set -> Magnificent Armor Set -> Duty Armor Set)

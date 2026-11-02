@@ -951,9 +951,10 @@ This is intentionally a safe subset:
   Odyssey armour and weapons); same-name cape and Nyame builds flatten to one base name for Wear
   set, and saving a version drops the augment arrays;
 - `//r30 <item>` in the game's chat log prints that item's Rank 30 rows — Odyssey (all four
-  Nyame paths, or the single Sakpata's/Gleti's/Agwu's row) or Limbus (the four suit rows);
-  `//r30` alone lists every item the server knows. `//rp30` re-stamps the Limbus pieces the
-  character is carrying to Rank 30 (55,800 RP and the piece's augment bundle).
+  Nyame paths, or the single Sakpata's/Gleti's/Agwu's row) or Limbus (a suit piece or one of
+  the sixteen Telopanos weapons); `//r30` alone lists every item the server knows. `//rp30`
+  re-stamps every Limbus piece the character is carrying — armour and weapons — to Rank 30
+  (55,800 RP and the piece's augment bundle).
 - GearSwap's rules, `aftercast`, `precast` hooks and state machine are not reimplemented here.
   Actual GearSwap can still run through the addon host if installed under
   `windower/addons/GearSwap`; the panel is a native inspector/equipper.

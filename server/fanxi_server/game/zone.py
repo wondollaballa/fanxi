@@ -2429,7 +2429,7 @@ class ZoneSession:
                 query = " ".join(words[1:]).strip()
                 if not query:
                     names = [entry["name"] for entry in odyssey.entries()]
-                    names += [entry["name"] for entry in limbus.entries()]
+                    names += [entry["name"] for entry in limbus.all_entries()]
                     for offset in range(0, len(names), 3):
                         self.say(", ".join(names[offset:offset + 3]))
                     self.say("//r30 <item> prints its Rank 30 rows (Odyssey or Limbus).")

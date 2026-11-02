@@ -125,9 +125,31 @@ def parse_description(description: str):
 
         text = regex.sub(replace, text)
 
+    def take_many(pattern: str, mod_ids, transform, flags: int = 0):
+        """Claim a line that feeds more than one modifier.
+
+        "Damage taken II" is one line that reduces both physical and magic damage
+        taken past the 50% cap, so it appends the same value to ``DMGPHYS_II`` and
+        ``DMGMAGIC_II`` instead of a single modifier.
+        """
+        nonlocal text
+        regex = re.compile(pattern, flags)
+
+        def replace(match: re.Match) -> str:
+            value = transform(int(match.group(1)))
+            for mod_id in mod_ids:
+                mods.append((int(mod_id), value))
+            return " "
+
+        text = regex.sub(replace, text)
+
     # Magic and ranged names first: "Magic Accuracy" must not be read as "Accuracy".
     take(r'"Magic Atk\. Bonus"\s*\+\s*(\d+)', MOD["MATT"])
     take(r'"M\. Atk\. B\."\s*\+\s*(\d+)', MOD["MATT"])
+    # Modern tooltips drop the quotes ("Magic Attack Bonus +52" on the Telopanos
+    # weapons and the iLvl 119 gear), so both spellings are claimed.
+    take(r"Magic Attack Bonus\s*\+\s*(\d+)", MOD["MATT"])
+    take(r"Magic Atk\. Bonus\s*\+\s*(\d+)", MOD["MATT"])
     take(r'"Magic Def\. Bonus"\s*\+\s*(\d+)', MOD["MDEF"])
     take(r'"M\. Def\. B\."\s*\+\s*(\d+)', MOD["MDEF"])
     take(r"Magic Accuracy\s*\+\s*(\d+)", MOD["MACC"])
@@ -187,7 +209,9 @@ def parse_description(description: str):
     take(r'"Absorb-TP" effect\s*\+\s*(\d+)%?', MOD["ABSORB_TP"])
     take(r"Weapon ?[Ss]kill damage\s*\+\s*(\d+)%?", MOD["WS_DMG"])
     take(r"Physical damage limit\s*\+\s*(\d+)%?", MOD["DAMAGE_LIMITP"])
-    take(r"Magic Damage\s*\+\s*(\d+)", MOD["MAGIC_DAMAGE"])
+    # The client writes "Magic damage" on modern weapon tooltips and
+    # "Magic Damage" on the older ones.
+    take(r"Magic Damage\s*\+\s*(\d+)", MOD["MAGIC_DAMAGE"], flags=re.I)
     take(r"Mag\. Dmg\.\s*\+\s*(\d+)", MOD["MAGIC_DAMAGE"])
     take(r"Magic burst damage II\s*\+\s*(\d+)", MOD["MAGIC_BURST_II"])
     take(r"Magic burst damage\s*\+\s*(\d+)", MOD["MAGIC_BURST"])
@@ -198,7 +222,7 @@ def parse_description(description: str):
     take(r'"Regen"\s*\+\s*(\d+)', MOD["REGEN"])
     take(r'"Perpetuance"\s*\+\s*(\d+)%', MOD["PERPETUANCE"], lambda value: value * 100)
     take(r"Enhancing magic duration\s*\+\s*(\d+)%", MOD["ENH_MAGIC_DURATION"])
-    take(r'"Snapshot"\s*\+\s*(\d+)', MOD["SNAPSHOT"])
+    take(r'"?Snapshot"?\s*\+\s*(\d+)', MOD["SNAPSHOT"])
     take(r'"Rapid Shot"\s*\+\s*(\d+)', MOD["RAPID_SHOT"])
     take(r"Dark magic casting time\s*-\s*(\d+)%", MOD["DARK_CAST"], lambda value: -value)
 
@@ -215,6 +239,10 @@ def parse_description(description: str):
          lambda value: -value * 100)
     take(r"Ranged damage taken\s*-\s*(\d+)%", MOD["DMGRANGE"],
          lambda value: -value * 100)
+    # "Damage taken II -5%" (the Telopanos Shield) is one line that feeds the
+    # two uncapped pools; plain "Damage taken" is the capped DMG pool.
+    take_many(r"Damage taken II\s*-\s*(\d+)%", (MOD["DMGPHYS_II"], MOD["DMGMAGIC_II"]),
+              lambda value: -value * 100)
     take(r"Damage taken\s*-\s*(\d+)%", MOD["DMG"], lambda value: -value * 100)
     take(r"Enmity\s*\+\s*(\d+)", MOD["ENMITY"])
     take(r"Enmity\s*-\s*(\d+)", MOD["ENMITY"], lambda value: -value)

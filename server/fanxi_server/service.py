@@ -2380,16 +2380,37 @@ class FanxiService:
         A slot holding something that is not a weapon (a shield in the sub slot, say) has
         no ``item_weapon`` row and comes back with zeroed weapon fields.  A shield carries
         its size in ``shield_size``; anything else has 0 there and is not a shield.
+
+        ``dmg`` includes the copy's augment rows that raise the damage rating
+        (``DMG:+12`` on an Oboro HQ2 path, ``Damage+18`` on a Telopanos weapon, a
+        ``DMG:`` slot on a standard block): retail adds those to the weapon, not to
+        a modifier, so the augmented rating is what the attack round must read.
         """
         rows = self.db.all(
             "SELECT e.kind, e.item_id, w.skill, w.dmg, w.delay, w.ilvl_skill, "
-            "i.item_level, s.size AS shield_size "
+            "i.item_level, s.size AS shield_size, COALESCE(ci.extra, X'') AS extra "
             "FROM char_equip e "
             "LEFT JOIN item_weapon w ON w.item_id = e.item_id "
             "LEFT JOIN items i ON i.item_id = e.item_id "
             "LEFT JOIN item_shield s ON s.item_id = e.item_id "
+            "LEFT JOIN char_inventory ci ON ci.character_id = e.character_id "
+            "AND ci.container = e.container AND ci.slot = e.slot "
             "WHERE e.character_id = ?", (int(character_id),))
-        return {int(row["kind"]): dict(row) for row in rows}
+        out: dict[int, dict] = {}
+        for row in rows:
+            weapon = dict(row)
+            extra = weapon.pop("extra", b"")
+            if int(weapon.get("dmg") or 0):
+                try:
+                    weapon["dmg"] = int(weapon["dmg"]) + augment_stats.weapon_damage(
+                        int(weapon["item_id"]), extra)
+                except (KeyError, TypeError, ValueError):
+                    # A malformed block must never stop the weapon from loading.
+                    logging.getLogger("fanxi.stats").debug(
+                        "augment damage unreadable for item %s", weapon["item_id"],
+                        exc_info=True)
+            out[int(weapon["kind"])] = weapon
+        return out
 
     def save_equipment(self, character_id: int, equipped: dict) -> None:
         """Replace the stored outfit with the current one (kind -> (container, slot, item))."""

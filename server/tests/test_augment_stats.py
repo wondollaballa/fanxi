@@ -128,6 +128,8 @@ class AugmentParserTest(unittest.TestCase):
         rows = set()
         for entry in limbus.entries():
             rows.update(entry["paths"]["Rank 30"])
+        for entry in limbus.weapon_entries():
+            rows.update(entry["paths"]["Rank 30"])
         for entry in odyssey.entries():
             for path_rows in entry["paths"].values():
                 rows.update(path_rows or [])
@@ -151,6 +153,33 @@ class AugmentParserTest(unittest.TestCase):
                 self.assertTrue(
                     not key or key in augment_stats.MAPPED or key in augment_stats.UNMODELLED,
                     "unhandled augment line %r (key %r)" % (line, key))
+
+
+class WeaponDamageTest(unittest.TestCase):
+    """The damage-rating rows raise item_weapon.dmg instead of a modifier."""
+
+    def test_damage_row_is_not_a_modifier(self):
+        self.assertEqual(augment_stats.parse_line("Damage+18"), {})
+        self.assertIn("damage", augment_stats.MAPPED)
+
+    def test_telopanos_saber_rows(self):
+        saber = limbus.get(22188)
+        block = limbus.extra(saber)
+        self.assertEqual(augment_stats.parse_rows(saber["paths"]["Rank 30"]),
+                         {mod.MAGIC_DAMAGE: 25, mod.HP: 150})
+        self.assertEqual(augment_stats.weapon_damage(22188, block), 18)
+
+    def test_oboro_hq2_path_adds_its_damage_row(self):
+        # Sagitta (HANDS hq2) path A carries the "DMG:+12" row at rank 25.
+        entry = next(item for item in oboro.entries() if item["item_id"] == 21523)
+        path = next(candidate for candidate in entry["paths"] if candidate["key"] == "A")
+        block = augments.bundle("A", path["rank"], path["tier"], path["bundle"],
+                                rp=path["rp"], curve=path["curve"])
+        self.assertEqual(augment_stats.weapon_damage(21523, block), 12)
+
+    def test_a_weapon_without_a_block_adds_nothing(self):
+        self.assertEqual(augment_stats.weapon_damage(22188, b""), 0)
+        self.assertEqual(augment_stats.weapon_damage(22188, None), 0)
 
 
 class EquippedAugmentTest(unittest.TestCase):
@@ -254,6 +283,23 @@ class EquippedAugmentTest(unittest.TestCase):
             mod.DEX: 20, mod.ACC: 30, mod.ATT: 20,
             mod.STORETP: 10, mod.DMGPHYS: -1000,
         })
+
+    def test_telopanos_weapon_rows_reach_the_sheet(self):
+        diff = self.augment_diff([(0, 22188, limbus.extra(limbus.get(22188)))])
+        self.assertEqual(diff[mod.MAGIC_DAMAGE], 25)
+        self.assertEqual(diff[mod.HP], 150)
+        # The Damage+18 row is the weapon's rating, not a modifier.
+        self.assertNotIn(mod.DMG, diff)
+
+    def test_the_weapon_rating_includes_the_augment(self):
+        self.equip([(0, 22188, limbus.extra(limbus.get(22188)))])
+        weapon = self.service.equipped_weapons(self.character_id)[0]
+        self.assertEqual(int(weapon["dmg"]), 157 + 18)
+        with self.db.transaction() as conn:
+            conn.execute("UPDATE char_inventory SET extra = X'' WHERE character_id = ?",
+                         (self.character_id,))
+        weapon = self.service.equipped_weapons(self.character_id)[0]
+        self.assertEqual(int(weapon["dmg"]), 157)
 
     def test_item_without_a_block_adds_nothing(self):
         self.assertEqual(self.augment_diff([(4, 24122, b"")]), {})

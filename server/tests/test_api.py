@@ -622,6 +622,38 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(mantle["current"]["rank"], 30)
         self.assertIn("Accuracy+25", " ".join(mantle["paths"][0]["augments"]))
 
+    def test_telopanos_weapon_card_and_rank30_cap(self):
+        token = self.register()["token"]
+        character = json.loads(self.call(
+            "POST", "/api/v1/characters",
+            {"name": "Telopanos", "race": 1, "face": 1, "size": 1, "nation": 0},
+            token=token).payload)["character"]
+        base = "/api/v1/characters/%d" % character["id"]
+        self.assertEqual(self.call("POST", base + "/gil", {"top_off": True},
+                                   token=token).status, 200)
+        bought = self.call("POST", base + "/armory", {"item_id": 22188}, token=token)
+        self.assertEqual(bought.status, 201, bought.payload)
+        data = json.loads(self.call("GET", base + "/data", token=token).payload)
+        saber = next(item for item in data["augments"] if item["item_id"] == 22188)
+        self.assertEqual((saber["kind"], saber["set"]), ("limbus", "Telopanos"))
+        self.assertIsNone(saber["current"])
+        self.assertEqual(saber["paths"][0]["rank"], 30)
+        self.assertEqual(saber["paths"][0]["augments"],
+                         ["Damage+18", "Magic Damage+25", "HP+150"])
+
+        capped = self.call("POST", base + "/progress", {
+            "op": "augment", "container": saber["container"],
+            "slot": saber["slot"], "path": "A",
+        }, token=token)
+        self.assertEqual(capped.status, 200, capped.payload)
+        payload = json.loads(capped.payload)
+        saber = next(item for item in payload["augments"] if item["item_id"] == 22188)
+        current = saber["current"]
+        self.assertEqual(
+            (current["rank"], current["tier"], current["rp"], current["curve"],
+             current["index"]),
+            (30, 3, 55800, 1, 500))
+
     def test_magian_trial_upgrades_the_item(self):
         token = self.register()["token"]
         character = json.loads(self.call(

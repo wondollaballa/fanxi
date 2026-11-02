@@ -151,7 +151,7 @@ _ATTRIBUTES = (mod.STR, mod.DEX, mod.VIT, mod.AGI, mod.INT, mod.MND, mod.CHR)
 UNMODELLED = {
     "bloodpactdamage",          # summoner blood pacts
     "chanceofsuccessfulblock",  # block rate is derived from shield size only
-    "dmg",                      # weapon damage rating comes from item_weapon
+    "petdmg",                   # pet damage bonus (no pet sheet yet)
     "doubleattackdamage",       # "Double Attack" damage bonus
     "tripleattackdamage",       # "Triple Attack" damage bonus
     "magicburstdamage",         # magic burst damage
@@ -276,6 +276,14 @@ UNMODELLED_LINES = {
 MAPPED = set(_FLAT) | set(_PERCENT) | set(_HUNDREDTHS) | set(_REDUCTIONS) | {
     "allattr", "swordenhancementspelldamage"}
 
+# Rows that raise the weapon's damage rating rather than a modifier.  They are
+# applied by :func:`weapon_damage` -- ``Service.equipped_weapons`` adds the total
+# to the ``item_weapon.dmg`` the attack round and the weaponskill formula read --
+# so they count as modelled even though :func:`parse_line` returns no modifier.
+# "Damage+n" is BG Wiki's wording for the bundle's "DMG:+#" row.
+WEAPON_DAMAGE = {"damage", "dmg"}
+MAPPED |= WEAPON_DAMAGE
+
 
 def _key(text: str) -> str:
     """Normalise an augment name: no quotes, dots, colons or spaces."""
@@ -370,13 +378,14 @@ def _registry() -> dict[int, dict]:
     return augment_gear.entries()
 
 
-def _bundle_mods(item_id: int, raw: bytes) -> dict[int, int]:
+def _bundle_rows(item_id: int, raw: bytes) -> list[str]:
+    """The augment rows a bundled block names for one item (empty when unknown)."""
     decoded = augments.decode(raw)
     if not decoded:
-        return {}
+        return []
     entry = _registry().get(int(item_id))
     if entry is None:
-        return {}
+        return []
     path = None
     for candidate in entry.get("paths", ()):
         if candidate.get("bundle") is None:
@@ -390,8 +399,47 @@ def _bundle_mods(item_id: int, raw: bytes) -> dict[int, int]:
         path = next((candidate for candidate in entry.get("paths", ())
                      if str(candidate.get("key", "")).upper() == decoded["path"]), None)
     if path is None or int(decoded["rank"]) < int(path.get("rank", 0)):
-        return {}
-    return parse_rows(path.get("augments"))
+        return []
+    return [str(row) for row in (path.get("augments") or ())]
+
+
+def _bundle_mods(item_id: int, raw: bytes) -> dict[int, int]:
+    return parse_rows(_bundle_rows(item_id, raw))
+
+
+def weapon_damage(item_id: int, extra: bytes | None) -> int:
+    """The damage-rating points one item copy's augment block adds.
+
+    Two row families raise ``item_weapon.dmg`` instead of a modifier: the bundle
+    datasets write it as ``DMG:+#`` (Oboro's HQ2 paths) or ``Damage+#`` (the
+    Telopanos weapons), and a standard cape-style block can carry the client's
+    0x02D/0x04C/0x2E6/0x2E7/0x2EA-0x2ED "DMG:" ids.  ``Service.equipped_weapons``
+    adds the total to the weapon the attack round reads, which is where retail
+    applies it too.  Blocks for ranks this checkout has no rows for add nothing.
+    """
+    raw = bytes(extra or b"")
+    if len(raw) < 12:
+        return 0
+    total = 0
+    if raw[0] == 0x03 and raw[1] == 0x83:
+        for row in _bundle_rows(int(item_id), raw):
+            position = 0
+            for match in _VALUE.finditer(row):
+                value = int(match.group(2)) * (1 if match.group(1) == "+" else -1)
+                for name in _names(row[position:match.start()]):
+                    if _key(name) in WEAPON_DAMAGE:
+                        total += value
+                position = match.end()
+        return total
+    if raw[0] == capes.AUGMENT_KIND and raw[1] == capes.AUGMENT_SUBKIND:
+        for slot in capes.decode(raw) or ():
+            entry = capes.TABLE.get(int(slot.get("id") or 0))
+            if entry is None or not str(entry[0]).startswith("DMG"):
+                continue
+            name, offset, multiplier, percent = entry
+            amount = (int(slot.get("value") or 0) + offset) * multiplier
+            total += amount if not percent else amount // 100
+    return int(total)
 
 
 def describe_augments(item_id: int, extra: bytes | None) -> str:

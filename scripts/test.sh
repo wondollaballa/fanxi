@@ -9,6 +9,7 @@ echo "== launcher"
 cargo test --manifest-path launcher-rs/src-tauri/Cargo.toml
 echo "== tools"
 python3 tools/gen_oboro.py --check
+python3 tools/gen_limbus_weapons.py --check
 python3 tests/verify_install_test.py
 python3 tests/chat_complete_test.py
 echo "== hud labels"
