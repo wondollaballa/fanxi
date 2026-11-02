@@ -4767,7 +4767,8 @@ class ZoneSession:
             if int(equipped_id) == int(item_id):
                 self._apply_equip_model(kind, {"model": int(model)})
         self.queue.append(self.grap_list())
-        self.say("%s now uses model %d (//modelnext for the next one)." % (name, int(model)))
+        self.say("%s now uses model %d (re-equip it to redraw; //modelnext for the "
+                 "next one)." % (name, int(model)))
 
     def _apply_equip_model(self, kind: int, item: dict) -> None:
         """Put the item's visual model into the character's grap list."""

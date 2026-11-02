@@ -10,7 +10,7 @@ rows; this tool turns it into the two artefacts that must not drift from it:
 * ``--sql``    write ``database/migrations/0175_limbus_weapons_r30.sql`` (the
                 base modifiers, the client skill bonuses, the item descriptions
                 and the grant for characters 1 and 2) and
-                ``0181_limbus_weapon_models.sql`` (the grap model each weapon
+                ``0182_limbus_weapon_models.sql`` (the grap model each weapon
                 wears, identified from the client's 2026 block -- see
                 :func:`render_models_sql`);
 * ``--docs``   write ``docs/limbus-weapons-r30.md`` (every weapon, every Rank 30
@@ -42,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "limbus_weapons_r30.json"
 DOCS = ROOT / "docs" / "limbus-weapons-r30.md"
 SQL = ROOT / "database" / "migrations" / "0175_limbus_weapons_r30.sql"
-MODELS_SQL = ROOT / "database" / "migrations" / "0181_limbus_weapon_models.sql"
+MODELS_SQL = ROOT / "database" / "migrations" / "0182_limbus_weapon_models.sql"
 
 # The two characters the award goes to: Onedough (account onedough) and
 # Twodough (account onedough-2), the same pair migration 99 granted the suits to.

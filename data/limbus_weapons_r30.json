@@ -86,8 +86,8 @@
     "HP+150"
    ],
    "bundle": 498,
-   "model": 957,
-   "model_note": "derived — Dagger follows H2H"
+   "model": 956,
+   "model_note": "confirmed in game (Onedough)"
   },
   {
    "item_id": 21738,
@@ -109,7 +109,7 @@
    "bundle": 502,
    "pet": "Main hand: Pet: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
    "model": 960,
-   "model_note": "derived — Axe in skill order"
+   "model_note": "derived — Axe follows G.Sword"
   },
   {
    "item_id": 21795,
@@ -273,8 +273,8 @@
     "HP+150"
    ],
    "bundle": 500,
-   "model": 968,
-   "model_note": "tentative — 968; if it is not a saber, it is probably 958 (shared with the Sword)"
+   "model": 958,
+   "model_note": "tentative — 968 is a fan (wrong); 958 is the Sword's model.  If the Saber has its own, try 957, 955, 954, 953, 952, 951"
   },
   {
    "item_id": 22225,
@@ -365,5 +365,5 @@
    "model_note": "confirmed in game (Onedough) — the sub/shield model group"
   }
  ],
- "model_note": "The 2026 wave has no model id in any server data (LandSandBoat: TODO MId) and the client's item record carries none either.  The ids come from the client's 2026 model additions, identified in game: Sword 958, Claymore 959, Scythe 962, Knuckles 490 and Shield 681 are confirmed.  The melee block is ordered by the client's skill ids (H2H, Dagger, Sword, G.Sword, Axe, G.Axe, Scythe, Polearm, Katana, G.Katana, Club, Staff), so Dagger 957 ... Staff 967 follow from it; H2H (490), Archery (156) and the shield (681) sit in their own model groups.  The Saber is still tentative."
+ "model_note": "The 2026 wave has no model id in any server data (LandSandBoat: TODO MId) and the client's item record carries none either.  The ids come from the client's 2026 model additions, identified in game: Knife 956, Sword 958, Claymore 959, Scythe 962, Knuckles 490 and Shield 681 are confirmed.  The melee block follows the client's skill-id order (Dagger, Sword, G.Sword, Axe, G.Axe, Scythe, Polearm, Katana, G.Katana, Club, Staff); H2H (490), Archery (156) and the shield (681) sit in their own model groups.  The Saber is still open: 968 is a fan, not a saber."
 }
