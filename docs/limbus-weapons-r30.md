@@ -210,7 +210,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Shield
 
 - **Item:** 26503, **slot:** sub, **bundle:** 512
-- **Model:** 680 -- tentative — try 681 (large) or 1181 (buckler) if wrong
+- **Model:** 681 -- confirmed in game (Onedough) — the sub/shield model group
 - **Jobs:** PLD
 - **Stats:** DEF:152 Accuracy+32 Magic Accuracy+32 Shield skill +121 Haste+5% Damage taken II -5%
 
@@ -250,7 +250,7 @@ main DAT only.  H2H, Archery and the shield sit in their own groups.
 | Telopanos Maul | Club | 966 | derived — Club one-hand, main+sub |
 | Telopanos Staff | Staff | 967 | derived — Staff closes the block |
 | Telopanos Claymore | Great Sword | 959 | confirmed in game (Onedough) |
-| Telopanos Shield | Shield | 680 | tentative — try 681 (large) or 1181 (buckler) if wrong |
+| Telopanos Shield | Shield | 681 | confirmed in game (Onedough) — the sub/shield model group |
 
 `//model <item> <id>` sets a copy's look in game and `//modelnext <item>` steps
 it up one id per call; editing the dataset's `model` field and running the

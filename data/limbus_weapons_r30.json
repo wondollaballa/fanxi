@@ -361,9 +361,9 @@
     "VIT+30"
    ],
    "bundle": 512,
-   "model": 680,
-   "model_note": "tentative — try 681 (large) or 1181 (buckler) if wrong"
+   "model": 681,
+   "model_note": "confirmed in game (Onedough) — the sub/shield model group"
   }
  ],
- "model_note": "The 2026 wave has no model id in any server data (LandSandBoat: TODO MId) and the client's item record carries none either.  The ids come from the client's 2026 model additions, identified in game: Sword 958, Claymore 959, Scythe 962 and Knuckles 490 are confirmed.  The melee block is ordered by the client's skill ids (H2H, Dagger, Sword, G.Sword, Axe, G.Axe, Scythe, Polearm, Katana, G.Katana, Club, Staff), so Dagger 957 ... Staff 967 follow from it; H2H (490), Archery (156) and the shield (680) sit in their own model groups.  The Saber and Shield are still tentative."
+ "model_note": "The 2026 wave has no model id in any server data (LandSandBoat: TODO MId) and the client's item record carries none either.  The ids come from the client's 2026 model additions, identified in game: Sword 958, Claymore 959, Scythe 962, Knuckles 490 and Shield 681 are confirmed.  The melee block is ordered by the client's skill ids (H2H, Dagger, Sword, G.Sword, Axe, G.Axe, Scythe, Polearm, Katana, G.Katana, Club, Staff), so Dagger 957 ... Staff 967 follow from it; H2H (490), Archery (156) and the shield (681) sit in their own model groups.  The Saber is still tentative."
 }

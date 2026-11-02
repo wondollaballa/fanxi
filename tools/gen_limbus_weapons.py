@@ -10,7 +10,7 @@ rows; this tool turns it into the two artefacts that must not drift from it:
 * ``--sql``    write ``database/migrations/0175_limbus_weapons_r30.sql`` (the
                 base modifiers, the client skill bonuses, the item descriptions
                 and the grant for characters 1 and 2) and
-                ``0180_limbus_weapon_models.sql`` (the grap model each weapon
+                ``0181_limbus_weapon_models.sql`` (the grap model each weapon
                 wears, identified from the client's 2026 block -- see
                 :func:`render_models_sql`);
 * ``--docs``   write ``docs/limbus-weapons-r30.md`` (every weapon, every Rank 30
@@ -42,7 +42,7 @@ ROOT = Path(__file__).resolve().parent.parent
 DATA = ROOT / "data" / "limbus_weapons_r30.json"
 DOCS = ROOT / "docs" / "limbus-weapons-r30.md"
 SQL = ROOT / "database" / "migrations" / "0175_limbus_weapons_r30.sql"
-MODELS_SQL = ROOT / "database" / "migrations" / "0180_limbus_weapon_models.sql"
+MODELS_SQL = ROOT / "database" / "migrations" / "0181_limbus_weapon_models.sql"
 
 # The two characters the award goes to: Onedough (account onedough) and
 # Twodough (account onedough-2), the same pair migration 99 granted the suits to.
@@ -246,8 +246,9 @@ def render_models_sql(doc: dict) -> str:
         "-- (LandSandBoat marks the rows `TODO: MId`) and the client's item records",
         "-- carry no model either, so the ids below were identified from the client's",
         "-- own 2026 model additions by testing them in game: the Sword is 958, the",
-        "-- Claymore 959, the Scythe 962 and the H2H Knuckles 490 (which lives in the",
-        "-- Hand-to-hand model group, not the melee block).  The block itself follows",
+        "-- Claymore 959, the Scythe 962, the Shield 681 and the H2H Knuckles 490",
+        "-- (which lives in the Hand-to-hand model group, not the melee block).  The",
+        "-- block itself follows",
         "-- the client's skill-id order (Dagger, Sword, G.Sword, Axe, G.Axe, Scythe,",
         "-- Polearm, Katana, G.Katana, Club, Staff).  The one-handed models carry a",
         "-- main and a sub DAT, the two-handed ones main only -- every id below is",
