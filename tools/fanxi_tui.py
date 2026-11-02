@@ -189,7 +189,9 @@ if db.is_file():
     try:
         connection = sqlite3.connect(db, timeout=10)
         try:
-            applied = {row[0] for row in connection.execute("SELECT version FROM schema_migrations")}
+            applied = {
+                row[0] for row in connection.execute("SELECT version FROM schema_migrations")
+            }
         except sqlite3.OperationalError as exc:
             if "no such table" not in str(exc).lower():
                 error = str(exc)
@@ -235,15 +237,29 @@ def migration_state(config: dict) -> dict:
     }
 
 
+def _migration_names(pending: list[dict], limit: int = 5) -> str:
+    names = ", ".join(entry.get("name", "?") for entry in pending[:limit])
+    if len(pending) > limit:
+        names += f", +{len(pending) - limit} more"
+    return names
+
+
 def migration_summary(state: dict) -> str:
     pending = state.get("pending") or []
     total = state.get("total") or 0
     if not pending:
         return f"all {total} migration{'s' if total != 1 else ''} applied"
-    names = ", ".join(entry.get("name", "?") for entry in pending[:5])
-    if len(pending) > 5:
-        names += f", +{len(pending) - 5} more"
-    return f"{len(pending)} new migration{'s' if len(pending) != 1 else ''}: {names}"
+    return (
+        f"{len(pending)} pending migration{'s' if len(pending) != 1 else ''}: "
+        + _migration_names(pending)
+    )
+
+
+def migration_applied(pending: list[dict]) -> str:
+    return (
+        f"applied {len(pending)} migration{'s' if len(pending) != 1 else ''}: "
+        + _migration_names(pending)
+    )
 
 
 def human_age(seconds: str | int | None) -> str:
@@ -264,7 +280,10 @@ def human_age(seconds: str | int | None) -> str:
 
 
 def deploy(config: dict, emit) -> tuple[bool, str]:
-    """Backup, pull, restart, verify. Returns (ok, previous commit)."""
+    """Backup, pull, restart (which applies migrations), verify them and /health.
+
+    Returns (ok, previous commit).
+    """
     remote = shlex.quote(config["remote_dir"])
     # The checkout is owned by `fanxi`; git run as root refuses it as "dubious ownership".
     git = f"sudo -u fanxi -H git -C {remote}"
@@ -292,10 +311,24 @@ def deploy(config: dict, emit) -> tuple[bool, str]:
 
     _, after = run_remote(config, f"{git} rev-parse HEAD")
     after = after.strip().splitlines()[-1] if after.strip() else ""
-    if after == previous:
+    if after != previous:
+        emit(f"now at {after[:12]}")
+
+    # The server applies database/migrations during startup, so the restart below is also the
+    # migration step. Read the files first to say what is new, and again afterwards to prove it
+    # ran: a deploy that leaves a migration unapplied is a failed deploy even if /health is up.
+    before = migration_state(config)
+    pending = before.get("pending") or []
+    if before.get("ok"):
+        emit("migrations — " + migration_summary(before))
+    else:
+        emit("migrations — could not read schema_migrations: " + before.get("error", "?"))
+
+    if after == previous and before.get("ok") and not pending:
         emit("already on this commit — nothing to deploy")
         return True, previous
-    emit(f"now at {after[:12]}")
+    if after == previous:
+        emit("no new commit — restarting to apply or verify migrations")
 
     emit("restarting…")
     run_remote(config, "systemctl restart fanxi")
@@ -306,8 +339,30 @@ def deploy(config: dict, emit) -> tuple[bool, str]:
             config, "curl -s --max-time 3 http://127.0.0.1:8080/api/v1/health", timeout=10
         )
         if '"status":"ok"' in health:
+            applied = migration_state(config)
+            remaining = applied.get("pending") or []
+            if not applied.get("ok"):
+                emit(f"healthy after {attempt + 1}s, but migrations could not be verified: "
+                     + applied.get("error", "?"))
+                return True, previous
+            if remaining:
+                emit(f"health OK after {attempt + 1}s, but a migration was not applied — "
+                     + migration_summary(applied))
+                emit("check the journal (l) for the SQL error before rolling back")
+                return False, previous
+            if pending:
+                emit("migrations — " + migration_applied(pending))
+            else:
+                emit("migrations — " + migration_summary(applied))
             emit(f"healthy after {attempt + 1}s")
             return True, previous
+    applied = migration_state(config)
+    if applied.get("ok"):
+        emit("migrations — " + migration_summary(applied))
+        if applied.get("pending"):
+            emit("a migration did not apply: the journal (l) has the SQL error")
+    else:
+        emit("migrations — could not verify after the restart: " + applied.get("error", "?"))
     emit("health check did not come back")
     return False, previous
 
@@ -410,12 +465,13 @@ ACTIONS = [
     Action(
         "d",
         "Deploy update",
-        "Backs up the database, pulls origin/main, restarts the service, then polls /health "
-        "for 20 seconds. If the service does not come back, it offers a rollback to the commit "
-        "that was running.",
+        "Backs up the database, pulls origin/main, restarts the service (which applies any new "
+        "database/migrations), then polls /health for 20 seconds and confirms every migration "
+        "file is recorded in schema_migrations. If the service does not come back, it offers a "
+        "rollback to the commit that was running.",
         "Players are disconnected while the service restarts (a few seconds). Only what is "
-        "pushed to origin/main is pulled, so unpushed work stays on your machine. The backup is "
-        "taken first and is the only thing that can undo a failed migration.",
+        "pushed to origin/main is pulled, so unpushed work stays on your machine. A deploy fails "
+        "if a migration is left unapplied; the backup taken first is what restores the schema.",
         confirm=True,
         danger=True,
     ),
@@ -1032,7 +1088,8 @@ def report(config: dict) -> int:
 def main(argv: list[str]) -> int:
     parser = argparse.ArgumentParser(description="Fanxi server dashboard over SSH")
     parser.add_argument("--status", action="store_true", help="print a report and exit")
-    parser.add_argument("--deploy", action="store_true", help="backup, pull, restart, verify")
+    parser.add_argument("--deploy", action="store_true",
+                        help="backup, pull, restart (applies migrations), verify")
     parser.add_argument("--setup", action="store_true", help="write ~/.fanxi-manager.json")
     parser.add_argument("--config", help="path to the settings file")
     args = parser.parse_args(argv)

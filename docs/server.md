@@ -307,7 +307,9 @@ Open only what players need: `8080/tcp` (or 443 if proxied), `54231/tcp`, `54230
 
 The server runs from a git checkout, so an update is a pull and a restart. Migrations in
 `database/migrations/` are applied by the service at startup, in version order — which is why the
-backup comes before the pull.
+backup comes before the pull. The dashboard's deploy reads `schema_migrations` after the restart
+and fails if any migration file in the checkout is still unapplied, so "healthy" cannot hide a
+schema that is behind the code.
 
 ```bash
 cd /srv/fanxi
@@ -356,7 +358,7 @@ server. It drives the steps above over SSH and shows the state between them:
 
 | Key | Action |
 | --- | --- |
-| `d` | deploy: backup, `git pull`, restart, health check, offer rollback |
+| `d` | deploy: backup, `git pull`, restart (applies migrations), verify `schema_migrations`, health check, offer rollback |
 | `R` | restart the service |
 | `b` | take a backup on the server |
 | `p` | pull the latest backup home (the homelab job, run by hand) |

@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — deploy verifies migrations
+
+- **The dashboard's deploy now proves the schema matches the code.**  The service still applies
+  `database/migrations/` at startup, but the dashboard reads `schema_migrations` before and
+  after the restart, prints the migrations it applied, and fails the deploy if any file is still
+  pending — even when `/health` is up.  A deploy with no new commit also restarts when a
+  migration is outstanding, instead of saying there is nothing to deploy.
+
 ## Unreleased — Limbus weapons on the RP card
 
 - **All sixteen Telopanos weapons joined the Data page's RP card.**  The Limbus

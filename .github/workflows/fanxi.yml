@@ -18,6 +18,8 @@ jobs:
           python-version: "3.11"
       - name: Server tests
         run: python3 -m unittest discover -s server/tests -v
+      - name: Dashboard deploy tests
+        run: python3 tests/fanxi_tui_test.py -v
       - name: Syntax and installer checks
         run: |
           python3 -m compileall -q server/fanxi_server tools/make_brand_assets.py
