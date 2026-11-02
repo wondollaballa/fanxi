@@ -1,0 +1,338 @@
+{
+ "format": "limbus-weapons-r30/1",
+ "source": [
+  "https://www.bg-wiki.com/ffxi/Telopanos_Knuckles",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Knife",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Axe",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Chopper",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Scythe",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Halberd",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Shin.",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Katana",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Bow",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Sword",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Saber",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Maul",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Staff",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Claymore",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Shield",
+  "https://www.bg-wiki.com/ffxi/Telopanos_Grip"
+ ],
+ "set": "Telopanos",
+ "rank": 30,
+ "tier": 3,
+ "rp": 55800,
+ "rp_curve": 1,
+ "note": "The Telopanos weapons are the Limbus furnace's Superior 5 weapons: an Auge Scintistone plus units from Temenos or Apollyon lifts the Telognophos base weapon to this form, and the same furnace adds the Rank 30 rows.  Every row is at its Rank 30 value.  `bundle` is the client's own augment bundle index (512 entries; 497-512 are this family), matched to the rows below by content.",
+ "weapons": [
+  {
+   "item_id": 18800,
+   "name": "Telopanos Grip",
+   "slot": "sub",
+   "skill": "Grips",
+   "jobs": [
+    "All jobs"
+   ],
+   "stats": [
+    "Accuracy+31 Ranged Accuracy+31 Magic Accuracy+31 Haste+4% Physical damage limit +9% Damage taken -4%"
+   ],
+   "augments": [
+    "Attack+30",
+    "Magic Damage+20",
+    "HP+100"
+   ],
+   "bundle": 511
+  },
+  {
+   "item_id": 21549,
+   "name": "Telopanos Knuckles",
+   "slot": "main",
+   "skill": "Hand-to-Hand",
+   "jobs": [
+    "MNK",
+    "PUP"
+   ],
+   "stats": [
+    "DMG:173 Delay:91 Accuracy+32 Magic Accuracy+32 Hand-to-Hand skill +255 Guard skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+19",
+    "Attack+100",
+    "HP+300",
+    "Pet dmg+5%"
+   ],
+   "bundle": 497,
+   "pet": "Automaton: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2"
+  },
+  {
+   "item_id": 21599,
+   "name": "Telopanos Knife",
+   "slot": "main",
+   "skill": "Dagger",
+   "jobs": [
+    "RDM",
+    "THF",
+    "BRD",
+    "DNC"
+   ],
+   "stats": [
+    "DMG:128 Delay:189 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Dagger skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+14",
+    "Attack+50",
+    "HP+150"
+   ],
+   "bundle": 498
+  },
+  {
+   "item_id": 21738,
+   "name": "Telopanos Axe",
+   "slot": "main",
+   "skill": "Axe",
+   "jobs": [
+    "BST"
+   ],
+   "stats": [
+    "DMG:181 Delay:268 Accuracy+32 Magic Accuracy+32 Axe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+20",
+    "Attack+50",
+    "HP+150",
+    "Pet dmg+5%"
+   ],
+   "bundle": 502,
+   "pet": "Main hand: Pet: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2"
+  },
+  {
+   "item_id": 21795,
+   "name": "Telopanos Chopper",
+   "slot": "main",
+   "skill": "Great Axe",
+   "jobs": [
+    "WAR"
+   ],
+   "stats": [
+    "DMG:330 Delay:489 Accuracy+32 Magic Accuracy+32 Great Axe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+37",
+    "Attack+70",
+    "HP+200"
+   ],
+   "bundle": 503
+  },
+  {
+   "item_id": 21848,
+   "name": "Telopanos Scythe",
+   "slot": "main",
+   "skill": "Scythe",
+   "jobs": [
+    "DRK"
+   ],
+   "stats": [
+    "DMG:345 Delay:513 Accuracy+32 Magic Accuracy+32 Scythe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+39",
+    "Attack+70",
+    "HP+200"
+   ],
+   "bundle": 504
+  },
+  {
+   "item_id": 21899,
+   "name": "Telopanos Halberd",
+   "slot": "main",
+   "skill": "Polearm",
+   "jobs": [
+    "DRG"
+   ],
+   "stats": [
+    "DMG:259 Delay:385 Accuracy+32 Magic Accuracy+32 Polearm skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+29",
+    "Attack+70",
+    "HP+200"
+   ],
+   "bundle": 505,
+   "pet": "Wyvern: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2"
+  },
+  {
+   "item_id": 21942,
+   "name": "Telopanos Shin.",
+   "slot": "main",
+   "skill": "Katana",
+   "jobs": [
+    "NIN"
+   ],
+   "stats": [
+    "DMG:149 Delay:222 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Katana skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+17",
+    "Attack+50 Ranged Attack+50",
+    "HP+150"
+   ],
+   "bundle": 506
+  },
+  {
+   "item_id": 21948,
+   "name": "Telopanos Katana",
+   "slot": "main",
+   "skill": "Great Katana",
+   "jobs": [
+    "SAM"
+   ],
+   "stats": [
+    "DMG:294 Delay:435 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Great Katana skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+33",
+    "Attack+70",
+    "HP+200"
+   ],
+   "bundle": 507
+  },
+  {
+   "item_id": 22176,
+   "name": "Telopanos Bow",
+   "slot": "range",
+   "skill": "Archery",
+   "jobs": [
+    "RNG"
+   ],
+   "stats": [
+    "DMG:316 Delay:582 Ranged Accuracy+32 Magic Accuracy+32 Archery skill +255 Snapshot +5 Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+35",
+    "Ranged Attack+100",
+    "HP+300"
+   ],
+   "bundle": 510
+  },
+  {
+   "item_id": 22182,
+   "name": "Telopanos Sword",
+   "slot": "main",
+   "skill": "Sword",
+   "jobs": [
+    "WAR",
+    "PLD",
+    "DRK"
+   ],
+   "stats": [
+    "DMG:173 Delay:258 Accuracy+32 Magic Accuracy+32 Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+19",
+    "Attack+50",
+    "HP+150"
+   ],
+   "bundle": 499
+  },
+  {
+   "item_id": 22188,
+   "name": "Telopanos Saber",
+   "slot": "main",
+   "skill": "Sword",
+   "jobs": [
+    "RDM",
+    "BLU",
+    "COR"
+   ],
+   "stats": [
+    "DMG:157 Delay:233 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +52 Magic damage +250 Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+18",
+    "Magic Damage+25",
+    "HP+150"
+   ],
+   "bundle": 500
+  },
+  {
+   "item_id": 22225,
+   "name": "Telopanos Maul",
+   "slot": "main",
+   "skill": "Club",
+   "jobs": [
+    "WHM",
+    "GEO"
+   ],
+   "stats": [
+    "DMG:223 Delay:334 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +52 Magic damage +250 Club skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+25",
+    "Magic Damage+25",
+    "HP+150"
+   ],
+   "bundle": 508
+  },
+  {
+   "item_id": 22231,
+   "name": "Telopanos Staff",
+   "slot": "main",
+   "skill": "Staff",
+   "jobs": [
+    "BLM",
+    "SMN",
+    "SCH"
+   ],
+   "stats": [
+    "DMG:240 Delay:356 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +72 Magic damage +312 Staff skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+27",
+    "Magic Damage+30",
+    "HP+200",
+    "\"Blood Pact\" Damage+10"
+   ],
+   "bundle": 509,
+   "pet": "Avatar: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2"
+  },
+  {
+   "item_id": 22237,
+   "name": "Telopanos Claymore",
+   "slot": "main",
+   "skill": "Great Sword",
+   "jobs": [
+    "WAR",
+    "PLD",
+    "DRK",
+    "RUN"
+   ],
+   "stats": [
+    "DMG:314 Delay:466 Accuracy+32 Magic Accuracy+32 Great Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%"
+   ],
+   "augments": [
+    "Damage+35",
+    "Attack+70",
+    "HP+200"
+   ],
+   "bundle": 501
+  },
+  {
+   "item_id": 26503,
+   "name": "Telopanos Shield",
+   "slot": "sub",
+   "skill": "Shield",
+   "jobs": [
+    "PLD"
+   ],
+   "stats": [
+    "DEF:152 Accuracy+32 Magic Accuracy+32 Shield skill +121 Haste+5% Damage taken II -5%"
+   ],
+   "augments": [
+    "Attack+50",
+    "HP+150",
+    "VIT+30"
+   ],
+   "bundle": 512
+  }
+ ]
+}

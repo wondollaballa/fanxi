@@ -23,6 +23,10 @@ data/nav/
 !data/skillchains.json
 !data/weapon_skill_properties.json
 !data/limbus_r30.json
+# The Telopanos weapons (the furnaces' Su5 gear) are their own dataset.  Like
+# odyssey_extra_r30.json, forgetting this line does not fail the build: the code
+# and the migration deploy, and the RP card silently lists no weapons.
+!data/limbus_weapons_r30.json
 !data/odyssey_r30.json
 # Odyssey's extra pieces (Bunzi's, Ikenga's, Mpaca's, Gekkei, Kunimitsu and the
 # ten Sheol Gaol accessories, the Beithir Ring among them) live in their own

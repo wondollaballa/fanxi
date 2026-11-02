@@ -31,6 +31,7 @@ import argparse
 import importlib.util
 import json
 import re
+import subprocess
 import sys
 from pathlib import Path
 
@@ -61,6 +62,25 @@ _SPEC.loader.exec_module(REFORGED)
 # client's 0x062 skill table (it is LSB's separate ``ilvl_macc`` column), so it is
 # claimed here and left un-stored -- the gap every iLvl 119 weapon has today.
 HEADER = re.compile(r"\b(?:DMG|Delay):\s*[+-]?\d+|Magic Accuracy skill\s*\+\s*\d+")
+
+
+def check_shipped() -> None:
+    """Fail when the dataset is git-ignored, because a deploy would ship without it.
+
+    ``data/*`` is ignored and every source dataset is whitelisted by name, so a new
+    dataset that forgets its ``!data/...`` line is committed *without* its file: the
+    code, the migration and the docs deploy, the migration grants the items, and the
+    RP card still lists nothing because the server has no dataset to read.
+    """
+    try:
+        result = subprocess.run(["git", "check-ignore", "-q", str(DATA)],
+                                cwd=ROOT, capture_output=True)
+    except (OSError, ValueError):
+        return  # no git at all (a release tarball): nothing to check
+    if result.returncode == 0:
+        raise SystemExit(
+            "%s is git-ignored: add '!%s' to .gitignore or a deploy ships without it"
+            % (DATA.name, DATA.relative_to(ROOT)))
 
 
 def load() -> dict:
@@ -328,6 +348,7 @@ def main(argv=None) -> int:
         parser.print_help()
         return 2
 
+    check_shipped()
     doc = load()
     if not weapons(doc):
         raise SystemExit("no weapons in %s" % DATA)
