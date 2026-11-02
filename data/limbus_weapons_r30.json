@@ -64,7 +64,7 @@
    "bundle": 497,
    "pet": "Automaton: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
    "model": 951,
-   "model_note": "derived — H2H is the only two-hand model left in the block"
+   "model_note": "derived — H2H opens the block (skill order)"
   },
   {
    "item_id": 21599,
@@ -87,7 +87,7 @@
    ],
    "bundle": 498,
    "model": 957,
-   "model_note": "derived — Dagger is first in the block"
+   "model_note": "derived — Dagger follows H2H"
   },
   {
    "item_id": 21738,
@@ -109,7 +109,7 @@
    "bundle": 502,
    "pet": "Main hand: Pet: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
    "model": 960,
-   "model_note": "derived — Axe follows G.Sword"
+   "model_note": "derived — Axe in skill order"
   },
   {
    "item_id": 21795,
@@ -148,8 +148,8 @@
     "HP+200"
    ],
    "bundle": 504,
-   "model": 963,
-   "model_note": "derived — Scythe two-hand, main-only"
+   "model": 962,
+   "model_note": "confirmed in game (Onedough)"
   },
   {
    "item_id": 21899,
@@ -169,8 +169,8 @@
    ],
    "bundle": 505,
    "pet": "Wyvern: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
-   "model": 962,
-   "model_note": "derived — Polearm two-hand, main-only"
+   "model": 963,
+   "model_note": "derived — Polearm follows Scythe in the skill order"
   },
   {
    "item_id": 21942,
@@ -274,7 +274,7 @@
    ],
    "bundle": 500,
    "model": 968,
-   "model_note": "tentative — try 956, 955, 954, 953, 952 if wrong"
+   "model_note": "tentative — compare with the Sword (958); try 956, 955, 954, 953, 952"
   },
   {
    "item_id": 22225,
@@ -319,7 +319,7 @@
    "bundle": 509,
    "pet": "Avatar: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2",
    "model": 967,
-   "model_note": "derived — Staff two-hand, main-only"
+   "model_note": "derived — Staff closes the block"
   },
   {
    "item_id": 22237,
@@ -365,5 +365,5 @@
    "model_note": "tentative — try 681 (large) or 1181 (buckler) if wrong"
   }
  ],
- "model_note": "The 2026 wave has no model id in any server data (LandSandBoat: TODO MId) and the client's item record carries none either, so the ids below come from the client's own 2026 model block, identified in game: the claymore confirmed 959 and the sword 958, which fixes the block's weapon-group order (Dagger 957, Sword 958, G.Sword 959, Axe 960, G.Axe 961, Polearm 962, Scythe 963, Katana 964, G.Katana 965, Club 966, Staff 967).  H2H, Archery and the shield sit in their own groups (951, 156, 680).  The Saber and Shield are still unconfirmed: //model <item> <id> tests one copy."
+ "model_note": "The 2026 wave has no model id in any server data (LandSandBoat: TODO MId) and the client's item record carries none either.  The ids come from the client's 2026 model block, identified in game: the Sword is 958, the Claymore 959 and the Scythe 962 -- which pins the block to the client's skill-id order (H2H, Dagger, Sword, G.Sword, Axe, G.Axe, Scythe, Polearm, Katana, G.Katana, Club, Staff).  One-handed models carry a main and a sub DAT, two-handed ones main only, which cross-checks every derived id.  H2H, Archery and the shield sit in their own groups (951, 156, 680).  The Saber and Shield are still tentative."
 }

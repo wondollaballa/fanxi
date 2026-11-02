@@ -52,7 +52,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Knuckles
 
 - **Item:** 21549, **slot:** main, **bundle:** 497
-- **Model:** 951 -- derived — H2H is the only two-hand model left in the block
+- **Model:** 951 -- derived — H2H opens the block (skill order)
 - **Jobs:** MNK / PUP
 - **Stats:** DMG:173 Delay:91 Accuracy+32 Magic Accuracy+32 Hand-to-Hand skill +255 Guard skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Automaton: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -64,7 +64,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Knife
 
 - **Item:** 21599, **slot:** main, **bundle:** 498
-- **Model:** 957 -- derived — Dagger is first in the block
+- **Model:** 957 -- derived — Dagger follows H2H
 - **Jobs:** RDM / THF / BRD / DNC
 - **Stats:** DMG:128 Delay:189 Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Dagger skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -75,7 +75,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Axe
 
 - **Item:** 21738, **slot:** main, **bundle:** 502
-- **Model:** 960 -- derived — Axe follows G.Sword
+- **Model:** 960 -- derived — Axe in skill order
 - **Jobs:** BST
 - **Stats:** DMG:181 Delay:268 Accuracy+32 Magic Accuracy+32 Axe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Main hand: Pet: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -98,7 +98,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Scythe
 
 - **Item:** 21848, **slot:** main, **bundle:** 504
-- **Model:** 963 -- derived — Scythe two-hand, main-only
+- **Model:** 962 -- confirmed in game (Onedough)
 - **Jobs:** DRK
 - **Stats:** DMG:345 Delay:513 Accuracy+32 Magic Accuracy+32 Scythe skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 
@@ -109,7 +109,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Halberd
 
 - **Item:** 21899, **slot:** main, **bundle:** 505
-- **Model:** 962 -- derived — Polearm two-hand, main-only
+- **Model:** 963 -- derived — Polearm follows Scythe in the skill order
 - **Jobs:** DRG
 - **Stats:** DMG:259 Delay:385 Accuracy+32 Magic Accuracy+32 Polearm skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +10% Damage taken -5%
 - **Pet line (client text, not stored):** Wyvern: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -165,7 +165,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Saber
 
 - **Item:** 22188, **slot:** main, **bundle:** 500
-- **Model:** 968 -- tentative — try 956, 955, 954, 953, 952 if wrong
+- **Model:** 968 -- tentative — compare with the Sword (958); try 956, 955, 954, 953, 952
 - **Jobs:** RDM / BLU / COR
 - **Stats:** DMG:157 Delay:233 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +52 Magic damage +250 Sword skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%
 
@@ -187,7 +187,7 @@ every Limbus piece in the bags, weapons included.
 ### Telopanos Staff
 
 - **Item:** 22231, **slot:** main, **bundle:** 509
-- **Model:** 967 -- derived — Staff two-hand, main-only
+- **Model:** 967 -- derived — Staff closes the block
 - **Jobs:** BLM / SMN / SCH
 - **Stats:** DMG:240 Delay:356 Accuracy+32 Magic Accuracy+32 Magic Attack Bonus +72 Magic damage +312 Staff skill +255 Parrying skill +255 Magic Accuracy skill +255 Haste+5% Physical damage limit +5% Damage taken -5%
 - **Pet line (client text, not stored):** Avatar: Accuracy+32 Ranged Accuracy+32 Magic Accuracy+32 Lv.+2
@@ -236,19 +236,19 @@ main DAT only.  H2H, Archery and the shield sit in their own groups.
 | Weapon | Group | Model | Note |
 | --- | --- | --- | --- |
 | Telopanos Grip | Grips | none (grips are invisible) | - |
-| Telopanos Knuckles | Hand-to-Hand | 951 | derived — H2H is the only two-hand model left in the block |
-| Telopanos Knife | Dagger | 957 | derived — Dagger is first in the block |
-| Telopanos Axe | Axe | 960 | derived — Axe follows G.Sword |
+| Telopanos Knuckles | Hand-to-Hand | 951 | derived — H2H opens the block (skill order) |
+| Telopanos Knife | Dagger | 957 | derived — Dagger follows H2H |
+| Telopanos Axe | Axe | 960 | derived — Axe in skill order |
 | Telopanos Chopper | Great Axe | 961 | derived — G.Axe two-hand, main-only |
-| Telopanos Scythe | Scythe | 963 | derived — Scythe two-hand, main-only |
-| Telopanos Halberd | Polearm | 962 | derived — Polearm two-hand, main-only |
+| Telopanos Scythe | Scythe | 962 | confirmed in game (Onedough) |
+| Telopanos Halberd | Polearm | 963 | derived — Polearm follows Scythe in the skill order |
 | Telopanos Shin. | Katana | 964 | derived — Katana one-hand, main+sub |
 | Telopanos Katana | Great Katana | 965 | derived — G.Katana two-hand, main-only |
 | Telopanos Bow | Archery | 156 | derived — the only new ranged model in ROM/386 |
 | Telopanos Sword | Sword | 958 | confirmed in game (Onedough) |
-| Telopanos Saber | Sword | 968 | tentative — try 956, 955, 954, 953, 952 if wrong |
+| Telopanos Saber | Sword | 968 | tentative — compare with the Sword (958); try 956, 955, 954, 953, 952 |
 | Telopanos Maul | Club | 966 | derived — Club one-hand, main+sub |
-| Telopanos Staff | Staff | 967 | derived — Staff two-hand, main-only |
+| Telopanos Staff | Staff | 967 | derived — Staff closes the block |
 | Telopanos Claymore | Great Sword | 959 | confirmed in game (Onedough) |
 | Telopanos Shield | Shield | 680 | tentative — try 681 (large) or 1181 (buckler) if wrong |
 
