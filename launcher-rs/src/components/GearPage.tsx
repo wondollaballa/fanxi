@@ -2052,11 +2052,12 @@ export function GearPage({
                             port={instance.port}
                             items={selectedItems}
                             augments={selectedAugments}
+                            onSlotClick={(slot) => openItemPicker(slot, "library")}
                             emptyLabel="This set has no items."
                           />
                           <span className="muted">
-                            Hover a slot for the piece's card. Editing happens in the Manage
-                            tab, so a glance at a set cannot change it.
+                            Click a slot to change that piece; the library saves it. Hover a
+                            slot for the piece's card.
                           </span>
                           {statQueries.length > 0 ? (
                             <SetStatTotals

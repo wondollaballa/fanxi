@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — the Manage set preview is clickable again
+
+- **Clicking a slot in the Manage tab's Set preview opens the item picker.**  The hover
+  card added for the item card replaced the click handler, leaving the preview read-only;
+  clicking a slot now swaps that piece again and saves the account library immediately.
+  Hovering still shows the piece's full card, its augments and its jobs.
+
 ## Unreleased — Trusts cast their damage debuffs and Sylvie's real aura
 
 - **Koru-Moru never cast Dia.**  The trust tick checked `buff_for` before `debuff_for`,
