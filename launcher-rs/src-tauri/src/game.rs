@@ -639,16 +639,24 @@ fn venv_python(root: &Path) -> PathBuf {
 }
 
 fn system_python() -> String {
-    std::env::var("FANXI_PYTHON")
+    if let Some(given) = std::env::var("FANXI_PYTHON")
         .ok()
         .filter(|value| !value.trim().is_empty())
-        .unwrap_or_else(|| {
-            if cfg!(windows) {
-                "python".to_string()
-            } else {
-                "python3".to_string()
-            }
-        })
+    {
+        return given;
+    }
+    if cfg!(windows) {
+        return "python".to_string();
+    }
+    // The interpreter decides the architecture of everything it starts: clang spawned by a process
+    // running under Rosetta defaults to x86_64, so a python from PATH that is an Intel or Anaconda
+    // build builds the whole client x86_64, and it then runs under Rosetta (`file build/fanxi`
+    // says x86_64 rather than arm64). On macOS prefer the system's own interpreter, which is
+    // native; it is also the one tools/setup.py picks for the same reason.
+    if cfg!(target_os = "macos") && Path::new("/usr/bin/python3").is_file() {
+        return "/usr/bin/python3".to_string();
+    }
+    "python3".to_string()
 }
 
 async fn stream_command(
