@@ -58,6 +58,8 @@ START_ZONE_BY_NATION = {0: 230, 1: 236, 2: 240}
 FAILED_LOGIN_LIMIT = 5
 LOCK_MINUTES = 15
 STARTER_GIL = 1000
+#: Alter-ego upgrade levels, the March 2026 Trust system's 0-50 per stat cap.
+TRUST_UPGRADE_MAX = 50
 STARTER_ITEMS = ((1, 4112, 2), (2, 16534, 1))  # slot, item id, quantity
 
 # The client's container numbers.  Storage is 2; the wardrobes are 8 and 10-16.
@@ -961,7 +963,7 @@ class FanxiService:
             },
             "crafts": self.crafts_for_character(int(character_id)),
             "craft_max": CRAFT_MAX,
-            "trusts": self.trust_summary(),
+            "trusts": self.trust_summary(int(character_id)),
             "augments": augment_gear.inventory_items(self, int(character_id)),
             "oboro": oboro.catalog(self, int(character_id)),
             "capes": capes.catalog(self, int(character_id)),
@@ -1560,12 +1562,39 @@ class FanxiService:
         return self.set_craft_skills(
             character_id, {skill_id: CRAFT_MAX for skill_id, _name in CRAFT_SKILLS})
 
-    def trust_summary(self) -> dict:
+    def trust_upgrade_level(self, character_id: int) -> int:
+        """The character's alter-ego upgrade level (0-50), shared by every Trust.
+
+        Fanxi models the launcher's "max all" action as one account-wide level rather
+        than asking the player to assign the retail point tiers to 100+ alter egos.
+        The level is stored in ``char_settings`` so an existing database needs no new
+        table; a fresh character starts at 0.
+        """
+        try:
+            raw = self.character_setting(int(character_id), "trust_upgrade_level", "0")
+            return max(0, min(TRUST_UPGRADE_MAX, int(raw or 0)))
+        except (TypeError, ValueError, sqlite3.Error):
+            return 0
+
+    def set_trust_upgrade_level(self, character_id: int, level: int) -> int:
+        value = max(0, min(TRUST_UPGRADE_MAX, int(level)))
+        self.set_character_setting(int(character_id), "trust_upgrade_level", str(value))
+        return value
+
+    def max_trust_upgrades(self, character_id: int) -> int:
+        """Set every Trust's upgrade to the current maximum (the launcher button)."""
+        return self.set_trust_upgrade_level(int(character_id), TRUST_UPGRADE_MAX)
+
+    def trust_summary(self, character_id: int | None = None) -> dict:
         row = self.db.one("SELECT COUNT(*) AS n FROM trusts")
+        level = (self.trust_upgrade_level(int(character_id))
+                 if character_id is not None else 0)
         return {
             "spells": int(row["n"]),
             "key_items": "all",
             "summoning": True,
+            "upgrade_level": int(level),
+            "upgrade_max": TRUST_UPGRADE_MAX,
         }
 
     def _character_fields(self, data: dict) -> dict:
@@ -2558,6 +2587,87 @@ class FanxiService:
             "ORDER BY s.id",
             (int(trust_spell_id), int(level), int(level)))
         return [dict(row) for row in rows]
+
+    def trust_action_spells(self, trust_spell_id: int, level: int = 255) -> list[dict]:
+        """Every spell a support Trust can choose, not just its curated rotation.
+
+        The importer's ``trust_spells`` rows are the spells retail's alter ego actually
+        uses by default; they are not the full spellbook.  A player customising a
+        support Trust should be able to choose the job's other spells too, and Sylvie
+        should see every Indi-/Geo- spell rather than the handful in her imported list.
+        This merges the curated rows with every spell the Trust's main job (up to
+        ``level``) and support job (up to the level-49 subjob cap) can cast, plus all
+        Indi-/Geo- spells for a Geomancer.
+        """
+        level = max(1, min(255, int(level)))
+        trust = self.trust(trust_spell_id) or {}
+        main_job = int(trust.get("job") or 0)
+        sub_job = int(trust.get("sub_job") or 0)
+        rows: dict[int, dict] = {}
+        for spell in self.trust_spells(trust_spell_id, level):
+            item = dict(spell)
+            item.setdefault("max_level", 255)
+            rows[int(item["id"])] = item
+
+        trust_ids = {int(row["spell_id"]) for row in self.db.all(
+            "SELECT spell_id FROM trusts")}
+        allowed = [(main_job, level)]
+        if sub_job:
+            allowed.append((sub_job, min(49, level)))
+
+        def add(spell_id: int, min_level: int) -> None:
+            spell_id = int(spell_id)
+            if spell_id <= 0 or spell_id in trust_ids:
+                return
+            current = rows.get(spell_id)
+            if current is not None:
+                current["min_level"] = min(int(current.get("min_level") or min_level),
+                                            int(min_level))
+                return
+            spell = self.spell(spell_id)
+            if spell is None:
+                return
+            item = dict(spell)
+            item["min_level"] = int(min_level)
+            item["max_level"] = 255
+            rows[spell_id] = item
+
+        table = self.spell_level_table()
+        for spell_id, entries in table.items():
+            if int(spell_id) in trust_ids:
+                continue
+            available = None
+            for job, spell_level in entries:
+                for allowed_job, cap in allowed:
+                    if int(job) == int(allowed_job) and int(spell_level) <= int(cap):
+                        available = (int(spell_level) if available is None
+                                     else min(available, int(spell_level)))
+            if available is not None:
+                add(int(spell_id), available)
+
+        # Job-point gift spells have no ordinary level row (Refresh III, Temper II, …),
+        # but a level-99 main job can use them, so a custom support set should see them.
+        if level >= 99 and main_job:
+            by_name = self.spell_ids_by_name()
+            for name in job_points.spell_grants(main_job):
+                key = "".join(str(name).split()).casefold()
+                for spell_id in by_name.get(key, ()):
+                    add(int(spell_id), 99)
+
+        # Sylvie (UC) is the only Geomancer support Trust.  Every Indi-/Geo- spell is
+        # selectable even if it is not in her imported mob_spell_list; the picker labels
+        # the Indi- and Geo- families separately through the normal kit classifier.
+        if main_job == 21 or sub_job == 21:
+            for name, ids in self.spell_ids_by_name().items():
+                if not str(name).casefold().startswith(("indi-", "geo-")):
+                    continue
+                for spell_id in ids:
+                    matched = [int(spell_level)
+                               for job, spell_level in table.get(int(spell_id), ())
+                               if int(job) == 21 and int(spell_level) <= level]
+                    add(int(spell_id), min(matched) if matched else 1)
+
+        return sorted(rows.values(), key=lambda row: int(row["id"]))
 
     def hunt_menu(self, zone: int, key: int) -> int | None:
         row = self.db.one("SELECT value FROM hunt_registries WHERE zone = ? AND key = ?",

@@ -537,10 +537,13 @@ class Api:
             else:
                 self.service.set_craft_skills(cid, body.get("values") or {})
         elif op == "trusts":
-            # The zone-in burst already carries every Trust spell and cipher; the
-            # endpoint only gives the launcher the refreshed snapshot and a place to
-            # hang the //reload that re-sends the bitmaps.
-            pass
+            # The zone-in burst already carries every Trust spell and cipher; this
+            # endpoint also applies the launcher's alter-ego upgrade action.
+            if body.get("max_upgrades"):
+                self.service.max_trust_upgrades(cid)
+            elif body.get("upgrade_level") is not None:
+                self.service.set_trust_upgrade_level(
+                    cid, int(body.get("upgrade_level") or 0))
         elif op == "augment":
             try:
                 augment_gear.cap(

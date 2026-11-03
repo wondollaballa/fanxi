@@ -14,7 +14,7 @@ from pathlib import Path
 
 from support import make_service
 
-from fanxi_server.game import effects, geomancy, modifiers as mod, trust_ai
+from fanxi_server.game import effects, geomancy, modifiers as mod, trust_ai, trust_stats
 from fanxi_server.game.world import World
 from fanxi_server.game.zone import ZoneSession
 
@@ -95,6 +95,72 @@ class TrustSupportTest(unittest.TestCase):
         # id that never landed on the monster and recast Entrust forever.
         self.assertIsNone(trust_ai.entrust_debuff_for(
             sylvie.name, sylvie.kit, self.mob.effect_state, self.now + 3))
+
+    def test_sylvie_catalog_has_every_indi_and_geo_spell(self):
+        rows = self.service.trust_action_spells(981, 99)
+        names = {str(row["name"]) for row in rows}
+        indi = {str(row["name"]) for row in self.db.all(
+            "SELECT name FROM spells WHERE lower(name) LIKE 'indi-%'")}
+        geo = {str(row["name"]) for row in self.db.all(
+            "SELECT name FROM spells WHERE lower(name) LIKE 'geo-%'")}
+        self.assertEqual(indi - names, set())
+        self.assertEqual(geo - names, set())
+        # The catalogue is the expanded picker, not just the 20 curated rows.
+        self.assertGreaterEqual(len(indi | geo), 60)
+        self.assertIn("Geo-frailty", names)
+        self.assertIn("Indi-malaise", names)
+
+    def test_the_hud_catalog_uses_the_expanded_spellbook(self):
+        rows = self.session._trust_action_catalog(981)
+        names = {str(row["name"]) for row in rows}
+        self.assertIn("Geo-frailty", names)
+        self.assertIn("Indi-malaise", names)
+        self.assertIn("Geo-malaise", names)
+        self.assertGreater(len(rows), 100)
+
+    def test_every_support_spell_catalog_lists_its_job_spells(self):
+        koru = {row["name"] for row in self.service.trust_action_spells(952, 99)}
+        self.assertIn("Haste II", koru)
+        self.assertIn("Phalanx II", koru)
+        self.assertIn("Temper II", koru)          # RDM job-point spell, not curated
+        self.assertIn("Refresh III", koru)
+        self.assertIn("Flurry", koru)
+        ygnas = {row["name"] for row in self.service.trust_action_spells(998, 99)}
+        self.assertIn("Cure VI", ygnas)
+        joachim = {row["name"] for row in self.service.trust_action_spells(911, 99)}
+        self.assertIn("Honor March", joachim)
+
+    def test_a_custom_sylvie_can_cast_geo_frailty(self):
+        # 818 is a Geo- hex that is not in her curated 20-spell default list.
+        self.session.trust_actions[981] = [818]
+        sylvie = self.spawn(981)
+        self.assertTrue(self.world._try_trust_cast(
+            sylvie, self.session, [self.session], self.mob, self.now))
+        self.assertEqual("Geo-frailty", sylvie.casting["spell"]["name"])
+        self.assertEqual("debuff", sylvie.casting["kind"])
+        sylvie.casting["finish"] = self.now - 1.0
+        self.world._finish_trust_cast(sylvie, self.session, self.now)
+        state = self.mob.effect_state.get(geomancy.GEO_DEFENSE_DOWN)
+        self.assertIsNotNone(state)
+        self.assertEqual(27, int(state.get("potency", 0)))
+
+    def test_trust_upgrades_raise_bars_and_stats(self):
+        cid = int(self.character["id"])
+        self.assertEqual(0, self.service.trust_upgrade_level(cid))
+        self.assertEqual(50, self.service.max_trust_upgrades(cid))
+        self.assertEqual(50, self.service.trust_upgrade_level(cid))
+        summary = self.service.trust_summary(cid)
+        self.assertEqual(50, summary["upgrade_level"])
+        self.assertEqual(50, summary["upgrade_max"])
+
+        trust = self.spawn(952)
+        base_hp, base_mp = trust_stats.vitals(
+            trust.race, trust.job, trust.sub_job, int(trust.level))
+        self.assertEqual(int(base_hp) + 250, int(trust.hp_max))
+        self.assertEqual(int(base_mp) + 100, int(trust.mp_max))
+        self.assertGreaterEqual(int(trust.shared_mods.get(mod.STR, 0)), 50)
+        self.assertGreaterEqual(int(trust.shared_mods.get(mod.ACC, 0)), 50)
+        self.assertEqual(50, int(trust.trust_upgrade_level))
 
     def test_sylvie_uses_the_retail_trust_aura_values(self):
         fury = trust_ai.effect_of({"name": "Indi-Fury"}, trust_name="Sylvie Uc")

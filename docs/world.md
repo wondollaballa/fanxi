@@ -274,15 +274,15 @@ songs** dialog offers the same 21 songs as checkboxes, with the level each unloc
 and saves the order they were clicked in (see [control panel](control-panel.md#combat-hud)).
 
 The same per-character mechanism covers the other support Trusts.  A **Set spells** dialog
-for Koru-Moru (952), Ygnas (998) and Sylvie (UC) (981) lists their cures, buffs, debuffs
-and Sylvie's Indi- auras plus **Geo-malaise**, with the level of each; only the ticked
-spells are used, and the default AI still decides *when* each one is worth casting (cure
-when hurt, buff when missing, and so on).  A **Set rolls** dialog for Luzaf (928) and Qultada (967) lists the
-31 Corsair rolls; the list is a priority order, so the first selected roll that is not
-already on the party wins; a second selected roll fills the Trust's other slot.  Sylvie's
-list also carries **Geo-malaise**, the enemy-targeted Magic Defense Down hex; the default
-logic keeps it on the monster as her Geo- bubble, and the explicit set can make it the
-only aura; it is migration 0172.  An empty set means the built-in logic.  Chat uses
+for Koru-Moru (952), Ygnas (998) and Sylvie (UC) (981) lists **every spell the Trust's
+main job can cast**, plus its support-job spells up to the level-49 cap; for Sylvie that
+includes **all 30 Indi- and all 30 Geo- spells**, not just her curated 20-spell rotation.
+The dialog shows the level of each spell, allows up to 24 selected spells, and the default
+AI still decides *when* each one is worth casting (cure when hurt, buff when missing, and
+so on).  A **Set rolls** dialog for Luzaf (928) and Qultada (967) lists the 31 Corsair
+rolls; the list is a priority order, so the first selected roll that is not already on
+the party wins; a second selected roll fills the Trust's other slot.  An empty set means
+the built-in logic.  Chat uses
 `//trust <id|name> set spells|rolls "..." ...`, `//trust <id|name> songs`, and
 `//trust <id|name> set default`; the HUD's **Use default logic** checkbox is the same
 switch.  The selection is stored in `char_settings.trust_actions` (JSON keyed by Trust
@@ -338,6 +338,14 @@ instead.  `//trust` lists what is out and `//trust release all` clears the group
 Limits: Trusts do not use job abilities or ranged attacks, and monsters cannot select one
 as their hate target.  Their spells heal and buff the owner only, not other party
 members.  They are also not persisted; a server restart clears them.
+
+**Alter-ego upgrades.**  The launcher's Data → Progression → Trusts card has **Max all
+upgrades**, the Fanxi form of the March 2026 alter-ego points system.  It stores a
+per-character upgrade level (0-50) in `char_settings.trust_upgrade_level`; at level 50
+every Trust gets **+250 HP, +100 MP and +50 to each base stat**, plus +50 Attack/Accuracy
+for the physical path.  The effect is applied on the next spawn or the next gear-sync
+beat.  The card shows the current level and the endpoint is
+`POST /api/v1/characters/<id>/progress` with `{"op":"trusts","max_upgrades":true}`.
 
 ## NPCs and the quest
 

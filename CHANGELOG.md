@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — Trust spellbooks and alter-ego upgrades
+
+- **Support Trusts now offer their whole spellbook in Set spells.**  The old picker read
+  only the imported `trust_spells` rows (Koru-Moru 29, Sylvie 20), so most of a job's
+  spells could not be chosen.  `service.trust_action_spells()` merges the curated rows
+  with every spell the Trust's main job can cast, its support-job spells up to the level-49
+  cap, and — for Sylvie — **all 30 Indi- and all 30 Geo- spells**.  The picker now shows
+  those rows and allows up to 24 selected spells per caster.
+- **Custom sets use the expanded kit.**  The default AI still runs the curated rotation,
+  but a player-selected set is built from the expanded catalogue, so a chosen
+  `Geo-frailty`, RDM `Temper II` or non-curated Indi- aura actually casts.  Auras and
+  Geo- hexes are cleared from the same expanded kit when the set swaps.
+- **Launcher `Max all upgrades`.**  The Data → Progression → Trusts card now shows the
+  character's alter-ego upgrade level (0-50) and has a button that maxes it.  The
+  per-character setting lives in `char_settings.trust_upgrade_level`; at level 50 every
+  Trust gets +250 HP, +100 MP, +50 to each base stat and +50 Attack/Accuracy, applied on
+  the next spawn or gear-sync beat.  This is Fanxi's simplified form of retail's 2026
+  alter-ego points system.
+- Tests: `test_trust_support.py` covers the 30/30 Sylvie catalogue, job spells for
+  Koru/Ygnas/Joachim, a custom non-curated Geo-frailty cast, and maxed upgrade stats;
+  `test_api.py` covers the launcher endpoint; `tests/trust_hud_test.py` covers the HUD
+  catalogue and new limits.
+
 ## Unreleased — Geomancy actually reaches the fight
 
 - **The GEO anchor had no position, so the loop threw before it cast anything.**

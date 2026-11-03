@@ -287,7 +287,7 @@ def check_live_server() -> None:
         def names(trust_id: int) -> set[str]:
             return {row['name'] for row in session._trust_action_catalog(trust_id)}
 
-        if len(names(911)) != 21 or 'Aria of Passion' not in names(911):
+        if len(names(911)) < 21 or 'Aria of Passion' not in names(911):
             raise SystemExit('Joachim catalogue is missing songs')
         if not {'Haste II', 'Refresh II', 'Cure IV', 'Flurry II'} <= names(952):
             raise SystemExit('Koru-Moru catalogue is missing spells')

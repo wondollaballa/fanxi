@@ -479,10 +479,18 @@ export function ProgressCards({
         <Head
           icon={<Users size={17} />}
           title="Trusts"
-          hint={`${data.trusts.spells} Trust spells`}
+          hint={`${data.trusts.spells} Trust spells · upgrades ${data.trusts.upgrade_level ?? 0}/${data.trusts.upgrade_max ?? 50}`}
           badge={
-            <Badge tone={data.trusts.summoning ? "success" : "warning"}>
-              {data.trusts.summoning ? "Ready" : "Menu only"}
+            <Badge
+              tone={
+                (data.trusts.upgrade_level ?? 0) >= (data.trusts.upgrade_max ?? 50)
+                  ? "success"
+                  : "accent"
+              }
+            >
+              {(data.trusts.upgrade_level ?? 0) >= (data.trusts.upgrade_max ?? 50)
+                ? "Maxed"
+                : `+${data.trusts.upgrade_level ?? 0}`}
             </Badge>
           }
         />
@@ -494,6 +502,11 @@ export function ProgressCards({
             ? "Casting one calls the alter ego beside you; it follows you and attacks your current target."
             : "Trust summoning is not implemented in this build yet: casting one will not spawn the ally."}
         </p>
+        <p className="data-note">
+          Alter-ego upgrades add HP, MP and base stats to every Trust. Maxing them gives
+          all {data.trusts.spells} alter egos the full +50 upgrade tier on their next
+          spawn (or the next gear-sync beat).
+        </p>
         <div className="data-actions">
           <Button
             variant="secondary"
@@ -504,6 +517,20 @@ export function ProgressCards({
             }
           >
             Get all trusts
+          </Button>
+          <Button
+            loading={busy === "trusts-max"}
+            disabled={busy !== null && busy !== "trusts-max"}
+            onClick={() =>
+              run(
+                "progress",
+                { op: "trusts", max_upgrades: true },
+                "All Trust upgrades maxed",
+                "trusts-max",
+              )
+            }
+          >
+            Max all trust upgrades
           </Button>
         </div>
       </Card>

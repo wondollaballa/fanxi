@@ -9028,10 +9028,10 @@ end
 hud.trust_config = {
     [911] = { kind = 'song',  label = 'songs',  limit = 4,  title = 'Joachim' },
     [928] = { kind = 'roll',  label = 'rolls',  limit = 8,  title = 'Luzaf' },
-    [952] = { kind = 'spell', label = 'spells', limit = 12, title = 'Koru-Moru' },
+    [952] = { kind = 'spell', label = 'spells', limit = 24, title = 'Koru-Moru' },
     [967] = { kind = 'roll',  label = 'rolls',  limit = 8,  title = 'Qultada' },
-    [981] = { kind = 'spell', label = 'spells', limit = 12, title = 'Sylvie (UC)' },
-    [998] = { kind = 'spell', label = 'spells', limit = 12, title = 'Ygnas' },
+    [981] = { kind = 'spell', label = 'spells', limit = 24, title = 'Sylvie (UC)' },
+    [998] = { kind = 'spell', label = 'spells', limit = 24, title = 'Ygnas' },
 }
 hud.trust_category = {
     cure = 'CURES', buff = 'BUFFS', debuff = 'DEBUFFS',
@@ -9045,7 +9045,7 @@ hud.trust_menu = {
     name = '',
     kind = 'spell',
     label = 'spells',
-    limit = 12,
+    limit = 24,
     actions = {},
     by_id = {},
     selected = {},

@@ -120,7 +120,7 @@ TRUST_ACTION_KIND: dict[int, str] = {
 #: How many actions one character may keep.  Songs are the horn's bar; the caster pool and the
 #: Corsair priority list are longer because they are not simultaneous buff slots.
 TRUST_ACTION_LIMIT: dict[int, int] = {
-    911: 4, 928: 8, 952: 12, 967: 8, 981: 12, 998: 12,
+    911: 4, 928: 8, 952: 24, 967: 8, 981: 24, 998: 24,
 }
 #: The Trusts whose selected spells replace the whole cast rotation.
 SPELL_ACTION_TRUSTS = frozenset({952, 981, 998})
@@ -492,7 +492,11 @@ def effect_of(spell: dict, geomancy_plus: int = 0, trust_name: str = ""):
         if idris is not None:
             mods, potency = idris
     trust_values = TRUST_AURA_EFFECTS.get(_key(trust_name))
-    if trust_values is not None:
+    if trust_values is not None and not name.startswith("geo-"):
+        # The published Trust column covers her Indi- auras (including the 12.5%
+        # entrusted Frailty).  A Geo- hex is cast through Idris, so it uses the
+        # Geomancy +10 column above instead: Geo-Frailty is 27%, not the 12.5%
+        # party-bubble Entrust value.
         fixed = trust_values.get(geomancy.family(name))
         if fixed is not None:
             mods, potency = fixed

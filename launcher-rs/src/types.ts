@@ -1205,6 +1205,9 @@ export interface TrustSummary {
   spells: number;
   key_items: string;
   summoning: boolean;
+  /** Alter-ego upgrade level (0-50), shared by every Trust on the character. */
+  upgrade_level: number;
+  upgrade_max: number;
 }
 
 /** The Data page snapshot, as the server sends it (snake_case fields). */

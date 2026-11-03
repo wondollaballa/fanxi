@@ -175,8 +175,9 @@ control addon:
   `//trust release <spell id>`. **The configurable support Trusts are the exception:** Joachim,
   Luzaf, Qultada, Koru-Moru, Sylvie (UC) and Ygnas open a small menu with **Call** (or
   **Dismiss** while out) and **Set songs**, **Set spells** or **Set rolls**. The dialog lists the
-  actions that Trust can use with the level each unlocks at; tick them in the order they should
-  be used and **Save**. **Use default logic** is the checkbox that returns the Trust to its
+  Trust's full spellbook (every main-job spell, its support-job spells up to 49, and all
+  Indi-/Geo- spells for Sylvie) with the level each unlocks at; tick up to 24 in the order
+  they should be used and **Save**. **Use default logic** is the checkbox that returns the Trust to its
   built-in rotation (and disables the list). The set is stored on the character by the server
   (`//trust <id> set ...`), so it survives a relog; the HUD reads the catalogue and selection back
   through hidden `TrustData|` lines rather than printing chat. A Trust with no selected actions

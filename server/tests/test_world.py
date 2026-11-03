@@ -4280,7 +4280,7 @@ class WorldTest(unittest.TestCase):
         self.session.queue.clear()
         self.session.command(["trust", "952", "ui", "hud"])
         lines = self.chats()
-        self.assertIn("TrustData|952|B|Koru-moru|spell|12|0|511,473", lines)
+        self.assertIn("TrustData|952|B|Koru-moru|spell|24|0|511,473", lines)
         self.assertIn("TrustData|952|A|511|96|buff|Haste II", lines)
         self.assertIn("TrustData|952|E", lines)
 
@@ -4306,8 +4306,11 @@ class WorldTest(unittest.TestCase):
                               '"Cure', 'III"', '"Cure', 'II"', '"Cure"',
                               '"Protect', 'V"', '"Shell', 'V"', '"Phalanx', 'II"',
                               '"Dia', 'III"', '"Slow', 'II"', '"Flurry', 'II"',
-                              '"Distract', 'II"'])
-        self.assertIn("at most 12 spells", " ".join(self.chats()))
+                              '"Distract', 'II"', '"Stone"', '"Water"', '"Aero"',
+                              '"Fire"', '"Blizzard"', '"Thunder"', '"Stone', 'II"',
+                              '"Water', 'II"', '"Aero', 'II"', '"Fire', 'II"',
+                              '"Blizzard', 'II"', '"Thunder', 'II"'])
+        self.assertIn("at most 24 spells", " ".join(self.chats()))
         self.assertNotIn(952, self.session.trust_actions)
 
     def test_koru_moru_casts_only_the_owners_spell_pool(self):

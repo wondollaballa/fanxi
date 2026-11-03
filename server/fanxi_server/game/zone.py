@@ -864,7 +864,7 @@ class ZoneSession:
             return rows
         level = max(1, int(self.char.get("main_level", 1) or 1))
         try:
-            spells = self.world.service.trust_spells(trust_id, level)
+            spells = self.world.service.trust_action_spells(trust_id, level)
             trust = self.world.service.trust(trust_id) or {}
         except Exception as exc:
             log.warning("%s could not read trust %d actions: %s", self.addr, trust_id, exc)

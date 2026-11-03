@@ -325,6 +325,7 @@ class ApiTest(unittest.TestCase):
             {"op": "exemplar", "points": 50000},
             {"op": "crafts", "max_all": True},
             {"op": "trusts"},
+            {"op": "trusts", "max_upgrades": True},
         ):
             response = self.call("POST", base + "/progress", body, token=token)
             self.assertEqual(response.status, 200, (body, response.payload))
@@ -336,6 +337,8 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(data["exemplar"]["points"], 50000)
         self.assertEqual(data["crafts"][0]["value"], 100)
         self.assertTrue(all(entry["value"] == 255 for entry in data["fame"]))
+        self.assertEqual(data["trusts"]["upgrade_level"], 50)
+        self.assertEqual(data["trusts"]["upgrade_max"], 50)
 
         # The Armory puts an augmentable piece in the bag; the RP card then caps a path.
         # Nyame Helm is an endgame purchase, so give the character a wallet first.

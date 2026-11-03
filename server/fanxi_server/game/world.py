@@ -522,6 +522,7 @@ class World:
         entity = trust_from_row(row, targid, zone, int(session.char["char_id"]), level)
         entity.spells = self.service.trust_spells(int(row["spell_id"]), level)
         entity.kit = trust_ai.build_kit(entity.spells, level, entity.job, entity.name)
+        self._set_trust_action_kit(entity, level)
         entity.gear = trust_gear.loadout(self.service, int(row["spell_id"]))
         entity.gear_mods = dict(entity.gear.mods)
         entity.geomancy_plus = int(entity.gear.geomancy_plus)
@@ -748,6 +749,26 @@ class World:
                                 owner.party_member()]
         entity.aura_effect = 0
 
+    def _set_trust_action_kit(self, entity: ZoneEntity, level: int) -> None:
+        """Build the wider picker kit for a support Trust, separate from its default AI.
+
+        The default rotation stays on the curated ``trust_spells`` rows, which is what
+        retail's alter ego actually casts.  A player-selected set may name any spell the
+        Trust's jobs can use, so the picker and ``restrict_kit`` read this expanded kit
+        instead.
+        """
+        entity.action_spells = entity.spells
+        entity.action_kit = entity.kit
+        if int(getattr(entity, "trust_spell", 0)) not in trust_ai.SUPPORT_TRUST_IDS:
+            return
+        try:
+            entity.action_spells = self.service.trust_action_spells(
+                int(entity.trust_spell), int(level))
+            entity.action_kit = trust_ai.build_kit(
+                entity.action_spells, int(level), entity.job, entity.name)
+        except Exception as exc:
+            log.debug("trust %s action catalogue unavailable: %s", entity.name, exc)
+
     def despawn_trust(self, entity, now: float | None = None, reason: str = "") -> None:
         """Remove one alter ego from the world and from every client that draws it."""
         from . import packets
@@ -797,11 +818,24 @@ class World:
                 log.debug("trust gear share failed: %s", exc)
                 shared = {}
             self._trust_share_cache[key] = (now, shared)
+        try:
+            upgrade = self.service.trust_upgrade_level(int(owner.char["id"]))
+        except Exception:
+            upgrade = 0
+        entity.trust_upgrade_level = int(upgrade)
+        shared = dict(shared)
+        if upgrade:
+            # Alter-ego upgrades (the launcher's max-all action): +5 HP, +2 MP and
+            # +1 to every base stat per level, applied to the same shared-modifier
+            # block the combat and spell paths already read.
+            for stat in (mod.STR, mod.DEX, mod.VIT, mod.AGI, mod.INT, mod.MND, mod.CHR,
+                         mod.ATT, mod.ACC):
+                shared[stat] = int(shared.get(stat, 0)) + int(upgrade)
         entity.shared_mods = shared
         hp_max, mp_max = trust_stats.vitals(
             entity.race, entity.job, entity.sub_job, int(entity.level))
-        hp_max = max(1, int(hp_max) + int(shared.get(mod.HP, 0)))
-        mp_max = max(0, int(mp_max) + int(shared.get(mod.MP, 0)))
+        hp_max = max(1, int(hp_max) + int(shared.get(mod.HP, 0)) + int(upgrade) * 5)
+        mp_max = max(0, int(mp_max) + int(shared.get(mod.MP, 0)) + int(upgrade) * 2)
         if full:
             entity.hp_max, entity.mp_max = hp_max, mp_max
             entity.hp, entity.mp = hp_max, mp_max
@@ -896,6 +930,7 @@ class World:
             entity.level = level
             entity.spells = self.service.trust_spells(int(entity.trust_spell), level)
             entity.kit = trust_ai.build_kit(entity.spells, level, entity.job, entity.name)
+            self._set_trust_action_kit(entity, level)
             self._apply_trust_gear_share(entity, owner, full=True)
             entity.next_cast_at = now + 0.5
         elif now >= float(getattr(entity, "next_gear_sync", 0.0) or 0.0):
@@ -984,6 +1019,9 @@ class World:
         if selected and int(entity.trust_spell) in trust_ai.SPELL_ACTION_TRUSTS:
             # An explicit spell pool replaces the whole cast rotation: the Trust still
             # decides when each chosen spell is useful, but cannot cast anything else.
+            # Use the expanded action kit so a job spell outside the curated rotation
+            # (or any Indi-/Geo- spell for Sylvie) is selectable.
+            kit = getattr(entity, "action_kit", None) or kit
             kit = trust_ai.restrict_kit(kit, selected)
         if not kit.get("caster"):
             return False
@@ -1099,7 +1137,7 @@ class World:
         per icon), so Minuet IV and V can both be up; an older icon-keyed state still
         counts as the same song here.
         """
-        kit = entity.kit or {}
+        kit = getattr(entity, "action_kit", None) or entity.kit or {}
         if not kit.get("song"):
             return None
         selected = list(getattr(owner, "joachim_songs", ()) or ())
@@ -1496,7 +1534,8 @@ class World:
         """
         previous = int(getattr(entity, "geo_mob_id", 0) or 0)
         hexed = self.entity_by_id(entity.zone, previous) if previous else None
-        for spell in (entity.kit or {}).get("aura", []):
+        kit = getattr(entity, "action_kit", None) or entity.kit or {}
+        for spell in kit.get("aura", []):
             name = str(spell.get("name") or "")
             if bubble and geomancy.bubble(name) != bubble:
                 continue
@@ -1504,10 +1543,16 @@ class World:
             if spec is None or int(spec.effect) == int(keep):
                 continue
             status = int(spec.effect)
-            if owner.effect_state.get(status) is not None:
+            # Indi-fury and Geo-fury share status 549 (likewise every Indi-/Geo-
+            # family).  Only clear the side this bubble actually owns: an Indi- buff
+            # is on the owner, an Indi- hex or any Geo- hex is on the monster.  A Geo-
+            # buff shares its owner status with the Indi- aura, so leave that alone.
+            owner_side = bubble == "indi" and spec.kind == "buff"
+            mob_side = (bubble == "indi" and spec.kind != "buff") or bubble == "geo"
+            if owner_side and owner.effect_state.get(status) is not None:
                 owner.remove_effect(status, quiet=True)
                 owner.queue.append(owner.char_status())
-            if hexed is not None and hexed.effect_state.get(status) is not None:
+            if mob_side and hexed is not None and hexed.effect_state.get(status) is not None:
                 self._drop_mob_effect(int(entity.id), hexed, status)
         if bubble == "geo":
             entity.geo_mob_id = int(mob_id)
