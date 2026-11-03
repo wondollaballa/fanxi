@@ -91,6 +91,25 @@ SCH_MODUS_VERITAS_DURATION = 0x0642
 SCH_HELIX_MAGIC = 0x0644
 SCH_MAX_SUBLIMATION = 0x0646
 
+# The group-2 rows: the four next-spell stratagems, Enlightenment and Stormsurge.
+# Stormsurge is a trait rather than an ability, so it has no ability id here.
+SCH_ALTRUISM = 0x0CC0
+SCH_FOCALIZATION = 0x0CC2
+SCH_TRANQUILITY = 0x0CC4
+SCH_EQUANIMITY = 0x0CC6
+SCH_ENLIGHTENMENT = 0x0CC8
+SCH_STORMSURGE = 0x0CCA
+
+# Job ability id -> the merit that unlocks it.  A group-2 ability with no rank is
+# not learned; the zone drops it from the command menu and refuses a hand-built use.
+SCH_GROUP2_ABILITIES = {
+    240: SCH_ALTRUISM,       # Altruism
+    241: SCH_FOCALIZATION,   # Focalization
+    242: SCH_TRANQUILITY,    # Tranquility
+    243: SCH_EQUANIMITY,     # Equanimity
+    244: SCH_ENLIGHTENMENT,  # Enlightenment
+}
+
 MERITS = {
     0x0040: (0x0040, 'hp_mp', 15, 10),  # hp_mp / max_hp
     0x0042: (0x0040, 'hp_mp', 15, 10),  # hp_mp / max_mp

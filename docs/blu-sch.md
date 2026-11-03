@@ -32,12 +32,15 @@
 - The **100-JP Storm II line** and the **1200-JP Helix IIs** are registered gift spells:
   only a level-99 Scholar main can cast them (the Storm IIs have no ordinary level row, so
   before this they were open to every job).
+- The **group-2 Scholar merits** are applied: **Altruism** / **Focalization** add +10
+  Magic Accuracy at rank 1 and +5 a rank after that to the next matching white/black
+  spell; **Tranquility** / **Equanimity** take 10 enmity a rank off it; **Enlightenment**
+  gives +5 INT/MND a rank to the first spell and counts as both arts for the duration
+  formulas; **Stormsurge** adds +3 at 1/5 and +1 a rank after that (Voidstorm gives half,
+  floored) to the stat its storm spell grants.  The four stratagems are merit-locked: a
+  rank of 0 drops them from the Abilities menu and refuses a hand-built use.
 - **Stratagem Effect IV** is not applied yet: the client owns spell recast, so the ranks'
   recast reduction cannot be sent from the server the way an ability recast can.
-- The group-2 merit abilities (**Altruism**, **Focalization**, **Tranquility**,
-  **Equanimity**, **Enlightenment**) put their status icons up and **Stormsurge** is not
-  in the ability table, but their next-spell accuracy/enmity, dual-Addendum and storm-stat
-  effects are not modelled yet.
 
 ## Red Mage
 

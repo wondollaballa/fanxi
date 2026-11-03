@@ -4670,6 +4670,52 @@ class World:
         entity.engaged_char_id = None
         return None
 
+    def relieve_mob_hate(self, entity: ZoneEntity, char_id: int, amount: int,
+                         now: float | None = None) -> None:
+        """Take enmity off one player (Tranquility/Equanimity).
+
+        The spell's own hate has already been added when this runs, so this is the
+        merit's relief on top of it.  A reduction that drops the current target below
+        another player hands the monster over; dropping it to nothing disengages it,
+        which is what the AI's own top-hate pass would do on its next tick.
+        """
+        char_id = int(char_id)
+        amount = max(0, int(amount))
+        hate = entity.enmity
+        if not hate or amount <= 0 or char_id not in hate:
+            return
+        total = max(0, int(hate.get(char_id, 0)) - amount)
+        if total:
+            hate[char_id] = total
+            entity.enmity_ve[char_id] = min(
+                int(entity.enmity_ve.get(char_id, 0)), total)
+        else:
+            hate.pop(char_id, None)
+            entity.enmity_ve.pop(char_id, None)
+        if int(entity.engaged_char_id or 0) != char_id:
+            return
+        now = time.time() if now is None else float(now)
+        top = self.mob_hate_target(entity)
+        if top is not None:
+            if int(top.char["char_id"]) != char_id:
+                entity.engaged_char_id = int(top.char["char_id"])
+                entity.claim_char_id = int(top.char["char_id"])
+                entity.pending_skill = None
+                entity.next_attack_at = now + 1.0
+                self._mob_clear_nav(entity)
+                entity.nav_blocked_until = 0.0
+            return
+        entity.claim_char_id = None
+        entity.pending_skill = None
+        entity.aggro_announced = False
+        if entity.nav_path or entity.moving:
+            self._mob_clear_nav(entity)
+            entity.moving = False
+            sessions = self.sessions_in_zone(entity.zone)
+            self._mob_speed(entity, sessions, MOB_WALK_SPEED_BYTE, now)
+            self._mob_sync(entity, sessions, now, force=True)
+        self.set_animation(entity, 0, self.sessions_in_zone(entity.zone))
+
     def mob_effect(self, entity: ZoneEntity, effect_id: int) -> dict | None:
         return entity.effect_state.get(int(effect_id))
 

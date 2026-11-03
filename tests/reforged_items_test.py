@@ -1,12 +1,17 @@
 #!/usr/bin/env python3
-"""Check the server's Reforged Bonanza names resolve to the client's stronger copies.
+"""Check server-only item names resolve to the client's real item ids.
 
-The client stores a Reforged weapon under the same display name as its base (21541 is
-"Premium Hearts", not "Premium Heart"; 21732 is "Demonic Axe", not "Malefic Axe").  The
-server names the upgrade "<base> (Reforged)" so GearSwap can tell them apart, but
-`res.item_by_name` cannot resolve that name.  `control.lua` keeps the join in one marked
-region; this runs the real lookup against a stub resource table and checks the table
-covers every "(Reforged)" row migration 53 inserted.
+The server and the client spell certain weapons differently.  The Reforged Bonanza
+weapons append " (Reforged)" (and two use the other copy's spelling entirely: Premium
+Hearts and Demonic Axe), while the final iLvl 119 III weapons keep the base name but the
+client has several stage rows under it.  `res.item_by_name` cannot see the suffix and
+returns the lowest (weakest) stage for a base name, which left the EquipViewer slot blank
+or showed the wrong stage's tooltip and stats.
+
+`control.lua` keeps the joins in one marked region.  This test runs the real lookup
+against a stub resource table, checks the Reforged table against migration 53, and checks
+the final-form table against the server's Prime and REMA family tables plus every
+``119 III`` spelling the migrations use.
 
 The test needs a Lua interpreter: lupa when installed, otherwise the vendored LuaJIT;
 with neither it skips (exit 0), matching the other HUD tests.
@@ -16,14 +21,16 @@ from __future__ import annotations
 import os
 import re
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 CONTROL = ROOT / 'host' / 'addons' / 'lua' / 'control.lua'
 MIGRATION = ROOT / 'database' / 'migrations' / '0053_bonanza_reforged.sql'
-BEGIN = '-- BEGIN Reforged item names'
-END = '-- END Reforged item names'
+MIGRATIONS = ROOT / 'database' / 'migrations'
+BEGIN = '-- BEGIN Item name aliases'
+END = '-- END Item name aliases'
 LUAJIT = ROOT / 'build' / 'third_party' / 'luajit-src' / 'src' / 'luajit'
 
 
@@ -33,11 +40,11 @@ def region() -> str:
         start = source.index(BEGIN)
         stop = source.index(END, start) + len(END)
     except ValueError as error:
-        raise SystemExit(f'{CONTROL}: missing the Reforged item markers: {error}')
+        raise SystemExit(f'{CONTROL}: missing the item-name alias markers: {error}')
     return source[start:stop]
 
 
-def migration_names() -> dict[str, int]:
+def reforged_names() -> dict[str, int]:
     """lowercased server name -> id for every Reforged weapon migration 53 inserts."""
     text = MIGRATION.read_text(encoding='utf-8')
     out: dict[str, int] = {}
@@ -48,11 +55,41 @@ def migration_names() -> dict[str, int]:
     return out
 
 
-def lua_table() -> dict[str, int]:
-    """The same mapping as control.lua spells it."""
+def final_form_names() -> dict[str, int]:
+    """lowercased base name and "119 III" spelling -> the family's final client id."""
+    sys.path.insert(0, str(ROOT / 'server'))
+    from fanxi_server.game import prime_weapons, rema_weapons  # noqa: PLC0415
+
     out: dict[str, int] = {}
-    for match in re.finditer(r'\["([^"]+)"\]\s*=\s*(\d+)', region()):
-        out[match.group(1).lower()] = int(match.group(2))
+    for family, stages in prime_weapons.PRIME_FAMILIES:
+        out[family.lower()] = stages[-1][1]
+    for family, final_id, _ids in rema_weapons.REMA_FAMILIES:
+        out[family.lower()] = final_id
+
+    # The hand-added final rows carry "119 III" in their name.  Every one must name a
+    # family the tables above know; otherwise the alias table would silently miss it.
+    suffixes = {'Dokoku 119 III', 'Hvergelmir 119 III', 'Kannagi 119 III',
+                'Kikoku 119 III', 'Nagi 119 III', 'Opashoro 119 III',
+                'Tupsimati 119 III'}
+    for path in MIGRATIONS.glob('*.sql'):
+        suffixes.update(re.findall(r"'([^']+ 119 III)'", path.read_text(encoding='utf-8')))
+    for name in suffixes:
+        base = name[:-len(' 119 III')].lower()
+        if base not in out:
+            raise SystemExit(f'{CONTROL}: no final form for the suffixed name {name!r}')
+        out[name.lower()] = out[base]
+    return out
+
+
+def lua_tables() -> dict[str, int]:
+    """Both alias tables as control.lua spells them."""
+    out: dict[str, int] = {}
+    for pattern in (r'\["([^"]+)"\]\s*=\s*(\d+)', r"\['([^']+)'\]\s*=\s*(\d+)"):
+        for match in re.finditer(pattern, region()):
+            key = match.group(1).lower()
+            if key in out:
+                raise SystemExit(f'{CONTROL}: duplicate item-name alias {key!r}')
+            out[key] = int(match.group(2))
     return out
 
 
@@ -99,17 +136,18 @@ def run_script(script: str) -> None:
 
 
 def main() -> int:
-    expected = migration_names()
-    actual = lua_table()
+    expected = reforged_names()
     if not expected:
         raise SystemExit(f'{MIGRATION}: no Reforged Bonanza rows found')
+    expected.update(final_form_names())
+    actual = lua_tables()
     if actual != expected:
         missing = sorted(set(expected) - set(actual))
         extra = sorted(set(actual) - set(expected))
         wrong = sorted(name for name in expected.keys() & actual.keys()
                        if expected[name] != actual[name])
         raise SystemExit(
-            f'{CONTROL}: Reforged item table does not match {MIGRATION.name}: '
+            f'{CONTROL}: item-name aliases do not match the server tables: '
             f'missing={missing} extra={extra} wrong_ids={wrong}')
 
     source = CONTROL.read_text(encoding='utf-8')
@@ -122,8 +160,12 @@ def main() -> int:
 xi = {}
 res = {
   item_by_name = function(name)
+    -- The client's own answer for every base name is the lowest (weakest) stage or the
+    -- base weapon; the alias table must win before this fallback.
     if name == "Wizard's Rod" then return { id = 21991 } end
     if name == 'Air Knife' then return { id = 21570 } end
+    if name == 'Opashoro' then return { id = 22103 } end
+    if name == 'Excalibur' then return { id = 18276 } end
     return nil
   end,
 }
@@ -140,6 +182,18 @@ eq(item_id_for_name("Wizard's Rod (Reforged)"), 21991, 'Wizard Rod suffix')
 eq(item_id_for_name('  Wizard\'s Rod (Reforged)  '), 21991, 'surrounding spaces')
 eq(item_id_for_name('Premium Heart (Reforged)'), 21541, 'Premium Hearts client spelling')
 eq(item_id_for_name('Malefic Axe (Reforged)'), 21732, 'Demonic Axe client spelling')
+
+-- The final form is picked even though the client's base-name lookup returns an early
+-- stage (Opashoro 22103, Excalibur 18276) or a weaker duplicate.
+eq(item_id_for_name('Opashoro 119 III'), 22106, 'Opashoro server suffix')
+eq(item_id_for_name('Opashoro (Level 119 III)'), 22106, 'Level 119 III spelling')
+eq(item_id_for_name('Opashoro Level 119 III'), 22106, 'Level 119 III without parens')
+eq(item_id_for_name('Opashoro'), 22106, 'Opashoro base name')
+eq(item_id_for_name('Excalibur'), 20685, 'Excalibur final form')
+eq(item_id_for_name('Fail-Not'), 22117, 'Fail-Not server final id')
+eq(item_id_for_name('Dokoku 119 III'), 21932, 'Dokoku server suffix')
+eq(item_id_for_name('Kikoku'), 21906, 'Kikoku final form')
+
 eq(item_id_for_name("Wizard's Rod"), 21991, 'base name still uses the client')
 eq(item_id_for_name('Air Knife'), 21570, 'plain weapon still uses the client')
 eq(item_id_for_name('Not an item'), 0, 'unknown name')

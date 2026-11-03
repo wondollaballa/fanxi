@@ -22,7 +22,7 @@ echo "== magic bag"
 python3 tests/magic_bag_test.py
 echo "== equip view"
 python3 tests/equipview_hud_test.py
-echo "== reforged item names"
+echo "== item name aliases"
 python3 tests/reforged_items_test.py
 echo "== corsair pickers"
 python3 tests/cor_hud_test.py

@@ -649,6 +649,108 @@ class EffectTest(unittest.TestCase):
         self.session.tick_player_effects(time.time() + 1)
         self.assertEqual(int(state["power"]), 410)
 
+    def test_group2_abilities_need_at_least_one_merit_rank(self):
+        self.session.char.update(main_job=20, main_level=99)
+        self.session._merit_counts = {}
+        self.assertNotIn(240, self.session._job_ability_ids())
+        self.ability(240)                                   # Altruism
+        self.assertNotIn(effects.ALTRUISM, self.session.status_effects)
+        self.session._merit_counts = {merits.SCH_ALTRUISM: 1}
+        self.assertIn(240, self.session._job_ability_ids())
+        self.ability(240)
+        self.assertIn(effects.ALTRUISM, self.session.status_effects)
+
+    def test_altruism_and_focalization_boost_the_matching_colour_only(self):
+        """+10 at 1/5 and +5 a rank after that; the other colour does not spend it."""
+        self.session.char.update(main_job=20, main_level=99)
+        self.session._merit_counts = {merits.SCH_ALTRUISM: 5}
+        self.ability(240)
+        black = self.session._sch_next_spell_bonuses(
+            {"name": "Stone", "skill": packets.SKILL_ELEMENTAL})
+        self.assertEqual(black["macc"], 0)
+        self.assertIn(effects.ALTRUISM, self.session.status_effects)
+        white = self.session._sch_next_spell_bonuses(
+            {"name": "Banish", "skill": packets.SKILL_DIVINE})
+        self.assertEqual(white["macc"], 30)
+        self.assertNotIn(effects.ALTRUISM, self.session.status_effects)
+        self.session._merit_counts = {merits.SCH_FOCALIZATION: 5}
+        self.session.ability_recasts.clear()      # the shared 1 s strategem recast
+        self.ability(241)
+        black = self.session._sch_next_spell_bonuses(
+            {"name": "Stone", "skill": packets.SKILL_ELEMENTAL})
+        self.assertEqual(black["macc"], 30)
+        self.assertNotIn(effects.FOCALIZATION, self.session.status_effects)
+
+    def test_a_cast_stores_the_next_spell_merit_bonus(self):
+        """The cast path consumes Altruism/Tranquility and carries both onto the spell."""
+        self.session.char.update(main_job=20, main_level=99, mp=1000, mp_current=1000)
+        self.session._merit_counts = {merits.SCH_ALTRUISM: 5,
+                                      merits.SCH_TRANQUILITY: 5}
+        self.ability(240)
+        self.session.ability_recasts.clear()
+        self.ability(242)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Cure'")
+        packet = bytearray(16)
+        struct.pack_into("<IHHI", packet, 4, 0, 0, packets.ACTION_CAST_MAGIC,
+                         int(row["id"]))
+        self.session.cast_magic(bytes(packet), 0)
+        self.assertIsNotNone(self.session.casting)
+        self.assertEqual(self.session.casting["sch_macc"], 30)
+        self.assertEqual(self.session.casting["sch_enmity"], 50)
+        self.assertNotIn(effects.ALTRUISM, self.session.status_effects)
+        self.assertNotIn(effects.TRANQUILITY, self.session.status_effects)
+
+    def test_tranquility_and_equanimity_relieve_the_next_spell_enmity(self):
+        self.session.char.update(main_job=20, main_level=99)
+        self.session._merit_counts = {merits.SCH_TRANQUILITY: 5,
+                                      merits.SCH_EQUANIMITY: 5}
+        mob = self.claim_mob()
+        mob.engaged_char_id = 0
+        mine = int(self.session.char["char_id"])
+        mob.enmity[mine] = 1000
+        mob.enmity_ve[mine] = 400
+        self.ability(242)                                   # Tranquility
+        white = self.session._sch_next_spell_bonuses(
+            {"name": "Banish", "skill": packets.SKILL_DIVINE})
+        self.assertEqual(white["enmity"], 50)
+        self.session._sch_relieve_hate(mob, {"sch_enmity": white["enmity"]})
+        self.assertEqual(int(mob.enmity[mine]), 950)
+        self.session.ability_recasts.clear()      # the shared 1 s strategem recast
+        self.ability(243)                                   # Equanimity
+        black = self.session._sch_next_spell_bonuses(
+            {"name": "Stone", "skill": packets.SKILL_ELEMENTAL})
+        self.assertEqual(black["enmity"], 50)
+        self.session._sch_relieve_hate(mob, {"sch_enmity": black["enmity"]})
+        self.assertEqual(int(mob.enmity[mine]), 900)
+
+    def test_enlightenment_gives_int_mnd_and_is_spent_by_the_first_spell(self):
+        self.session.char.update(main_job=20, main_level=99)
+        self.session._merit_counts = {merits.SCH_ENLIGHTENMENT: 5}
+        self.ability(244)
+        state = self.session.effect(effects.ENLIGHTENMENT)
+        self.assertEqual(int(state["mods"].get(mod.INT, 0)), 25)
+        self.assertEqual(int(state["mods"].get(mod.MND, 0)), 25)
+        bonus = self.session._sch_next_spell_bonuses(
+            {"name": "Stone", "skill": packets.SKILL_ELEMENTAL})
+        self.assertEqual((bonus["int"], bonus["mnd"]), (25, 25))
+        self.assertNotIn(effects.ENLIGHTENMENT, self.session.status_effects)
+
+    def test_stormsurge_adds_the_storm_element_stat(self):
+        self.session.char.update(main_job=20, main_level=99, mp=1000,
+                                 mp_current=1000)
+        self.session._merit_counts = {merits.SCH_STORMSURGE: 5}
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Firestorm'")
+        self.cast(int(row["id"]))
+        fire = effects.for_spell("Firestorm")
+        state = self.session.effect(fire.effect)
+        self.assertEqual(int(state["mods"].get(mod.STR, 0)), 7)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Voidstorm II'")
+        self.cast(int(row["id"]))
+        void = effects.for_spell("Voidstorm II")
+        state = self.session.effect(void.effect)
+        for stat in (mod.STR, mod.DEX, mod.VIT, mod.AGI, mod.INT, mod.MND, mod.CHR):
+            self.assertEqual(int(state["mods"].get(stat, 0)), 3)
+
     def test_the_timer_packet_follows_the_icon_list(self):
         """0x063 type 9 is what the client counts down from; 0x037 alone leaves it blank."""
         self.ability(211)                                   # Light Arts, two hours

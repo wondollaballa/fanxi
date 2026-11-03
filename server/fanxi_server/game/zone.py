@@ -7256,6 +7256,10 @@ class ZoneSession:
                     self.world.service.refill_working_stock(int(self.char["id"])))
             except Exception as exc:
                 log.warning("%s tool refill failed: %s", self.addr, exc)
+        # Consume Altruism/Focalization/Tranquility/Equanimity/Enlightenment before the
+        # sheet is built, so the spell gets their bonus exactly once and the removed
+        # Enlightenment mods are not counted through the sheet as well.
+        sch_bonus = self._sch_next_spell_bonuses(spell)
         sheet = self.stat_sheet()
         # The action packet starts the cast before the client has finished sending the
         # midcast set.  These are the numbers that set controls (Cure potency, MAB,
@@ -7270,7 +7274,8 @@ class ZoneSession:
         values = self._cast_numbers(
             spell, spec, value_target, healing=healing, sheet=sheet,
             dark_seal=dark_seal, cascade_bonus=cascade_bonus,
-            convergence=convergence)
+            convergence=convergence, macc_bonus=int(sch_bonus["macc"]),
+            int_bonus=int(sch_bonus["int"]), mnd_bonus=int(sch_bonus["mnd"]))
         if convergence:
             self.remove_effect(effects.CONVERGENCE, quiet=True)
         if dark_seal:
@@ -7336,7 +7341,11 @@ class ZoneSession:
                         "effect_potency": effect_potency,
                         "skill": int(spell["skill"]), "resist": resist,
                         "dark_seal": dark_seal, "cascade_bonus": cascade_bonus,
-                        "convergence": convergence}
+                        "convergence": convergence,
+                        "sch_macc": int(sch_bonus["macc"]),
+                        "sch_enmity": int(sch_bonus["enmity"]),
+                        "sch_int": int(sch_bonus["int"]),
+                        "sch_mnd": int(sch_bonus["mnd"])}
         self.stop_resting()
         self.queue += [self.char_stats(), self.char_status()]
         try:
@@ -7474,7 +7483,9 @@ class ZoneSession:
 
     def _cast_numbers(self, spell: dict, spec, target, *, healing: bool,
                       sheet=None, dark_seal: bool = False,
-                      cascade_bonus: int = 0, convergence: bool = False) -> dict:
+                      cascade_bonus: int = 0, convergence: bool = False,
+                      macc_bonus: int = 0, int_bonus: int = 0,
+                      mnd_bonus: int = 0) -> dict:
         """The result values the midcast gear controls.
 
         The host wears the fast-cast set before the action and the midcast set right
@@ -7509,6 +7520,8 @@ class ZoneSession:
                            else {})
             target_int = 0
         base = int(spell["base"])
+        caster_int = int(sheet.attributes.get("int", 0)) + int(int_bonus)
+        caster_mnd = int(sheet.attributes.get("mnd", 0)) + int(mnd_bonus)
         # Helix Magic Acc./Atk. merits add +3 Magic Accuracy and +2 Magic Atk. Bonus
         # a rank to Helix spells only; every other spell keeps the sheet's mods.
         spell_mods = sheet.fighter.mods
@@ -7520,6 +7533,10 @@ class ZoneSession:
                                         + 3 * helix_rank)
                 spell_mods[mod.MATT] = (int(spell_mods.get(mod.MATT, 0))
                                         + 2 * helix_rank)
+        if macc_bonus:
+            spell_mods = dict(spell_mods)
+            spell_mods[mod.MACC] = (int(spell_mods.get(mod.MACC, 0))
+                                    + int(macc_bonus))
         if healing:
             amount = effects.healing_amount(
                 int(cost * 3 + level), sheet.fighter.mods, target_mods)
@@ -7528,7 +7545,7 @@ class ZoneSession:
             # comes back every ten seconds while the effect lasts (see resolve_casting).
             amount = combat.helix_damage(
                 base=base, multiplier=float(spell["multiplier"]),
-                caster_int=int(sheet.attributes.get("int", 0)),
+                caster_int=caster_int,
                 target_int=target_int,
                 skill=spell_skill, mods=spell_mods,
                 target_mods=target_mods,
@@ -7540,7 +7557,7 @@ class ZoneSession:
             # character's Hvergelmir set it turned a 2-base spell into 1,475 damage.
             amount = combat.dia_damage(
                 base=base,
-                caster_mnd=int(sheet.attributes.get("mnd", 0)),
+                caster_mnd=caster_mnd,
                 target_mnd=(int(target_sheet.attributes.get("mnd", 0))
                             if target_sheet is not None else 0))
         elif spec is None and base > 0 and target_sheet is not None:
@@ -7551,7 +7568,7 @@ class ZoneSession:
                     + int(spell_mods.get(mod.NINJUTSU_MAGIC_DAMAGE, 0)))
             amount = combat.magic_damage(
                 base=base, multiplier=float(spell["multiplier"]),
-                caster_int=int(sheet.attributes.get("int", 0)),
+                caster_int=caster_int,
                 target_int=target_int,
                 skill=spell_skill, mods=spell_mods,
                 target_mods=target_mods,
@@ -7598,8 +7615,7 @@ class ZoneSession:
                 skill=song_skill + (150 if dmnd_enfeeble else 0)
                       + (100 if burst_tier else 0) + (100 if dark_seal else 0)
                       + (50 if diabolic else 0) + (50 if convergence else 0),
-                caster_int=int(sheet.attributes.get(
-                    "mnd" if dmnd_enfeeble else "int", 0)),
+                caster_int=caster_mnd if dmnd_enfeeble else caster_int,
                 mods=spell_mods,
                 target_level=int(target_sheet.fighter.level),
                 target_mods=target_mods)
@@ -7610,7 +7626,9 @@ class ZoneSession:
                 int(self.char.get("main_job") or 0), int(self.char.get("main_level") or 0),
                 int(self.char.get("sub_job") or 0), int(self.char.get("sub_level") or 0))
             effect_duration = effects.helix_duration(
-                sch_level, dark_arts=self.has_effect(effects.DARK_ARTS),
+                sch_level,
+                dark_arts=(self.has_effect(effects.DARK_ARTS)
+                           or self.has_effect(effects.ENLIGHTENMENT)),
                 jp_rank=JOB_POINT_RANK)
         elif (spec is not None and debuff
               and int(spell.get("skill") or 0) in effects.SONG_SKILLS):
@@ -7667,7 +7685,10 @@ class ZoneSession:
             healing=bool(cast.get("healing")),
             dark_seal=bool(cast.get("dark_seal")),
             cascade_bonus=int(cast.get("cascade_bonus") or 0),
-            convergence=bool(cast.get("convergence"))))
+            convergence=bool(cast.get("convergence")),
+            macc_bonus=int(cast.get("sch_macc") or 0),
+            int_bonus=int(cast.get("sch_int") or 0),
+            mnd_bonus=int(cast.get("sch_mnd") or 0)))
 
     def resolve_casting(self, now: float) -> None:
         """Apply a finished cast: a buff, a debuff, damage, or a heal."""
@@ -7830,6 +7851,7 @@ class ZoneSession:
                 self.world.add_damage_hate(entity, me, damage, now)
             else:
                 self.world.add_mob_hate(entity, me, HATE_ENFEEBLE, now)
+            self._sch_relieve_hate(entity, cast)
             if defeated:
                 self.world.kill_mob(self, entity, now)
             self.assert_stance()
@@ -7878,6 +7900,7 @@ class ZoneSession:
         # to the caster, and one already fighting someone else switches when this spell
         # out-weighs the hate already on it.
         self.world.add_damage_hate(entity, me, damage, now)
+        self._sch_relieve_hate(entity, cast)
         if defeated:
             self.world.kill_mob(self, entity, now)
         self.assert_stance()
@@ -7896,6 +7919,7 @@ class ZoneSession:
                          else packets.MESSAGE_MAGIC_NO_EFFECT), info=0,
                 category=packets.ACTION_CATEGORY_MAGIC_FINISH, action_id=int(spell["id"]))))
             self.world.add_mob_hate(entity, me, HATE_ENFEEBLE, time.time())
+            self._sch_relieve_hate(entity, cast)
             return
         if folded.startswith("aspir"):
             amount = max(1, int(cast["amount"]) // 2)
@@ -7914,6 +7938,7 @@ class ZoneSession:
                 info=0, category=packets.ACTION_CATEGORY_MAGIC_FINISH,
                 action_id=int(spell["id"]))))
             self.world.add_damage_hate(entity, me, amount, time.time())
+            self._sch_relieve_hate(entity, cast)
             return
         if folded.startswith("drain"):
             amount = max(1, int(cast["amount"]))
@@ -7929,6 +7954,7 @@ class ZoneSession:
             self.queue_entity(entity, packets.SEND_HP)
             self.queue += [self.char_status(), self.party_member()]
             self.world.add_damage_hate(entity, me, amount, time.time())
+            self._sch_relieve_hate(entity, cast)
             if entity.hp <= 0:
                 self.world.kill_mob(self, entity, time.time())
             return
@@ -9092,6 +9118,114 @@ class ZoneSession:
             return 0
         return max(0, int(self.merit_counts().get(int(merit_id), 0)))
 
+    def _merit_ability_allowed(self, ability_id: int) -> bool:
+        """Whether a merit-locked job ability has at least one rank bought."""
+        merit_id = merits.SCH_GROUP2_ABILITIES.get(int(ability_id))
+        if merit_id is None:
+            return True
+        return self._sch_merit(merit_id) > 0
+
+    def _job_ability_ids(self) -> list[int]:
+        """The job abilities this character may list, merit locks applied."""
+        try:
+            ids = self.world.service.job_ability_ids(
+                int(self.char.get("main_job", 0)), int(self.char.get("main_level", 1)),
+                int(self.char.get("sub_job", 0)), int(self.char.get("sub_level", 0)))
+        except Exception as exc:
+            log.warning("%s job ability list unavailable: %s", self.addr, exc)
+            return []
+        return [int(ability_id) for ability_id in ids
+                if self._merit_ability_allowed(int(ability_id))]
+
+    @staticmethod
+    def _sch_magic_color(spell: dict) -> str:
+        """White or black magic for Altruism/Focalization and their enmity pair.
+
+        Divine, Healing and Enhancing are white (the Blaze/Ice/Shock Spikes are black
+        Enhancing spells); Elemental and Dark are black.  Enfeebling is black except
+        Dia/Diaga, the white enfeebles.  Songs, Ninjutsu, Blue and Summoning are neither.
+        """
+        name = " ".join(str(spell.get("name") or "").casefold().split())
+        skill = int(spell.get("skill") or 0)
+        if skill in (packets.SKILL_DIVINE, packets.SKILL_HEALING,
+                     packets.SKILL_ENHANCING):
+            if skill == packets.SKILL_ENHANCING and name in effects.BLACK_ENHANCING:
+                return "black"
+            return "white"
+        if skill == packets.SKILL_ENFEEBLING:
+            return "white" if name.startswith(("dia", "diaga")) else "black"
+        if skill in (packets.SKILL_ELEMENTAL, packets.SKILL_DARK):
+            return "black"
+        return ""
+
+    def _sch_next_spell_bonuses(self, spell: dict) -> dict:
+        """Consume the next-spell Scholar merits and return what they add to this cast.
+
+        Altruism/Focalization add 5 magic accuracy plus 5 a rank (the ability's own 5
+        and +5 for each merit; BG-wiki's note puts 1/5 at +10).  Tranquility/Equanimity
+        take 10 enmity a rank off the spell.  Enlightenment gives +5 INT/MND a rank to
+        the first spell and is spent by it, whatever its colour.
+        """
+        color = self._sch_magic_color(spell)
+        macc = enmity = int_bonus = mnd_bonus = 0
+        consumed: list[int] = []
+        if color == "white":
+            if self.has_effect(effects.ALTRUISM):
+                macc += 5 + 5 * self._sch_merit(merits.SCH_ALTRUISM)
+                consumed.append(effects.ALTRUISM)
+            if self.has_effect(effects.TRANQUILITY):
+                enmity += 10 * self._sch_merit(merits.SCH_TRANQUILITY)
+                consumed.append(effects.TRANQUILITY)
+        elif color == "black":
+            if self.has_effect(effects.FOCALIZATION):
+                macc += 5 + 5 * self._sch_merit(merits.SCH_FOCALIZATION)
+                consumed.append(effects.FOCALIZATION)
+            if self.has_effect(effects.EQUANIMITY):
+                enmity += 10 * self._sch_merit(merits.SCH_EQUANIMITY)
+                consumed.append(effects.EQUANIMITY)
+        if self.has_effect(effects.ENLIGHTENMENT):
+            rank = self._sch_merit(merits.SCH_ENLIGHTENMENT)
+            int_bonus += 5 * rank
+            mnd_bonus += 5 * rank
+            consumed.append(effects.ENLIGHTENMENT)
+        if consumed:
+            for effect_id in consumed:
+                self.remove_effect(int(effect_id), quiet=True)
+            self.queue.append(self.char_status())
+        return {"macc": macc, "enmity": enmity,
+                "int": int_bonus, "mnd": mnd_bonus}
+
+    def _storm_mods(self, name: str) -> dict[int, int]:
+        """Stormsurge: the stat a storm spell grants, from the merit rank.
+
+        Retail gives +3 at 1/5 and +1 a rank after that (+7 at 5/5).  Voidstorm gives
+        half that to every stat, floored (+1 at 1/5, +3 at 5/5).  The bonus rides the
+        buff's own modifiers, so it applies to whoever the Scholar casts the storm on.
+        """
+        rank = self._sch_merit(merits.SCH_STORMSURGE)
+        if rank <= 0:
+            return {}
+        folded = " ".join(str(name or "").casefold().split())
+        value = 2 + rank
+        if folded.startswith("voidstorm"):
+            return {stat: value // 2 for stat in
+                    (mod.STR, mod.DEX, mod.VIT, mod.AGI, mod.INT, mod.MND, mod.CHR)}
+        families = (("sandstorm", mod.VIT), ("rainstorm", mod.MND),
+                    ("windstorm", mod.AGI), ("firestorm", mod.STR),
+                    ("hailstorm", mod.INT), ("thunderstorm", mod.DEX),
+                    ("aurorastorm", mod.CHR))
+        for prefix, stat in families:
+            if folded.startswith(prefix):
+                return {stat: value}
+        return {}
+
+    def _sch_relieve_hate(self, entity, cast: dict | None) -> None:
+        """Take Tranquility/Equanimity's enmity off the monster after the spell lands."""
+        amount = int((cast or {}).get("sch_enmity") or 0)
+        if entity is None or amount <= 0:
+            return
+        self.world.relieve_mob_hate(entity, int(self.char["char_id"]), amount)
+
     def _waltz_tp_reduction(self) -> int:
         """TP taken off a waltz by "Waltz TP Cost" gear.
 
@@ -10236,6 +10370,9 @@ class ZoneSession:
             log.warning("%s unknown job ability id %d", self.addr, ability_id)
             self.say("That job ability does not exist.")
             return
+        if not self._merit_ability_allowed(ability_id):
+            self.say("You have not learned that ability.")
+            return
         name = str(ability["name"])
         log.info("%s job ability %s (%d)", self.addr, name, ability_id)
         now = time.time()
@@ -10365,8 +10502,14 @@ class ZoneSession:
         if applied is not None:
             for gone in applied.cancels:
                 self.remove_effect(int(gone), quiet=True)
-            self.add_effect(applied.effect, duration=applied.duration,
-                            mods=applied.mods or None)
+            mods = applied.mods or None
+            if int(ability_id) == 244:      # Enlightenment: +5 INT/MND a merit rank
+                rank = self._sch_merit(merits.SCH_ENLIGHTENMENT)
+                if rank:
+                    mods = dict(mods or {})
+                    mods[mod.INT] = mods.get(mod.INT, 0) + 5 * rank
+                    mods[mod.MND] = mods.get(mod.MND, 0) + 5 * rank
+            self.add_effect(applied.effect, duration=applied.duration, mods=mods)
             self.queue.append(self.char_status())
         else:
             fallback = job_points.ability_effect(int(ability_id))
@@ -11484,7 +11627,9 @@ class ZoneSession:
         perpetuance = white_enhancing and self.has_effect(effects.PERPETUANCE)
         main_job = int(self.char.get("main_job") or 0)
         main_level = int(self.char.get("main_level") or 0)
-        light_arts = self.has_effect(effects.LIGHT_ARTS)
+        # Enlightenment optimizes both arts for its one spell.
+        light_arts = (self.has_effect(effects.LIGHT_ARTS)
+                      or self.has_effect(effects.ENLIGHTENMENT))
         tabula_rasa = self.has_effect(effects.TABULA_RASA)
         # job_points_detail sends every category at rank 20, so the Light Arts Effect
         # rank the duration formula reads is 20 too (+60 s before Perpetuance).
@@ -11588,9 +11733,11 @@ class ZoneSession:
             # self-targeted, so the list being cleared is the caster's own.
             for effect_id in effects.ENSPELL_IDS:
                 target.remove_effect(int(effect_id), quiet=True)
+        mods = dict(spec.mods)
+        mods.update(self._storm_mods(str(spell.get("name") or "")))
         target.add_effect(spec.effect, duration=duration, power=power,
                           potency=spec.potency, tick=tick, icon=spec.icon,
-                          mods=spec.mods)
+                          mods=mods)
         if perpetuance:
             self.remove_effect(effects.PERPETUANCE, quiet=True)
         action = sub(0x028, packets.battle_action(
@@ -11881,10 +12028,12 @@ class ZoneSession:
         if perpetuance:
             self.remove_effect(effects.PERPETUANCE, quiet=True)
         animation = spell_animation(spell)
+        mods = dict(spec.mods)
+        mods.update(self._storm_mods(str(spell.get("name") or "")))
         for target in self._accession_targets(now):
             target.add_effect(spec.effect, duration=duration, power=power,
                               potency=spec.potency, tick=tick, icon=spec.icon,
-                              mods=spec.mods)
+                              mods=mods)
             action = sub(0x028, packets.battle_action(
                 me, int(target.char["char_id"]), int(spec.effect),
                 animation=animation, kind=0,
@@ -11914,6 +12063,7 @@ class ZoneSession:
         self.remove_effect(effects.ACCESSION, quiet=True)
         animation = spell_animation(spell)
         mods = dict(spec.mods)
+        mods.update(self._storm_mods(str(spell.get("name") or "")))
         for target in self._accession_targets(now):
             target.add_effect(spec.effect, duration=duration, power=power,
                               potency=spec.potency, tick=tick, icon=spec.icon,
@@ -13315,13 +13465,7 @@ class ZoneSession:
         above 159 (merit and master-level abilities) still travel in 0x0AC.
         """
         bits = bytearray(20)
-        try:
-            ja_ids = self.world.service.job_ability_ids(
-                int(self.char.get("main_job", 0)), int(self.char.get("main_level", 1)),
-                int(self.char.get("sub_job", 0)), int(self.char.get("sub_level", 0)))
-        except Exception as exc:
-            log.warning("%s job feat list unavailable: %s", self.addr, exc)
-            ja_ids = ()
+        ja_ids = self._job_ability_ids()
         for ja_id in ja_ids:
             ja_id = int(ja_id)
             if 0 < ja_id < 160:
@@ -13337,13 +13481,7 @@ class ZoneSession:
         so a client that only refreshes a submenu on an incremental update sees it.
         """
         bits = bytearray(64)
-        try:
-            ja_ids = self.world.service.job_ability_ids(
-                int(self.char.get("main_job", 0)), int(self.char.get("main_level", 1)),
-                int(self.char.get("sub_job", 0)), int(self.char.get("sub_level", 0)))
-        except Exception as exc:
-            log.warning("%s job command update unavailable: %s", self.addr, exc)
-            ja_ids = ()
+        ja_ids = self._job_ability_ids()
         for ja_id in ja_ids:
             ja_id = int(ja_id)
             if 0 < ja_id < 512:
@@ -13452,13 +13590,7 @@ class ZoneSession:
         except Exception as exc:
             log.warning("%s weapon skill list unavailable: %s", self.addr, exc)
             ws_ids = ()
-        try:
-            ja_ids = self.world.service.job_ability_ids(
-                int(self.char.get("main_job", 0)), int(self.char.get("main_level", 1)),
-                int(self.char.get("sub_job", 0)), int(self.char.get("sub_level", 0)))
-        except Exception as exc:
-            log.warning("%s job ability list unavailable: %s", self.addr, exc)
-            ja_ids = ()
+        ja_ids = self._job_ability_ids()
         trait_ids = [trait.id for trait in self.job_traits()]
         return sub(0x0AC, command_bits(ws_ids, ja_ids, trait_ids))
 
@@ -13485,6 +13617,8 @@ class ZoneSession:
         except Exception as exc:
             log.warning("%s job ability recasts unavailable: %s", self.addr, exc)
             abilities = []
+        abilities = [row for row in abilities
+                     if self._merit_ability_allowed(int(row["id"]))]
         # Slot 0 is retail's two-hour ("Special") recast: the current main job's
         # one-hour ability (recast id 0).  A ready one is still a zero timer rather
         # than an absent row.  The per-ability cooldowns live above the byte-sized
@@ -13659,6 +13793,10 @@ class ZoneSession:
                        sub(0x029, packets.battle_message(
                            me, me, TARGID, TARGID, int(param2), count, message)),
                        self.char_stats(), self.char_status(), self.party_member()]
+        if int(merit_id) in merits.SCH_GROUP2_ABILITIES.values():
+            # A group-2 ability appears or disappears from the Abilities menu with
+            # its first/last rank, so the command tables have to be rebuilt now.
+            self.queue += [self.char_abilities(), self.char_commands()]
 
     def _apply_merit_vitals(self, merit_id: int, delta: int) -> None:
         """Max HP/MP merits change the character's own max, not just a menu number."""

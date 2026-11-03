@@ -68,7 +68,7 @@ Commands the launcher uses:
 | `weapons` | main/sub/ranged/ammo items in all 18 client bags (slots 1-80) that the main job meets the level and job requirements for, with copy and stack counts |
 | `bag_items {container}` | every item in one client container (diagnostic; scans slots 1-80, including slots past `container_max`) |
 | `icons {ids}` | item icons as top-down RGBA hex, decoded from the game's DATs |
-| `item_ids {names}` | item name -> id, for launcher-side GearSwap set previews |
+| `item_ids {names}` | item name -> id, for launcher-side GearSwap set previews; resolves the Reforged and final-form server names to their client ids |
 | `hud {show_hud, show_abilities, show_spells, show_trusts, show_weapon_skills, show_mounts, show_target, show_equipview, show_battle_hud, show_sch, edit, type, layout, columns, size, labels, font, tabs, group, custom_groups, assign_key, assign_group, target, target_tab, targets, warp_marks, mounts, opacity, menu_hide, reset_positions, center_positions}` | change the whole in-game HUD or one of its combat windows (or all of them); `edit` starts/stops in-game move mode, `center_positions` parks all six windows in the middle before editing (the resolution-change repair); `target` + `target_tab` or a `targets` map sets per-tab spell targeting (`selected`, `stnpc` or `stpc`); `warp_marks` is the launcher's `[{slot, alias, zone_name}, ...]` list for the Zoning spell page; `show_mounts` opens the Mount HUD and `mounts: {selected, columns, size, x, y}` sets its own prefs; `show_battle_hud` drives the camp Battle HUD (the same setting as its title-bar X); returns the saved state |
 | `battle_info {show, toggle, start, pause, stop, reset, auto_start, native_fps, advanced, opacity, x, y, reset_position}` | the Stats window and the measurement session; returns the live snapshot |
 | `battle {action, profile, name, role, radius, scope, line, tab}` | the Battle hub and automation engine: `state`, `update`, `save`, `load`, `delete`, `new`, `start`, `stop`, `pause`, `show`, `hide`, `tab`, `camp_hud`, `camp_here`, `camp_radius`, `camp_clear`, `place_there`, `suggest` or `command`; see [battle.md](battle.md) |
@@ -980,10 +980,12 @@ client's `0x01B` Encumbrance Flags word. `gear` now returns `count` and that wor
 `<data dir>/icons/` and can clear again from **Settings → Clear icon cache**. The grid polls
 `gear` (2 s on the Gear page; the existing 3 s party poll on Home and the Control room), so an
 equip is visible on the next tick rather than at the exact `0x050` packet. Set previews resolve
-their item names through `item_ids`; an unknown name renders a placeholder tile. The twenty
-Reforged Bonanza weapons are a special case: the server suffixes their names with `(Reforged)`,
-while the client stores both copies under one base name, so `control.lua` maps those names to the
-upgraded client ids for `item_ids`, set-wear lookup and the launcher's stat query alike. Fanxi's
+their item names through `item_ids`; an unknown name renders a placeholder tile. Two naming
+classes need help from `control.lua`: the Reforged Bonanza weapons, whose server names carry
+`(Reforged)` while the client stores both copies under one base name, and the final iLvl 119 III
+weapons, where the client has several stage rows under one base name and `item_by_name` returns
+the weakest. The alias table maps both — including the server's `119 III` spellings — to the
+final client ids for `item_ids`, set-wear lookup and the launcher's stat query alike. Fanxi's
 server rejects gear the character cannot use, so it sends a zero flags word today; the overlay is
 wired and shows the X whenever the client reports a bit (another server, or future rules).
 

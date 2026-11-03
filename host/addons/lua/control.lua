@@ -430,54 +430,147 @@ local function item_name(id)
     return type(name) == 'string' and name or nil
 end
 
--- BEGIN Reforged item names
--- The client stores each Reforged Bonanza weapon under its base display name (and two of
--- them use a different spelling entirely: Premium Hearts and Demonic Axe).  The server's
--- item rows and the GearSwap libraries spell the upgrade "<base> (Reforged)", which the
--- client's item_by_name cannot resolve.  Without this table a set naming a Reforged weapon
--- renders an empty EquipViewer slot and its tooltip stats never load.
+-- BEGIN Item name aliases
+-- The client's item names do not always match the server's.  The Reforged Bonanza
+-- weapons append " (Reforged)" (and two use the other copy's spelling entirely:
+-- Premium Hearts and Demonic Axe), while the final iLvl 119 III weapons keep the base
+-- name but the client has several stage rows under it.  res.item_by_name cannot see the
+-- suffix and returns the lowest (weakest) id for a base name, so a set that names one
+-- of these drew an empty EquipViewer slot or the wrong stage's tooltip and stats.
 --
--- Keyed by the server name lowercased; the ids are migration 53's rows.  This is the one
--- place that joins the server spelling to the client item, so item_ids, find_item and the
--- launcher's stat query all agree on which copy is the Reforged one.
+-- Keep the server spellings here; item_id_for_name falls back to the client table for
+-- every ordinary item.  item_ids, find_item and the launcher's stat query all use this
+-- resolver so the set preview, the worn set and the item card agree.
 local REFORGED_ITEM_IDS = {
-    ["ice brand (reforged)"] = 20663,
-    ["flametongue (reforged)"] = 20664,
-    ["dragon fangs (reforged)"] = 21540,
-    ["premium heart (reforged)"] = 21541,
-    ["chocobo knife (reforged)"] = 21592,
-    ["air knife (reforged)"] = 21593,
-    ["onion sword iii (reforged)"] = 21602,
-    ["save the queen iii (reforged)"] = 21603,
-    ["brave blade iii (reforged)"] = 21677,
-    ["malefic axe (reforged)"] = 21732,
-    ["drastic axe (reforged)"] = 21789,
-    ["final sickle (reforged)"] = 21842,
+    ['ice brand (reforged)'] = 20663,
+    ['flametongue (reforged)'] = 20664,
+    ['dragon fangs (reforged)'] = 21540,
+    ['premium heart (reforged)'] = 21541,
+    ['chocobo knife (reforged)'] = 21592,
+    ['air knife (reforged)'] = 21593,
+    ['onion sword iii (reforged)'] = 21602,
+    ['save the queen iii (reforged)'] = 21603,
+    ['brave blade iii (reforged)'] = 21677,
+    ['malefic axe (reforged)'] = 21732,
+    ['drastic axe (reforged)'] = 21789,
+    ['final sickle (reforged)'] = 21842,
     ["hebo's spear (reforged)"] = 21893,
-    ["yagyu darkblade (reforged)"] = 21936,
-    ["zanmato +2 (reforged)"] = 21952,
-    ["mutsu. yoshi. (reforged)"] = 21953,
+    ['yagyu darkblade (reforged)'] = 21936,
+    ['zanmato +2 (reforged)'] = 21952,
+    ['mutsu. yoshi. (reforged)'] = 21953,
     ["wizard's rod (reforged)"] = 21991,
     ["pandit's staff (reforged)"] = 22168,
     ["artemis's bow +2 (reforged)"] = 22169,
-    ["exeter (reforged)"] = 22170,
+    ['exeter (reforged)'] = 22170,
+}
+
+-- The server's Prime and REMA family tables name the final form; these are their
+-- base names plus the hand-added "119 III" spellings that GearSwap libraries may carry.
+local FINAL_FORM_ITEM_IDS = {
+    ['aegis'] = 16200,
+    ['almace'] = 20689,
+    ['amanomurakumo'] = 21954,
+    ['annihilator'] = 21267,
+    ['apocalypse'] = 21808,
+    ['armageddon'] = 21269,
+    ['aymur'] = 21751,
+    ['bravura'] = 21756,
+    ['burtgang'] = 20687,
+    ['caladbolg'] = 21684,
+    ['caliburnus'] = 21646,
+    ['carnwenhan'] = 20586,
+    ['claustrum'] = 22060,
+    ['conqueror'] = 21757,
+    ['daurdabla'] = 18839,
+    ['death penalty'] = 21268,
+    ['dokoku'] = 21932,
+    ['duban'] = 26495,
+    ['earp'] = 22164,
+    ['epeolatry'] = 21685,
+    ['excalibur'] = 20685,
+    ['fail-not'] = 22117,
+    ['farsha'] = 21752,
+    ['foenaria'] = 21837,
+    ['fomalhaut'] = 22143,
+    ['gae buide'] = 21891,
+    ['gambanteinn'] = 21079,
+    ['gandiva'] = 22116,
+    ['gastraphetes'] = 21266,
+    ['gjallarhorn'] = 18840,
+    ['glanzfaust'] = 20510,
+    ['gungnir'] = 21857,
+    ['guttler'] = 21750,
+    ['helheim'] = 21653,
+    ['hvergelmir'] = 22064,
+    ['idris'] = 21080,
+    ['kannagi'] = 21908,
+    ['kenkonken'] = 20511,
+    ['kikoku'] = 21906,
+    ['kogarasumaru'] = 21955,
+    ['kusanagi'] = 21986,
+    ['laevateinn'] = 22062,
+    ['laphria'] = 21785,
+    ['liberator'] = 21809,
+    ['lorg mor'] = 22002,
+    ['loughnashade'] = 22307,
+    ['mandau'] = 20583,
+    ['masamune'] = 21956,
+    ['mjollnir'] = 21077,
+    ['mpu gandring'] = 21590,
+    ['murgleis'] = 20686,
+    ['nagi'] = 21907,
+    ['nirvana'] = 22063,
+    ['ochain'] = 16199,
+    ['opashoro'] = 22106,
+    ['pinaka'] = 22163,
+    ['ragnarok'] = 21683,
+    ['redemption'] = 21810,
+    ['rhongomiant'] = 21859,
+    ['ryunohige'] = 21858,
+    ['spalirisos'] = 21730,
+    ['spharai'] = 20509,
+    ['terpsichore'] = 20584,
+    ['tizona'] = 20688,
+    ['tupsimati'] = 22061,
+    ['twashtar'] = 20587,
+    ['ukonvasara'] = 21758,
+    ['vajra'] = 20585,
+    ['varga purnikawa'] = 21535,
+    ['verethragna'] = 20512,
+    ['yagrush'] = 21078,
+    ['yoichinoyumi'] = 22115,
+    ['dokoku 119 iii'] = 21932,
+    ['hvergelmir 119 iii'] = 22064,
+    ['kannagi 119 iii'] = 21908,
+    ['kikoku 119 iii'] = 21906,
+    ['nagi 119 iii'] = 21907,
+    ['opashoro 119 iii'] = 22106,
+    ['tupsimati 119 iii'] = 22061,
 }
 
 local function item_id_for_name(name)
     local wanted = tostring(name or ''):match('^%s*(.-)%s*$')
     if wanted == '' then return 0 end
-    local reforged = REFORGED_ITEM_IDS[wanted:lower()]
-    if reforged then return reforged end
+    local key = wanted:lower()
+    local alias = REFORGED_ITEM_IDS[key] or FINAL_FORM_ITEM_IDS[key]
+    if not alias then
+        -- A version string is a description, not part of the item name: accept the
+        -- server's "(Level 119 III)" spelling too.
+        local base = key:gsub('%s*%(level%s*119%s*iii%)%s*$', '')
+        base = base:gsub('%s*level%s*119%s*iii%s*$', '')
+        base = base:gsub('%s+119%s*iii%s*$', ''):gsub('%s+$', '')
+        alias = FINAL_FORM_ITEM_IDS[base]
+    end
+    if alias then return alias end
     local ok, item = pcall(res.item_by_name, wanted)
     if not ok or not item then return 0 end
     return tonumber(item.id) or 0
 end
 
--- The generic `lua` command runs in its own chunk, so the launcher's stat query asks this
--- resolver instead of duplicating the table.  Older hosts omit the field and the query falls
--- back to the client's own name lookup.
+-- The generic `lua` command runs in its own chunk, so the launcher's stat query asks
+-- this resolver instead of duplicating the tables.
 xi.item_id_for_name = item_id_for_name
--- END Reforged item names
+-- END Item name aliases
 
 -- Windower's 0x01B "Encumbrance Flags" word, kept for the launcher's EquipViewer overlay.
 -- 0x01B is sent when the job/equipment block is rebuilt; 0 means nothing is encumbered.

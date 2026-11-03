@@ -11,7 +11,7 @@
   import or **Restore template**) opens on its first set, and a job change still follows the live
   job's library.
 
-## Unreleased — Reforged Bonanza weapons in the viewer and the stat sheet
+## Unreleased — Reforged and final-form weapons in the viewer and the stat sheet
 
 - **Reforged Bonanza weapons resolve in the EquipViewer and its item cards.**  The server names
   the upgraded copy `Wizard's Rod (Reforged)` (and the other nineteen similarly), but the
@@ -21,14 +21,25 @@
   host now keeps the one server-name-to-client-id table (`control.lua`) and uses it for
   `item_ids`, set-wear lookup and the launcher's stat query, so all twenty show their icon,
   card, base lines and set totals.
+- **Final-stage weapons resolve to their iLvl 119 III copy.**  The client has several item rows
+  under names like `Excalibur`, `Opashoro`, `Tupsimati` and `Kikoku`; `item_by_name` returns the
+  lowest (weakest) stage, and the server's own rows for some of them append `119 III`.  The same
+  resolver now maps all Prime and REMA family names, plus the seven `119 III` spellings and
+  `(Level 119 III)` variants, to the final form, so those sets show the right icon and the
+  strongest tooltip instead of an empty slot or a level-75 stage.
+- **The hover card prints the client's own item label.**  A set may spell a piece the server's
+  way (`Opashoro 119 III`); once the client row is loaded, the card titles it with the label the
+  game would draw (`Opashoro`).  The set's own name is still what the library editor shows.
 - **The server has their real stats too.**  Migration 185 fills the nineteen reforged weapons
   that had no `item_mods` rows (and refreshes Final Sickle's), including the weapon/Parrying
   and H2H Guard skill bonuses, Haste, Magic Damage, Fast Cast, Refresh, Cure potency and the
   ranged weapons' Store TP.  The live stat sheet and combat now agree with the client tooltip
   instead of treating them as bare-damage weapons.
-- Tests: `tests/reforged_items_test.py` runs the real resolver against a stub resource table
-  and checks its table covers every Reforged row in migration 53; `test_stats.py` checks the
-  imported tooltip stats and that the conditional `Unarmed:` block is not counted.
+- Tests: `tests/reforged_items_test.py` runs the real resolver against a stub resource table,
+  checks the Reforged table against migration 53, and checks the final-form table against the
+  server's Prime/REMA family tables and every `119 III` spelling in the migrations;
+  `test_stats.py` checks the imported tooltip stats and that the conditional `Unarmed:` block
+  is not counted.
 
 ## Unreleased — Scholar charge rate, merits and gift spells
 
@@ -49,6 +60,11 @@
   and Dark Arts, Max Sublimation adds 10 MP a rank to the storage cap, Helix Magic
   Acc./Atk. adds +3 Magic Accuracy and +2 Magic Atk. Bonus a rank to Helix spells, and
   Modus Veritas Duration gives 5% of its duration penalty back a rank.
+- **The Scholar group-2 merits are applied.**  Altruism/Focalization add +10 Magic Accuracy
+  at rank 1 and +5 a rank after that to the next white/black spell; Tranquility/Equanimity
+  take 10 enmity a rank off it; Enlightenment gives +5 INT/MND a rank to the first spell and
+  counts as both arts; Stormsurge gives the storm's stat +3 at 1/5 and +1 a rank after that
+  (Voidstorm half, floored).  A group-2 ability with no rank is no longer listed or usable.
 - **Modus Veritas follows retail.**  It doubles the Helix damage-over-time tick (plus the
   job-point bonus) and halves the remaining duration instead of only adding the bonus, and
   it refuses a tick of 5,000 or more.

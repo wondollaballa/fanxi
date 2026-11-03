@@ -546,9 +546,11 @@ totals** adds every numeric stat from both sources, keeping flat values and perc
 changing a cape, ring or earring and reading the same column is a quick best-in-slot check. The
 descriptions are read from the running client's item resources
 through the control port's `lua` command; an item the client cannot resolve still shows its
-augment lines and their totals. A name the server has renamed — the Reforged Bonanza weapons'
-`(Reforged)` suffix — is resolved through `control.lua`'s name table first, so its icon and the
-stronger copy's tooltip load instead of disappearing. Conditional `Set:` and `Unity Ranking:`
+augment lines and their totals. A name the server spells differently — the Reforged Bonanza
+weapons' `(Reforged)` suffix, or a final weapon's `119 III` stage — is resolved through
+`control.lua`'s alias table first, so its icon and the final copy's tooltip load instead of
+disappearing. The hover card then titles the piece with the client's own label (the set editor
+keeps the library's spelling). Conditional `Set:` and `Unity Ranking:`
 blocks and the pet/avatar/automaton lines are left out of the totals because they do not describe
 the player's own piece — the hover card still prints them, the way the game's tooltip does.
 `Aftermath:`, `Latent effect:` and `Additional effect:` lines stay on the card but are not added
