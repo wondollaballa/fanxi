@@ -35,6 +35,7 @@ cargo test --manifest-path launcher-rs/src-tauri/Cargo.toml
 
 # game-free client checks
 tests/battle_hub_test.sh --game <FFXI folder>   # Battle hub widget code, mock ImGui
+tests/sch_hud_test.sh --game <FFXI folder>      # Scholar HUD: chains, charges, saved sets, mock ImGui
 python3 tools/build_posix.py vfstest
 python3 tests/replay_test.py -v
 python3 tests/geometry_simd_test.py

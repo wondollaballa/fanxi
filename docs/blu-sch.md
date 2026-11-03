@@ -13,6 +13,14 @@
 - **Sublimation** is implemented and verified (see `sublimation.md`).
 - **Caper Emissarius** heals for 10% + its job-point percentage of max HP.
 - **Modus Veritas** adds its job-point bonus to a target's damage-over-time tick.
+- **Immanence** gives the next damaging elemental spell the skillchain property of its
+  element, so two casts can open and close a chain; the closing spell's damage is the
+  chain's base and the chain plays from the spell's own result (see
+  [skillchains.md](skillchains.md)).  Magic Burst reads the same state, so a Scholar's
+  burst list works after the chain closes.
+- The **Scholar HUD** tracks the strategem charges and the recharge clock and runs the
+  player's own self-skillchain macros and magic bursts; see
+  [control-panel.md](control-panel.md).
 - **Stratagem Effect IV** and Quick Magic on Red Mage are handled separately.
 
 ## Red Mage

@@ -69,7 +69,7 @@ Commands the launcher uses:
 | `bag_items {container}` | every item in one client container (diagnostic; scans slots 1-80, including slots past `container_max`) |
 | `icons {ids}` | item icons as top-down RGBA hex, decoded from the game's DATs |
 | `item_ids {names}` | item name -> id, for launcher-side GearSwap set previews |
-| `hud {show_hud, show_abilities, show_spells, show_trusts, show_weapon_skills, show_mounts, show_target, show_equipview, show_battle_hud, edit, type, layout, columns, size, labels, font, tabs, group, custom_groups, assign_key, assign_group, target, target_tab, targets, warp_marks, mounts, opacity, menu_hide, reset_positions, center_positions}` | change the whole in-game HUD or one of its combat windows (or all of them); `edit` starts/stops in-game move mode, `center_positions` parks all six windows in the middle before editing (the resolution-change repair); `target` + `target_tab` or a `targets` map sets per-tab spell targeting (`selected`, `stnpc` or `stpc`); `warp_marks` is the launcher's `[{slot, alias, zone_name}, ...]` list for the Zoning spell page; `show_mounts` opens the Mount HUD and `mounts: {selected, columns, size, x, y}` sets its own prefs; `show_battle_hud` drives the camp Battle HUD (the same setting as its title-bar X); returns the saved state |
+| `hud {show_hud, show_abilities, show_spells, show_trusts, show_weapon_skills, show_mounts, show_target, show_equipview, show_battle_hud, show_sch, edit, type, layout, columns, size, labels, font, tabs, group, custom_groups, assign_key, assign_group, target, target_tab, targets, warp_marks, mounts, opacity, menu_hide, reset_positions, center_positions}` | change the whole in-game HUD or one of its combat windows (or all of them); `edit` starts/stops in-game move mode, `center_positions` parks all six windows in the middle before editing (the resolution-change repair); `target` + `target_tab` or a `targets` map sets per-tab spell targeting (`selected`, `stnpc` or `stpc`); `warp_marks` is the launcher's `[{slot, alias, zone_name}, ...]` list for the Zoning spell page; `show_mounts` opens the Mount HUD and `mounts: {selected, columns, size, x, y}` sets its own prefs; `show_battle_hud` drives the camp Battle HUD (the same setting as its title-bar X); returns the saved state |
 | `battle_info {show, toggle, start, pause, stop, reset, auto_start, native_fps, advanced, opacity, x, y, reset_position}` | the Stats window and the measurement session; returns the live snapshot |
 | `battle {action, profile, name, role, radius, scope, line, tab}` | the Battle hub and automation engine: `state`, `update`, `save`, `load`, `delete`, `new`, `start`, `stop`, `pause`, `show`, `hide`, `tab`, `camp_hud`, `camp_here`, `camp_radius`, `camp_clear`, `place_there`, `suggest` or `command`; see [battle.md](battle.md) |
 | `party_info {show, toggle, tab, replace, buffs, names, opacity, x, y, reset_position}` | the Party Info window; `tab` is `party` or `alliance`; returns the saved state and the member list |
@@ -215,6 +215,51 @@ reopened. This works the same from `//job` and from the Mog House or Nomad Moogl
 menu. A rebuild that only changes the weapon (a gear swap on the same job) keeps the cooldown
 bars of abilities that survive it. The same snapshot is refreshed on every launcher poll, so the
 Control room's counts follow the change even while the windows are hidden.
+
+**The Scholar HUD is the job's own window.** It opens by itself for a Scholar main job and steps
+aside on every other job until the player makes a choice: the Control room's **Scholar** switch,
+`//hud sch` and the window's title-bar X store that choice in the character's HUD file. The
+header is **strategems**: one pip per charge the job has (five at 99, one more every twenty
+levels from 10), the count left, and the clock to the next charge, with the next pip filling as
+the four-minute recharge runs down. Every Immanence and Ebullience spends one; the count follows
+the outgoing job-ability packet, so a stratagem used from the Abilities window or a macro keystroke
+counts the same as one clicked here. The charge state is persisted with the sets, so a logout does
+not give them back. A **Dark Arts** chip warns when the active art is Light or none, because
+retail's Immanence wants Dark Arts; **Addendum: Black** is accepted too.
+
+The body is a left-hand list of **tabs**, one per skillchain, each holding the player's own named
+macros. A fresh character gets the twelve chains (Transfixion, Compression, Liquefaction, Scission,
+Reverberation, Detonation, Induration, Impaction, Gravitation, Distortion, Fusion, Fragmentation)
+seeded with the pairs from the old Scholar library — Stone → Pyrohelix for Liquefaction, Blizzard
+→ Noctohelix for Compression, Aero → Noctohelix for Gravitation, and so on — plus the no-Helix
+variants where they differ. A tab can be renamed in place, added with **+ New tab**, or deleted
+with its macros. A macro is a title, **two or three spells**, an optional **Use Ebullience** check
+(its title then reads `(Ebullience)` and it costs one more charge), and an optional **magic burst
+sequence**: a list of spells cast after the closing spell, inside the skillchain window. The
+editor is a modal with a tab picker, a title, a searchable spell picker for each slot (Divine,
+Elemental and Ninjutsu spells), a live preview of the chain the chosen spells form, and the
+burst list. Deleting a macro or a tab asks for confirmation.
+
+![The Scholar HUD: strategem charges, the twelve skillchain tabs, and a tab's macros](images/sch-hud.png)
+
+![The macro editor: title, tab, up to three spells, Ebullience and the magic burst list](images/sch-editor.png)
+
+Clicking a macro runs the sequence the way the old GearSwap library did, which is still the
+timing that works in game: `/ja "Immanence"`, one second, the spell; then five seconds before the
+next Immanence when the next spell is a Helix and four seconds otherwise; after the closing cast,
+each burst spell. **Stop** cancels the sequence. A macro whose spells (plus Ebullience) need more
+charges than are left is dimmed and shows the clock to the next time the whole chain is payable --
+`next 7:59` for a two-spell macro with none left -- and clicking it repeats that in chat rather
+than sending a sequence the strategems cannot cover. Nothing here bypasses the client's own
+checks: each step is an ordinary `/ja` or `/ma`, so range, cast bars, recast and the server's
+packet validation still apply, and the server now forms the skillchain itself
+(see [skillchains.md](skillchains.md)).
+
+`//sch on|off|toggle` shows or hides it; `//sch save` writes now, `//sch reset` restores the
+twelve default tabs, `//sch position` re-centres the window after a resolution change,
+`//sch charges <n>` corrects the gauge, and `//sch stop` cancels a running sequence. The sets and
+the charge clock live in `<data>/sch/<character>-<id>.sch`, one TAB-separated line per tab and
+macro, separate from the HUD layout file so the launcher's layout editor does not rewrite them.
 
 The icon on each tile is the game's own menu icon: the addon's resource layer reads the icon DAT
 (`ROM/280/15.DAT`, file id 39551) and decodes the 32x32 DXT3 image for the spell/ability

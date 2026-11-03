@@ -323,6 +323,138 @@ class SkillchainTest(unittest.TestCase):
         self.assertEqual(0, numbers["magic_burst"])
 
 
+    def spell(self, name):
+        spell = self.service.spell_by_name(name)
+        self.assertIsNotNone(spell, name)
+        return spell
+
+    def test_the_element_to_chain_map_covers_every_element(self):
+        self.assertEqual(int(skillchain.SC.LIQUEFACTION),
+                         skillchain.immanence_props(1)[0])   # Fire
+        self.assertEqual(int(skillchain.SC.INDURATION),
+                         skillchain.immanence_props(2)[0])   # Ice
+        self.assertEqual(int(skillchain.SC.DETONATION),
+                         skillchain.immanence_props(3)[0])   # Wind
+        self.assertEqual(int(skillchain.SC.SCISSION),
+                         skillchain.immanence_props(4)[0])   # Earth
+        self.assertEqual(int(skillchain.SC.IMPACTION),
+                         skillchain.immanence_props(5)[0])   # Thunder
+        self.assertEqual(int(skillchain.SC.REVERBERATION),
+                         skillchain.immanence_props(6)[0])   # Water
+        self.assertEqual(int(skillchain.SC.TRANSFIXION),
+                         skillchain.immanence_props(7)[0])   # Light
+        self.assertEqual(int(skillchain.SC.COMPRESSION),
+                         skillchain.immanence_props(8)[0])   # Dark
+        self.assertEqual((0, 0, 0), skillchain.immanence_props(0))
+        self.assertEqual((0, 0, 0), skillchain.immanence_props(99))
+
+    def test_immanence_spell_opens_and_the_next_closes_liquefaction(self):
+        """Stone is Earth (Scission); Fire closes it into Liquefaction."""
+        now = time.time()
+        mob = self.mob()
+        self.session.add_effect(effects.IMMANENCE, duration=60)
+        self.assertIsNone(
+            self.session._magic_skillchain(mob, self.spell("Stone"), 1000, now))
+        self.assertEqual(0, mob.skillchain.tier)
+        self.assertIsNone(self.session.effect(effects.IMMANENCE))
+        self.session.add_effect(effects.IMMANENCE, duration=60)
+        chain = self.session._magic_skillchain(
+            mob, self.spell("Fire"), 1000, now + 5.0)
+        self.assertIsNotNone(chain)
+        self.assertEqual(int(skillchain.SC.LIQUEFACTION), mob.skillchain.sc)
+        self.assertEqual(1, mob.skillchain.count)
+        # Tier 1, link 1: 1000 x 0.50 off the monster.
+        self.assertEqual(5000 - 500, mob.hp)
+        self.assertEqual(500, chain["damage"])
+        self.assertEqual(int(skillchain.proc_kind(mob.skillchain.sc)), chain["proc"])
+        self.assertEqual(int(skillchain.proc_message(mob.skillchain.sc)),
+                         chain["message"])
+        self.assertIsNone(self.session.effect(effects.IMMANENCE))
+
+    def test_a_helix_closes_the_chain_too(self):
+        """A Helix is a damaging elemental spell, so Immanence chains through it."""
+        now = time.time()
+        mob = self.mob()
+        self.session.add_effect(effects.IMMANENCE, duration=60)
+        self.assertIsNone(
+            self.session._magic_skillchain(mob, self.spell("Stone"), 900, now))
+        self.session.add_effect(effects.IMMANENCE, duration=60)
+        chain = self.session._magic_skillchain(
+            mob, self.spell("Pyrohelix"), 900, now + 5.0)
+        self.assertIsNotNone(chain)
+        self.assertEqual(int(skillchain.SC.LIQUEFACTION), mob.skillchain.sc)
+
+    def test_immanence_is_spent_by_a_killing_spell(self):
+        mob = self.mob()
+        mob.hp = 100
+        self.session.add_effect(effects.IMMANENCE, duration=60)
+        self.assertIsNone(self.session._magic_skillchain(
+            mob, self.spell("Fire"), 1000, time.time(), defeated=True))
+        self.assertIsNone(self.session.effect(effects.IMMANENCE))
+        # Nothing to chain into: the lethal hit only spends the charge.
+        self.assertIsNone(getattr(mob, "skillchain", None))
+
+    def test_a_zero_damage_spell_does_not_spend_immanence(self):
+        mob = self.mob()
+        self.session.add_effect(effects.IMMANENCE, duration=60)
+        self.assertIsNone(self.session._magic_skillchain(
+            mob, self.spell("Fire"), 0, time.time()))
+        self.assertIsNotNone(self.session.effect(effects.IMMANENCE))
+
+    def test_resolve_casting_puts_the_chain_block_on_the_closing_spell(self):
+        """The client plays the chain from the finished spell's own result."""
+        from test_packets import decode_battle, decode_battle_results
+
+        mob = self.mob()
+        mob.targid = 0x300
+        mob.x, mob.y, mob.z = self.session.pos[0], self.session.pos[1], self.session.pos[2]
+        self.world.content.setdefault(self.session.zone, []).append(mob)
+        self.session.entities.append(mob)
+        self.session.char.update(main_job=20, main_level=99, sub_job=5, sub_level=49)
+        self.session.char["mp_current"] = 9999
+
+        base = time.time()
+
+        def finish(name, at):
+            spell = self.spell(name)
+            packet = bytearray(16)
+            struct.pack_into("<IHH", packet, 0, int(self.session.char["char_id"]), 0,
+                             packets.ACTION_CAST_MAGIC)
+            struct.pack_into("<I", packet, 12, int(spell["id"]))
+            self.session.queue.clear()
+            self.session.cast_magic(bytes(packet), mob.targid)
+            self.assertIsNotNone(self.session.casting, name)
+            self.session.resolve_casting(at)
+            return spell
+
+        self.session.add_effect(effects.IMMANENCE, duration=60)
+        finish("Stone", base + 10)
+        self.assertEqual(0, mob.skillchain.tier)
+        self.session.add_effect(effects.IMMANENCE, duration=60)
+        # Six seconds after the opener: past the 3 s lockout, inside the 11 s window.
+        fire = finish("Fire", base + 16)
+        self.assertEqual(int(skillchain.SC.LIQUEFACTION), mob.skillchain.sc)
+
+        closing = []
+        for message in self.session.queue:
+            if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) != 0x028:
+                continue
+            body = bytes(message[4:])
+            action = decode_battle(body)
+            if action["category"] != packets.ACTION_CATEGORY_MAGIC_FINISH:
+                continue
+            for row in decode_battle_results(body):
+                if row.get("add_effect"):
+                    closing.append((action["action"], row))
+        self.assertEqual(1, len(closing), closing)
+        self.assertEqual(int(fire["id"]), closing[0][0])
+        self.assertEqual(int(skillchain.proc_kind(mob.skillchain.sc)),
+                         closing[0][1]["add_kind"])
+        self.assertEqual(int(skillchain.proc_message(mob.skillchain.sc)),
+                         closing[0][1]["add_message"])
+        self.assertGreater(closing[0][1]["add_value"], 0)
+
+
 class AddonSkillchainTableTest(unittest.TestCase):
     """The Battle hub planner must know every weapon skill the server does.
 

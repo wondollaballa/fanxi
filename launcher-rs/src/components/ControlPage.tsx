@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type DragEvent, type ReactNode } 
 import {
   Activity,
   Backpack,
+  BookOpen,
   Crosshair,
   Eye,
   FileText,
@@ -222,6 +223,7 @@ function normalizeHud(raw: unknown): HudState {
     show_inventory: source.show_inventory === true,
     show_target: source.show_target !== false,
     show_battle_hud: source.show_battle_hud === true,
+    show_sch: source.show_sch === true,
     edit: source.edit === true,
     opacity: Math.min(1, Math.max(0.45, numberOr(source.opacity, 0.9))),
     menu_hide: source.menu_hide !== false,
@@ -359,6 +361,14 @@ function HudControls({
         busy={busy}
         title="Show the Battle automation HUD (start/stop, follow, camp and menu)"
         onClick={() => onChange({ show_battle_hud: !hud.show_battle_hud })}
+      />
+      <HudToggle
+        label="Scholar"
+        icon={<BookOpen size={12} />}
+        on={hud.show_sch === true}
+        busy={busy}
+        title="Show the Scholar HUD: strategem charges, self-skillchain macros and magic bursts. It follows the main job until you switch it."
+        onClick={() => onChange({ show_sch: hud.show_sch !== true })}
       />
       <HudToggle
         label="Target debuffs"
@@ -824,6 +834,7 @@ export function ControlPage({
     if (patch.show_inventory !== undefined) next.show_inventory = patch.show_inventory;
     if (patch.show_target !== undefined) next.show_target = patch.show_target;
     if (patch.show_battle_hud !== undefined) next.show_battle_hud = patch.show_battle_hud;
+    if (patch.show_sch !== undefined) next.show_sch = patch.show_sch;
     if (patch.edit !== undefined) next.edit = patch.edit;
     if (patch.opacity !== undefined) next.opacity = patch.opacity;
     if (patch.menu_hide !== undefined) next.menu_hide = patch.menu_hide;

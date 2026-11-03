@@ -95,6 +95,40 @@ The in-game Battle hub planner and the control HUD carry the same property table
 are generated from `data/weapon_skill_properties.json`, and
 `test_skillchain.AddonSkillchainTableTest` pins them to it.
 
+### Scholar's Immanence: spells as weapon skills
+
+Immanence gives the next damaging elemental spell the weapon-skill property of its
+element, so a Scholar can open and close a chain with two casts.  The element map is
+`skillchain.ELEMENT_TO_SC`, keyed by the server's 1-based `spells.element`:
+
+| Element | Property | Element | Property |
+|---|---|---|---|
+| Fire | Liquefaction | Water | Reverberation |
+| Ice | Induration | Light | Transfixion |
+| Wind | Detonation | Dark | Compression |
+| Earth | Scission | Thunder | Impaction |
+
+A spell carries exactly **one** property.  The first Immanence spell goes through the
+same `skillchain.advance()` as a weapon skill, so it opens the 11 s window; the next
+one must land more than 3 s after it and inside the window.  Stone (Earth/Scission) then
+Pyrohelix (Fire/Liquefaction) forms Liquefaction; Aero (Wind/Detonation) then
+Noctohelix (Dark/Compression) forms Gravitation.  The closing spell's **own damage** is
+the chain's base exactly as a closing weapon skill's is, and the chain's
+additional-effect block rides that spell's finished-magic `0x028` result, so the client
+plays the skillchain from the cast.
+
+`ZoneSession._magic_skillchain()` is the entry point.  It is called from both damaging
+magic paths -- a plain nuke and a Helix -- after the spell's own hit has landed, while
+the target is still alive.  Immanence is spent by the spell whether or not it forms a
+chain (a killing hit spends it and chains into nothing); a zero-damage or non-elemental
+spell leaves it up.  Because the chain state is the same one Magic Burst reads, the
+burst list the Scholar HUD runs after the closing spell bursts normally: matching the
+chain's element, with the link count as the burst tier.
+
+The HUD side of this is documented in [control-panel.md](control-panel.md): the
+Scholar window's tabs, macros, strategem clock and the tested `Immanence, 1 s, spell,
+4 s or 5 s` timing.
+
 ### State and timing
 
 From `GetSkillChainEffect`:
@@ -250,12 +284,15 @@ hit-rate/resist work, not in the same change as the skillchain state machine.
   `skillchain.py` (ids, map, state, damage, MB helpers), the tests in
   `server/tests/test_skillchain.py`.
 - **B. Runtime skillchains — done.** `SkillchainState` lives on the monster;
-  `ZoneSession._advance_skillchain` runs from `weaponskill` only on a landed, non-lethal
-  hit with properties, computes the closing-WS-based damage, applies it, and returns the
-  add-effect block that rides the closing WS result.  The state is cleared by
+  `ZoneSession._advance_skillchain` runs from `weaponskill` on a landed, non-lethal hit
+  with properties, and `ZoneSession._magic_skillchain` runs from the two damaging spell
+  paths when Immanence is up.  Both go through `_advance_chain`, compute the closing hit's
+  damage, apply it, and return the add-effect block that rides that closing result (the
+  weapon skill's result or the finished spell's result).  The state is cleared by
   `kill_mob`/`reset_mob`, so a respawn cannot inherit the previous life's chain (which
   let the first WS of a new fight close a chain nobody opened).  `SkillchainState.opener`
-  records who opened it, and the log line names the `closer`, `opener` and `target`.
+  records who opened it, and the log line names the `via` action, `closer`, `opener` and
+  `target`.
 - **C. Magic hit rate and resist tiers — partial.** `combat.magic_resist` is still the
   deterministic 0.5–1.0 approximation; the full three-roll 1/2^tier model is pending.
 - **D. Magic Burst — wired to the deterministic model.** `spell.element` reaches the

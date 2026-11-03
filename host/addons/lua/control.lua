@@ -60,7 +60,7 @@ key holds, frame captures, waits). Commands:
                              helix or songs) of each; a level-99 main job also gets its job-point spells
   job_abilities              the current main/sub job abilities the client's menu lists
   hud {show_hud, show_abilities, show_spells, show_trusts, show_weapon_skills, show_mounts,
-       show_target, show_equipview, show_battle_hud,
+       show_target, show_equipview, show_battle_hud, show_sch,
        edit, type, layout, columns, size, labels, font, tabs, group, custom_groups, assign_key,
        assign_group, target, target_tab, targets, opacity, menu_hide, reset_positions,
        center_positions, warp_marks, mounts}
@@ -77,7 +77,9 @@ key holds, frame captures, waits). Commands:
                              show_target is the Target Debuffs window, show_equipview is the
                              in-game EquipViewer (collapsed: the set being worn; expanded: the
                              4x4 equipment grid) and show_battle_hud is the
-                             Battle automation HUD; the
+                             Battle automation HUD; show_sch is the Scholar HUD (strategems,
+                             skillchain macros and magic bursts), unset by default so it follows
+                             the main job (nil: shown for Scholar only); the
                              mounts map carries its prefs ({selected, columns, size, x, y}) and the
                              returned copy names the mount being ridden and the table's size.
   weapons                    equipment in the bags for main/sub/ranged/ammo the main job can use
@@ -3657,6 +3659,9 @@ local function hud_sanitize(raw)
     if type(raw.show_inventory) == 'boolean' then state.show_inventory = raw.show_inventory end
     if type(raw.show_target) == 'boolean' then state.show_target = raw.show_target end
     if type(raw.show_equipview) == 'boolean' then state.show_equipview = raw.show_equipview end
+    -- The Scholar window is automatic when this is absent: a Scholar main job shows it,
+    -- every other job hides it.  The launcher switch and //hud sch store true/false.
+    if type(raw.show_sch) == 'boolean' then state.show_sch = raw.show_sch end
     do
         local target_pos = type(raw.target) == 'table' and raw.target or {}
         state.target.x = math.floor(hud_clamp(target_pos.x, -4000, 8000, state.target.x))
@@ -3795,6 +3800,7 @@ local function hud_save(state, path)
         show_inventory = state.show_inventory,
         show_target = state.show_target,
         show_equipview = state.show_equipview,
+        show_sch = state.show_sch,
         equipview = { x = state.equipview.x, y = state.equipview.y },
         mounts = {
             x = state.mounts.x, y = state.mounts.y, selected = state.mounts.selected,
@@ -4937,6 +4943,16 @@ local function hud_snapshot_items(list)
     return out
 end
 
+-- The Scholar HUD is the one window whose default follows the job: with no saved choice it
+-- is shown for a Scholar main job and hidden on every other job.  An explicit true/false
+-- from the launcher or //hud sch wins, so a player can keep it open while changing gear.
+-- On the hud table rather than a local: hud_init() is at Lua's 200-local limit.
+hud.sch_visible = function()
+    if hud.state.show_sch == true then return true end
+    if hud.state.show_sch == false then return false end
+    return hud.sch ~= nil and hud.sch.active() == true
+end
+
 function hud.snapshot()
     hud.ensure()
     -- The launcher's Control room reads the HUD counts even while the windows are off.
@@ -4955,6 +4971,8 @@ function hud.snapshot()
         show_party_info = hud.state.show_party_info == true,
         show_inventory = hud.state.show_inventory,
         show_target = hud.state.show_target,
+        show_sch = hud.sch_visible(),
+        sch = hud.sch and hud.sch.snapshot() or nil,
         show_battle_hud = (hud.battle and hud.battle.camp_hud_visible
             and hud.battle.camp_hud_visible()) == true,
         edit = hud.state.edit,
@@ -5107,6 +5125,10 @@ function hud.command(args)
         if state.show_target then hud.target_at = 0 end
     end
     if type(args.show_equipview) == 'boolean' then state.show_equipview = args.show_equipview end
+    if type(args.show_sch) == 'boolean' then
+        state.show_sch = args.show_sch
+        if args.show_sch then state.show_hud = true end
+    end
     if type(args.show_battle_hud) == 'boolean' and hud.battle then
         -- The in-game Battle HUD is the camp radar/roster window; cfg.show is the same
         -- setting its title-bar X and the Battle profile page use.
@@ -10020,6 +10042,16 @@ xi.events.on('command', function(e)
             hud.cor_open('shot')
             xi.chat.write('Quick Draw: shot picker shown', 1)
             return
+        elseif rest == 'sch' or rest == 'scholar' or rest == 'sch on' or rest == 'sch off' then
+            local shown
+            if rest == 'sch on' then shown = true
+            elseif rest == 'sch off' then shown = false
+            else shown = not hud.sch_visible() end
+            hud.state.show_sch = shown
+            if shown then hud.state.show_hud = true end
+            hud_save(hud.state, hud.path)
+            xi.chat.write('Scholar HUD: ' .. (shown and 'shown' or 'hidden'), 1)
+            return
         elseif rest == 'target' or rest == 'target on' or rest == 'target off'
             or rest == 'debuffs' then
             if rest == 'target on' then
@@ -10036,7 +10068,7 @@ xi.events.on('command', function(e)
                 (hud.state.show_target and 'shown' or 'hidden'), 1)
             return
         else
-            xi.chat.write('HUD: //hud [on|off|toggle|move|move reset|save|jug|pet|roll|quickdraw|target] (Ctrl+H)', 1)
+            xi.chat.write('HUD: //hud [on|off|toggle|move|move reset|save|jug|pet|roll|quickdraw|target|sch] (Ctrl+H)', 1)
             return
         end
         -- A hidden HUD has no Done box; leave move mode when the HUD is switched off.
@@ -10233,10 +10265,13 @@ function hud.frame()
     -- Equip View is its own switch like Target Debuffs: it stays up in the Battle hub and when
     -- the action windows are off, because it is the readout for the gear system itself.
     local equipview_on = state.show_equipview == true
+    -- The Scholar HUD is its own switch like Equip View.  It steps aside for the Battle
+    -- hub's full editor, the same way the action windows do, so the two never fight.
+    local sch_on = hud.sch_visible() and not battle_open
     -- Move mode still draws its Done box with no windows switched on, so the box is never a trap
     -- that cannot be dismissed and //hud save is not the only way out.
     if not action_on and not hubs_on and not state.edit and not dialog_on and not target_on
-            and not equipview_on then
+            and not equipview_on and not sch_on then
         return
     end
     if action_on or hud.pet_state.open or hud.cor_menu.open then
@@ -10281,6 +10316,13 @@ function hud.frame()
     if hud.trust_menu.open then hud.trust_window(api) end
     if target_on and not hide_hud then hud.target_window(api) end
     if equipview_on and not hide_hud then hud.equipview_window(api) end
+    if sch_on and not hide_hud and hud.sch then
+        local ok_sch, err_sch = pcall(hud.sch.draw, api)
+        if not ok_sch and not hud.warned then
+            hud.warned = true
+            xi.chat.write('Scholar HUD: ' .. tostring(err_sch), 1)
+        end
+    end
     -- Last, and opaque: the Done box is the one control that must never be hidden by a window.
     if state.edit then hud_edit_box(api) end
     if hud.reposition then hud.reposition = false end
@@ -10317,6 +10359,33 @@ do
         xi.chat.write('Battle: the battle module is missing (' .. tostring(module) .. ')', 1)
     end
 end
+-- The Scholar HUD (strategems, self-skillchain macros, magic bursts) is a separate module
+-- like the Battle hub: its sets are a file of its own, so it stays out of this chunk's
+-- locals and out of the saved HUD layout.  It only needs the chat writer and a way to
+-- remember that its title-bar X hid it.  A function keeps its locals off hud_init()'s
+-- 200-local budget.
+hud.install_sch = function()
+    local ok, module = pcall(require, 'xi.sch')
+    if not ok or type(module) ~= 'table' then
+        xi.chat.write('Scholar: the module is missing (' .. tostring(module) .. ')', 1)
+        return
+    end
+    hud.sch = module
+    local installed, err = pcall(module.install, {
+        notify = function(text) xi.chat.write(tostring(text), 1) end,
+        on_hide = function(shown)
+            hud.state.show_sch = shown == true
+            if shown then hud.state.show_hud = true end
+            hud_save(hud.state, hud.path)
+        end,
+        get_shown = hud.sch_visible,
+    })
+    if not installed then
+        hud.sch = nil
+        xi.chat.write('Scholar: could not install (' .. tostring(err) .. ')', 1)
+    end
+end
+hud.install_sch()
 hud.rgba = hub_rgba
 hud.colors = HUB_C
 end

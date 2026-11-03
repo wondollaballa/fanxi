@@ -1,5 +1,36 @@
 # Changelog
 
+## Unreleased — the Scholar HUD and Immanence skillchains
+
+- **A Scholar HUD for strategems, self-skillchains and magic bursts.**  The new window
+  (`host/addons/lua/sch.lua`, opened by `//hud sch`, the Control room's **Scholar** switch, or
+  automatically for a Scholar main job) shows the strategem charges as pips, the count left and
+  the clock to the next four-minute recharge, and warns when the active art is Light.  Its left
+  rail holds the twelve skillchain tabs, each with the player's named macros; a macro is a title,
+  two or three spells, an optional **Use Ebullience** (the title then reads `(Ebullience)` and it
+  costs one more charge) and an optional magic burst list.  The editor is a modal with a
+  searchable spell picker, a live preview of the chain the spells form, and delete confirmations.
+  A macro runs the old library's tested timing -- Immanence, 1 s, spell, then 5 s before the next
+  Immanence for a Helix closer and 4 s otherwise -- then the burst list.  When the spells cost
+  more charges than are left the card is dim and shows the clock to the next time the chain is
+  payable (`next 7:59` for two spells with none left) and clicking it repeats that in chat.
+  Sets and the charge clock persist per character in `<data>/sch/<name>-<id>.sch`; `//sch` handles
+  on/off, save, reset, position, charges and stop, and `//hud sch` is the HUD's own toggle.
+- **Immanence now makes spells form skillchains.**  A damaging elemental spell cast with
+  Immanence lands as a weapon skill with that element's property (Fire Liquefaction, Ice
+  Induration, Wind Detonation, Earth Scission, Thunder Impaction, Water Reverberation, Light
+  Transfixion, Dark Compression).  The first opens the 11 s window, the second closes it after
+  the 3 s lockout, and the closing spell's damage is the chain's base.  The chain's
+  additional-effect block rides the finished spell's own `0x028`, so the client plays the
+  animation from the cast.  Immanence is spent by the spell whether or not it chains; a
+  zero-damage or non-elemental spell leaves it up.  Magic Burst reads the same state, so a
+  Scholar's burst list works after the chain closes.
+- Tests: `server/tests/test_skillchain.py` covers the element map, a Stone → Fire Liquefaction,
+  a Helix closer, lethal-hit spending and a full `resolve_casting` pair whose closing result
+  carries the chain block; `tests/sch_hud_test.sh --game <folder>` runs the real module against a
+  mock ImGui API and pins every default tab to the chain it is named after, the saved format, the
+  charge arithmetic, macro CRUD and every window.
+
 ## Unreleased — Trust spellbooks and alter-ego upgrades
 
 - **Support Trusts now offer their whole spellbook in Set spells.**  The old picker read

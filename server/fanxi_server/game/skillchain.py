@@ -137,6 +137,34 @@ TRANSITIONS: dict[tuple[int, int], int] = {
     (SC.DETONATION, SC.IMPACTION): SC.DETONATION,
 }
 
+# Scholar's Immanence: the next damaging elemental spell counts as a weapon skill with
+# the property of its element, so a spell can open or close a chain.  Fire is
+# Liquefaction, Ice Induration, Wind Detonation, Earth Scission, Thunder Impaction,
+# Water Reverberation, Light Transfixion and Dark Compression.  The keys are the
+# server's 1-based ``spells.element`` ids; the client's resource table is 0-based, so
+# the HUD adds one before looking a spell up here.
+ELEMENT_TO_SC: dict[int, int] = {
+    ELEMENT_FIRE: SC.LIQUEFACTION,
+    ELEMENT_ICE: SC.INDURATION,
+    ELEMENT_WIND: SC.DETONATION,
+    ELEMENT_EARTH: SC.SCISSION,
+    ELEMENT_THUNDER: SC.IMPACTION,
+    ELEMENT_WATER: SC.REVERBERATION,
+    ELEMENT_LIGHT: SC.TRANSFIXION,
+    ELEMENT_DARK: SC.COMPRESSION,
+}
+
+
+def immanence_props(element: int) -> tuple[int, int, int]:
+    """The weapon-skill properties an Immanence spell brings, or ``(0, 0, 0)``.
+
+    A spell carries exactly one property -- the one for its element.  A non-elemental
+    spell (``element`` 0) gets none, so it opens nothing and closes nothing.
+    """
+    prop = ELEMENT_TO_SC.get(int(element or 0), 0)
+    return (int(prop), 0, 0) if prop else (0, 0, 0)
+
+
 # ``chainMultipliers`` from scripts/combat/skillchain.lua, indexed [tier][count - 1].
 # The first link is count 1; LSB caps count at 5.
 CHAIN_MULTIPLIERS = {

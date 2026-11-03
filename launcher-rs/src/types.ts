@@ -290,6 +290,9 @@ export interface HudState {
   show_equipview?: boolean;
   /** The Battle automation HUD (the stop/start/follow window). */
   show_battle_hud: boolean;
+  /** The Scholar HUD (strategems, skillchain macros and magic bursts).  The control addon
+   * reports the effective state, which follows the main job until the player switches it. */
+  show_sch?: boolean;
   edit: boolean;
   opacity: number;
   /** Hide left-side windows while the game's own menu is open. */
@@ -324,6 +327,7 @@ export interface HudPatch {
   show_target?: boolean;
   show_equipview?: boolean;
   show_battle_hud?: boolean;
+  show_sch?: boolean;
   /** The server-side Magic Bag rows pushed by the launcher. */
   inventory?: MagicBagItem[];
   edit?: boolean;

@@ -7779,14 +7779,27 @@ class ZoneSession:
                 # "receives the effect" line on top of the damage line would repeat the
                 # cast message.
                 defeated = entity.hp - damage <= 0
-                self.queue.append(sub(0x028, packets.battle_action(
-                    me, int(entity.id), damage, defeated=defeated,
-                    animation=animation, kind=0,
+                # Apply the opening hit before the chain: a skillchain's damage is a
+                # percentage of the closing hit that actually landed.  Immanence turns
+                # this Helix into a weapon-skill-equivalent, and its additional-effect
+                # block rides this same result so the client draws the chain.
+                entity.hp = max(0, entity.hp - damage)
+                chain = self._magic_skillchain(entity, spell, damage, now,
+                                               defeated=defeated)
+                if chain is not None and chain["defeated"]:
+                    defeated = True
+                result = dict(
+                    damage=damage, defeated=defeated, animation=animation, kind=0,
                     message=(packets.MESSAGE_MAGIC_BURST if cast.get("magic_burst")
-                             else packets.MESSAGE_MAGIC_DMG), info=0,
+                             else packets.MESSAGE_MAGIC_DMG), info=0)
+                if chain is not None and int(chain["damage"]) > 0:
+                    result.update(add_effect=int(chain["proc"]),
+                                  add_value=int(chain["damage"]),
+                                  add_message=int(chain["message"]))
+                self.queue.append(sub(0x028, packets.battle_action(
+                    me, int(entity.id), results=[result],
                     category=packets.ACTION_CATEGORY_MAGIC_FINISH,
                     action_id=int(spell["id"]))))
-                entity.hp = max(0, entity.hp - damage)
                 self.queue_entity(entity, packets.SEND_HP)
                 self.world.wake_mob(entity)
             elif remaining:
@@ -7827,13 +7840,26 @@ class ZoneSession:
             self.assert_stance()
             return
         defeated = entity.hp - damage <= 0
-        self.queue.append(sub(0x028, packets.battle_action(
-            me, int(entity.id), damage, defeated=defeated,
-            animation=animation, kind=0,
-            message=(packets.MESSAGE_MAGIC_BURST if cast.get("magic_burst")
-                             else packets.MESSAGE_MAGIC_DMG), info=0,
-            category=packets.ACTION_CATEGORY_MAGIC_FINISH, action_id=int(spell["id"]))))
+        # The spell's own hit lands first; an Immanence chain is a percentage of it.
+        # The chain's additional-effect block rides the same finished-spell result, so
+        # the client plays the skillchain animation from this cast, not a second one.
         entity.hp = max(0, entity.hp - damage)
+        chain = self._magic_skillchain(entity, spell, damage, now,
+                                       defeated=defeated)
+        if chain is not None and chain["defeated"]:
+            defeated = True
+        result = dict(
+            damage=damage, defeated=defeated, animation=animation, kind=0,
+            message=(packets.MESSAGE_MAGIC_BURST if cast.get("magic_burst")
+                     else packets.MESSAGE_MAGIC_DMG), info=0)
+        if chain is not None and int(chain["damage"]) > 0:
+            result.update(add_effect=int(chain["proc"]),
+                          add_value=int(chain["damage"]),
+                          add_message=int(chain["message"]))
+        self.queue.append(sub(0x028, packets.battle_action(
+            me, int(entity.id), results=[result],
+            category=packets.ACTION_CATEGORY_MAGIC_FINISH,
+            action_id=int(spell["id"]))))
         self.queue_entity(entity, packets.SEND_HP)
         self.world.wake_mob(entity)
         # Damage is the enmity that makes a monster turn around: an idle monster claims
@@ -8292,6 +8318,37 @@ class ZoneSession:
         text but has no additional-effect block, which is why no animation played.
         """
         props = self.world.service.weaponskill_properties(int(ws["id"]))
+        return self._advance_chain(entity, props, base_damage, now,
+                                   label="ws=%d" % int(ws["id"]))
+
+    def _magic_skillchain(self, entity, spell: dict, damage: int, now: float,
+                          *, defeated: bool = False) -> dict | None:
+        """Immanence: a landed elemental spell acts as a weapon skill for one chain.
+
+        The spell's element picks its single property (Fire is Liquefaction, Ice
+        Induration, ...), so a Scholar can open with one Immanence spell and close with
+        another.  Immanence is spent by the spell whether or not it forms a chain --
+        a spell that kills the target has nothing left to chain into, but the charge
+        is still gone.
+        """
+        if int(damage) <= 0 or not self.has_effect(effects.IMMANENCE):
+            return None
+        props = skillchain.immanence_props(int(spell.get("element") or 0))
+        if not any(props):
+            return None
+        self.remove_effect(effects.IMMANENCE, quiet=True)
+        # Take the icon off the bar at the same moment the charge is gone; without this
+        # the client kept showing Immanence for the rest of its minute.
+        self.queue.append(self.char_status())
+        if defeated:
+            return None
+        return self._advance_chain(
+            entity, props, int(damage), now,
+            label="immanence %s" % str(spell.get("name") or ""))
+
+    def _advance_chain(self, entity, props, base_damage: int, now: float,
+                       *, label: str = "") -> dict | None:
+        """Shared chain step for a weapon skill or an Immanence spell."""
         if not any(props):
             return None
         # Diamond Aspis is a closer's shield: it keeps the next window at the full
@@ -8303,8 +8360,8 @@ class ZoneSession:
             opener=owner)
         entity.skillchain = state
         if not formed:
-            log.info("%s skillchain open ws=%d props=%s until=%.1f%s opener=%s target=%s",
-                     self.addr, int(ws["id"]), props, state.until,
+            log.info("%s skillchain open %s props=%s until=%.1f%s opener=%s target=%s",
+                     self.addr, label or "?", props, state.until,
                      " (Diamond Aspis)" if diamond else "", owner, entity.name)
             return None
         tier = int(skillchain.TIER[formed])
@@ -8326,9 +8383,9 @@ class ZoneSession:
         entity.hp = max(0, int(entity.hp) - damage)
         self.world.add_damage_hate(entity, int(self.char["char_id"]), applied, now)
         log.info("%s skillchain %s: base=%d tier=%d link=%d damage=%d applied=%d "
-                 "closer=%s opener=%s target=%s",
+                 "via=%s closer=%s opener=%s target=%s",
                  self.addr, skillchain.SC(int(formed)).name, int(base_damage), tier,
-                 int(state.count), damage, applied, owner,
+                 int(state.count), damage, applied, label or "?", owner,
                  state.opener or "?", entity.name)
         return {"proc": int(skillchain.proc_kind(formed)),
                 "damage": applied,

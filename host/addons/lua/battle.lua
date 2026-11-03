@@ -545,6 +545,14 @@ function S.libcurl()
         const char *curl_easy_strerror(int);
         void *curl_slist_append(void *, const char *);
         void curl_slist_free_all(void *);
+        /* the multi interface: a transfer a step at a time, so a request never holds the frame */
+        struct CURLMsg { int msg; void *easy_handle; union curl_msg_data { void *whatever; int result; } data; };
+        void *curl_multi_init(void);
+        int curl_multi_add_handle(void *, void *);
+        int curl_multi_perform(void *, int *);
+        int curl_multi_remove_handle(void *, void *);
+        int curl_multi_cleanup(void *);
+        void *curl_multi_info_read(void *, int *);
     ]])
     local ok, lib = pcall(S.ffi.load, 'curl')
     if not ok then ok, lib = pcall(S.ffi.load, 'libcurl') end
@@ -583,7 +591,33 @@ function S.https_json(method, url, body, token)
             C.curl_easy_setopt(curl, 60, S.ffi.cast('long', #payload)) -- CURLOPT_POSTFIELDSIZE
         end
     end
-    local rc = C.curl_easy_perform(curl)
+    -- One request must not hold the frame: the launcher's API is on another machine, so a blocking
+    -- perform froze the game for a whole round trip - the Target Debuffs poll did it every 0.75 s,
+    -- which is what a player saw as a stutter every couple of seconds.  Inside a coroutine (the
+    -- polls and the command handlers all are) the transfer is driven a step a frame instead.
+    local rc
+    if coroutine.running() then
+        local multi = C.curl_multi_init()
+        if multi ~= nil then
+            C.curl_multi_add_handle(multi, curl)
+            local running = S.ffi.new('int[1]', 1)
+            for _ = 1, 900 do -- CURLOPT_TIMEOUT (8 s) ends it first; this is the backstop
+                C.curl_multi_perform(multi, running)
+                if running[0] == 0 then break end
+                coroutine.sleepf(1)
+            end
+            local queued = S.ffi.new('int[1]')
+            local message = S.ffi.cast('struct CURLMsg *', C.curl_multi_info_read(multi, queued))
+            if message ~= nil then
+                rc = tonumber(message.data.result) or 0
+            else
+                rc = 28 -- CURL_OPERATION_TIMEDOUT: it never finished
+            end
+            C.curl_multi_remove_handle(multi, curl)
+            C.curl_multi_cleanup(multi)
+        end
+    end
+    if rc == nil then rc = C.curl_easy_perform(curl) end -- not in a coroutine: nothing to yield to
     local code = S.ffi.new('long[1]')
     C.curl_easy_getinfo(curl, 0x200002, code)                 -- CURLINFO_RESPONSE_CODE
     local status = tonumber(code[0]) or 0
@@ -4081,7 +4115,16 @@ function B.tick()
         S.visible = S.profile and S.profile.ui.show == true
     end
     if not S.profile then C.resume() end
-    B.team_poll()
+    -- This tick runs on the game thread, where a request cannot be waited on: the team poll talks
+    -- to the launcher's API on another machine, so it runs in a coroutine and steps a frame at a
+    -- time (S.https_json) instead of freezing the frame for the round trip.
+    if not S.team_polling and clock() >= (S.team_poll_at or 0) then
+        S.team_polling = true
+        xi.tasks.spawn(function()
+            pcall(B.team_poll)
+            S.team_polling = false
+        end)
+    end
     if not S.running then return end
     if B.death_tick() then return end
 
@@ -4607,7 +4650,7 @@ local function show_hub(value)
         S.ui.opacity = S.profile.ui.opacity or S.ui.opacity
         S.ui.force = true
         S.team_poll_at = 0
-        pcall(B.team_poll)
+        xi.tasks.spawn(function() pcall(B.team_poll) end) -- a coroutine: the request steps a frame
     end
 end
 
