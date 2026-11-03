@@ -5545,6 +5545,32 @@ button.ev-cell:hover {
   font-weight: 600;
 }
 
+.set-total-cap {
+  margin-left: 4px;
+  color: var(--muted-2);
+  font-family: var(--mono);
+  font-size: 8px;
+  font-style: normal;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
+/* Blue means the total has reached (or passed) a known cap; gold says how much is missing. */
+.set-total.cap-at strong,
+.set-total.cap-over strong {
+  color: #8fd5ff;
+}
+
+.set-total.cap-at .set-total-cap,
+.set-total.cap-over .set-total-cap {
+  color: #8fd5ff;
+  opacity: 0.78;
+}
+
+.set-total.cap-under .set-total-cap {
+  color: #d8b45b;
+}
+
 .set-body .set-items {
   margin-top: 0;
 }

@@ -1,5 +1,15 @@
 # Changelog
 
+## Unreleased — Set totals show stat caps
+
+- **Known caps are marked in the Set totals.**  A capped stat now carries a note and changes
+  colour when the set reaches the cap: Fast Cast 80%, equipment Haste 25%, Quick Magic 10%,
+  Skillchain Bonus 50%, Cure potency 50% (II 30%), capped Magic Burst damage 40%, the
+  Damage Taken family at -50%, Spell interruption rate at -102%, Snapshot 70%, Subtle Blow
+  50% (II 50%), Conserve MP 100% and Casting time -80%.  A blue total means the set is at or
+  past the cap; the note reads `13 excess` for Fast Cast at 93, for example.  A gold note
+  reads `2 needed` while the stat is still short.  Stats with no hard cap are left plain.
+
 ## Unreleased — the Gear page remembers the set you were browsing
 
 - **The Gear page reopens on the same GearSwap set and tab.**  The library browser is unmounted
@@ -27,9 +37,13 @@
   resolver now maps all Prime and REMA family names, plus the seven `119 III` spellings and
   `(Level 119 III)` variants, to the final form, so those sets show the right icon and the
   strongest tooltip instead of an empty slot or a level-75 stage.
-- **The hover card prints the client's own item label.**  A set may spell a piece the server's
-  way (`Opashoro 119 III`); once the client row is loaded, the card titles it with the label the
-  game would draw (`Opashoro`).  The set's own name is still what the library editor shows.
+- **The special stage spelling stays visible.**  A set may spell a piece the server's way
+  (`Opashoro 119 III`); the alias table uses that suffix only to find the final image and
+  tooltip, and the card keeps the library's full name so the stage is still identifiable.
+- **A rebuilt client no longer leaves the slot and card blank for the session.**  The set
+  preview used to cache the zero id an unresolved name returned, and the hover card cached an
+  empty result; both survived the client rebuild.  Only resolved ids and found tooltips are
+  cached now, so opening the page against the new host resolves the piece.
 - **The server has their real stats too.**  Migration 185 fills the nineteen reforged weapons
   that had no `item_mods` rows (and refreshes Final Sickle's), including the weapon/Parrying
   and H2H Guard skill bonuses, Haste, Magic Damage, Fast Cast, Refresh, Cure potency and the

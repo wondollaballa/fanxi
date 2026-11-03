@@ -45,7 +45,10 @@ export function useItemCard(port: number | null, query: GearStatQuery | null): I
         .gearItemStats(port, [query])
         .then((items) => {
           const stats = items?.[0] ?? null;
-          if (stats) CACHE.set(key, stats);
+          // Cache only a resolved item.  A found=false row is what an old or unready host
+          // sends for a name it cannot see yet; keeping it would hide the tooltip after the
+          // host is rebuilt, while the Set totals above refetched and show the item.
+          if (stats?.found) CACHE.set(key, stats);
           if (!cancelled) setState({ key, stats, error: "" });
         })
         .catch((caught) => {

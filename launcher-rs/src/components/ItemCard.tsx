@@ -80,10 +80,6 @@ export function ItemCard({
   const jobs = jobNames(stats?.jobs);
   const level = Number(stats?.level ?? 0);
   const itemLevel = Number(stats?.itemLevel ?? 0);
-  // The library may use the server's name for the same item ("Opashoro 119 III"); once
-  // the card has the client row, its own label is the one the game would print.  The
-  // server suffix is a version description, not part of the item's display name.
-  const title = stats?.name?.trim() || name;
 
   // Beside the cell when there is room, otherwise on its other side; never off the window.
   const width = Math.min(CARD_WIDTH, window.innerWidth - 16);
@@ -105,7 +101,7 @@ export function ItemCard({
   return (
     <div className="item-card" role="tooltip" style={style}>
       <div className="item-card-head">
-        <strong className="item-card-name">{title}</strong>
+        <strong className="item-card-name">{name}</strong>
         <span className="item-card-tags">
           <span className="item-card-slot">[{slotLabel}]</span>{" "}
           <span className="item-card-races">{raceLabel(stats?.races)}</span>

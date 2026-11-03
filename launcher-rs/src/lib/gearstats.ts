@@ -170,6 +170,90 @@ export function formatGearStatValue(stat: Pick<GearStat, "value" | "percent">): 
   return `${stat.value}${stat.percent ? "%" : ""}`;
 }
 
+export type GearStatCapState = "at" | "over" | "under";
+
+export interface GearStatCapStatus {
+  /** The cap itself, in the stat's unit (percent stats only). */
+  cap: number;
+  state: GearStatCapState;
+  /** How far past the cap (excess) or short of it (needed). Zero at the cap. */
+  amount: number;
+  /** `13 excess`, `13 needed` or `at cap`. */
+  text: string;
+  /** The full explanation for the row's title attribute. */
+  title: string;
+}
+
+interface GearStatCapRule {
+  cap: number;
+  /** Higher is better for a normal bonus; lower is better for a reduction. */
+  better: "higher" | "lower";
+}
+
+/**
+ * Retail caps that apply to the client-tooltip totals.  Keep this list to caps that are
+ * really hard caps on the printed stat; a stat without a rule (Accuracy, Magic Damage,
+ * Store TP, ...) is shown plainly.  The values come from the game's own formulas and
+ * BG Wiki's stat pages; they are percent stats, so only percent rows are annotated.
+ */
+const GEAR_STAT_CAPS: Record<string, GearStatCapRule> = {
+  "fast cast": { cap: 80, better: "higher" },
+  // The tooltip totals are equipment only; equipment Haste caps at 25%.
+  haste: { cap: 25, better: "higher" },
+  "quick magic": { cap: 10, better: "higher" },
+  "skillchain bonus": { cap: 50, better: "higher" },
+  "cure potency": { cap: 50, better: "higher" },
+  "cure potency ii": { cap: 30, better: "higher" },
+  // "Magic burst damage" is the capped modifier; "Magic burst damage II" is uncapped.
+  "magic burst damage": { cap: 40, better: "higher" },
+  // DT and the typed damage-taken rows share retail's -50% family cap.
+  "damage taken": { cap: -50, better: "lower" },
+  "physical damage taken": { cap: -50, better: "lower" },
+  "magic damage taken": { cap: -50, better: "lower" },
+  "breath damage taken": { cap: -50, better: "lower" },
+  "ranged damage taken": { cap: -50, better: "lower" },
+  "spell interruption rate": { cap: -102, better: "lower" },
+  "casting time": { cap: -80, better: "lower" },
+  snapshot: { cap: 70, better: "higher" },
+  "subtle blow": { cap: 50, better: "higher" },
+  "subtle blow ii": { cap: 50, better: "higher" },
+  "conserve mp": { cap: 100, better: "higher" },
+};
+
+/** The cap state for a totaled stat, or null when the stat has no hard cap. */
+export function gearStatCap(
+  stat: Pick<GearStat, "key" | "value" | "percent">,
+): GearStatCapStatus | null {
+  if (!stat.percent) return null;
+  const rule = GEAR_STAT_CAPS[stat.key.trim().toLowerCase()];
+  if (!rule) return null;
+
+  let state: GearStatCapState;
+  let amount: number;
+  if (rule.better === "higher") {
+    if (stat.value >= rule.cap) {
+      state = stat.value > rule.cap ? "over" : "at";
+      amount = stat.value - rule.cap;
+    } else {
+      state = "under";
+      amount = rule.cap - stat.value;
+    }
+  } else if (stat.value <= rule.cap) {
+    state = stat.value < rule.cap ? "over" : "at";
+    amount = rule.cap - stat.value;
+  } else {
+    state = "under";
+    amount = stat.value - rule.cap;
+  }
+
+  const text = state === "at" ? "at cap" : state === "over" ? `${amount} excess` : `${amount} needed`;
+  const title =
+    state === "at"
+      ? `Cap ${rule.cap}% — at the cap`
+      : `Cap ${rule.cap}% — ${amount} ${state === "over" ? "past" : "to go"}`;
+  return { cap: rule.cap, state, amount, text, title };
+}
+
 /** A short note for the totals card; the full command error stays in its title. */
 export function gearStatsErrorHint(error: string): string {
   if (error.includes('no command "lua"')) {

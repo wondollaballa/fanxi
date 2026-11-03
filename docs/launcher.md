@@ -543,14 +543,21 @@ The selected set's preview is more than icons. Hovering a slot draws the full ca
 inline list under the preview also keeps the item's own tooltip (the base stats the client draws)
 next to the augment lines stored on that slot in the GearSwap file. Under the EquipViewer, **Set
 totals** adds every numeric stat from both sources, keeping flat values and percentages apart, so
-changing a cape, ring or earring and reading the same column is a quick best-in-slot check. The
-descriptions are read from the running client's item resources
+changing a cape, ring or earring and reading the same column is a quick best-in-slot check. Known
+hard caps are marked on the total: blue means the set is at or past the cap (Fast Cast at 93
+reads `13 excess`), and gold reads `2 needed` while it is short (equipment Haste at 23). The
+capped stats are Fast Cast, equipment Haste, Quick Magic, Skillchain Bonus, Cure potency and
+Cure potency II, capped Magic Burst damage, the Damage Taken family, Spell interruption rate,
+Snapshot, Subtle Blow and Subtle Blow II, Conserve MP, and Casting time; an uncapped stat stays
+plain.
+The descriptions are read from the running client's item resources
 through the control port's `lua` command; an item the client cannot resolve still shows its
 augment lines and their totals. A name the server spells differently — the Reforged Bonanza
 weapons' `(Reforged)` suffix, or a final weapon's `119 III` stage — is resolved through
 `control.lua`'s alias table first, so its icon and the final copy's tooltip load instead of
-disappearing. The hover card then titles the piece with the client's own label (the set editor
-keeps the library's spelling). Conditional `Set:` and `Unity Ranking:`
+disappearing. The library's spelling stays on the card — `119 III` and `(Reforged)` are the
+stage labels, not noise — while the alias is only the lookup key for the image and tooltip.
+Conditional `Set:` and `Unity Ranking:`
 blocks and the pet/avatar/automaton lines are left out of the totals because they do not describe
 the player's own piece — the hover card still prints them, the way the game's tooltip does.
 `Aftermath:`, `Latent effect:` and `Additional effect:` lines stay on the card but are not added

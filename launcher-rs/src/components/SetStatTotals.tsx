@@ -2,9 +2,11 @@ import { useMemo } from "react";
 import type { GearItemStats } from "../types";
 import {
   formatGearStatValue,
+  gearStatCap,
   gearStatsErrorHint,
   totalGearStats,
 } from "../lib/gearstats";
+import { cn } from "./ui";
 
 /**
  * The selected set's summed stats, shown in the empty space under the EquipViewer. The totals
@@ -29,7 +31,7 @@ export function SetStatTotals({
       <div className="set-totals-head">
         <span
           className="eyebrow"
-          title="Sums the base item stats and the GearSwap augments in this set"
+          title="Sums the base item stats and the GearSwap augments in this set. Blue values are at or past a known cap; gold notes show how much a stat still needs."
         >
           Set totals
         </span>
@@ -52,15 +54,21 @@ export function SetStatTotals({
       ) : null}
       {totals.length > 0 ? (
         <div className="set-totals-list">
-          {totals.map((stat) => (
-            <div
-              className="set-total"
-              key={`${stat.key}-${stat.percent ? "pct" : "flat"}`}
-            >
-              <span title={stat.label}>{stat.label}</span>
-              <strong>{formatGearStatValue(stat)}</strong>
-            </div>
-          ))}
+          {totals.map((stat) => {
+            const cap = gearStatCap(stat);
+            return (
+              <div
+                className={cn("set-total", cap && `cap-${cap.state}`)}
+                key={`${stat.key}-${stat.percent ? "pct" : "flat"}`}
+              >
+                <span title={stat.label}>{stat.label}</span>
+                <strong title={cap?.title}>
+                  {formatGearStatValue(stat)}
+                  {cap ? <em className="set-total-cap">({cap.text})</em> : null}
+                </strong>
+              </div>
+            );
+          })}
         </div>
       ) : null}
     </div>

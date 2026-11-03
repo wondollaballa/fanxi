@@ -481,6 +481,12 @@ fn percent_default(key: &str) -> bool {
             | "shield block rate"
             | "movement speed"
             | "song duration"
+            // These tooltips print the value without a percent sign, but the stats are
+            // percentages; the set-totals cap notes need the percent unit to apply.
+            | "snapshot"
+            | "subtle blow"
+            | "subtle blow ii"
+            | "conserve mp"
     )
 }
 
@@ -1226,6 +1232,21 @@ mod tests {
         let bonus = stat(&stats, "Skillchain Bonus");
         assert_eq!(bonus.value, 5);
         assert!(bonus.percent);
+    }
+
+    #[test]
+    fn unitless_percent_stats_keep_their_unit() {
+        for (text, label, value) in [
+            ("\"Snapshot\"+10", "Snapshot", 10),
+            ("\"Subtle Blow\"+10", "Subtle Blow", 10),
+            ("\"Subtle Blow II\"+5", "Subtle Blow II", 5),
+            ("\"Conserve MP\"+8", "Conserve MP", 8),
+        ] {
+            let stats = parse_augment(text);
+            let found = stat(&stats, label);
+            assert_eq!(found.value, value, "{text}");
+            assert!(found.percent, "{text}");
+        }
     }
 
     #[test]

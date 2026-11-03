@@ -40,7 +40,10 @@ function useResolvedNames(port: number | null, names: string[]) {
         .gearItemIds(port, missing)
         .then((items) => {
           for (const item of items) {
-            NAME_IDS.set(normalize(item.name), item.id);
+            // A zero is not a fact about the item: an old host, or one that has not loaded
+            // its aliases yet, answers zero for every unknown name.  Keeping that in the
+            // session cache would outlive the host and leave the slot blank forever.
+            if (item.id > 0) NAME_IDS.set(normalize(item.name), item.id);
           }
           if (!cancelled) apply();
         })

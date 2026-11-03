@@ -735,6 +735,28 @@ class EffectTest(unittest.TestCase):
         self.assertEqual((bonus["int"], bonus["mnd"]), (25, 25))
         self.assertNotIn(effects.ENLIGHTENMENT, self.session.status_effects)
 
+    def test_group2_merit_values_at_rank_one(self):
+        """The 1/5 values: Altruism +10, Tranquility -10, Enlightenment +5, storm +3."""
+        self.session.char.update(main_job=20, main_level=99)
+        self.session._merit_counts = {merits.SCH_ALTRUISM: 1,
+                                      merits.SCH_TRANQUILITY: 1,
+                                      merits.SCH_ENLIGHTENMENT: 1,
+                                      merits.SCH_STORMSURGE: 1}
+        self.ability(240)
+        self.session.ability_recasts.clear()
+        self.ability(242)
+        self.session.ability_recasts.clear()
+        self.ability(244)
+        white = self.session._sch_next_spell_bonuses(
+            {"name": "Banish", "skill": packets.SKILL_DIVINE})
+        self.assertEqual(white["macc"], 10)
+        self.assertEqual(white["enmity"], 10)
+        self.assertEqual((white["int"], white["mnd"]), (5, 5))
+        self.assertEqual(self.session._storm_mods("Firestorm"), {mod.STR: 3})
+        self.assertEqual(self.session._storm_mods("Voidstorm"),
+                         {mod.STR: 1, mod.DEX: 1, mod.VIT: 1, mod.AGI: 1,
+                          mod.INT: 1, mod.MND: 1, mod.CHR: 1})
+
     def test_stormsurge_adds_the_storm_element_stat(self):
         self.session.char.update(main_job=20, main_level=99, mp=1000,
                                  mp_current=1000)
