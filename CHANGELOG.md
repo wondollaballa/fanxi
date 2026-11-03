@@ -1,5 +1,43 @@
 # Changelog
 
+## Unreleased — Geomancy actually reaches the fight
+
+- **The GEO anchor had no position, so the loop threw before it cast anything.**
+  `B.members()` comes from the party table and carries no x/y, but `geo_tick` immediately
+  passed the member to `distance()`.  `geo_anchor()` now resolves the member's entity
+  position, which also lets the walk-to-range step work.
+- **Support GEO cast Geo- hexes on the tank.**  `Geo-frailty` and `Geo-malaise` are
+  enemy-target spells; the Battle loop sent them to the anchor by subtarget, so the client
+  rejected the cast and a multibox GEO never put a hex on the monster.  The loop now reads
+  the spell's target mask: Geo- buffs go on the anchor, Geo- hexes go on the claimed
+  monster nearest the anchor, and the Luopan is placed at that target.
+- **The Luopan was dropped at the GEO's feet.**  Even when a Geo- buff landed, the bubble
+  was centered on the support camp instead of the tank/anchor.  `spawn_pet` accepts an
+  explicit position and `_geo_bubble` resolves the party anchor or monster target before
+  spawning it.  A Geo- hex now debuffs every monster inside the 10-yalm bubble (and drops
+  the status when one leaves), instead of storing a single mob id.
+- **Player GEOs were stuck at Geomancy +0.**  Idris has no `item_mods` row for its
+  Geomancy +10, so a player GEO's Indi-/Geo- auras used the base column and Frailty stayed
+  at 10%.  `ZoneSession.geomancy_plus()` reads the worn weapon ids and `geomancy.values()`
+  applies the Idris column: party Fury +27%, Frailty -27%, Malaise -30%.  Geocolure is
+  also main-job only, so /GEO can no longer cast a Geo- spell the client menu should not
+  have offered.
+- **Sylvie now keeps both monster debuffs.**  Her default rotation still puts Indi-Fury on
+  the owner and Entrusts the 12.5% Defense Down on the monster, and now also maintains
+  **Geo-Malaise** (-30% Magic Defense) as its own Geo- bubble.  Swapping the owner's Indi-
+  aura no longer strips the Geo- hex, and the hex no longer strips Indi-Fury.
+- **Koru-Moru skipped Haste II/Phalanx II when a tier-I was up.**  `buff_for` treated
+  status 33/116 as "already up" without comparing the tier, so a Haste I or Phalanx I
+  from another source blocked the stronger spell for its whole duration.  `_stronger_buff`
+  now compares Haste's magic-haste modifier and Phalanx's flat absorption, and recasts the
+  higher tier.  **Phalanx II also absorbed nothing** because the generated icon row had
+  `power=0`; the RDM tier is 240 s and a flat -35 at 500 Enhancing Magic, so its icon now
+  does what the buff says.
+- Tests: `test_world.py` covers party-anchor Luopan placement, all-monsters hexes,
+  Idris potency, main-job-only Geocolure and Sylvie's two monster effects;
+  `test_trust_support.py` covers Geo-Malaise then entrusted Defense Down; the Battle hub
+  harness still passes.
+
 ## Unreleased — the Manage set preview is clickable again
 
 - **Clicking a slot in the Manage tab's Set preview opens the item picker.**  The hover

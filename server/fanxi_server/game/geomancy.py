@@ -73,6 +73,9 @@ INDI_EFFECTS: dict[str, tuple[int, dict[int, int], bool]] = {
 # The second value is the hex potency -- the percentage the combat engine cuts -- and 0
 # for a party aura.
 IDRIS_GEOMANCY_PLUS = 10
+#: Idris's item ids.  LandSandBoat scripts the +10 instead of storing an item_mods row,
+#: so both the player and Trust paths have to recognize the weapon itself.
+IDRIS_ITEM_IDS = frozenset({21070, 21080})
 IDRIS_EFFECTS: dict[str, tuple[dict[int, int], int]] = {
     "regen": ({mod.REGEN: 20}, 0),
     "refresh": ({mod.REFRESH: 10}, 0),
@@ -147,3 +150,22 @@ def idris_effect(name: str):
     if not aura:
         return None
     return IDRIS_EFFECTS.get(aura)
+
+
+def values(name: str, geomancy_plus: int = 0):
+    """(status, mods, hostile, potency) for a player's Indi-/Geo- spell.
+
+    ``potency`` is the percentage a hex cuts from the monster stat, or the status power
+    shown for a party aura.  With Geomancy +10 (Idris) the stronger ``IDRIS_EFFECTS``
+    column replaces the base one, exactly as the Trust path does for Sylvie.
+    """
+    aura = indi_effect(name)
+    if aura is None:
+        return None
+    status, mods, hostile = aura
+    potency = 10
+    if int(geomancy_plus) >= IDRIS_GEOMANCY_PLUS:
+        idris = idris_effect(name)
+        if idris is not None:
+            mods, potency = idris
+    return status, dict(mods), bool(hostile), int(potency)

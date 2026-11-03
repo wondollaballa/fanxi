@@ -329,6 +329,10 @@ def _white_magic() -> dict[str, SpellEffect]:
         "regen v": SpellEffect(REGEN, "buff", 60, tick=40),
         "refresh": SpellEffect(REFRESH, "buff", 150, tick=3),
         "phalanx": SpellEffect(PHALANX, "buff", 180, power=20),
+        # Phalanx II is the RDM tier: 240 s at 42 MP, and its flat absorption follows
+        # Enhancing Magic skill (500 skill = -35).  The generated icon row has no
+        # power, so without this the Trust icon landed but absorbed nothing.
+        "phalanx ii": SpellEffect(PHALANX, "buff", 240, power=35),
         "reraise": SpellEffect(RERAISE, "buff", 3600),
         "sneak": SpellEffect(SNEAK, "buff", 420),
         "invisible": SpellEffect(INVISIBLE, "buff", 420),

@@ -2320,6 +2320,93 @@ class WorldTest(unittest.TestCase):
         self.assertNotIn(geomancy.GEO_DEFENSE_DOWN, mob.effect_state)
         self.assertIn(geomancy.GEO_REFRESH, self.session.effect_state)
 
+    def test_a_geo_buff_puts_the_luopan_on_the_party_anchor(self):
+        """Geo- buffs target a party member, and the bubble belongs at that member."""
+        self.zone(100)
+        self.session.char.update(main_job=21, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        self.session.char["mp_current"] = 5000
+        account = self.service.register("geoanchor", "password123").account
+        buddy = self.service.create_character(
+            account["id"], {"name": "Geoanchor", "race": 1})
+        ally = ZoneSession(
+            self.world, None,
+            self.service.character_record(
+                self.service.character(buddy["id"]), "Geoanchor"))
+        ally.set_key(bytes(20)); ally.logged_in = True; ally.zone = 100
+        ally.targid = 0x401
+        ally.pos = [self.session.pos[0] + 5.0, self.session.pos[1],
+                    self.session.pos[2] + 5.0, 0]
+        self.world.sessions[("127.0.0.1", 1236)] = ally
+        group = self.world.create_party(self.session)
+        self.assertTrue(self.world.join_party(group, ally))
+
+        self._cast_spell(800, ally.targid)            # Geo-refresh on the anchor
+        self.session.resolve_casting(time.time() + 10)
+        self.assertIn(geomancy.GEO_REFRESH, ally.effect_state)
+        pet = self.session.pet_entity
+        self.assertIsNotNone(pet)
+        self.assertAlmostEqual(float(pet.x), ally.pos[0], places=3)
+        self.assertAlmostEqual(float(pet.z), ally.pos[2], places=3)
+
+        # Indi- is the other bubble and does not move the Luopan.  The old code put
+        # the Geo- bubble at the GEO's feet, which on a multibox is the support camp.
+        self._cast_spell(771)                         # Indi-haste on self
+        self.session.resolve_casting(time.time() + 20)
+        self.assertIn(geomancy.GEO_HASTE, self.session.effect_state)
+        self.assertIn(geomancy.GEO_REFRESH, ally.effect_state)
+
+    def test_a_geo_hex_hits_every_monster_in_the_bubble(self):
+        """A Geo-frailty bubble debuffs all monsters inside its radius, not one id."""
+        self.zone(100)
+        self.session.char.update(main_job=21, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        self.session.char["mp_current"] = 5000
+        mobs = [entity for entity in self.session.entities
+                if entity.kind == "mob" and entity.alive][:2]
+        self.assertEqual(len(mobs), 2)
+        first, second = mobs
+        second.x, second.y, second.z = first.x + 3.0, first.y, first.z + 3.0
+        self.session.pos = [first.x + 2.0, first.y, first.z, 0]
+        self.session.engaged_id = int(first.id)
+        self._cast_spell(818, first.targid)            # Geo-frailty
+        self.session.resolve_casting(time.time() + 10)
+        self.assertIn(geomancy.GEO_DEFENSE_DOWN, first.effect_state)
+        self.assertIn(geomancy.GEO_DEFENSE_DOWN, second.effect_state)
+        self.assertEqual(int(first.effect_state[geomancy.GEO_DEFENSE_DOWN]["potency"]), 10)
+
+    def test_idris_raises_player_geo_potency(self):
+        """Idris is Geomancy +10 even though it has no item_mods row."""
+        self.zone(100)
+        self.session.char.update(main_job=21, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        self.session.char["mp_current"] = 5000
+        self.session.equipped[0] = (0, 0, 21080)       # Idris
+        mob = next(entity for entity in self.session.entities
+                   if entity.kind == "mob" and entity.alive)
+        self.session.pos = [mob.x + 2.0, mob.y, mob.z, 0]
+        self.session.engaged_id = int(mob.id)
+
+        self._cast_spell(779)                          # Indi-fury on self
+        self.session.resolve_casting(time.time() + 10)
+        fury = self.session.effect(geomancy.GEO_ATTACK)
+        self.assertIsNotNone(fury)
+        self.assertEqual(int(fury["mods"].get(mod.ATT_PERCENT, 0)), 27)
+
+        self._cast_spell(820, mob.targid)              # Geo-malaise
+        self.session.resolve_casting(time.time() + 20)
+        self.assertEqual(
+            int(mob.effect_state[geomancy.GEO_MAGIC_DEF_DOWN]["potency"]), 30)
+
+    def test_geocolure_is_main_job_only(self):
+        """A /GEO support job may know the level but cannot cast a Geo- spell."""
+        self.zone(100)
+        self.session.char.update(main_job=5, main_level=99, sub_job=21, sub_level=99)
+        self.assertFalse(self.session.can_cast_spell(801))   # Geo-haste
+        self._cast_spell(801)
+        self.assertIsNone(self.session.casting)
+        self.assertIn("You cannot cast that spell.", self.chats())
+
     def test_geo_luopan_modifier_abilities(self):
         self.zone(100)
         self.session.char.update(main_job=21, main_level=99, sub_job=0, sub_level=0)
@@ -3908,7 +3995,8 @@ class WorldTest(unittest.TestCase):
         # there is no Flurry left in the rotation to fall back to.
         for name in ("Protect V", "Shell V", "Refresh II", "Phalanx II"):
             spec = effects.for_spell(name)
-            self.session.add_effect(spec.effect, duration=600, mods=spec.mods)
+            self.session.add_effect(spec.effect, duration=600, power=spec.power,
+                                    mods=spec.mods)
         now = time.time()
         self.assertEqual(trust_ai.buff_for(trust.kit, self.session.effect_state, now)["name"],
                          "Haste II")
@@ -3983,15 +4071,21 @@ class WorldTest(unittest.TestCase):
         # Indi-Frailty aura whose caster would be the monster itself.
         self.assertIn(effects.DEFENSE_DOWN, mob.effect_state)
         self.assertEqual(int(mob.effect_state[effects.DEFENSE_DOWN]["potency"]), 12)
+        # Her Geo- bubble is separate from the owner's Indi- aura: the monster also
+        # carries Geo-Malaise, so the magic damage dealers get the MDEF cut.
+        self.assertIn(geomancy.GEO_MAGIC_DEF_DOWN, mob.effect_state)
+        self.assertEqual(
+            int(mob.effect_state[geomancy.GEO_MAGIC_DEF_DOWN]["potency"]), 30)
 
         # The owner runs dry: the owner aura swaps to Indi-refresh, but the Entrust
-        # Defense Down on the monster is its own effect and stays up.
+        # Defense Down and the Geo-Malaise on the monster are separate effects and stay up.
         self.session.char["mp"] = 600
         self.session.char["mp_current"] = 120
         tick(8, start + 30)
         self.assertEqual([status for status in self.session.effect_state
                           if status in geomancy.STATUSES], [geomancy.GEO_REFRESH])
         self.assertIn(effects.DEFENSE_DOWN, mob.effect_state)
+        self.assertIn(geomancy.GEO_MAGIC_DEF_DOWN, mob.effect_state)
 
         # A Geomancer owner maintains their own bubble, so the Trust leaves it alone.
         self.session.char["main_job"] = 21

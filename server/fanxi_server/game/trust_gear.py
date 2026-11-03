@@ -31,7 +31,7 @@ SHARED_MODS = (
     mod.STR, mod.DEX, mod.VIT, mod.AGI, mod.INT, mod.MND, mod.CHR,
 )
 #: Idris's "Geomancy +10" (LandSandBoat scripts it; there is no item_mods row).
-IDRIS_ITEM_IDS = frozenset({21070, 21080})
+IDRIS_ITEM_IDS = geomancy.IDRIS_ITEM_IDS
 
 
 @dataclass(frozen=True)

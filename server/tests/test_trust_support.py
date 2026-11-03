@@ -14,7 +14,7 @@ from pathlib import Path
 
 from support import make_service
 
-from fanxi_server.game import effects, modifiers as mod, trust_ai
+from fanxi_server.game import effects, geomancy, modifiers as mod, trust_ai
 from fanxi_server.game.world import World
 from fanxi_server.game.zone import ZoneSession
 
@@ -69,10 +69,21 @@ class TrustSupportTest(unittest.TestCase):
 
     def test_sylvie_entrust_lands_defense_down(self):
         sylvie = self.spawn(981)
-        # Keep Indi-Fury up on the owner so the next beat is the Entrust cast.
+        # Keep Indi-Fury up on the owner so the next beats are her two monster
+        # effects: the Geo-Malaise bubble first, then the entrusted Frailty.
         self.session.add_effect(549, duration=180.0)      # GEO_ATTACK / Indi-Fury
         self.assertTrue(self.world._try_trust_cast(
             sylvie, self.session, [self.session], self.mob, self.now))
+        self.assertEqual("Geo-malaise", sylvie.casting["spell"]["name"])
+        self.assertEqual("debuff", sylvie.casting["kind"])
+        sylvie.casting["finish"] = self.now - 1.0
+        self.world._finish_trust_cast(sylvie, self.session, self.now)
+        self.assertEqual(
+            int(self.mob.effect_state[geomancy.GEO_MAGIC_DEF_DOWN]["potency"]), 30)
+
+        sylvie.next_cast_at = 0.0
+        self.assertTrue(self.world._try_trust_cast(
+            sylvie, self.session, [self.session], self.mob, self.now + 2))
         self.assertEqual("Indi-frailty", sylvie.casting["spell"]["name"])
         self.assertEqual("debuff", sylvie.casting["kind"])
         sylvie.casting["finish"] = self.now - 1.0
@@ -80,6 +91,10 @@ class TrustSupportTest(unittest.TestCase):
         state = self.mob.effect_state.get(effects.DEFENSE_DOWN)
         self.assertIsNotNone(state)
         self.assertEqual(12, int(state.get("potency", 0)))
+        # The next beat must see the ordinary Defense Down, not look for a GEO aura
+        # id that never landed on the monster and recast Entrust forever.
+        self.assertIsNone(trust_ai.entrust_debuff_for(
+            sylvie.name, sylvie.kit, self.mob.effect_state, self.now + 3))
 
     def test_sylvie_uses_the_retail_trust_aura_values(self):
         fury = trust_ai.effect_of({"name": "Indi-Fury"}, trust_name="Sylvie Uc")
@@ -93,6 +108,31 @@ class TrustSupportTest(unittest.TestCase):
         # The player's own Geomancy+0 column is unchanged.
         player = trust_ai.effect_of({"name": "Indi-Fury"})
         self.assertEqual(10, player.mods.get(mod.ATT_PERCENT))
+
+    def test_koru_upgrades_haste_and_phalanx_tiers(self):
+        """A tier-I status must not hide the stronger tier the Trust carries."""
+        kit = trust_ai.build_kit(
+            self.service.trust_spells(952, 99), 99, 5, "Koru-Moru")
+        now = time.time()
+        self.session.add_effect(effects.HASTE, duration=600,
+                                mods={mod.HASTE_MAGIC: 1500})
+        self.session.add_effect(effects.PHALANX, duration=600, power=20)
+        for name in ("Protect V", "Shell V", "Refresh II"):
+            spec = effects.for_spell(name)
+            self.session.add_effect(spec.effect, duration=600, mods=spec.mods)
+        self.assertEqual("Haste II", trust_ai.buff_for(
+            kit, self.session.effect_state, now)["name"])
+        haste = effects.for_spell("Haste II")
+        self.session.add_effect(haste.effect, duration=600, mods=haste.mods)
+        self.assertEqual("Phalanx II", trust_ai.buff_for(
+            kit, self.session.effect_state, now)["name"])
+
+    def test_phalanx_ii_has_its_flat_absorption(self):
+        """The generated icon row has no power; the RDM tier is 240 s at -35/hit."""
+        phalanx = effects.for_spell("Phalanx II")
+        self.assertEqual(effects.PHALANX, phalanx.effect)
+        self.assertEqual(240, int(phalanx.duration))
+        self.assertEqual(35, int(phalanx.power))
 
     def test_koru_kit_and_opening_debuff(self):
         kit = trust_ai.build_kit(

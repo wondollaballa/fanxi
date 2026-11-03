@@ -40,6 +40,9 @@ TRUST_AURA_EFFECTS: dict[str, dict[str, tuple[dict[int, int], int]]] = {
         "acumen": ({mod.MATT: 21}, 0),
         "refresh": ({mod.REFRESH: 5}, 0),
         "regen": ({mod.REGEN: 30}, 0),
+        # Her Geo-Malaise is the enemy-targeted Magic Defense Down hex.  The Trust
+        # carries Idris, so the published hex value is 30%, not the player's 10%.
+        "malaise": ({}, 30),
     },
 }
 
@@ -530,9 +533,9 @@ def entrust_debuff_for(name: str, kit: dict, active: dict[int, dict], now: float
     """The Entrust aura a Geomancer Trust puts on the monster, if it is missing.
 
     Sylvie (UC) does not have a Geo- frailty in her spell table; she keeps Indi-Fury on
-    the owner and Entrusts Indi-Frailty onto the fight.  The server models the Entrust
-    as the same Indi-Frailty status landing on the monster, which is what the combat
-    engine's ``GEO_DEFENSE_DOWN`` cut reads.
+    the owner and Entrusts Indi-Frailty onto the fight.  The server lands the entrusted
+    cut as an ordinary ``DEFENSE_DOWN`` on the monster (the bubble is on the party, not
+    the mob), so this checks that effect rather than the GEO aura id.
     """
     if _key(name) not in ENTRUST_TRUSTS:
         return None
@@ -540,7 +543,7 @@ def entrust_debuff_for(name: str, kit: dict, active: dict[int, dict], now: float
         spec = effect_of(spell)
         if spec is None or int(spec.effect) != geomancy.GEO_DEFENSE_DOWN:
             continue
-        state = active.get(int(spec.effect))
+        state = active.get(effects.DEFENSE_DOWN)
         if state is None:
             return spell
         until = float(state.get("until") or 0.0)
@@ -705,6 +708,23 @@ def cure_for(kit: dict, level: int, mp: int, missing_hp: int) -> dict | None:
     return max(candidates, key=lambda spell: (amount(spell), int(spell["id"])))
 
 
+def _stronger_buff(spec, state: dict) -> bool:
+    """Whether this spell is a real upgrade over the copy already on the owner.
+
+    Haste and Phalanx share one status id across their tiers.  If a party member's
+    Haste I or Phalanx I is up, looking only at the status id makes a Red Mage skip the
+    stronger tier for its whole duration.  Compare the effect value instead: Haste's
+    magic-haste modifier and Phalanx's flat absorption.
+    """
+    mods = state.get("mods") or {}
+    if int(spec.effect) == effects.HASTE:
+        return (int(mods.get(mod.HASTE_MAGIC, 0))
+                < int((spec.mods or {}).get(mod.HASTE_MAGIC, 0)))
+    if int(spec.effect) == effects.PHALANX:
+        return int(state.get("power", 0)) < int(spec.power)
+    return False
+
+
 def buff_for(kit: dict, active: dict[int, dict], now: float,
              refresh_within: float = 45.0) -> dict | None:
     """The next buff the owner is missing, or one about to wear off."""
@@ -714,6 +734,8 @@ def buff_for(kit: dict, active: dict[int, dict], now: float,
             continue
         state = active.get(int(spec.effect))
         if state is None:
+            return spell
+        if _stronger_buff(spec, state):
             return spell
         until = float(state.get("until") or 0.0)
         if until and until - now <= refresh_within:

@@ -902,7 +902,7 @@ function C.default_profile(name, zone, zone_name)
         support = {
             geo = {
                 enabled = true, indi = 'Indi-haste', geo = 'Geo-frailty',
-                indi_interval = 120, geo_interval = 120, anchor = '', range = 20,
+                indi_interval = 120, geo_interval = 120, anchor = '', range = 12,
             },
             abilities = {},
             brd = {
@@ -1124,7 +1124,7 @@ function C.sanitize(raw)
     profile.support.geo.indi_interval = whole(geo.indi_interval, 30, 600, 120)
     profile.support.geo.geo_interval = whole(geo.geo_interval, 30, 600, 120)
     profile.support.geo.anchor = text(geo.anchor, 32)
-    profile.support.geo.range = clamp(geo.range, 5, 40, 20)
+    profile.support.geo.range = clamp(geo.range, 5, 40, 12)
     local brd = type(support.brd) == 'table' and support.brd or {}
     profile.support.brd.enabled = truth(brd.enabled, true)
     profile.support.brd.song_groups = {}
@@ -3337,22 +3337,101 @@ local function geo_anchor()
     local cfg = S.profile.support.geo
     local wanted = text(cfg.anchor, 32)
     local fallback = nil
+
+    -- B.members() comes from the party table and carries no position.  Resolve it
+    -- from the entity list; distance()/move_to() need x/y, and the old code passed the
+    -- bare member here, so GEO support threw before it ever cast a spell.
+    local function located(member)
+        if not member then return nil end
+        local index = entity_by_name(member.name)
+        if index and entity_live(index) then
+            local pos = position(index)
+            if pos then
+                member.x, member.y, member.z = pos.x, pos.y, pos.z
+                member.index = index
+            end
+        end
+        return member
+    end
+
     for _, member in ipairs(B.members('alliance')) do
         if member.hp > 0 then
-            if wanted ~= '' and member.name:lower() == wanted:lower() then return member end
+            if wanted ~= '' and member.name:lower() == wanted:lower() then
+                return located(member)
+            end
             if not fallback and member.slot > 0 then fallback = member end
         end
     end
     local tank = text(S.profile.roster.tank, 32)
     if tank ~= '' then
         for _, member in ipairs(B.members('alliance')) do
-            if member.hp > 0 and member.name:lower() == tank:lower() then return member end
+            if member.hp > 0 and member.name:lower() == tank:lower() then
+                return located(member)
+            end
         end
     end
     for _, member in ipairs(B.members('party')) do
-        if member.hp > 0 and member.slot > 0 then return member end
+        if member.hp > 0 and member.slot > 0 then return located(member) end
     end
-    return fallback
+    return located(fallback)
+end
+
+function B.geo_cast(cfg, me, anchor, dist, range, now, geo)
+    local function is_enemy(spell)
+        local targets = tonumber(spell and spell.targets) or 0
+        return math.floor(targets / 32) % 2 == 1
+    end
+    local function find_enemy(reach)
+        local best = nil
+        local function consider(index, pos)
+            if not pos then return end
+            if distance(me, pos) > reach then return end
+            local d = distance(anchor, pos)
+            if not best or d < best.distance then
+                best = { index = index, distance = d }
+            end
+        end
+        if B.target_valid() then consider(R.target_index, position(R.target_index)) end
+        for _, mob in ipairs(mob_list('tank')) do
+            if mob.claim and mob.claim ~= '' and mob.hpp > 0 then
+                consider(mob.index, mob.pos)
+            end
+        end
+        return best
+    end
+    local spell = B.spell(cfg.geo)
+    if is_enemy(spell) then
+        -- Geo- hexes are enemy-target spells; the Luopan appears at the monster.
+        -- The old code cast them on the tank anchor, which the client/server rejected,
+        -- so Geo-Frailty and Geo-Malaise never appeared in a multibox fight.
+        local reach = math.min(range, tonumber(spell and spell.range) or 12)
+        local mob = find_enemy(reach)
+        if mob then
+            return B.cast_on_enemy(cfg.geo, mob.index)
+        end
+        if now >= (geo.warn_at or 0) + 30 then
+            geo.warn_at = now
+            note('action', string.format(
+                'Battle: no claimed monster within %.1f yalms of GEO anchor %s for %s.',
+                reach, anchor.name, cfg.geo))
+        end
+        return false
+    end
+    -- Geo- buffs are party-target spells; the bubble is centred on the anchor.
+    local reach = math.min(range, tonumber(spell and spell.range) or 12)
+    if dist > reach then
+        if now >= (geo.warn_at or 0) + 30 then
+            geo.warn_at = now
+            note('action', string.format(
+                'Battle: GEO anchor %s is %.1f yalms away; Geo range is %.1f.',
+                anchor.name, dist, reach))
+        end
+        return false
+    end
+    if anchor.slot == 0 then
+        return cast_self_spell(cfg.geo)
+    end
+    return B.cast_on_member(cfg.geo, anchor.slot)
 end
 
 local function geo_tick(me)
@@ -3361,27 +3440,23 @@ local function geo_tick(me)
     local now = clock()
     local geo = R.geo
     local anchor = geo_anchor()
-    if not anchor then return false end
+    if not anchor or not anchor.x then return false end
     local dist = distance(me, anchor)
-    local range = tonumber(cfg.range) or 20
+    local range = tonumber(cfg.range) or 12
     local need_geo = now >= (geo.last_geo or 0) + (tonumber(cfg.geo_interval) or 120)
     local need_indi = now >= (geo.last_indi or 0) + (tonumber(cfg.indi_interval) or 120)
-    if need_geo and dist <= range then
-        local ok
-        if anchor.slot == 0 then
-            ok = cast_self_spell(cfg.geo)
-        else
-            ok = B.cast_on_member(cfg.geo, anchor.slot)
-        end
-        if ok then
-            geo.last_geo = now
-            return true
-        end
+    -- A support camp can be outside the 12-yalm Geocolure range (the live Bibiki
+    -- profile is ~40 yalms).  Walk to the anchor for the cast, put the Luopan down,
+    -- then let the normal support return take the GEO back to camp.
+    local spell = B.spell(cfg.geo)
+    local reach = math.min(range, tonumber(spell and spell.range) or 12)
+    if need_geo and dist > reach then
+        B.move_to(anchor, math.max(1.0, reach * 0.8))
+        return true
     end
-    if need_geo and dist > range and now >= (geo.warn_at or 0) + 30 then
-        geo.warn_at = now
-        note('action', string.format('Battle: GEO anchor %s is %.1f yalms away; Geo range is %.1f.',
-            anchor.name, dist, range))
+    if need_geo and B.geo_cast(cfg, me, anchor, dist, range, now, geo) then
+        geo.last_geo = now
+        return true
     end
     if need_indi and cast_self_spell(cfg.indi) then
         geo.last_indi = now
@@ -6451,14 +6526,14 @@ function H.support(api)
         local geo_on = check(api, 'geo-on', 'Run the GEO support loop', p.geo.enabled)
         if geo_on ~= nil then p.geo.enabled = geo_on; touched() end
         api.TextDisabled('Indi- stays around the GEO at support.')
-        api.TextDisabled('Geo- is thrown on the tank/anchor by subtarget, so the bubble is')
-        api.TextDisabled('centered in the tank camp and the GEO never runs.')
+        api.TextDisabled('Geo- buffs are thrown on the tank/anchor by subtarget; Geo- hexes')
+        api.TextDisabled('(Frailty, Malaise, ...) are thrown on the claimed monster instead.')
         local indi = text_field(api, 'geo-indi', p.geo.indi, 170)
         if indi then p.geo.indi = text(indi, 40); touched() end
         api.SameLine(0, 6); hud_text(api, HUB.dim, 'Indi at support')
         local geospell = text_field(api, 'geo-geo', p.geo.geo, 170)
         if geospell then p.geo.geo = text(geospell, 40); touched() end
-        api.SameLine(0, 6); hud_text(api, HUB.dim, 'Geo on tank anchor')
+        api.SameLine(0, 6); hud_text(api, HUB.dim, 'Geo- spell')
         local values, labels = { '' }, { '(tank)' }
         for _, name in ipairs(roster_names()) do values[#values + 1] = name; labels[#labels + 1] = name end
         local anchor = combo(api, 'geo-anchor', values, labels, p.geo.anchor, 150)

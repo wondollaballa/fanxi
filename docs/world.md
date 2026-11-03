@@ -207,8 +207,8 @@ my way" — it does not change collision itself, it keeps the team out of the bu
 A Trust follows its owner and fights the monster the owner is fighting.  Its opening
 action at melee reach is a weapon swing (the client's stance tell); after that the AI
 casts from its kit: a Cure when the owner is below 85% HP, then the damage-first
-enfeebles (Koru-Moru's Dia, Sylvie's entrusted Indi-Frailty), a missing or expiring
-buff, the rest of the monster debuffs, then a nuke.  Dia is deliberately before the buff
+enfeebles (Koru-Moru's Dia, Sylvie's Geo-Malaise and entrusted Indi-Frailty), a missing
+or expiring buff, the rest of the monster debuffs, then a nuke.  Dia is deliberately before the buff
 rotation: a Red Mage with Protect/Shell/Haste/Refresh/Phalanx to maintain otherwise
 spends every cast refreshing one of them and never lands the 20% Defense cut.  Buffs
 land on the owner with the normal `0x037`/`0x063` status icons and a `0x028` gain-effect
@@ -218,27 +218,34 @@ family and Haste II is the attack-speed buff he keeps up.  The Geomancy family i
 the spell table the AI classifies by, so `trust_ai.effect_of()` resolves an Indi-/Geo-
 spell through `geomancy.INDI_EFFECTS`.
 Geomancy is not a buff the rotation puts up, though: a Geomancer keeps one aura per bubble
-and the next cast in a bubble replaces it -- Sylvie's list is all Indi-, so she holds a
-single aura -- and `trust_ai.choose_aura()` picks the one the moment needs, from
-the situation the zone tick measures into `trust_ai.AuraNeed`.  The order is
-Indi-refresh when the owner or a teammate is below half a mana bar, Indi-acumen for a
-caster owner, Indi-precision when the owner's hit rate is under 80% (and as the default
-before a pull, when there is no monster to measure), Indi-fury when the
-Attack/Defense ratio is under 1.3, and otherwise Indi-frailty, whose Defense cut helps
-every physical attacker and is the play when a weapon skill is ready.  A swap waits eight
-seconds, and the old aura is taken down when the new one lands.  Sylvie (UC) is the only
-Trust whose `mob_spell_list` carries Geomancy.  On top of her own aura she **Entrusts
-Indi-Frailty** whenever the fight's 12.5% Defense cut is missing or expiring.  The
-Entrust bubble itself is on the party, not the monster, so the server lands the cut as
-an ordinary **Defense Down** on the monster -- putting the Indi-Frailty aura on the mob
-would make the mob the aura's caster and debuff the players inside it.
-`trust_ai.entrust_debuff_for()` is the second half of her kit.
+and the next cast in a bubble replaces it.  Sylvie's kit now has both an Indi- line and
+the enemy-targeted **Geo-malaise**, so she runs two independent bubbles: `choose_aura()`
+picks the owner's Indi- aura from the situation the zone tick measures into
+`trust_ai.AuraNeed`, while `_trust_hex_choice()` keeps Geo-malaise on the monster.  The
+Indi- order is Indi-refresh when the owner or a teammate is below half a mana bar,
+Indi-acumen for a caster owner, Indi-precision when the owner's hit rate is under 80%
+(and as the default before a pull, when there is no monster to measure), Indi-fury when
+the Attack/Defense ratio is under 1.3, and otherwise Indi-frailty, whose Defense cut
+helps every physical attacker and is the play when a weapon skill is ready.  A swap
+waits eight seconds, and the old aura is taken down when the new one lands.  Swapping the
+owner's Indi- bubble does not remove the monster's Geo- hex, and a new Geo- hex does not
+strip Indi-fury.  Sylvie (UC) is the only Trust whose `mob_spell_list` carries Geomancy.
+On top of those two bubbles she **Entrusts Indi-Frailty** whenever the fight's 12.5%
+Defense cut is missing or expiring.  The Entrust bubble itself is on the party, not the
+monster, so the server lands the cut as an ordinary **Defense Down** on the monster --
+putting the Indi-Frailty aura on the mob would make the mob the aura's caster and debuff
+the players inside it.  `trust_ai.entrust_debuff_for()` and `_trust_hex_choice()` are the
+monster-side halves of her kit; the Geo-malaise potency is the published Trust value of
+30%, and the result stacks with the entrusted 12.5% Defense Down.
 
 Every Trust carries the weapons its design gives it (`trust_gear`, migration 159).
 **Sylvie (UC) has Idris**, but her Trust kit uses the published level-99 alter-ego
 values rather than the player's Geomancy+10 column: Indi-Fury **Attack +37.5%**,
-Indi-Precision **Accuracy +56**, Indi-Haste **+28.8%**, and the entrusted
-**-12.5% Defense** cut.  `trust_ai.TRUST_AURA_EFFECTS` holds that row.  **Joachim has the
+Indi-Precision **Accuracy +56**, Indi-Haste **+28.8%**, Geo-Malaise **-30% Magic
+Defense**, and the entrusted **-12.5% Defense** cut.  `trust_ai.TRUST_AURA_EFFECTS`
+holds that row.  A **player** GEO wielding Idris gets the same +10 column from
+`geomancy.IDRIS_EFFECTS`; the item has no `item_mods` row for it, so both paths read the
+equipped weapon id.  **Joachim has the
 Prime Loughnashade** (the final iLvl 119 III horn, item 22307), so his songs are Song+4
 and four of them fit.  He sings
 the plan rather than his spell list: **Victory March** while the owner's magic haste is
@@ -268,14 +275,14 @@ and saves the order they were clicked in (see [control panel](control-panel.md#c
 
 The same per-character mechanism covers the other support Trusts.  A **Set spells** dialog
 for Koru-Moru (952), Ygnas (998) and Sylvie (UC) (981) lists their cures, buffs, debuffs
-and Sylvie's Indi- auras, with the level of each; only the ticked spells are used, and the
-default AI still decides *when* each one is worth casting (cure when hurt, buff when
-missing, and so on).  A **Set rolls** dialog for Luzaf (928) and Qultada (967) lists the
+and Sylvie's Indi- auras plus **Geo-malaise**, with the level of each; only the ticked
+spells are used, and the default AI still decides *when* each one is worth casting (cure
+when hurt, buff when missing, and so on).  A **Set rolls** dialog for Luzaf (928) and Qultada (967) lists the
 31 Corsair rolls; the list is a priority order, so the first selected roll that is not
 already on the party wins; a second selected roll fills the Trust's other slot.  Sylvie's
-list also carries **Geo-malaise**, the enemy-targeted
-Magic Defense Down hex, so she can keep the Idris 30% Malaise on a monster instead of an
-Indi- aura; it is migration 0172.  An empty set means the built-in logic.  Chat uses
+list also carries **Geo-malaise**, the enemy-targeted Magic Defense Down hex; the default
+logic keeps it on the monster as her Geo- bubble, and the explicit set can make it the
+only aura; it is migration 0172.  An empty set means the built-in logic.  Chat uses
 `//trust <id|name> set spells|rolls "..." ...`, `//trust <id|name> songs`, and
 `//trust <id|name> set default`; the HUD's **Use default logic** checkbox is the same
 switch.  The selection is stored in `char_settings.trust_actions` (JSON keyed by Trust
@@ -1126,7 +1133,13 @@ its duration and the numbers the engine reads:
   bubble's status and the monster its hex landed on, so a new hex clears the old one and
   switching to a party aura clears a hex.  The friendly half carries the stat modifiers in
   `geomancy.INDI_EFFECTS`; the hex half cuts the monster's own Defense, Evasion, Accuracy,
-  Attack, Magic Defense or Magic Evasion by its 10% potency.
+  Attack, Magic Defense or Magic Evasion by its potency.  The **Luopan is put down at the
+  spell's target**: a Geo- buff on the party anchor, a Geo- hex on the monster.  A hex is a
+  bubble, so every monster inside ten yalms gets it, and a monster that leaves loses it.
+  A **Geo- hex must be cast on a monster**; only main-job GEOs may cast Geocolure at all.
+  A GEO wielding **Idris** gets Geomancy +10 (`geomancy.values`), which turns the base 10%
+  hexes into the Idris column (Frailty -27%, Malaise -30%) and strengthens the party auras
+  without touching the Trust's separate published values.
 - **Accession** widens the next white enhancing spell to every party member within ten
   yalms of the caster (the caster included).  Each recipient gets the caster's rolled
   duration, tick and power, its own gain-effect result and its own `0x037` icon list, so

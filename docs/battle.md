@@ -337,16 +337,24 @@ checked by default; GEO can check Bolster and the rest of its ability list.
 ### Geomancer
 
 - **At support:** maintains the configured **Indi-** spell around the GEO (default `Indi-haste`).
-- **At tank:** instead of running there, the GEO casts the configured **Geo-** spell on the
-  tank/anchor by subtarget (default anchor is the roster tank, `Geo-frailty`). The bubble is
-  centered in the tank camp, and the GEO stays at support. No Luopan walk is required.
-- The **Geo anchor** can be any party member; the default is the tank. Keep the anchor inside the
-  `cast range` (default 20 yalms). The Camp page prints the camp span, Geo cast range and bubble
-  radius, and warns when the camps are too far apart.
+- **Geo- buffs** (`Geo-haste`, `Geo-refresh`, ...) are cast on the tank/anchor by subtarget.
+  The Luopan is placed at that member and the bubble is centered in the tank camp.  If the
+  support camp is outside the 12-yalm Geocolure range (the live Bibiki camp is ~40 yalms),
+  the loop walks the GEO to the anchor for the cast, then returns to camp.
+- **Geo- hexes** (`Geo-frailty`, `Geo-malaise`, ...) are enemy-target spells. The Battle loop
+  casts them on the claimed monster nearest the anchor, and the Luopan is placed at that
+  monster. Casting a hex on the tank was rejected by both the client and the server, which is
+  why support GEO hexes used to do nothing.  The same walk-to-anchor step applies before a
+  hex, because the cast still has to be in range of its monster.
+- The **Geo anchor** can be any party member; the default is the tank. It is the anchor for
+  Geo- buffs and the search point for a hex target. Keep it inside the `cast range` (default
+  12 yalms, the Geocolure range). The Camp page prints the camp span, Geo cast range and
+  bubble radius, and warns when the camps are too far apart.
 - A Geo bubble has a roughly 10-yalm radius. With the anchor in the tank camp and a 6-yalm tank
-  camp, the melee group is covered; the support group stays in the Indi aura.
+  camp, the melee group is covered; the support group stays in the Indi aura. A hex lands on
+  every monster inside the Luopan's radius.
 - Common alternatives: `Indi-refresh`/`Indi-acumen` at support; `Geo-malaise` (magic damage),
-  `Geo-torpor` (slow), or `Geo-frailty` (defense down) on the anchor.
+  `Geo-torpor` (slow), or `Geo-frailty` (defense down) on the monster.
 
 ### Bard
 

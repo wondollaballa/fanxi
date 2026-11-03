@@ -4891,6 +4891,17 @@ class ZoneSession:
         # The item may have been moved between bags since it was worn.
         return next((item for item in rows if int(item["item_id"]) == item_id), None)
 
+    def geomancy_plus(self) -> int:
+        """The character's Geomancy+ level from the worn weapons.
+
+        Idris is Geomancy +10, but the item has no ``item_mods`` row for it: the live
+        server scripts the bonus.  Read the equipped item ids so a player GEO gets the
+        same Idris column the Trust path already uses for Sylvie.
+        """
+        items = {int(entry[2]) for entry in self.equipped.values() if entry}
+        return (geomancy.IDRIS_GEOMANCY_PLUS
+                if items & geomancy.IDRIS_ITEM_IDS else 0)
+
     def _weapon_pair_error(self, item: dict, kind: int,
                            items: list[dict] | None = None) -> str | None:
         """Why a sub item cannot share the hands with the main weapon, or None."""
@@ -7048,6 +7059,13 @@ class ZoneSession:
         ordinary row belongs to another job or does not exist at all.
         """
         spell_id = int(spell_id)
+        spell = self.world.service.spell(spell_id)
+        # Geocolure spells are main-job only even when the support job has the level:
+        # BG-wiki's Geomancer page is explicit that only main-job GEOs may cast them.
+        if (spell is not None
+                and str(spell.get("name") or "").casefold().startswith("geo-")
+                and int(self.char.get("main_job") or 0) != 21):
+            return False
         every, mine = self.job_point_spell_ids()
         if spell_id in mine:
             return True
@@ -7086,6 +7104,20 @@ class ZoneSession:
             spell_id = int(spell_id)
             if 0 < spell_id < len(bits) * 8:
                 bits[spell_id // 8] &= ~(1 << (spell_id % 8)) & 0xFF
+        # Geocolure is main-job only; clear every Geo- bit for a support GEO so the
+        # client's magic menu matches what cast_magic will accept.
+        if int(self.char.get("main_job") or 0) != 21:
+            try:
+                by_name = self.world.service.spell_ids_by_name()
+            except Exception:
+                by_name = {}
+            for name, ids in by_name.items():
+                if not str(name).casefold().startswith("geo-"):
+                    continue
+                for spell_id in ids:
+                    spell_id = int(spell_id)
+                    if 0 < spell_id < len(bits) * 8:
+                        bits[spell_id // 8] &= ~(1 << (spell_id % 8)) & 0xFF
         return bytes(bits)
 
     def cast_magic(self, p: bytes, act_index: int = 0) -> None:
@@ -7137,6 +7169,11 @@ class ZoneSession:
         targets = int(spell.get("valid_targets") or 0)
         SELF_TARGET, ENEMY_TARGET = 0x01, 0x04
         spec = effects.for_spell(spell["name"])
+        # Geo- spells are not in the ordinary effect table: their buff/hex half comes
+        # from geomancy.INDI_EFFECTS.  The bubble prefix decides whether the spell is
+        # aimed at a party-member anchor (Geo- buffs) or the monster (Geo- hexes).
+        geo_aura = geomancy.indi_effect(str(spell["name"]))
+        geo_bubble = geomancy.bubble(str(spell["name"]))
         # Accession widens the next white enhancing spell to the party.  Detect it now,
         # while the cast starts, but spend it in resolve_party_spell so the icon stays
         # up for the length of the cast bar and a cancelled cast does not eat it.  Haste
@@ -7181,6 +7218,15 @@ class ZoneSession:
                     party_target = None
                 else:
                     self_cast = False
+        if (self_cast and act_index and not accession and geo_aura is not None
+                and geo_bubble == "geo" and not geo_aura[2]):
+            # Geo- buffs place the Luopan at a party member/self.  The generic party
+            # branch above only sees effects.for_spell(), which has no Geomancy row, so
+            # the anchor has to be resolved here or the bubble is put down at the GEO.
+            anchor = self._party_spell_target(int(act_index))
+            if anchor is not None and anchor is not self:
+                party_target = anchor
+                self_cast = False
         if needs_enemy:
             if target is None or target.kind != "mob" or not target.alive:
                 self.say("There is no valid target for %s." % spell["name"])
@@ -7214,17 +7260,6 @@ class ZoneSession:
         # enfeebling duration, Macc), so they are computed again at the finish; this
         # first pass keeps the cast record complete for anything that reads it early.
         value_target = party_target or (self if healing else target)
-        spell_name = str(spell.get("name") or "").casefold()
-        if spell_name.startswith("geo-"):
-            pet = getattr(self, "pet_entity", None)
-            if pet is None or not pet.alive:
-                pet = self.world.spawn_pet(self, "luopan", now)
-            if pet is not None:
-                pet.geo_mp_cost = int(cost)
-                pet.geo_potency = 100
-                pet.geo_drain = 24
-                pet.next_geo_tick = now + 3.0
-                pet.geo_name = str(spell.get("name") or "")
         dark_seal = (bool(getattr(self, "_dark_seal", False))
                      and int(spell.get("skill") or 0) == packets.SKILL_DARK)
         cascade_bonus = int(getattr(self, "_cascade_bonus", 0) or 0)
@@ -9618,13 +9653,13 @@ class ZoneSession:
         lands.  Indi-haste and Geo-frailty coexist; two Indi- auras never do.
         """
         name = str(spell.get("name") or "")
-        spec = geomancy.indi_effect(name)
-        if spec is None:
+        aura = geomancy.values(name, self.geomancy_plus())
+        if aura is None:
             return
-        status, mods, hostile = spec
+        status, mods, hostile, potency = aura
         bubble = geomancy.bubble(name)
         if bubble == "geo":
-            self._geo_bubble(spell, now, cast, status, mods, hostile)
+            self._geo_bubble(spell, now, cast, status, mods, hostile, potency)
             return
         me = int(self.char["char_id"])
         duration = 180.0
@@ -9639,7 +9674,7 @@ class ZoneSession:
                 # client's status label, and the shared Colure status (558 for every
                 # frailty aura, Indi- or Geo-) is named for the Indi- bubble there.
                 self.world.apply_mob_effect(
-                    target, effects.SpellEffect(status, "debuff", duration, potency=10),
+                    target, effects.SpellEffect(status, "debuff", duration, potency=potency),
                     self, now, duration=duration, name=name)
                 self.say("%s affects %s." % (name, target.name))
             return
@@ -9648,7 +9683,7 @@ class ZoneSession:
         if entrusted:
             other = self.world.session_by_char(entrusted)
             if other is not None and int(other.zone) == int(self.zone):
-                other.add_effect(status, duration=duration, power=10, mods=mods)
+                other.add_effect(status, duration=duration, power=potency, mods=mods)
                 other.queue += [other.char_status(), other.party_member()]
                 self.queue.append(sub(0x028, packets.battle_action(
                     me, int(other.char["char_id"]), int(status), animation=0,
@@ -9671,7 +9706,7 @@ class ZoneSession:
                     continue
                 targets.append(other)
         for target in targets:
-            target.add_effect(status, duration=duration, power=10, mods=mods)
+            target.add_effect(status, duration=duration, power=potency, mods=mods)
             target.queue.append(target.char_status())
             action = sub(0x028, packets.battle_action(
                 me, int(target.char["char_id"]), int(status), animation=0, kind=2,
@@ -9686,32 +9721,53 @@ class ZoneSession:
     GEO_RADIUS = 10.0
 
     def _geo_bubble(self, spell: dict, now: float, cast: dict, status: int,
-                    mods: dict, hostile: bool) -> None:
+                    mods: dict, hostile: bool, potency: int = 10) -> None:
         """A Geo- spell puts its Luopan down, and the bubble is the Luopan's.
 
         Retail's Geo- aura radiates from the Luopan, not from the Geomancer: party
         members inside the radius keep the buff, monsters inside take the hex, and
         stepping out drops it.  The Luopan is a pet, so a recast replaces it and its
-        bubble with it.
+        bubble with it.  A Geo- buff is cast on a party member (the anchor), a Geo-
+        hex on the monster; the Luopan is put down at that target, not at the GEO's
+        feet.  On a multibox the GEO often stands in the support camp, so putting the
+        bubble at the caster would cover the wrong camp entirely.
         """
         name = str(spell.get("name") or "")
-        pet = self.world.spawn_pet(self, "luopan", now)
+        position = tuple(float(value) for value in self.pos[:3])
+        anchor = None
+        party_id = int(cast.get("party_target") or 0)
+        if party_id:
+            anchor = self.world.session_by_char(party_id)
+            if anchor is None or int(anchor.zone) != int(self.zone):
+                anchor = None
+            else:
+                position = tuple(float(value) for value in anchor.pos[:3])
+        target = None
+        if int(cast.get("target") or 0):
+            target = self.world.entity_by_id(int(self.zone), int(cast["target"]))
+        if anchor is None and target is not None:
+            position = (float(target.x), float(target.y), float(target.z))
+        pet = self.world.spawn_pet(self, "luopan", now, position=position)
         if pet is None:
             return
         pet.geo_name = name
         pet.geo_status = int(status)
         pet.geo_mods = dict(mods)
         pet.geo_hostile = bool(hostile)
-        pet.geo_potency = 10
+        pet.geo_potency = int(potency)
+        pet.geo_mp_cost = int(spell.get("mp") or 0)
+        pet.geo_drain = 24
         pet.geo_mob_id = 0
+        pet.geo_mob_ids = set()
         if hostile:
-            target = None
-            if int(cast.get("target") or 0):
-                target = self.world.entity_by_id(int(self.zone), int(cast["target"]))
-            if ((target is None or not target.is_mob() or not target.alive)
-                    and self.engaged_id):
-                target = self.world.entity_by_id(int(self.zone), int(self.engaged_id))
-            if target is not None and target.is_mob() and target.alive:
+            if target is None or not target.is_mob() or not target.alive:
+                target = None
+            if target is None and self.engaged_id:
+                candidate = self.world.entity_by_id(
+                    int(self.zone), int(self.engaged_id))
+                if candidate is not None and candidate.is_mob() and candidate.alive:
+                    target = candidate
+            if target is not None:
                 pet.geo_mob_id = int(target.id)
         self._clear_geo_aura("geo", int(status), int(getattr(pet, "geo_mob_id", 0) or 0))
         self._apply_geo_bubble(pet, now)
@@ -9721,29 +9777,46 @@ class ZoneSession:
         spec = geomancy.indi_effect(str(getattr(pet, "geo_name", "") or ""))
         if spec is None:
             return
-        status, mods, hostile = spec
+        _status, _base_mods, hostile = spec
+        status = int(getattr(pet, "geo_status", 0) or _status)
+        mods = dict(getattr(pet, "geo_mods", None) or _base_mods)
+        potency = int(getattr(pet, "geo_potency", 10) or 10)
         duration = 180.0
         here = (float(pet.x), float(pet.y), float(pet.z))
         if hostile:
-            mob_id = int(getattr(pet, "geo_mob_id", 0) or 0)
-            mob = self.world.entity_by_id(int(self.zone), mob_id) if mob_id else None
-            if mob is None or not mob.alive:
-                return
-            if math.dist(here, (float(mob.x), float(mob.y), float(mob.z))) <= self.GEO_RADIUS:
-                if mob.effect_state.get(status) is None:
-                    self.say("%s affects %s." % (pet.geo_name, mob.name))
-                self.world.apply_mob_effect(
-                    mob, effects.SpellEffect(status, "debuff", duration, potency=10),
-                    self, now, duration=duration, name=str(pet.geo_name))
-            elif mob.effect_state.get(status) is not None:
-                self.world._drop_mob_effect(int(self.char["char_id"]), mob, status)
+            # A Geo- hex is a bubble, not a single-target debuff: every monster inside
+            # the Luopan's radius gets it (retail also requires the GEO to be on the
+            # monster's hate list, which the party's tagged fight satisfies here).
+            active = set()
+            for entity in self.world.entities_for_zone(int(self.zone)):
+                if entity.kind != "mob" or not getattr(entity, "alive", False):
+                    continue
+                if math.dist(here, (float(entity.x), float(entity.y), float(entity.z))) \
+                        > self.GEO_RADIUS:
+                    continue
+                active.add(int(entity.id))
+                state = entity.effect_state.get(status)
+                if state is None:
+                    self.say("%s affects %s." % (pet.geo_name, entity.name))
+                if state is None or float(state.get("until") or 0.0) - now < 30.0:
+                    self.world.apply_mob_effect(
+                        entity,
+                        effects.SpellEffect(status, "debuff", duration, potency=potency),
+                        self, now, duration=duration, name=str(pet.geo_name))
+            previous = set(getattr(pet, "geo_mob_ids", ()) or ())
+            for mob_id in previous - active:
+                mob = self.world.entity_by_id(int(self.zone), int(mob_id))
+                if mob is not None and mob.effect_state.get(status) is not None:
+                    self.world._drop_mob_effect(int(self.char["char_id"]), mob, status)
+            pet.geo_mob_ids = active
             return
         for target in self._geo_party():
             inside = math.dist(here, tuple(target.pos[:3])) <= self.GEO_RADIUS
             state = target.effect_state.get(status)
             if inside:
                 if state is None or float(state.get("until") or 0.0) - now < 60.0:
-                    target.add_effect(status, duration=duration, power=10, mods=dict(mods))
+                    target.add_effect(status, duration=duration, power=potency,
+                                      mods=dict(mods))
                     target.queue.append(target.char_status())
             elif state is not None:
                 target.remove_effect(status, quiet=True)
@@ -9758,9 +9831,12 @@ class ZoneSession:
             if target.effect_state.get(status) is not None:
                 target.remove_effect(status, quiet=True)
                 target.queue.append(target.char_status())
+        mob_ids = set(getattr(pet, "geo_mob_ids", ()) or ())
         mob_id = int(getattr(pet, "geo_mob_id", 0) or 0)
         if mob_id:
-            mob = self.world.entity_by_id(int(self.zone), mob_id)
+            mob_ids.add(mob_id)
+        for mob_id in mob_ids:
+            mob = self.world.entity_by_id(int(self.zone), int(mob_id))
             if mob is not None and mob.effect_state.get(status) is not None:
                 self.world._drop_mob_effect(int(self.char["char_id"]), mob, status)
 

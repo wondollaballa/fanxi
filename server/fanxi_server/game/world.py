@@ -569,8 +569,12 @@ class World:
         return entity
 
     def spawn_pet(self, session, key: str | None = None, now: float | None = None,
-                  spec=None):
-        """Call one job pet beside its owner and show it to everyone in the zone."""
+                  spec=None, position: tuple[float, float, float] | None = None):
+        """Call one job pet beside its owner and show it to everyone in the zone.
+
+        ``position`` places the pet at an explicit point instead of beside the owner;
+        a Geo- Luopan is put down at its anchor/monster, not at the GEO's feet.
+        """
         from . import packets
         from .zone import TARGID, sub
 
@@ -622,7 +626,9 @@ class World:
         entity.x = float(session.pos[0]) + math.sin(angle) * distance
         entity.y = float(session.pos[1])
         entity.z = float(session.pos[2]) + math.cos(angle) * distance
-        if spec.key == "luopan":
+        if position is not None:
+            entity.x, entity.y, entity.z = (float(value) for value in position[:3])
+        elif spec.key == "luopan":
             entity.x, entity.y, entity.z = (float(session.pos[0]), float(session.pos[1]),
                                             float(session.pos[2]))
         entity.spawn_x, entity.spawn_y, entity.spawn_z = entity.x, entity.y, entity.z
@@ -1016,6 +1022,9 @@ class World:
         # two debuffs that lift every physical hit, so they get the beat before the
         # next buff refresh.  Cures still win, and the rest of the enfeebles still run
         # after the buffs below.
+        if spell is None and target is not None:
+            spell = self._trust_hex_choice(entity, owner, target, now, kit)
+            kind = "debuff" if spell is not None else ""
         entrust = False
         if spell is None and target is not None:
             spell = trust_ai.entrust_debuff_for(
@@ -1348,7 +1357,8 @@ class World:
         spec = trust_ai.effect_of(chosen)
         if spec is None:
             return None
-        up = self._trust_aura_up(kit, owner, target)
+        up = self._trust_aura_up(
+            kit, owner, target, geomancy.bubble(str(chosen.get("name") or "")))
         if up == int(spec.effect):
             state = owner.effect_state.get(up)
             if state is None and target is not None:
@@ -1363,9 +1373,16 @@ class World:
         log.info("%s puts up %s", entity.name, chosen.get("name") or chosen.get("id"))
         return chosen
 
-    def _trust_aura_up(self, kit: dict, owner, target) -> int:
-        """The geomancy status this Trust already has up, or 0."""
+    def _trust_aura_up(self, kit: dict, owner, target, bubble: str = "") -> int:
+        """The geomancy status this Trust already has up in one bubble, or 0.
+
+        Indi- and Geo- are separate bubbles: an active Geo-Malaise must not make the
+        owner's Indi-Fury look present, or the owner aura would never be refreshed.
+        """
         for spell in kit.get("aura", []):
+            name = str(spell.get("name") or "")
+            if bubble and geomancy.bubble(name) != bubble:
+                continue
             spec = trust_ai.effect_of(spell)
             if spec is None:
                 continue
@@ -1375,6 +1392,34 @@ class World:
             if target is not None and target.effect_state.get(status) is not None:
                 return status
         return 0
+
+    def _trust_hex_choice(self, entity: ZoneEntity, owner, target, now: float,
+                          kit: dict | None = None):
+        """The Geo- hex on the monster that is missing or about to expire.
+
+        Sylvie keeps Indi-Fury on the owner and a separate Geo- bubble on the fight.
+        The hex is not part of the owner's aura choice: ``choose_aura`` only sees the
+        friendly Indi- line, and this method puts the enemy-targeted Geo-Malaise on
+        the monster so the Magic Defense cut stacks with the entrusted Frailty.
+        """
+        kit = kit or entity.kit or {}
+        if target is None or not target.is_mob() or not target.alive:
+            return None
+        for spell in kit.get("aura", ()):
+            name = str(spell.get("name") or "")
+            if geomancy.bubble(name) != "geo":
+                continue
+            spec = trust_ai.effect_of(
+                spell, int(getattr(entity, "geomancy_plus", 0) or 0), entity.name)
+            if spec is None or spec.kind != "debuff":
+                continue
+            state = target.effect_state.get(int(spec.effect))
+            if state is None:
+                return spell
+            until = float(state.get("until") or 0.0)
+            if until and until - now <= trust_ai.AURA_REFRESH_SECONDS:
+                return spell
+        return None
 
     def _trust_aura_need(self, owner, target):
         """Measure the owner and the monster for ``trust_ai.choose_aura``."""
@@ -1442,16 +1487,19 @@ class World:
         return members
 
     def _clear_trust_aura(self, entity: ZoneEntity, owner, keep: int,
-                          mob_id: int = 0) -> None:
-        """Take the last aura down: one Indi-/Geo- at a time, on the owner and the monster.
+                          mob_id: int = 0, bubble: str = "") -> None:
+        """Take the last aura down from one bubble, on the owner and the monster.
 
-        A Geomancer's next aura replaces the last one, so a swap has to remove the status
-        the previous cast put up -- on the owner's bar, and on the monster when the last
-        one was a hex.  ``entity.geo_mob_id`` remembers the monster the last hex landed on.
+        A Geomancer runs an Indi- bubble and a Geo- bubble at once; each replaces only
+        itself.  ``bubble`` is ``indi`` or ``geo`` so swapping the owner's Indi-Fury
+        does not strip Sylvie's Geo-Malaise from the fight (or the reverse).
         """
         previous = int(getattr(entity, "geo_mob_id", 0) or 0)
         hexed = self.entity_by_id(entity.zone, previous) if previous else None
         for spell in (entity.kit or {}).get("aura", []):
+            name = str(spell.get("name") or "")
+            if bubble and geomancy.bubble(name) != bubble:
+                continue
             spec = trust_ai.effect_of(spell)
             if spec is None or int(spec.effect) == int(keep):
                 continue
@@ -1461,7 +1509,8 @@ class World:
                 owner.queue.append(owner.char_status())
             if hexed is not None and hexed.effect_state.get(status) is not None:
                 self._drop_mob_effect(int(entity.id), hexed, status)
-        entity.geo_mob_id = int(mob_id)
+        if bubble == "geo":
+            entity.geo_mob_id = int(mob_id)
 
     def _drop_mob_effect(self, actor_id: int, mob, status: int) -> None:
         """Remove one status from a monster and tell the clients the icon wore off."""
@@ -1521,7 +1570,8 @@ class World:
         if geomancy.indi_effect(name) is not None:
             # An entrust Trust has two independent bubbles: swapping the owner's
             # Indi-Fury/Precision must not take the Entrust Frailty off the monster.
-            self._clear_trust_aura(entity, owner, int(spec.effect), 0)
+            self._clear_trust_aura(
+                entity, owner, int(spec.effect), 0, geomancy.bubble(name))
         # A Trust's weapons are part of its kit: Joachim's Loughnashade is Song+4, so the
         # song line reads the loadout's modifiers the way a player's gear would.
         gear = getattr(entity, "gear_mods", None) or {}
@@ -1603,7 +1653,9 @@ class World:
         """Land a Trust enfeeble, including Dia's small opening hit."""
         if (geomancy.indi_effect(str(spell.get("name") or "")) is not None
                 and not entrust):
-            self._clear_trust_aura(entity, owner, int(spec.effect), int(target.id))
+            self._clear_trust_aura(
+                entity, owner, int(spec.effect), int(target.id),
+                geomancy.bubble(str(spell.get("name") or "")))
         target_sheet = self.monster_sheet(target)
         target_mnd = int(target_sheet.attributes.get("mnd", 0))
         caster_mnd = int(stats.build_monster(int(entity.level)).attributes.get("mnd", 0))
