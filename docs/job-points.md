@@ -19,6 +19,8 @@ Source: [BG-wiki Job Points](https://www.bg-wiki.com/ffxi/Job_Points).  The gene
   `0x0AA`; no other job can.  For Red Mage that is the Fire V line (100 JP), Addle II /
   Distract III / Frazzle III (550 JP) and Refresh III / Temper II (1200 JP) — the Fire V
   line is also a Black Mage/Scholar level row, so those jobs keep it by level instead.
+  Scholar's 100-JP Storm II line and 1200-JP Helix IIs are in the same table; the Storm IIs
+  have no ordinary level row, so the gift is what opens them.
 - **The "En"-spell gift is flat En-spell damage.**  Red Mage's four rows total +23 and are
   applied to every landed en-spell hit on both hands (`mod.ENSPELL_DMG_BONUS`).
 - **Red Mage Quick Magic** is a 5% instant-cast proc; its "Quick Magic Effect" ranks
@@ -26,6 +28,13 @@ Source: [BG-wiki Job Points](https://www.bg-wiki.com/ffxi/Job_Points).  The gene
 - **The ★Master! gift shortens the two-hour recast.**  Its 15 minutes are stored as
   `mod.ONE_HOUR_RECAST` and taken off the per-ability cooldown sent in `0x119` slot 0
   for the current main job.
+- **The Scholar "Stratagem Recast Time" gift is applied.**  Its 15 seconds come off every
+  charge in the HUD's clock (`job_points.stratagem_recharge_seconds`, mirrored in
+  `host/addons/lua/sch.lua`), so a level-99 Scholar recharges a charge every 33 seconds.
+- **The Scholar group-1 merits are applied** through `zone._sch_merit`: Grimoire Recast
+  (2 s a rank off Light/Dark Arts), Max Sublimation (+10 MP a rank), Helix Magic Acc./Atk.
+  (+3 M.Acc / +2 MAB a rank on Helix spells) and Modus Veritas Duration (5% less duration
+  penalty a rank).
 
 ## Not yet applied
 
@@ -66,7 +75,8 @@ Heady Artifice Effect, Activate Effect, Cooldown Effect, Deactivate Effect
 
 ### Scholar
 
-Stratagem Effect IV
+Stratagem Effect IV (the client owns spell recast, so the server has no hook for the
+2%-a-rank spell-recast reduction)
 
 ### Geomancer
 
@@ -76,13 +86,13 @@ Life Cycle Effect, Concentric Pulse Effect, Indicolure Spell Effect Dur.
 
 Rune Enchantment Effect
 
-Remaining category rows: **0**.
+Remaining category rows: **1** (Scholar's Stratagem Effect IV, above).
 
 ## Gift rows not modelled as stats
 
 Capacity Point bonuses, Superior levels, new songs/ninjutsu, pet/automaton/avatar bonuses,
-Treasure Hunter, stratagem recast, ammunition and similar remain in the table and are listed
-here for the next pass.
+Treasure Hunter, ammunition and similar remain in the table and are listed here for the
+next pass.
 
 - **Warrior**: double rate attack
 - **Monk**: counter damage
@@ -100,5 +110,4 @@ here for the next pass.
 - **Corsair**: quick draw delay, reduced ammunition consumption, snapshot effect, true shot effect
 - **Puppetmaster**: automaton elemental capacity bonus, automaton mag. acc. and eva. bonus, automaton mag. atk. and def. bonus, automaton phys. acc. and eva. bonus, automaton phys. atk. and def. bonus, automaton physical accuracy and physical evasion bonus, automaton physical attack and defense bonus
 - **Dancer**: maximum finishing moves bonus
-- **Scholar**: stratagem recast time
 - **Rune Fencer**: enh. magic received duration, enhancing magic received duration, inquartata effect

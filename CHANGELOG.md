@@ -1,11 +1,67 @@
 # Changelog
 
+## Unreleased — the Gear page remembers the set you were browsing
+
+- **The Gear page reopens on the same GearSwap set and tab.**  The library browser is unmounted
+  when the sidebar moves to Data (or any other page), so coming back reloaded the account's
+  library and reset the selection to its first set — usually a state set — and the page also
+  returned to **Sets**.  The tab is now kept in `fanxi.gear.tab`, and the selected set is kept per
+  account and job in `fanxi.gear.selected.v1`, so a round trip to Data lands on the same set.
+  Another account keeps its own set, a library that no longer carries the remembered set (after an
+  import or **Restore template**) opens on its first set, and a job change still follows the live
+  job's library.
+
+## Unreleased — Reforged Bonanza weapons in the viewer and the stat sheet
+
+- **Reforged Bonanza weapons resolve in the EquipViewer and its item cards.**  The server names
+  the upgraded copy `Wizard's Rod (Reforged)` (and the other nineteen similarly), but the
+  client's item resource stores both copies under the base display name — and two of the
+  upgrades use the other copy's spelling entirely (`Premium Hearts`, `Demonic Axe`).  A set
+  naming one of them therefore drew an empty slot and its tooltip stats never loaded.  The
+  host now keeps the one server-name-to-client-id table (`control.lua`) and uses it for
+  `item_ids`, set-wear lookup and the launcher's stat query, so all twenty show their icon,
+  card, base lines and set totals.
+- **The server has their real stats too.**  Migration 185 fills the nineteen reforged weapons
+  that had no `item_mods` rows (and refreshes Final Sickle's), including the weapon/Parrying
+  and H2H Guard skill bonuses, Haste, Magic Damage, Fast Cast, Refresh, Cure potency and the
+  ranged weapons' Store TP.  The live stat sheet and combat now agree with the client tooltip
+  instead of treating them as bare-damage weapons.
+- Tests: `tests/reforged_items_test.py` runs the real resolver against a stub resource table
+  and checks its table covers every Reforged row in migration 53; `test_stats.py` checks the
+  imported tooltip stats and that the conditional `Unarmed:` block is not counted.
+
+## Unreleased — Scholar charge rate, merits and gift spells
+
+- **Strategem charges recharge at retail's rate.**  The HUD gave every charge a flat four
+  minutes.  Retail splits the pool's four minutes across the level's charges (48 s at 99,
+  60 s at 70, 80 s at 50, 120 s at 30, 240 s at 10), and the 550-JP **Stratagem Recast
+  Time** gift takes 15 seconds off each; every Fanxi job has the 2,100 JP that unlocks it,
+  so a level-99 Scholar now recharges a charge every **33 seconds**.  The footer prints
+  the rate, the pip fill uses it, and a clock saved under the old four-minute constant is
+  pulled in on the next draw.
+- **The Scholar group-1 job-point gift is classified.**  `job_points` now carries the
+  550-JP row as `mod.STRATAGEM_RECAST` (15 s) and exposes
+  `stratagem_recharge_seconds()` so the server table and the HUD agree.
+- **Scholar's 100/1200-JP gift spells are registered.**  The Storm II line and the eight
+  Helix IIs are now in `SPELL_GRANTS`; the Storm IIs have no ordinary level row, so before
+  this they were open to every job instead of being the Scholar's 100-JP gift.
+- **The Scholar group-1 merits are applied.**  Grimoire Recast takes 2 s a rank off Light
+  and Dark Arts, Max Sublimation adds 10 MP a rank to the storage cap, Helix Magic
+  Acc./Atk. adds +3 Magic Accuracy and +2 Magic Atk. Bonus a rank to Helix spells, and
+  Modus Veritas Duration gives 5% of its duration penalty back a rank.
+- **Modus Veritas follows retail.**  It doubles the Helix damage-over-time tick (plus the
+  job-point bonus) and halves the remaining duration instead of only adding the bonus, and
+  it refuses a tick of 5,000 or more.
+- **Stratagem Effect IV no longer cuts the wrong recast.**  The old code took its 40% off
+  Accession/Manifestation's own 1 s ability recast.  Spell recast belongs to the client,
+  so the row is documented as not modelled instead of being applied to the ability.
+
 ## Unreleased — the Scholar HUD and Immanence skillchains
 
 - **A Scholar HUD for strategems, self-skillchains and magic bursts.**  The new window
   (`host/addons/lua/sch.lua`, opened by `//hud sch`, the Control room's **Scholar** switch, or
   automatically for a Scholar main job) shows the strategem charges as pips, the count left and
-  the clock to the next four-minute recharge, and warns when the active art is Light.  Its left
+  the clock to the next charge, and warns when the active art is Light.  Its left
   rail holds the twelve skillchain tabs, each with the player's named macros; a macro is a title,
   two or three spells, an optional **Use Ebullience** (the title then reads `(Ebullience)` and it
   costs one more charge) and an optional magic burst list.  The editor is a modal with a
@@ -25,11 +81,26 @@
   animation from the cast.  Immanence is spent by the spell whether or not it chains; a
   zero-damage or non-elemental spell leaves it up.  Magic Burst reads the same state, so a
   Scholar's burst list works after the chain closes.
+- **The spell window is grouped into titled sections.**  Each type tab now draws coloured
+  section bands instead of one alphabetical wall: Buff separates Protect & Shell, Regen &
+  Refresh, Haste, Bars, Storms, Enspells, Songs, Ninjutsu, Blue Magic, Geomancy, Utility and
+  Enhancing; Healing separates Cures, Raises and Status Removal; Debuff separates Sleep, Bind &
+  Gravity, Dispel, Slow, Paralyze, Poison, Blind & Silence, Absorb and Enfeebling; Zoning
+  separates Warp Marks, Warp, Teleport, Recall and Escape & Retrace.  The Nuke tab leads with a
+  **Helix** block, then one block per element (Fire, Ice, Wind, Earth, Thunder, Water, Light,
+  Dark) with the element's Immanence skillchain as the hint, then Blue Magic and Non-elemental.
+  Because the client gives every helix the same generic icon, each helix tile now uses its
+  element's tier-I nuke art (Pyrohelix/Fire, Cryohelix/Blizzard, …); the **Storms** row uses the
+  same art (Firestorm/Fire, Hailstorm/Blizzard, …) so its eight shared icons become a colour-coded
+  spread.  **Kaustra** carries a
+  **2HR** tag, is dimmed and unclickable until **Tabula Rasa** is up, and a click while it is
+  down writes the requirement to chat.
 - Tests: `server/tests/test_skillchain.py` covers the element map, a Stone → Fire Liquefaction,
   a Helix closer, lethal-hit spending and a full `resolve_casting` pair whose closing result
   carries the chain block; `tests/sch_hud_test.sh --game <folder>` runs the real module against a
   mock ImGui API and pins every default tab to the chain it is named after, the saved format, the
-  charge arithmetic, macro CRUD and every window.
+  charge arithmetic, macro CRUD and every window; `tests/spell_sections_test.py` pins the section
+  taxonomy, Nuke ordering, Bard family sections and the Tabula Rasa gate.
 
 ## Unreleased — Trust spellbooks and alter-ego upgrades
 

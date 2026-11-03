@@ -5582,7 +5582,9 @@ class ZoneSession:
             elif effect_id == effects.SUBLIMATION:
                 hp = int(self.char.get("hp_current", 0))
                 stored = max(0, int(state.get("power") or 0))
-                cap = 300 + job_points.category_total(20, "Sublimation Effect")
+                # 300 base, +3 a JP rank (60 at rank 20), +10 a Max Sublimation merit.
+                cap = (300 + job_points.category_total(20, "Sublimation Effect")
+                       + 10 * self._sch_merit(merits.SCH_MAX_SUBLIMATION))
                 if hp > 1 and stored < cap:
                     self.char["hp_current"] = hp - 1
                     state["power"] = stored + 1
@@ -7507,6 +7509,17 @@ class ZoneSession:
                            else {})
             target_int = 0
         base = int(spell["base"])
+        # Helix Magic Acc./Atk. merits add +3 Magic Accuracy and +2 Magic Atk. Bonus
+        # a rank to Helix spells only; every other spell keeps the sheet's mods.
+        spell_mods = sheet.fighter.mods
+        if spec is not None and spec.helix:
+            helix_rank = self._sch_merit(merits.SCH_HELIX_MAGIC)
+            if helix_rank:
+                spell_mods = dict(spell_mods)
+                spell_mods[mod.MACC] = (int(spell_mods.get(mod.MACC, 0))
+                                        + 3 * helix_rank)
+                spell_mods[mod.MATT] = (int(spell_mods.get(mod.MATT, 0))
+                                        + 2 * helix_rank)
         if healing:
             amount = effects.healing_amount(
                 int(cost * 3 + level), sheet.fighter.mods, target_mods)
@@ -7517,7 +7530,7 @@ class ZoneSession:
                 base=base, multiplier=float(spell["multiplier"]),
                 caster_int=int(sheet.attributes.get("int", 0)),
                 target_int=target_int,
-                skill=spell_skill, mods=sheet.fighter.mods,
+                skill=spell_skill, mods=spell_mods,
                 target_mods=target_mods,
                 target_level=int(target_sheet.fighter.level))
         elif spec is not None and spec.damage:
@@ -7531,7 +7544,6 @@ class ZoneSession:
                 target_mnd=(int(target_sheet.attributes.get("mnd", 0))
                             if target_sheet is not None else 0))
         elif spec is None and base > 0 and target_sheet is not None:
-            spell_mods = sheet.fighter.mods
             if spell_skill == NINJUTSU_SKILL:  # elemental Ninjutsu only
                 spell_mods = dict(spell_mods)
                 spell_mods[mod.MAGIC_DAMAGE] = (
@@ -7588,7 +7600,7 @@ class ZoneSession:
                       + (50 if diabolic else 0) + (50 if convergence else 0),
                 caster_int=int(sheet.attributes.get(
                     "mnd" if dmnd_enfeeble else "int", 0)),
-                mods=sheet.fighter.mods,
+                mods=spell_mods,
                 target_level=int(target_sheet.fighter.level),
                 target_mods=target_mods)
         debuff = effects.is_debuff(spec)
@@ -9073,6 +9085,12 @@ class ZoneSession:
         if int(self.char.get("main_job", 0)) != dancer.DANCER_JOB:
             return 0
         return int(self.merit_counts().get(int(merit_id), 0))
+
+    def _sch_merit(self, merit_id: int) -> int:
+        """A Scholar group-1/group-2 merit's rank, only while Scholar is the main job."""
+        if int(self.char.get("main_job", 0)) != effects.SCHOLAR:
+            return 0
+        return max(0, int(self.merit_counts().get(int(merit_id), 0)))
 
     def _waltz_tp_reduction(self) -> int:
         """TP taken off a waltz by "Waltz TP Cost" gear.
@@ -11137,14 +11155,32 @@ class ZoneSession:
             self._heal_job_ability(max(1, heal))
             system_handled = True
         elif int(ability_id) == 214 and target is not None:  # Modus Veritas
+            # Retail doubles the Helix DoT and halves its remaining life.  Each Modus
+            # Veritas Duration merit takes 5% off that penalty (25% at 5/5), and the
+            # job-point row adds 3 a rank to the tick.
             bonus = job_points.category_total(20, "Modus Veritas Effect")
+            scale = 0.5 + 0.05 * self._sch_merit(merits.SCH_MODUS_VERITAS_DURATION)
             changed = False
+            too_strong = False
             for state in getattr(target, "effect_state", {}).values():
-                if int(state.get("tick") or 0) > 0:
-                    state["tick"] = int(state["tick"]) + bonus
-                    changed = True
-            self.say("Modus Veritas amplifies the target's damage over time." if changed
-                     else "The target has no damage over time to amplify.")
+                tick = int(state.get("tick") or 0)
+                interval = float(state.get("tick_interval") or 0.0)
+                if tick <= 0 or interval != effects.HELIX_TICK_SECONDS:
+                    continue
+                if tick >= 5000:
+                    too_strong = True
+                    continue
+                state["tick"] = tick * 2 + bonus
+                until = float(state.get("until") or 0.0)
+                if until > now:
+                    state["until"] = now + (until - now) * scale
+                changed = True
+            if changed:
+                self.say("Modus Veritas amplifies the target's damage over time.")
+            elif too_strong:
+                self.say("The target's damage over time is too strong to amplify.")
+            else:
+                self.say("The target has no damage over time to amplify.")
             system_handled = True
 
         # Instant weapon abilities with a direct damage component.
@@ -11345,9 +11381,10 @@ class ZoneSession:
                     4, "Enmity Douse Recast"))
             elif int(ability_id) == 41:                      # Steal
                 recast = max(0, recast - job_points.category_total(6, "Steal Recast"))
-            elif int(ability_id) in (218, 222):              # Accession/Manifestation
-                recast = max(0, recast - job_points.category_total(
-                    20, "Stratagem Effect IV"))
+            elif int(ability_id) in (211, 212):              # Light Arts / Dark Arts
+                # Grimoire Recast: 2 seconds a merit rank off the arts' 60 s recast.
+                recast = max(0, recast - 2 * self._sch_merit(
+                    merits.SCH_GRIMOIRE_RECAST))
             if dancer.is_waltz(int(ability_id)):
                 # Trance pins every waltz to 6 seconds; Fan Dance merits take 5% off
                 # the recast per rank (1 merit = 5, 5/5 = 25%).

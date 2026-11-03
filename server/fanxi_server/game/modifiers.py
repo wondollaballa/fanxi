@@ -184,6 +184,7 @@ SONG_DURATION_BONUS = 454  # song duration +x%
 SONG_SPELLCASTING_TIME = 455  # song cast time -x%
 SONG_RECAST_DELAY = 833   # song recast -N seconds
 ONE_HOUR_RECAST = 996      # one-hour ability recast -N minutes (the Master job-point gift)
+STRATAGEM_RECAST = 997     # one strategem charge recast -N seconds (SCH's 550-JP gift)
 ENSPELL_DURATION = 938     # En-spell duration +x seconds
 ENSPELL_DMG_BONUS = 432    # "Sword enhancement spell damage"+n, flat per hit
 ENSPELL_DMG_PCT = 1195     # "Sword enhancement spell damage"+x%, the weapon-only line

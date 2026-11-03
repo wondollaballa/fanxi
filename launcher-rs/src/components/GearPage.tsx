@@ -92,6 +92,59 @@ type DetailedSets = Record<string, Record<string, GearItem>>;
 
 type GearTab = "sets" | "manage";
 
+const GEAR_TAB_KEY = "fanxi.gear.tab";
+/** The last set opened in each character's job library, keyed by `<characterId>:<JOB>`. */
+const GEAR_SELECTED_KEY = "fanxi.gear.selected.v1";
+
+function readGearTab(): GearTab {
+  try {
+    return window.localStorage.getItem(GEAR_TAB_KEY) === "manage" ? "manage" : "sets";
+  } catch {
+    return "sets";
+  }
+}
+
+function saveGearTab(tab: GearTab) {
+  try {
+    window.localStorage.setItem(GEAR_TAB_KEY, tab);
+  } catch {
+    // The page still switches tabs when storage is unavailable.
+  }
+}
+
+function selectionKey(characterId: number, jobAbbr: string): string {
+  return `${characterId}:${jobAbbr.toUpperCase()}`;
+}
+
+function readSelectedSet(characterId: number, jobAbbr: string): string | null {
+  if (!characterId || !jobAbbr) return null;
+  try {
+    const raw = window.localStorage.getItem(GEAR_SELECTED_KEY);
+    if (!raw) return null;
+    const saved = JSON.parse(raw) as Record<string, unknown>;
+    const value = saved?.[selectionKey(characterId, jobAbbr)];
+    return typeof value === "string" ? value : null;
+  } catch {
+    return null;
+  }
+}
+
+function saveSelectedSet(characterId: number, jobAbbr: string, path: string) {
+  if (!characterId || !jobAbbr || !path) return;
+  try {
+    const raw = window.localStorage.getItem(GEAR_SELECTED_KEY);
+    const parsed = raw ? (JSON.parse(raw) as unknown) : null;
+    const saved =
+      parsed && typeof parsed === "object" && !Array.isArray(parsed)
+        ? (parsed as Record<string, unknown>)
+        : {};
+    saved[selectionKey(characterId, jobAbbr)] = path;
+    window.localStorage.setItem(GEAR_SELECTED_KEY, JSON.stringify(saved));
+  } catch {
+    // A full or disabled localStorage should not break browsing.
+  }
+}
+
 const WEAPON_SLOT_BITS: Record<string, number> = { main: 1, sub: 2, range: 4, ammo: 8 };
 
 /** The client's equipment-slot bits, used to filter bag copies for the picker. */
@@ -273,7 +326,7 @@ export function GearPage({
   onTogglePhase: () => void;
 }) {
   const running = instances.filter((instance) => instance.alive);
-  const [tab, setTab] = useState<GearTab>("sets");
+  const [tab, setTab] = useState<GearTab>(readGearTab);
   const pageRef = useRef<HTMLDivElement | null>(null);
 
   const [slots, setSlots] = useState<Record<string, GearSlot>>({});
@@ -844,6 +897,34 @@ export function GearPage({
   const libraryName = library?.name || library?.path.split(/[/\\]/).pop() || "";
   const librarySetCount = library ? Object.keys(library.sets).length : 0;
 
+  /** The job whose library is on screen. An account path carries it even while a job change is
+   * still loading the next library; a parsed file names it; loadedJob covers an import that has
+   * not been saved under its job yet. */
+  function currentLibraryJob(): string {
+    const pathJob = /^account:([A-Za-z]{3})$/.exec(library?.path ?? "")?.[1];
+    return (pathJob || library?.job?.abbr || loadedJob.current || job?.abbr || "").toUpperCase();
+  }
+
+  /** The set to reopen when a library loads: the last one seen for this character and job when
+   * the library still carries it, otherwise its first set. */
+  function initialSet(value: GearLibrary, jobAbbr: string): string | null {
+    const characterId = instance ? Number(instance.character.id) : 0;
+    const remembered =
+      characterId && jobAbbr ? readSelectedSet(characterId, jobAbbr) : null;
+    if (remembered && value.sets[remembered]) return remembered;
+    return Object.keys(value.sets)[0] ?? null;
+  }
+
+  /** Select a set and remember it, so leaving the page for another sidebar tab and coming back
+   * reopens this set instead of the library's first one. `jobAbbr` names a library that is
+   * about to replace the one on screen (an import or a fresh template). */
+  function selectSet(path: string | null, jobAbbr?: string) {
+    setSelected(path);
+    if (!path || !instance) return;
+    const job = (jobAbbr || currentLibraryJob()).toUpperCase();
+    if (job) saveSelectedSet(Number(instance.character.id), job, path);
+  }
+
   /** Load this tenant account's saved library for a job.  The server seeds a brand new
    * account from Onedough's template, so the first open already has sets to browse. */
   async function loadJobLibrary(jobAbbr: string) {
@@ -861,7 +942,7 @@ export function GearPage({
         try {
           const value = await backend.gearLoadDefault(instance.port, jobAbbr);
           setLibrary(value);
-          setSelected(Object.keys(value.sets)[0] ?? null);
+          selectSet(initialSet(value, jobAbbr), jobAbbr);
           loadedJob.current = jobAbbr;
           notify(`Loaded the bundled ${jobAbbr} default`, "info");
           return;
@@ -879,7 +960,7 @@ export function GearPage({
         jobAbbr,
       );
       setLibrary(value);
-      setSelected(Object.keys(value.sets)[0] ?? null);
+      selectSet(initialSet(value, jobAbbr), jobAbbr);
       loadedJob.current = jobAbbr;
       notify(
         `Loaded ${tenant?.account ? `@${tenant.account}'s ` : ""}${jobAbbr} library`,
@@ -922,7 +1003,7 @@ export function GearPage({
         name: saved.library.name,
         source: saved.library.source,
       });
-      setSelected(Object.keys(value.sets)[0] ?? null);
+      selectSet(Object.keys(value.sets)[0] ?? null, targetJob);
       loadedJob.current = targetJob;
       notify(
         `Imported ${fileName} into ${targetJob} for @${tenant?.account ?? "this account"}`,
@@ -971,7 +1052,7 @@ export function GearPage({
         targetJob,
       );
       setLibrary(value);
-      setSelected(Object.keys(value.sets)[0] ?? null);
+      selectSet(Object.keys(value.sets)[0] ?? null, targetJob);
       loadedJob.current = targetJob;
       notify(`Restored the ${targetJob} template`, "success");
     } catch (caught) {
@@ -1508,7 +1589,7 @@ export function GearPage({
         sets: result.sets,
         detailed,
       });
-      setSelected(result.path);
+      selectSet(result.path);
       if (editor.weaponOnly) {
         setConfig((current) => ({
           ...current,
@@ -1544,7 +1625,7 @@ export function GearPage({
       sets,
       detailed,
     });
-    setSelected(Object.keys(sets)[0] ?? null);
+    selectSet(Object.keys(sets)[0] ?? null);
     const name = selected.replace(/^sets\./, "");
     if (written.saved) {
       notify(`Removed ${name} from the library`, "info");
@@ -1583,6 +1664,7 @@ export function GearPage({
   function openTab(next: GearTab) {
     if (next === tab) return;
     setTab(next);
+    saveGearTab(next);
     pageRef.current?.closest(".page-scroll")?.scrollTo({ top: 0 });
   }
 
@@ -2008,7 +2090,7 @@ export function GearPage({
                       <button
                         key={path}
                         className={cn("set-row", selected === path && "active")}
-                        onClick={() => setSelected(path)}
+                        onClick={() => selectSet(path)}
                       >
                         <span>{path.replace(/^sets\./, "")}</span>
                         <span className="set-count">

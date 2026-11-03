@@ -15,7 +15,7 @@ from unittest import mock
 
 from support import make_huffman_dir, make_service
 
-from fanxi_server.game import effects, modifiers as mod, packets
+from fanxi_server.game import effects, merits, modifiers as mod, packets
 from fanxi_server.game.cipher import Huffman
 from fanxi_server.game.entities import ZoneEntity
 from fanxi_server.game.world import World
@@ -624,6 +624,31 @@ class EffectTest(unittest.TestCase):
         self.session.tick_player_effects(time.time() + 61)
         self.assertEqual(status_icon(self.session), -1)
 
+    def test_grimoire_recast_merit_shortens_light_and_dark_arts(self):
+        """5/5 Grimoire Recast takes 10 s off the arts' 60 s recast."""
+        self.session.char.update(main_job=20, main_level=99)
+        self.session._merit_counts = {merits.SCH_GRIMOIRE_RECAST: 5}
+        started = time.time()
+        self.ability(211)                                   # Light Arts, recast id 228
+        self.assertAlmostEqual(self.session.ability_recasts[228] - started, 50.0,
+                               delta=1.5)
+        self.ability(212)                                   # Dark Arts, recast id 232
+        self.assertAlmostEqual(self.session.ability_recasts[232] - started, 50.0,
+                               delta=1.5)
+
+    def test_max_sublimation_merit_raises_the_storage_cap(self):
+        """300 base + 60 from the JP row + 50 from 5/5 Max Sublimation."""
+        self.session.char.update(main_job=20, main_level=99)
+        self.session._merit_counts = {merits.SCH_MAX_SUBLIMATION: 5}
+        self.ability(233)
+        state = self.session.effect(effects.SUBLIMATION)
+        state["power"] = 409
+        state["next_tick"] = 0.0
+        self.session.char["hp"] = 2000
+        self.session.char["hp_current"] = 2000
+        self.session.tick_player_effects(time.time() + 1)
+        self.assertEqual(int(state["power"]), 410)
+
     def test_the_timer_packet_follows_the_icon_list(self):
         """0x063 type 9 is what the client counts down from; 0x037 alone leaves it blank."""
         self.ability(211)                                   # Light Arts, two hours
@@ -1079,6 +1104,60 @@ class EffectTest(unittest.TestCase):
         self.cast(int(row["id"]), mob.targid)
         state = mob.effect_state[effects.HELIX]
         self.assertAlmostEqual(float(state["until"]) - started, 70.0, delta=1.5)
+
+    def test_helix_magic_merit_raises_only_helix_damage(self):
+        """Helix Magic Acc./Atk. is +3 M.Acc and +2 MAB a rank, Helix only."""
+        self.enter(100)
+        mob = self.at_mob()
+        self.session.char.update(main_job=20, main_level=99)
+        row = dict(self.db.one("SELECT * FROM spells WHERE name = 'Noctohelix'"))
+        spec = effects.for_spell("Noctohelix")
+        base = self.session._cast_numbers(row, spec, mob, healing=False)
+        self.session._merit_counts = {merits.SCH_HELIX_MAGIC: 5}
+        boosted = self.session._cast_numbers(row, spec, mob, healing=False)
+        self.assertGreater(int(boosted["amount"]), int(base["amount"]))
+        self.assertGreaterEqual(float(boosted["resist"]), float(base["resist"]))
+        # A non-Helix spell does not inherit the row.
+        nuke = dict(self.db.one("SELECT * FROM spells WHERE name = 'Stone'"))
+        stone = effects.for_spell("Stone")
+        plain = self.session._cast_numbers(nuke, stone, mob, healing=False)
+        self.session._merit_counts = {}
+        unmerited = self.session._cast_numbers(nuke, stone, mob, healing=False)
+        self.assertEqual(int(plain["amount"]), int(unmerited["amount"]))
+
+    def test_modus_veritas_doubles_the_helix_tick_and_halves_its_life(self):
+        self.enter(100)
+        mob = self.at_mob()
+        mob.hp_max = mob.hp = 50000
+        self.session.char.update(main_job=20, main_level=99)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Noctohelix'")
+        self.cast(int(row["id"]), mob.targid)
+        state = mob.effect_state[effects.HELIX]
+        tick = int(state["tick"])
+        before = float(state["until"])
+        self.session.engaged_id = int(mob.id)
+        self.session._merit_counts = {}
+        self.ability(214)
+        self.assertEqual(int(state["tick"]), tick * 2 + 60)
+        now = time.time()
+        self.assertAlmostEqual(float(state["until"]) - now, (before - now) * 0.5,
+                               delta=1.5)
+
+    def test_modus_veritas_duration_merit_softens_the_penalty(self):
+        self.enter(100)
+        mob = self.at_mob()
+        mob.hp_max = mob.hp = 50000
+        self.session.char.update(main_job=20, main_level=99)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Noctohelix'")
+        self.cast(int(row["id"]), mob.targid)
+        state = mob.effect_state[effects.HELIX]
+        before = float(state["until"])
+        self.session.engaged_id = int(mob.id)
+        self.session._merit_counts = {merits.SCH_MODUS_VERITAS_DURATION: 5}
+        self.ability(214)
+        now = time.time()
+        self.assertAlmostEqual(float(state["until"]) - now, (before - now) * 0.75,
+                               delta=1.5)
 
     def test_a_tier_one_helix_does_not_replace_a_tier_two_helix(self):
         """Retail: Helix II overwrites any Helix, but Helix 1 only overwrites Helix 1."""

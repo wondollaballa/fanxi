@@ -166,7 +166,11 @@ control addon:
   roll rows and the **Phantom Roll** tile show the same clock; a shot uses the same cooldown
   sweep as the action tiles. `//hud roll` and `//hud quickdraw` open the same two pickers from
   chat.
-- **Spells** lists the same job pair's spell table, with trust magic removed. **Trusts** is its
+- **Spells** lists the same job pair's spell table, with trust magic removed, and splits each
+  page into titled sections rather than one alphabetical wall (see **Spell sections** below).
+  **Kaustra** is the one spell that needs a two-hour: its tile carries a **2HR** tag and stays
+  dimmed and unclickable until **Tabula Rasa** is active; a click while it is down explains the
+  requirement in chat instead of sending the spell. **Trusts** is its
   own window and groups by the trust's main job (Kupipi WHM, Trion PLD, Shantotto BLM, …). Its
   buttons use cropped portrait faces bundled from the BGWiki trust cards, with the full trust name
   and level still in the hover tooltip. A button runs `/ma "<name>" <me>`; the server calls that
@@ -221,7 +225,11 @@ aside on every other job until the player makes a choice: the Control room's **S
 `//hud sch` and the window's title-bar X store that choice in the character's HUD file. The
 header is **strategems**: one pip per charge the job has (five at 99, one more every twenty
 levels from 10), the count left, and the clock to the next charge, with the next pip filling as
-the four-minute recharge runs down. Every Immanence and Ebullience spends one; the count follows
+its interval runs down. The interval is retail's: the pool's four minutes are split across the
+level's charges (48 s a charge at 99, 60 s at 70, 80 s at 50, 120 s at 30, 240 s at 10), and the
+550-JP **Stratagem Recast Time** gift — which every Fanxi job has at its 2,100 JP — takes 15 s off
+each one, so a level-99 Scholar recharges a charge every **33 s**. The footer prints that rate
+beside the count. Every Immanence and Ebullience spends one; the count follows
 the outgoing job-ability packet, so a stratagem used from the Abilities window or a macro keystroke
 counts the same as one clicked here. The charge state is persisted with the sets, so a logout does
 not give them back. A **Dark Arts** chip warns when the active art is Light or none, because
@@ -314,6 +322,34 @@ in Other. Etudes read by the stat they raise (`STR`, `DEX`, `VIT`, ...), with a
 left off the label because the icon already carries it; a hover still shows the full name. The sections follow the type and skill pages (the
 normal Buff/Debuff tabs and the Bard Song page), including when tabs are off; element and custom
 groups keep the player's own split.
+
+**Spell sections.** Every type page is split into named sections with a coloured band, a heading
+and a short hint. The Buff tab separates **Protect & Shell**, **Regen & Refresh**, **Haste**,
+**Bars**, **Storms**, **Enspells**, **Songs**, **Ninjutsu**, **Blue Magic**, **Geomancy**,
+**Utility** and **Enhancing**; Healing separates **Cures**, **Raises** and **Status Removal**;
+Debuff separates **Sleep**, **Bind & Gravity**, **Dispel**, **Slow**, **Paralyze**, **Poison**
+(Bio and Dia join it), **Blind & Silence**, **Absorb** and **Enfeebling**; Zoning separates
+**Warp Marks**, **Warp**, **Teleport**, **Recall** and **Escape & Retrace**; Avatar separates
+**Avatars** and **Spirits**. The Nuke tab leads with a **Helix** block, then one block each for
+**Fire**, **Ice**, **Wind**, **Earth**, **Thunder**, **Water**, **Light** and **Dark**, then
+**Blue Magic** (the physical Blue spells, which carry no element) and **Non-elemental** (Meteor).
+The Nuke headings carry the skillchain each element forms under Immanence as their hint
+(Liquefaction, Induration, Detonation, Scission, Impaction, Reverberation, Transfixion,
+Compression), so the page doubles as the Scholar's chain reference.
+
+The client gives all eight helixes the same generic swirl icon, so a helix tile borrows the
+element's tier-I nuke art instead: Pyrohelix shows the Fire icon, Cryohelix Blizzard, Anemohelix
+Aero, Geohelix Stone, Ionohelix Thunder, Hydrohelix Water, Luminohelix Holy and Noctohelix Comet.
+The tile still reads `PYROH`, `CRYOH`, … and the **Helix** heading holds them together. The
+**Storms** row gets the same element treatment, because the client also gives every weather storm
+one shared icon: Firestorm shows Fire, Hailstorm Blizzard, Windstorm Aero, Sandstorm Stone,
+Thunderstorm Thunder, Rainstorm Water, Aurorastorm Holy and Voidstorm Comet, so the eight tides
+read as a colour-coded spread instead of eight copies of the same orb.
+
+**Kaustra** is a two-hour-only spell. Its tile carries a red **2HR** tag while Tabula Rasa is
+down, the icon and label are dimmed, and clicking it writes the requirement to chat instead of
+casting. Under Tabula Rasa the tag turns green and the tile casts normally. A normal spell never
+gets the tag or the gate.
 
 **Layout** opens the per-account editor. Each of the four types has its own tab and its own saved
 layout:
@@ -944,9 +980,12 @@ client's `0x01B` Encumbrance Flags word. `gear` now returns `count` and that wor
 `<data dir>/icons/` and can clear again from **Settings → Clear icon cache**. The grid polls
 `gear` (2 s on the Gear page; the existing 3 s party poll on Home and the Control room), so an
 equip is visible on the next tick rather than at the exact `0x050` packet. Set previews resolve
-their item names through `item_ids`; an unknown name renders a placeholder tile. Fanxi's server
-rejects gear the character cannot use, so it sends a zero flags word today; the overlay is wired
-and shows the X whenever the client reports a bit (another server, or future rules).
+their item names through `item_ids`; an unknown name renders a placeholder tile. The twenty
+Reforged Bonanza weapons are a special case: the server suffixes their names with `(Reforged)`,
+while the client stores both copies under one base name, so `control.lua` maps those names to the
+upgraded client ids for `item_ids`, set-wear lookup and the launcher's stat query alike. Fanxi's
+server rejects gear the character cannot use, so it sends a zero flags word today; the overlay is
+wired and shows the X whenever the client reports a bit (another server, or future rules).
 
 The rest of the original protocol (`chat_send`, `keys`, `target`, `entities`, `capture`, `lua`, …)
 still works, so `tools/xi_mcp.py` is unaffected.

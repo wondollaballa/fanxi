@@ -97,6 +97,25 @@ check('two at 30', internal.max_charges(30) == 2, internal.max_charges(30))
 check('one at 10', internal.max_charges(10) == 1, internal.max_charges(10))
 check('none below 10', internal.max_charges(9) == 0, internal.max_charges(9))
 
+-- Charge rate: the pool's four minutes split by the charge count, then the 550-JP
+-- gift's 15 seconds off each charge (33 s at 99, the retail table's number).
+check('33 s a charge at 99 with the JP gift', internal.recharge_seconds(99) == 33,
+      internal.recharge_seconds(99))
+check('48 s a charge at 99 without it', internal.recharge_seconds(99, false) == 48,
+      internal.recharge_seconds(99, false))
+check('45 s a charge at 70 with the gift', internal.recharge_seconds(70) == 45,
+      internal.recharge_seconds(70))
+check('60 s a charge at 70 without it', internal.recharge_seconds(70, false) == 60,
+      internal.recharge_seconds(70, false))
+check('65 s a charge at 50', internal.recharge_seconds(50) == 65,
+      internal.recharge_seconds(50))
+check('105 s a charge at 30', internal.recharge_seconds(30) == 105,
+      internal.recharge_seconds(30))
+check('225 s a charge at 10', internal.recharge_seconds(10) == 225,
+      internal.recharge_seconds(10))
+check('no charges below 10', internal.recharge_seconds(9) == 0,
+      internal.recharge_seconds(9))
+
 -- Saved format round trip, including the optional pieces.
 local state = internal.default_state()
 state.groups[3].macros[1].ebullience = true
@@ -123,12 +142,16 @@ internal.spend_charge(2)
 check('spending two leaves three', T.state.charges.count == 3, T.state.charges.count)
 check('spending starts the clock', T.state.charges.next_at ~= nil)
 local now = os.time()
-T.state.charges = { count = 0, max = 5, level = 99, next_at = now + 240 }
-check('two charges are eight minutes away', internal.ready_at(2) == now + 480,
+T.state.charges = { count = 0, max = 5, level = 99, next_at = now + 33 }
+check('two charges are a minute and six seconds away', internal.ready_at(2) == now + 66,
       internal.ready_at(2) - now)
-T.state.charges = { count = 1, max = 5, level = 99, next_at = now + 240 }
-check('one short waits for the next charge', internal.ready_at(2) == now + 240,
+T.state.charges = { count = 1, max = 5, level = 99, next_at = now + 33 }
+check('one short waits for the next charge', internal.ready_at(2) == now + 33,
       internal.ready_at(2) - now)
+T.state.charges = { count = 3, max = 5, level = 99, next_at = now + 240 }
+internal.refresh_charges()
+check('a clock saved under the old four-minute rate is pulled in',
+      T.state.charges.next_at <= now + 33, T.state.charges.next_at - now)
 check('a full macro is ready now', internal.ready_at(1) == 0, internal.ready_at(1))
 check('a helix cast is five seconds', internal.cast_seconds('Pyrohelix') == 5,
       internal.cast_seconds('Pyrohelix'))

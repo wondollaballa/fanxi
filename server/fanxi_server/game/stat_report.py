@@ -226,6 +226,7 @@ MOD_LABELS.update({
     mod.RATT_PERCENT: "Ranged Attack (%)",
     mod.MOVE_SPEED_BOLTERS_ROLL: "Movement speed (Bolter's Roll)",
     mod.ONE_HOUR_RECAST: "One-hour recast (minutes)",
+    mod.STRATAGEM_RECAST: "Strategem recast (seconds)",
     mod.PHANTOM_DURATION: "Phantom Roll duration",
     mod.SNAPSHOT: "Snapshot", mod.REGAIN: "Regain",
     mod.CONSERVE_MP: "Conserve MP",

@@ -29,15 +29,51 @@ class JobPointGiftTest(unittest.TestCase):
             mod.MEVA: 42,
             mod.MACC: 42,
             mod.MAGIC_BURST_BONUS_CAPPED: 13,
+            # The 550-JP "Stratagem Recast Time" gift: 15 s off every charge.
+            mod.STRATAGEM_RECAST: 15,
             # Every job's ★Master! gift cuts the one-hour recast by 15 minutes.
             mod.ONE_HOUR_RECAST: 15,
         })
+        self.assertEqual(totals["unclassified"], [])
         self.assertEqual(totals["skills"], {
             33: 36,  # Healing Magic
             34: 36,  # Enhancing Magic
             36: 36,  # Elemental Magic
             37: 36,  # Dark Magic
         })
+
+    def test_scholar_strategem_recharge(self):
+        # Retail: the pool's four minutes split across the level's charges, then the
+        # 550-JP gift takes 15 s off every charge (33 s at 99 in BG-wiki's table).
+        self.assertEqual(job_points.strategem_charges(99), 5)
+        self.assertEqual(job_points.strategem_charges(70), 4)
+        self.assertEqual(job_points.strategem_charges(50), 3)
+        self.assertEqual(job_points.strategem_charges(30), 2)
+        self.assertEqual(job_points.strategem_charges(10), 1)
+        self.assertEqual(job_points.strategem_charges(9), 0)
+        self.assertEqual(job_points.stratagem_recharge_seconds(20, 99), 33)
+        self.assertEqual(job_points.stratagem_recharge_seconds(20, 70), 45)
+        self.assertEqual(job_points.stratagem_recharge_seconds(20, 50), 65)
+        self.assertEqual(job_points.stratagem_recharge_seconds(20, 30), 105)
+        self.assertEqual(job_points.stratagem_recharge_seconds(20, 10), 225)
+        self.assertEqual(job_points.stratagem_recharge_seconds(20, 9), 0)
+        # A job without the gift keeps the base 48 s at 99.
+        self.assertEqual(job_points.stratagem_recharge_seconds(1, 99), 48)
+
+    def test_scholar_gift_spells(self):
+        """The 100-JP storm II line and the 1200-JP Helix IIs are SCH gifts."""
+        grants = job_points.spell_grants(20)
+        for name in ("Sandstorm II", "Rainstorm II", "Windstorm II", "Firestorm II",
+                     "Hailstorm II", "Thunderstorm II", "Aurorastorm II",
+                     "Voidstorm II"):
+            self.assertEqual(grants[name], 100, name)
+        for name in ("Geohelix II", "Hydrohelix II", "Anemohelix II", "Pyrohelix II",
+                     "Cryohelix II", "Ionohelix II", "Noctohelix II",
+                     "Luminohelix II"):
+            self.assertEqual(grants[name], 1200, name)
+        self.assertTrue(job_points.is_job_point_spell("Aurorastorm II"))
+        self.assertTrue(job_points.is_job_point_spell("Pyrohelix II"))
+        self.assertFalse(job_points.is_job_point_spell("Firestorm"))
 
     def test_warrior_gift_totals(self):
         totals = job_points.gift_totals(1)
@@ -144,12 +180,14 @@ class JobPointCategoryTest(unittest.TestCase):
 
     def test_conditional_categories_are_not_applied_silently(self):
         # Scholar's Light Arts is handled by the duration formula, not as a permanent
-        # stat; the audit must still list it as needing an ability hook.
+        # stat; the audit must still list it as needing an ability hook.  Stratagem
+        # Effect IV is the one row with no hook at all: it reduces spell recast, which
+        # the client owns.
         self.assertEqual(job_points.category_mods(20), {})
         names = [row["category"] for row in job_points.missing_categories(20)]
         self.assertNotIn("Light Arts Effect", names)
         self.assertNotIn("Dark Arts Effect", names)
-        self.assertNotIn("Stratagem Effect IV", names)
+        self.assertIn("Stratagem Effect IV", names)
 
 
 class JobPointDurationTest(unittest.TestCase):

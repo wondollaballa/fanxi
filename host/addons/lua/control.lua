@@ -430,6 +430,55 @@ local function item_name(id)
     return type(name) == 'string' and name or nil
 end
 
+-- BEGIN Reforged item names
+-- The client stores each Reforged Bonanza weapon under its base display name (and two of
+-- them use a different spelling entirely: Premium Hearts and Demonic Axe).  The server's
+-- item rows and the GearSwap libraries spell the upgrade "<base> (Reforged)", which the
+-- client's item_by_name cannot resolve.  Without this table a set naming a Reforged weapon
+-- renders an empty EquipViewer slot and its tooltip stats never load.
+--
+-- Keyed by the server name lowercased; the ids are migration 53's rows.  This is the one
+-- place that joins the server spelling to the client item, so item_ids, find_item and the
+-- launcher's stat query all agree on which copy is the Reforged one.
+local REFORGED_ITEM_IDS = {
+    ["ice brand (reforged)"] = 20663,
+    ["flametongue (reforged)"] = 20664,
+    ["dragon fangs (reforged)"] = 21540,
+    ["premium heart (reforged)"] = 21541,
+    ["chocobo knife (reforged)"] = 21592,
+    ["air knife (reforged)"] = 21593,
+    ["onion sword iii (reforged)"] = 21602,
+    ["save the queen iii (reforged)"] = 21603,
+    ["brave blade iii (reforged)"] = 21677,
+    ["malefic axe (reforged)"] = 21732,
+    ["drastic axe (reforged)"] = 21789,
+    ["final sickle (reforged)"] = 21842,
+    ["hebo's spear (reforged)"] = 21893,
+    ["yagyu darkblade (reforged)"] = 21936,
+    ["zanmato +2 (reforged)"] = 21952,
+    ["mutsu. yoshi. (reforged)"] = 21953,
+    ["wizard's rod (reforged)"] = 21991,
+    ["pandit's staff (reforged)"] = 22168,
+    ["artemis's bow +2 (reforged)"] = 22169,
+    ["exeter (reforged)"] = 22170,
+}
+
+local function item_id_for_name(name)
+    local wanted = tostring(name or ''):match('^%s*(.-)%s*$')
+    if wanted == '' then return 0 end
+    local reforged = REFORGED_ITEM_IDS[wanted:lower()]
+    if reforged then return reforged end
+    local ok, item = pcall(res.item_by_name, wanted)
+    if not ok or not item then return 0 end
+    return tonumber(item.id) or 0
+end
+
+-- The generic `lua` command runs in its own chunk, so the launcher's stat query asks this
+-- resolver instead of duplicating the table.  Older hosts omit the field and the query falls
+-- back to the client's own name lookup.
+xi.item_id_for_name = item_id_for_name
+-- END Reforged item names
+
 -- Windower's 0x01B "Encumbrance Flags" word, kept for the launcher's EquipViewer overlay.
 -- 0x01B is sent when the job/equipment block is rebuilt; 0 means nothing is encumbered.
 local encumbrance_flags = 0
@@ -496,9 +545,8 @@ local function find_item(by_id, name, claimed)
         end
         return nil
     end
-    local ok, by_name = pcall(res.item_by_name, wanted)
-    local wanted_id = ok and by_name and tonumber(by_name.id) or nil
-    if wanted_id and by_id[wanted_id] then
+    local wanted_id = item_id_for_name(wanted)
+    if wanted_id > 0 and by_id[wanted_id] then
         local bag, slot = take(by_id[wanted_id], wanted_id)
         if bag then return bag, slot, wanted_id, item_name(wanted_id) or wanted end
     end
@@ -2069,8 +2117,7 @@ local function item_ids(a)
         local name = tostring(raw or '')
         local id = 0
         if name ~= '' then
-            local ok, item = pcall(res.item_by_name, name)
-            if ok and item and item.id then id = item.id end
+            id = item_id_for_name(name)
         end
         out[#out + 1] = { name = name, id = id }
     end
@@ -4196,6 +4243,11 @@ hud = {
     -- rank drawn as a small badge.  The cache is by base spell name and lives for the session:
     -- the icons do not depend on the character.
     spell_base_icons = {},
+    -- Every helix and every weather storm shares one generic icon in this client's menu icons
+    -- (the helix ids 563..570 and the storm ids 555..562/648..655 all resolve to one picture),
+    -- so those tiles borrow the element's tier-I nuke art instead: Pyrohelix/Firestorm read as
+    -- Fire, Cryohelix/Hailstorm as Blizzard, and so on.
+    element_icon_names = { 'Fire', 'Blizzard', 'Aero', 'Stone', 'Thunder', 'Water', 'Holy', 'Comet' },
     by_key = {},
     cool = {},
     active_trusts = {},
@@ -4462,6 +4514,14 @@ function hud.spell_base_icon(name)
     return icon > 0 and icon or nil
 end
 
+-- Element id (0 Fire ... 7 Dark) -> the menu art that names that element.  Used by the helix
+-- and storm tiles, whose own client icons are all the same generic picture.
+function hud.element_icon(element)
+    local name = hud.element_icon_names[(tonumber(element) or 0) + 1]
+    if not name then return nil end
+    return hud.spell_base_icon(name)
+end
+
 -- A saved //warp tile uses the Warp spell's own menu icon so it reads as a travel action next to
 -- the spells. The resource table knows the id even when this job pair cannot cast Warp.  Methods
 -- on `hud` rather than new chunk-level locals: control.lua is at the Lua local limit.
@@ -4649,6 +4709,26 @@ function hud.rebuild(force)
         local duplicate = item.kind == 'spell' and seen_spell_names[item.name]
         if item.kind == 'spell' then seen_spell_names[item.name] = true end
         if not duplicate then
+            if item.kind == 'spell' then
+                -- Kaustra is a two-hour-only spell: the client shows it in the normal list,
+                -- but the server refuses it without Tabula Rasa.  Mark the tile so the grid
+                -- can dim it and stop the click before it leaves the client.
+                if item.id == 388 or item.name == 'Kaustra' then
+                    item.requires_buff = 377 -- Tabula Rasa
+                    item.requires_label = 'Tabula Rasa'
+                    item.requires_tag = '2HR'
+                end
+                local lower = tostring(item.name):lower()
+                if lower:find('helix', 1, true) then
+                    item.helix = true
+                    item.element_icon = hud.element_icon(item.element)
+                end
+                -- The weather storms are White Magic Enhancing spells; Blue Magic's
+                -- "Feather Storm" and "Silent Storm" are a different school and stay put.
+                if item.magic == 1 and item.skill_id == 34 and lower:find('storm', 1, true) then
+                    item.element_icon = hud.element_icon(item.element)
+                end
+            end
             local short, tiny, base, roman, tier = hud_spell_parts(item.name, item.kind == 'spell')
             item.short, item.tiny = short, tiny
             -- Bard songs carry their family so the tile, its label and the page headings can
@@ -4776,6 +4856,8 @@ local function hud_spell_kind(item)
         if item.skill_id == 35 then return 'Debuff' end
         if item.skill_id == 36 then return 'Nuke' end
         if item.skill_id == 37 then
+            if n:find('klimaform', 1, true) then return 'Buff' end
+            if n:match('^bio') then return 'Debuff' end
             if n:find('absorb', 1, true) or n:find('sleep', 1, true) or n:find('dispel', 1, true)
                 or n:find('break', 1, true) or n:find('stun', 1, true) then return 'Debuff' end
             return 'Nuke'
@@ -5289,25 +5371,254 @@ local function hud_draw_group_header(api, key, title, font_size)
     api.Dummy({ 0, 1 })
 end
 
--- The automatic effect sections belong to the type/skill pages.  Element and custom grouping
--- are already the user's own split; adding a second one there would hide the grouping they
--- picked, so those keep the plain grid.
-hud.song_page_sections = function(spec, group)
-    if spec.group == 'custom' or spec.group == 'element' then return nil end
-    return HUD_SHORT.song_sections(group.items)
+-- BEGIN HUD spell sections -- tests/spell_sections_test.py extracts this region and runs it.
+-- Every spell page is split into named sections.  The tab still picks the broad kind
+-- (Healing/Buff/Debuff/Nuke/Zoning); these sections give the page the smaller headings a
+-- player scans by: Cures/Raises, Protect & Shell, Bars, each nuke element, and a Helix block.
+-- The layout counts every heading before it draws the body, so no section is clipped.
+hud.spell_section_order = {
+    Nuke = { 'Helix', 'Fire', 'Ice', 'Wind', 'Earth', 'Thunder', 'Water', 'Light', 'Dark',
+        'Blue Magic', 'Non-elemental' },
+    Healing = { 'Cures', 'Raises', 'Status Removal', 'Healing' },
+    Buff = { 'Protect & Shell', 'Regen & Refresh', 'Haste', 'Bars', 'Storms', 'Enspells',
+        'Songs', 'Ninjutsu', 'Blue Magic', 'Geomancy', 'Utility', 'Enhancing' },
+    Debuff = { 'Sleep', 'Bind & Gravity', 'Dispel', 'Slow', 'Paralyze', 'Poison',
+        'Blind & Silence', 'Absorb', 'Songs', 'Ninjutsu', 'Blue Magic', 'Geomancy',
+        'Enfeebling' },
+    Zoning = { 'Warp Marks', 'Warp', 'Teleport', 'Recall', 'Escape & Retrace' },
+    Avatar = { 'Avatars', 'Spirits' },
+}
+
+-- Section colours and hints.  Nuke sections carry the skillchain the element forms under
+-- Immanence, which is the number a Scholar is actually looking for on that page.  The hint is
+-- dropped by the header if the window is too narrow, so it never pushes the heading out.
+hud.spell_section_style = {
+    Helix = { color = { 110, 230, 230 }, hint = 'Elemental DoT' },
+    Fire = { color = { 255, 112, 80 }, hint = 'Liquefaction' },
+    Ice = { color = { 120, 200, 255 }, hint = 'Induration' },
+    Wind = { color = { 120, 230, 150 }, hint = 'Detonation' },
+    Earth = { color = { 214, 178, 108 }, hint = 'Scission' },
+    Thunder = { color = { 196, 142, 255 }, hint = 'Impaction' },
+    Water = { color = { 90, 160, 255 }, hint = 'Reverberation' },
+    Light = { color = { 255, 240, 170 }, hint = 'Transfixion' },
+    Dark = { color = { 170, 120, 220 }, hint = 'Compression' },
+    ['Non-elemental'] = { color = { 190, 190, 200 }, hint = 'Meteor' },
+    Cures = { color = { 130, 240, 160 }, hint = 'HP' },
+    Raises = { color = { 255, 226, 140 }, hint = 'Revival' },
+    ['Status Removal'] = { color = { 170, 220, 255 }, hint = 'Na spells' },
+    Healing = { color = { 130, 240, 160 }, hint = '' },
+    ['Protect & Shell'] = { color = { 170, 200, 255 }, hint = 'Defense' },
+    ['Regen & Refresh'] = { color = { 140, 230, 170 }, hint = 'Over time' },
+    Haste = { color = { 255, 220, 130 }, hint = 'Attack speed' },
+    Bars = { color = { 150, 210, 255 }, hint = 'Resistance' },
+    Storms = { color = { 200, 170, 255 }, hint = 'Weather' },
+    Enspells = { color = { 255, 170, 110 }, hint = 'Added damage' },
+    Songs = { color = { 240, 190, 230 }, hint = 'Bard' },
+    Ninjutsu = { color = { 190, 210, 255 }, hint = 'Utsusemi' },
+    ['Blue Magic'] = { color = { 120, 200, 220 }, hint = 'Blue' },
+    Geomancy = { color = { 160, 220, 160 }, hint = 'Indi / Geo' },
+    Utility = { color = { 170, 200, 210 }, hint = 'Utility' },
+    Enhancing = { color = { 170, 210, 200 }, hint = '' },
+    Sleep = { color = { 170, 150, 255 }, hint = 'Sleep' },
+    ['Bind & Gravity'] = { color = { 200, 170, 140 }, hint = 'Bind / Gravity' },
+    Dispel = { color = { 220, 170, 255 }, hint = 'Dispel' },
+    Slow = { color = { 160, 200, 255 }, hint = 'Slow' },
+    Paralyze = { color = { 255, 220, 120 }, hint = 'Paralyze' },
+    Poison = { color = { 160, 220, 120 }, hint = 'Poison / Bio / Dia' },
+    ['Blind & Silence'] = { color = { 180, 180, 190 }, hint = 'Blind / Silence' },
+    Absorb = { color = { 200, 140, 160 }, hint = 'Absorb' },
+    Enfeebling = { color = { 190, 160, 230 }, hint = '' },
+    ['Warp Marks'] = { color = { 120, 220, 255 }, hint = 'Saved places' },
+    Warp = { color = { 120, 220, 255 }, hint = 'Warp' },
+    Teleport = { color = { 140, 200, 255 }, hint = 'Teleport' },
+    Recall = { color = { 150, 220, 200 }, hint = 'Recall' },
+    ['Escape & Retrace'] = { color = { 180, 180, 255 }, hint = 'Escape / Retrace' },
+    Avatars = { color = { 200, 180, 255 }, hint = 'Summons' },
+    Spirits = { color = { 160, 220, 255 }, hint = 'Elemental' },
+    Other = { color = { 160, 174, 192 }, hint = '' },
+}
+
+hud.spell_section_rank = function(kind, title)
+    local order = hud.spell_section_order[kind]
+    if order then
+        for index, name in ipairs(order) do
+            if name == title then return index end
+        end
+    end
+    return 900
 end
 
--- A Bard song section: a coloured band and heading, the effect hint, then the group's tiles.
--- The heading is the place the player looks when scanning an 80-song page, so it carries the
--- group colour in full while the tiles only tint their note and border.
-hud.song_header_height = function(spec)
+-- One spell's section.  Nukes are elemental first and helix first of all; the other pages
+-- use the effect the spell is actually cast for.  A spell with no better home falls to the
+-- page's generic bucket instead of disappearing.
+hud.spell_section = function(item, kind)
+    local n = tostring(item.name or ''):lower()
+    kind = kind or hud_spell_kind(item)
+    if kind == 'Nuke' then
+        if item.helix or n:find('helix', 1, true) then return 'Helix' end
+        local element = tonumber(item.element) or 0
+        if element >= 0 and element <= 7 then return HUD_ELEMENTS[element + 1] end
+        -- Blue Magic's physical spells carry no element; keep them in one Blue block instead
+        -- of dropping forty breath/charge attacks into Non-elemental.
+        if item.magic == 6 then return 'Blue Magic' end
+        return 'Non-elemental'
+    end
+    if kind == 'Healing' then
+        if n:match('^cure') or n:match('^cura') then return 'Cures' end
+        if n:match('^raise') or n == 'arise' or n:match('^reraise') then return 'Raises' end
+        if n == 'esuna' or n == 'erase' or n == 'sacrifice' or n:match('na$') then
+            return 'Status Removal'
+        end
+        return 'Healing'
+    end
+    if kind == 'Buff' then
+        if item.magic == 5 then return 'Songs' end
+        if item.magic == 4 then return 'Ninjutsu' end
+        if item.magic == 6 then return 'Blue Magic' end
+        if item.magic == 7 then return 'Geomancy' end
+        if n:find('protect', 1, true) or n:find('shell', 1, true) then
+            return 'Protect & Shell'
+        end
+        if n:find('regen', 1, true) or n:find('refresh', 1, true) then
+            return 'Regen & Refresh'
+        end
+        if n:find('haste', 1, true) then return 'Haste' end
+        if n:match('^bar') then return 'Bars' end
+        if n:find('storm', 1, true) then return 'Storms' end
+        if n:match('^en') and (n:find('fire', 1, true) or n:find('blizzard', 1, true)
+            or n:find('aero', 1, true) or n:find('stone', 1, true)
+            or n:find('thunder', 1, true) or n:find('water', 1, true)
+            or n == 'enlight' or n == 'endark') then
+            return 'Enspells'
+        end
+        if n:find('blink', 1, true) or n:find('sneak', 1, true)
+            or n:find('invisible', 1, true) or n:find('deodorize', 1, true)
+            or n:find('stoneskin', 1, true) or n:find('phalanx', 1, true)
+            or n:find('aquaveil', 1, true) or n:find('adloquium', 1, true)
+            or n:find('animus', 1, true) then
+            return 'Utility'
+        end
+        return 'Enhancing'
+    end
+    if kind == 'Debuff' then
+        if item.magic == 5 then return 'Songs' end
+        if item.magic == 4 then return 'Ninjutsu' end
+        if item.magic == 6 then return 'Blue Magic' end
+        if item.magic == 7 then return 'Geomancy' end
+        if n:find('sleep', 1, true) then return 'Sleep' end
+        if n:find('bind', 1, true) or n:find('gravity', 1, true) then return 'Bind & Gravity' end
+        if n:find('dispel', 1, true) then return 'Dispel' end
+        if n:find('slow', 1, true) then return 'Slow' end
+        if n:find('paralyze', 1, true) then return 'Paralyze' end
+        if n:find('poison', 1, true) or n:find('bio', 1, true) or n:find('dia', 1, true) then
+            return 'Poison'
+        end
+        if n:find('blind', 1, true) or n:find('silence', 1, true) then
+            return 'Blind & Silence'
+        end
+        if n:find('absorb', 1, true) then return 'Absorb' end
+        return 'Enfeebling'
+    end
+    if kind == 'Zoning' then
+        if item.kind == 'warp' then return 'Warp Marks' end
+        if n:find('^warp') then return 'Warp' end
+        if n:find('^teleport') then return 'Teleport' end
+        if n:find('^recall') then return 'Recall' end
+        if n == 'escape' or n:find('^retrace') then return 'Escape & Retrace' end
+        return 'Warp'
+    end
+    if kind == 'Avatar' then
+        if n:find('spirit', 1, true) then return 'Spirits' end
+        return 'Avatars'
+    end
+    return 'Other'
+end
+
+-- A spell that a buff gates (Kaustra / Tabula Rasa) returns nil while the buff is up and the
+-- reason string while it is not.  `has_buff` is passed in so the grid and the test can use the
+-- same rule with the HUD's cached reader or a stub.
+hud.spell_gate = function(item, has_buff)
+    local buff = tonumber(item and item.requires_buff)
+    if not buff or buff <= 0 then return nil end
+    if type(has_buff) == 'function' and has_buff(buff) then return nil end
+    return item.requires_label or 'a required buff'
+end
+
+-- Build the headings for one page.  A page that is mostly Bard songs keeps the older
+-- family split (Attack/Haste/...), and a mixed page still puts its non-song spells under
+-- Protect/Regen/Bars after the song blocks.  Element and custom grouping are already the
+-- user's own split, and a flat list stays flat.
+hud.spell_page_sections = function(spec, group)
+    if spec.group == 'custom' or spec.group == 'element' or spec.group == 'none' then
+        return nil
+    end
+    local songs, others = {}, {}
+    for _, item in ipairs(group.items) do
+        if item.magic == 5 then songs[#songs + 1] = item else others[#others + 1] = item end
+    end
+    local list = {}
+    local function add_generic(items, base_order)
+        local buckets = {}
+        for _, item in ipairs(items) do
+            local kind = hud_spell_kind(item)
+            local title = hud.spell_section(item, kind)
+            local bucket = buckets[title]
+            if not bucket then
+                local style = hud.spell_section_style[title] or hud.spell_section_style.Other
+                bucket = {
+                    title = title,
+                    hint = style.hint or '',
+                    color = style.color or { 160, 174, 192 },
+                    order = base_order + hud.spell_section_rank(kind, title),
+                    rank = #list + 1,
+                    items = {},
+                }
+                buckets[title] = bucket
+                list[#list + 1] = bucket
+            end
+            bucket.items[#bucket.items + 1] = item
+        end
+    end
+    if #songs > 1 then
+        local song_sections = HUD_SHORT.song_sections(songs)
+        if song_sections then
+            for _, section in ipairs(song_sections) do
+                section.rank = #list + 1
+                list[#list + 1] = section
+            end
+            -- Non-song buffs follow the song families rather than interrupting them.
+            add_generic(others, 900)
+            if #list < 2 then return nil end
+            table.sort(list, function(a, b)
+                if a.order ~= b.order then return a.order < b.order end
+                return a.rank < b.rank
+            end)
+            return list
+        end
+    end
+    add_generic(group.items, 0)
+    if #list < 2 then return nil end
+    table.sort(list, function(a, b)
+        if a.order ~= b.order then return a.order < b.order end
+        return a.rank < b.rank
+    end)
+    return list
+end
+hud.song_page_sections = hud.spell_page_sections
+-- END HUD spell sections
+
+-- A section heading: a coloured band, the title, an optional effect hint, then the group's
+-- tiles.  The heading is the place the player looks when scanning a long page, so it carries
+-- the group colour in full while the tiles only tint their border.
+hud.section_header_height = function(spec)
     local font = math.max(9, math.min(11, hud_font_size(spec)))
     return font + 6
 end
+hud.song_header_height = hud.section_header_height
 
-hud.draw_song_header = function(api, section, width, spec)
+hud.draw_section_header = function(api, section, width, spec)
     local font = math.max(9, math.min(11, hud_font_size(spec)))
-    local height = hud.song_header_height(spec)
+    local height = hud.section_header_height(spec)
     local draw = api.GetWindowDrawList()
     local x, y = api.GetCursorScreenPos()
     x, y = tonumber(x) or 0, tonumber(y) or 0
@@ -5341,6 +5652,7 @@ hud.draw_song_header = function(api, section, width, spec)
     api.PopFont()
     api.Dummy({ 0, height })
 end
+hud.draw_song_header = hud.draw_section_header
 
 local function hud_fade(color, alpha)
     local r = color % 256
@@ -5458,8 +5770,11 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
     local tp = tonumber(hud.tp) or 0
     local ability_tp, ability_reason, ability_blocked = hud.ability_tp_cost(item)
     local ability_short = ability_tp > 0 and tp < ability_tp
+    -- A buff-gated spell (Kaustra / Tabula Rasa) cannot be clicked while the buff is down.
+    local gate_reason = hud.spell_gate(item, hud.has_buff)
+    local gated = gate_reason ~= nil
     local enabled = (not is_ws or tp >= HUD_TP_COST)
-        and not ability_blocked and not ability_short
+        and not ability_blocked and not ability_short and not gated
     local draw = api.GetWindowDrawList()
     local clicked = api.InvisibleButton('hud-' .. item.key, { cell_width, cell_height })
     local x, y = api.GetItemRectMin()
@@ -5541,6 +5856,8 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
             lines[#lines + 1] = string.format('Recast %s', hud_recast_time(cooling.remaining))
         end
         hover_text = table.concat(lines, '\n')
+    elseif gated then
+        hover_text = string.format('%s  (requires %s)', item.name, gate_reason)
     elseif cooling then
         hover_text = string.format('%s  (%s)', item.name, hud_recast_time(cooling.remaining))
     elseif (item.kind == 'spell' or item.kind == 'trust') and item.level > 0 then
@@ -5558,7 +5875,7 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
         else
             edge = hud_color(255, 90, 80, 55)
         end
-    elseif ability_blocked or ability_short then
+    elseif ability_blocked or ability_short or gated then
         edge = hud_color(255, 90, 80, 55)
     elseif ability_tp > 0 then
         edge = hud_color(89, 216, 242, 70)
@@ -5566,7 +5883,7 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
     -- A song's family colour sits on its border and note, so a page of 80 songs reads as a
     -- handful of coloured bands instead of one wall of identical white notes.
     if item.song and not cooling and not is_ws and not trust_active
-        and not ability_blocked and not ability_short then
+        and not ability_blocked and not ability_short and not gated then
         local c = item.song.color
         edge = hud_color(c[1], c[2], c[3], 96)
     end
@@ -5600,6 +5917,7 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
         else texture = hud_title_texture(item.ws_skill) end
     end
     if not texture and item.kind == 'trust' then texture = hud_face_texture(item.id) end
+    if not texture and item.element_icon then texture = hud_icon_texture(item.element_icon) end
     if not texture then texture = hud_icon_texture(item.icon) end
     -- A ranked spell replaced its numeral tile with the line's art; if that art is missing from
     -- this client's DAT, the numeral tile is still better than a lettered fallback.
@@ -5608,12 +5926,12 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
     if is_ws then
         if not enabled then icon_alpha = 70
         elseif target > 0 and not match then icon_alpha = 105 end
-    elseif ability_blocked or ability_short then
+    elseif ability_blocked or ability_short or gated then
         icon_alpha = 70
     end
     if texture then
         local tint = hud_color(255, 255, 255, icon_alpha)
-        if item.song then
+        if item.song and not gated then
             local c = item.song.color
             tint = hud_color(c[1], c[2], c[3], icon_alpha)
         end
@@ -5694,12 +6012,26 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
         if is_ws then
             if not enabled then label_color = hud_fade(HUD_COLOR_TEXT, 0.45)
             elseif target > 0 and not match then label_color = hud_fade(HUD_COLOR_TEXT, 0.60) end
-        elseif ability_blocked or ability_short then
+        elseif ability_blocked or ability_short or gated then
             label_color = hud_fade(HUD_COLOR_TEXT, 0.45)
         elseif trust_active then
             label_color = HUD_COLOR_WHITE
         end
         draw:AddText({ x + (w - text_w) / 2, y + h - label_h + 1 }, label_color, text)
+        api.PopFont()
+    end
+
+    -- A buff-gated spell carries a small 2HR tag; it turns red while the gate is down and
+    -- green while the buff is up, so the tile never looks silently broken.
+    if item.requires_buff and item.requires_buff > 0 and icon_size >= 16 then
+        local tag = item.requires_tag or '2HR'
+        api.PushFont(nil, 8)
+        local tag_w, tag_h = api.CalcTextSize(tag)
+        local bx, by = icon_x + 1, icon_y + 1
+        local badge_bg = gated and hud_color(82, 24, 24, 214) or hud_color(18, 64, 54, 214)
+        local badge_fg = gated and hud_color(255, 176, 166, 255) or hud_color(150, 255, 208, 255)
+        draw:AddRectFilled({ bx - 1, by - 1 }, { bx + tag_w + 2, by + tag_h + 1 }, badge_bg, 2, 0)
+        draw:AddText({ bx, by }, badge_fg, tag)
         api.PopFont()
     end
 
@@ -5745,9 +6077,12 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
 
     -- A support Trust's menu also opens while the Trust spell itself is cooling: setting
     -- its actions is a configuration action, not a cast, and the menu disables the call.
-    if clicked and not hud.state.edit and enabled
-            and (not cooling or trust_active or hud.trust_configurable(item.id)) then
-        hud_click(hud, item)
+    if clicked and not hud.state.edit then
+        if gated then
+            xi.chat.write('HUD: ' .. tostring(item.name) .. ' requires ' .. gate_reason .. '.', 1)
+        elseif enabled and (not cooling or trust_active or hud.trust_configurable(item.id)) then
+            hud_click(hud, item)
+        end
     end
 end
 
@@ -5841,16 +6176,15 @@ local function hud_screen_size(api)
     return width, height
 end
 
-local function hud_list_width(api, groups, font_size, icon_size)
+local function hud_list_width(api, key, groups, spec, font_size, icon_size)
     local max_text = 0
     local header_font = math.max(9, math.min(11, font_size))
     api.PushFont(nil, font_size)
     for _, group in ipairs(groups) do
         if group.title then max_text = math.max(max_text, hud_text_width(api, tostring(group.title):upper())) end
-        for _, item in ipairs(group.items) do max_text = math.max(max_text, hud_text_width(api, tostring(item.name or ''))) end
-        -- A Bard list draws a section title and hint on its own row; measure them too or a
+        -- A spell list draws a section title and hint on its own row; measure them too or a
         -- narrow list clips "Magic Defense / Carol, Scherzo" even though the spell names fit.
-        local sections = HUD_SHORT.song_sections(group.items)
+        local sections = key == 'spells' and hud.spell_page_sections(spec, group) or nil
         if sections then
             api.PushFont(nil, header_font)
             for _, section in ipairs(sections) do
@@ -5859,6 +6193,15 @@ local function hud_list_width(api, groups, font_size, icon_size)
                 max_text = math.max(max_text, hud_text_width(api, text) + 8)
             end
             api.PopFont()
+            for _, section in ipairs(sections) do
+                for _, item in ipairs(section.items) do
+                    max_text = math.max(max_text, hud_text_width(api, tostring(item.name or '')))
+                end
+            end
+        else
+            for _, item in ipairs(group.items) do
+                max_text = math.max(max_text, hud_text_width(api, tostring(item.name or '')))
+            end
         end
     end
     api.PopFont()
@@ -6044,7 +6387,7 @@ local function hud_layout(api, key, spec, groups)
     if spec.layout == 'list' then
         local measure = groups
         if tabs_on then measure = { { title = nil, items = active.items } } end
-        width = math.max(150, hud_list_width(api, measure, font_size, math.min(28, spec.size)) + 8)
+        width = math.max(150, hud_list_width(api, key, measure, spec, font_size, math.min(28, spec.size)) + 8)
     elseif spec.layout == 'bar' then
         local visible = math.min(math.max(max_items, 1), visible_cap)
         width = math.max(180, visible * (spec.size + HUD_GRID_GAP) - HUD_GRID_GAP + 20)
@@ -6060,8 +6403,8 @@ local function hud_layout(api, key, spec, groups)
         -- clips the last group.
         local sections = nil
         if key == 'spells' then
-            sections = hud.song_page_sections(spec, group)
-            if sections then natural = natural + #sections * hud.song_header_height(spec) end
+            sections = hud.spell_page_sections(spec, group)
+            if sections then natural = natural + #sections * hud.section_header_height(spec) end
         end
         local count = #group.items
         if spec.layout == 'grid' then
@@ -6307,10 +6650,10 @@ local function hud_window(api, key, title, groups)
             -- On a Bard page the flat list splits into effect groups.  The headings and their
             -- colours are the index into the page; the top-level Buff/Debuff tab still owns
             -- targeting and the mode strip.
-            local sections = key == 'spells' and hud.song_page_sections(spec, group) or nil
+            local sections = key == 'spells' and hud.spell_page_sections(spec, group) or nil
             if sections then
                 for _, section in ipairs(sections) do
-                    hud.draw_song_header(api, section, body_width, spec)
+                    hud.draw_section_header(api, section, body_width, spec)
                     draw_cells(section.items)
                 end
             else

@@ -81,6 +81,17 @@ SPELL_GRANTS: dict[int, dict[str, int]] = {
     13: {  # Ninja
         "Utsusemi San": 100,
     },
+    20: {  # Scholar
+        # 100 JP: the tier-II storm line.  1200 JP: the eight Helix II spells, which
+        # also carry a level-99 row but stay here so the client menu and cast gate
+        # agree with the gift table.
+        "Sandstorm II": 100, "Rainstorm II": 100, "Windstorm II": 100,
+        "Firestorm II": 100, "Hailstorm II": 100, "Thunderstorm II": 100,
+        "Aurorastorm II": 100, "Voidstorm II": 100,
+        "Geohelix II": 1200, "Hydrohelix II": 1200, "Anemohelix II": 1200,
+        "Pyrohelix II": 1200, "Cryohelix II": 1200, "Ionohelix II": 1200,
+        "Noctohelix II": 1200, "Luminohelix II": 1200,
+    },
     21: {  # Geomancer
         "Fire V": 100, "Blizzard V": 100, "Aero V": 100,
         "Stone V": 100, "Thunder V": 100, "Water V": 100,
@@ -161,6 +172,9 @@ GIFT_RULES: dict[str, tuple[tuple[int, int], ...]] = {
     # en-spell hit already reads that modifier for both hands.
     '"en"spell damage': ((mod.ENSPELL_DMG_BONUS, 1),),
     "enspell damage": ((mod.ENSPELL_DMG_BONUS, 1),),
+    # SCH's 550-JP gift.  The HUD mirrors this rule (host/addons/lua/sch.lua); keep the
+    # 240-second pool and the 15-second-per-charge cut in sync with it.
+    "stratagem recast time": ((mod.STRATAGEM_RECAST, 1),),
 }
 
 SKILL_RULES: dict[str, int] = {
@@ -653,6 +667,33 @@ def combat_mods(job_id: int) -> dict[int, int]:
     return out
 
 
+# Retail's strategem pool: the four minutes at level 10 are split across the charges the
+# level has (48 s at 99), and the 550-JP gift takes 15 s off each charge (33 s at 99).
+# host/addons/lua/sch.lua mirrors the pool and the gift's 15 seconds for the HUD.
+STRATAGEM_CHARGE_TOTAL = 240
+
+
+def strategem_charges(level: int) -> int:
+    """Retail's charge count: one at 10, one more every twenty levels."""
+    level = int(level or 0)
+    if level < 10:
+        return 0
+    return max(1, (level + 10) // 20)
+
+
+def stratagem_recharge_seconds(job_id: int, level: int) -> int:
+    """The seconds one strategem charge takes, with the job's gift applied.
+
+    Every Fanxi job carries the 2,100 JP that unlocks the 550-JP gift, so a level-99
+    Scholar main recharges one charge every 33 seconds instead of the base 48.
+    """
+    charges = strategem_charges(level)
+    if charges <= 0:
+        return 0
+    bonus = int(gift_totals(int(job_id))["mods"].get(mod.STRATAGEM_RECAST, 0))
+    return max(1, STRATAGEM_CHARGE_TOTAL // charges - bonus)
+
+
 def skill_bonus(job_id: int) -> dict[int, int]:
     """Skill id -> gift skill bonus for the current main job."""
     return dict(gift_totals(job_id)["skills"])
@@ -714,7 +755,7 @@ HANDLED = {
          "Step Duration", "Contradance Effect", "Jig Duration", "Flourish I Effect",
          "Flourish II Effect", "Flourishes III Effect"},
     20: {"Light Arts Effect", "Dark Arts Effect", "Stratagem Effect I",
-         "Stratagem Effect II", "Stratagem Effect III", "Stratagem Effect IV",
+         "Stratagem Effect II", "Stratagem Effect III",
          "Tabula Rasa Effect", "Sublimation Effect", "Caper Emissarius Effect",
          "Modus Veritas Effect"},
     21: {"Bolster Effect", "Blaze of Glory Effect", "Concentric Pulse Effect",

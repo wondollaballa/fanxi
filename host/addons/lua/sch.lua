@@ -46,7 +46,12 @@ local W = {}      -- the windows
 -- ---------------------------------------------------------------------------------------------
 -- constants
 
-local RECHARGE_SECONDS = 240      -- one strategem back every four minutes
+-- The whole charge pool refills in four minutes at level 10, so the per-charge rate
+-- scales with the number of charges (48 s at 99, 60 s at 70, 80 s at 50, 120 s at 30).
+-- Every Fanxi job carries the 2,100 JP that unlocks the 550-JP "Stratagem Recast Time"
+-- gift; it takes 15 s off each charge, which is the 33 s the retail table shows at 99.
+local RECHARGE_TOTAL = 240
+local JP_RECHARGE_BONUS = 15
 local VERSION = 1
 local SPELL_SLOTS = 3
 local MAX_BURSTS = 6
@@ -228,6 +233,17 @@ local function max_charges(level)
     level = tonumber(level) or 0
     if level < 10 then return 0 end
     return math.max(1, math.floor((level + 10) / 20))
+end
+
+-- The seconds one charge takes at a job level.  The pool's four minutes are split
+-- across the charges the level has, and the 550-JP gift shortens every charge by 15 s.
+-- `gift` is only for the tests; a live Scholar main always has the gift.
+local function recharge_seconds(level, gift)
+    local cap = max_charges(level)
+    if cap <= 0 then return 0 end
+    local seconds = math.floor(RECHARGE_TOTAL / cap)
+    if gift ~= false then seconds = seconds - JP_RECHARGE_BONUS end
+    return math.max(1, seconds)
 end
 
 local function is_helix(name)
@@ -519,10 +535,20 @@ end
 
 -- Bring the charge count up to date: level cap, elapsed recharges, and the clock to the
 -- next one.  Called every frame the window draws and before every readiness test.
+local function charge_level(charges)
+    local level = tonumber(charges and charges.level)
+    if level and level > 0 then return level end
+    return select(2, jobs())
+end
+
 local function refresh_charges()
     local state = S.state
     if not state then return end
-    local _, level = jobs()
+    local main, level = jobs()
+    -- The HUD belongs to a Scholar main.  On another job leave the saved clock alone:
+    -- its level has a different charge count, and charging it would either drop or
+    -- invent charges for the Scholar the player comes back to.
+    if main ~= JOB_SCHOLAR then return end
     local cap = max_charges(level)
     local charges = state.charges
     charges.count = tonumber(charges.count)
@@ -540,20 +566,28 @@ local function refresh_charges()
     if charges.count > cap then charges.count = cap end
     if charges.count < 0 then charges.count = 0 end
     local now = now_epoch()
+    local recharge = recharge_seconds(level)
+    -- A save written by the old four-minute constant (or by a lower-level Scholar) can
+    -- hold a clock further out than one charge now takes.  Pull it in so the change is
+    -- visible on the next draw instead of after the stale interval runs out.
+    if charges.next_at and charges.next_at - now > recharge then
+        charges.next_at = now + recharge
+        mark_dirty()
+    end
     -- A logout can be hours long: catch every charge that completed while the client
     -- was away, not just the first one.
     local guard = 0
     while charges.count < cap and charges.next_at and now >= charges.next_at
             and guard < 200 do
         charges.count = charges.count + 1
-        charges.next_at = charges.next_at + RECHARGE_SECONDS
+        charges.next_at = charges.next_at + recharge
         guard = guard + 1
         mark_dirty()
     end
     if charges.count >= cap then
         charges.next_at = nil
     elseif not charges.next_at then
-        charges.next_at = now + RECHARGE_SECONDS
+        charges.next_at = now + recharge
         mark_dirty()
     end
 end
@@ -565,8 +599,9 @@ local function spend_charge(count)
     for _ = 1, math.max(1, tonumber(count) or 1) do
         if (charges.count or 0) > 0 then charges.count = charges.count - 1 end
     end
+    local recharge = recharge_seconds(charge_level(charges))
     if charges.count < (charges.max or 0) and not charges.next_at then
-        charges.next_at = now_epoch() + RECHARGE_SECONDS
+        charges.next_at = now_epoch() + recharge
     end
     if charges.count >= (charges.max or 0) then charges.next_at = nil end
     mark_dirty()
@@ -582,8 +617,10 @@ local function ready_at(needed)
     local count = tonumber(charges.count) or 0
     if count >= needed then return 0 end
     local missing = needed - count
-    local first = tonumber(charges.next_at) or (now_epoch() + RECHARGE_SECONDS)
-    return first + (missing - 1) * RECHARGE_SECONDS
+    local recharge = recharge_seconds(charge_level(charges))
+    if recharge <= 0 then return 0 end
+    local first = tonumber(charges.next_at) or (now_epoch() + recharge)
+    return first + (missing - 1) * recharge
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -1006,9 +1043,11 @@ local function pips(api, count, cap, next_at, max_width)
             draw:AddCircle({ cx, y + 9 }, radius - 1, u32(COLORS.dim), 16, 1.5)
         end
     end
-    -- The next charge fills a dot in the first empty pip as the four minutes run down.
+    -- The next charge fills a dot in the first empty pip as its interval runs down.
     if count < cap and next_at then
-        local fraction = 1 - math.max(0, next_at - now_epoch()) / RECHARGE_SECONDS
+        local recharge = recharge_seconds(charge_level(S.state and S.state.charges))
+        local fraction = recharge > 0
+            and (1 - math.max(0, next_at - now_epoch()) / recharge) or 0
         fraction = clamp(fraction, 0, 1, 0)
         local cx = x + radius + count * gap
         draw:AddCircleFilled({ cx, y + 9 }, math.max(0.5, (radius - 1) * fraction), u32(COLORS.gold))
@@ -1182,9 +1221,11 @@ end
 function W.footer(api)
     api.Separator()
     local charges = S.state.charges
+    local recharge = recharge_seconds(charge_level(charges))
     text(api, COLORS.faint, string.format(
-        'Charges: %d/%d  ·  %s', charges.count or 0, charges.max or 0,
-        charges.next_at and ('next ' .. clock_text(charges.next_at - now_epoch())) or 'full'))
+        'Charges: %d/%d  ·  %s  ·  1 every %s', charges.count or 0, charges.max or 0,
+        charges.next_at and ('next ' .. clock_text(charges.next_at - now_epoch())) or 'full',
+        clock_text(recharge)))
     api.SameLine(0, 12)
     text(api, COLORS.faint, '//hud sch hides  ·  //sch sets')
 end
@@ -1711,8 +1752,10 @@ function M.command(rest)
             local _, level = jobs()
             local cap = max_charges(level)
             S.state.charges.count = clamp(value, 0, cap, 0)
+            S.state.charges.level = level
+            S.state.charges.max = cap
             S.state.charges.next_at = S.state.charges.count >= cap
-                and nil or (now_epoch() + RECHARGE_SECONDS)
+                and nil or (now_epoch() + recharge_seconds(level))
             mark_dirty()
             save_state()
         end
@@ -1737,6 +1780,7 @@ end
 
 M._internal = {
     max_charges = max_charges,
+    recharge_seconds = recharge_seconds,
     preview_chain = preview_chain,
     spend_charge = spend_charge,
     refresh_charges = refresh_charges,

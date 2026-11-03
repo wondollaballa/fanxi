@@ -133,8 +133,10 @@ static MARKER_RE: LazyLock<Regex> = LazyLock::new(|| {
 });
 
 /// The `lua` code that asks the client for every item description in one game-thread call.
-/// Slots with an item id ask the resource table by id; library sets fall back to the name. Names
-/// are escaped as Lua strings; a name cannot break out of the list.
+/// Slots with an item id ask the resource table by id; library sets fall back to the name.  A
+/// library name can be the server's Reforged spelling, which the client's resources do not
+/// carry, so ask the addon's `item_id_for_name` resolver first and read the item by its id.
+/// Names are escaped as Lua strings; a name cannot break out of the list.
 pub fn item_query_code(items: &[GearStatRequest]) -> String {
     let mut code = String::from(
         "local res = xi and xi.res\n\
@@ -159,7 +161,13 @@ pub fn item_query_code(items: &[GearStatRequest]) -> String {
            if type(key) == 'number' then\n\
              ok, item = pcall(res.item, key)\n\
            else\n\
-             ok, item = pcall(res.item_by_name, key, 2)\n\
+             local id = 0\n\
+             if xi and xi.item_id_for_name then\n\
+               local ok_id, value = pcall(xi.item_id_for_name, key)\n\
+               if ok_id and tonumber(value) then id = tonumber(value) end\n\
+             end\n\
+             if id > 0 then ok, item = pcall(res.item, id) end\n\
+             if not (ok and item) then ok, item = pcall(res.item_by_name, key, 2) end\n\
            end\n\
            if ok and item then\n\
              local name = type(key) == 'string' and key or ''\n\
@@ -1378,6 +1386,11 @@ mod tests {
         assert!(code.contains("if type(key) == 'number' then"));
         assert!(code.contains("pcall(res.item, key)"));
         assert!(code.contains("pcall(res.item_by_name, key, 2)"));
+        // A library name may be the server's "(Reforged)" spelling, which item_by_name cannot
+        // resolve.  The addon's resolver turns it into the Reforged copy's id, and that by-id
+        // lookup is what loads the stronger item's tooltip.
+        assert!(code.contains("xi.item_id_for_name"));
+        assert!(code.contains("ok, item = pcall(res.item, id)"));
         // The hover card's `Lv.99 MNK` line and its race tag ride along with the tooltip.
         assert!(code.contains("jobs = tonumber(item.jobs) or 0"));
         assert!(code.contains("races = tonumber(item.races) or 0"));

@@ -84,6 +84,13 @@ MINNE_EFFECT = 0x03C4
 MINUET_EFFECT = 0x03C6
 MADRIGAL_EFFECT = 0x03C8
 
+# The Scholar group-1 rows zone applies: arts recast, Modus Veritas's duration
+# penalty, the Helix accuracy/attack pair and Sublimation's storage cap.
+SCH_GRIMOIRE_RECAST = 0x0640
+SCH_MODUS_VERITAS_DURATION = 0x0642
+SCH_HELIX_MAGIC = 0x0644
+SCH_MAX_SUBLIMATION = 0x0646
+
 MERITS = {
     0x0040: (0x0040, 'hp_mp', 15, 10),  # hp_mp / max_hp
     0x0042: (0x0040, 'hp_mp', 15, 10),  # hp_mp / max_mp

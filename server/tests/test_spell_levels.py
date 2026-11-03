@@ -103,6 +103,21 @@ class SpellLevelTest(unittest.TestCase):
             self.assertTrue(self.session.can_cast_spell(spell_id), name)
             self.assertTrue(bits[spell_id // 8] & (1 << (spell_id % 8)), name)
 
+    def test_scholar_job_point_spells_are_granted(self):
+        """The SCH storm II line and Helix IIs are gift spells, not open rows."""
+        self.session.char.update(main_job=20, main_level=99, sub_job=0, sub_level=0)
+        bits = self.session.spell_bits()
+        for name in ("Sandstorm II", "Aurorastorm II", "Geohelix II",
+                     "Pyrohelix II"):
+            spell_id = self.spell_id(name)
+            self.assertTrue(self.session.can_cast_spell(spell_id), name)
+            self.assertTrue(bits[spell_id // 8] & (1 << (spell_id % 8)), name)
+        # The storm IIs have no ordinary level row; only the Scholar gift opens them.
+        self.session.char.update(main_job=1, main_level=99)
+        storm = self.spell_id("Sandstorm II")
+        self.assertFalse(self.session.can_cast_spell(storm))
+        self.assertFalse(self.session.spell_bits()[storm // 8] & (1 << (storm % 8)))
+
     def test_a_job_point_spell_stays_closed_to_other_jobs(self):
         fire5 = self.spell_id("Fire V")
         addle2 = self.spell_id("Addle II")

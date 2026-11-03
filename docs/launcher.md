@@ -94,7 +94,7 @@ main display.
 | **Control** | The party roster with each account's job pair, Launch / Launch all, the live KPI table (including a **Job** column) and its **Party jobs** roster, Stop, the command console, and **Invite** to party the whole sub team or one running character. A client whose zone session died shows **orphaned** (the server has no session although the client still answers) or **logged out**, with **Reconcile** / **Relaunch**; **Reconcile N** restarts every stale box, and a relogged or relaunched box is pulled to the leader automatically. |
 | **Warps** | Saved `//warp` places for the selected tenant: mark the live position, rename aliases, delete rows, warp just that character or every online box in the account family, and **Warp team to me** to call the team to the live character. Works for main and sub-account characters. Even when the team is already in that zone the server hands each box a short `0x00B` re-zone: the client ignores its own position update, so this is what actually moves it to the leader. |
 | **Data** | The assignment page, split into **Overview** (merits, job points, Mastery Rank, gil, Home Points, currencies, key items and mounts), **Merits** (the six general menus and every job's Group 1/2 as editable form groups), **Progression** (mission/fame/Mog Garden ranks, jobs and Master Levels, Exemplar Points, crafts, Trusts with their max-all alter-ego upgrade, augment RP paths over Odyssey, Limbus, Temenos and Unity gear — the five Limbus suits and all sixteen Telopanos weapons included — and Oboro weapon paths), **Augments** (the Ambuscade cape augment editor, Nolan mezzotints, Oseem Arcane Glyptics, Skirmish, Sinister Reign, Moonshade, Magian trials and Shantotto's Ascension gear), **Armory** (gear search and purchase history) and **Items** (ninja tools, jug pets, consumables, ingredients and the rest of the general-item store), applied to the selected tenant. The tab you were last on is remembered. |
-| **Gear / GearSwap** | The selected tenant's live gear and GearSwap library, plus job defaults, imports and versioned set libraries. The **Live job** card shows the main and support job pair. |
+| **Gear / GearSwap** | The selected tenant's live gear and GearSwap library, plus job defaults, imports and versioned set libraries. The **Live job** card shows the main and support job pair. The tab and the last set browsed are remembered per account and job. |
 | **Battle** | The selected tenant's Battle profile: roster roles, camp/engage, formation, pull/sleep, healing, buffs, enfeebles, dispel, death/kiting/loot rules and saved profiles. Save/Apply live/Start/Stop/Show hub talk to the same in-game `battle` module as `//battle`. |
 | **News** | Posts from `news` in the database. |
 | **Settings** | Server URL, game folder, headless game folder, remote Linux host, 30 fps main cap, **game window** (display, mode, resolution, interface scale), Save, Detect game, Build game, Open data folder, live build log. |
@@ -504,10 +504,13 @@ box on another machine (see [headless-multibox.md](headless-multibox.md)): that 
 copy of the checkout's `gearswap/` folder.
 
 The window is split into two tabs. **Sets** holds the live gear, the live job and the state groups.
-**Manage** holds the GearSwap library browser, the set editor and the saved versions. Its **Job
-libraries** dropdown loads the account's saved library for any of the 22 jobs, **Import .lua**
-reads a GearSwap file with the same sandbox as before and saves it to the account for the current
-job, and **Restore template** replaces that job's copy with a fresh one from the template account.
+**Manage** holds the GearSwap library browser, the set editor and the saved versions. The tab last
+used is remembered, and the set last opened in an account's job library reopens when you come back
+from another page; if an import or **Restore template** replaces that library the page falls back
+to its first set. Its **Job libraries** dropdown loads the account's saved library for any of the
+22 jobs, **Import .lua** reads a GearSwap file with the same sandbox as before and saves it to the
+account for the current job, and **Restore template** replaces that job's copy with a fresh one
+from the template account.
 The strip at the top names the loaded library and its set count, marks **Sets** while auto-swap is
 on, and jumps to **Manage** after an import.
 
@@ -543,10 +546,13 @@ totals** adds every numeric stat from both sources, keeping flat values and perc
 changing a cape, ring or earring and reading the same column is a quick best-in-slot check. The
 descriptions are read from the running client's item resources
 through the control port's `lua` command; an item the client cannot resolve still shows its
-augment lines and their totals. Conditional `Set:` and `Unity Ranking:` blocks and the
-pet/avatar/automaton lines are left out of the totals because they do not describe the player's
-own piece — the hover card still prints them, the way the game's tooltip does. `Aftermath:`,
-`Latent effect:` and `Additional effect:` lines stay on the card but are not added to the totals.
+augment lines and their totals. A name the server has renamed — the Reforged Bonanza weapons'
+`(Reforged)` suffix — is resolved through `control.lua`'s name table first, so its icon and the
+stronger copy's tooltip load instead of disappearing. Conditional `Set:` and `Unity Ranking:`
+blocks and the pet/avatar/automaton lines are left out of the totals because they do not describe
+the player's own piece — the hover card still prints them, the way the game's tooltip does.
+`Aftermath:`, `Latent effect:` and `Additional effect:` lines stay on the card but are not added
+to the totals.
 
 The **Sets** tab shows the server's own sheet for the gear the client is actually wearing. **Live
 set stats** under the EquipViewer is deliberately compact: one **Stat** and its **Total**, using the

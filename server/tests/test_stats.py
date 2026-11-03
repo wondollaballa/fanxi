@@ -76,6 +76,49 @@ class ReforgedItemDataTest(unittest.TestCase):
         self.assertIsNotNone(row)
         self.assertEqual(int(row["amount"]), 269)
 
+    def test_every_bonanza_weapon_carries_its_client_tooltip(self):
+        """Migration 185 fills the nineteen reforged weapons that had no item_mods."""
+        for item_id in (
+            20663, 20664, 21540, 21541, 21592, 21593, 21602, 21603, 21677, 21732,
+            21789, 21842, 21893, 21936, 21952, 21953, 21991, 22168, 22169, 22170,
+        ):
+            self.assertTrue(self.mods(item_id), item_id)
+
+        wizard = self.mods(21991)  # Wizard's Rod (Reforged)
+        self.assertEqual(wizard[mod.INT], 40)
+        self.assertEqual(wizard[mod.MACC], 50)
+        self.assertEqual(wizard[mod.MATT], 45)
+        self.assertEqual(wizard[mod.MAGIC_DAMAGE], 272)
+        club = self.db.one(
+            "SELECT amount FROM item_skill_bonus WHERE item_id = ? AND skill_id = ?",
+            (21991, 11))  # Club
+        self.assertIsNotNone(club)
+        self.assertEqual(int(club["amount"]), 269)
+
+        # Artemis's Bow prints a conditional Unarmed: Ranged Accuracy+100 block after
+        # its real Ranged Accuracy+50; only the base line belongs in the totals.
+        bow = self.mods(22169)  # Artemis's Bow +2 (Reforged)
+        self.assertEqual(bow[mod.AGI], 40)
+        self.assertEqual(bow[mod.RACC], 50)
+        self.assertEqual(bow[mod.RATT], 50)
+        self.assertEqual(bow[mod.STORETP], 20)
+
+        # The staff's Cure potency, Refresh, Fast Cast and Enmity- lines are real stats.
+        staff = self.mods(22168)  # Pandit's Staff (Reforged)
+        self.assertEqual(staff[mod.CURE_POTENCY], 50)
+        self.assertEqual(staff[mod.REFRESH], 2)
+        self.assertEqual(staff[mod.FASTCAST], 20)
+        self.assertEqual(staff[mod.ENMITY], -20)
+
+        # The H2H upgrades use the client's "Guardian skill" spelling for Guard.
+        fangs = self.mods(21540)  # Dragon Fangs (Reforged)
+        self.assertEqual(fangs[mod.DEX], 40)
+        guard = self.db.one(
+            "SELECT amount FROM item_skill_bonus WHERE item_id = ? AND skill_id = ?",
+            (21540, 28))  # Guard
+        self.assertIsNotNone(guard)
+        self.assertEqual(int(guard["amount"]), 269)
+
     def test_foenaria_carries_its_skill_stats_and_triple_attack(self):
         """Migration 161: without these, Origin runs at 424 scythe skill and low WSC."""
         weapon = self.db.one(
