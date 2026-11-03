@@ -1,11 +1,43 @@
 # Changelog
 
+## Unreleased — Scholar strategem charges recharge independently
+
+- **Each spent charge now keeps its own return time.** The HUD used one serialized clock, so
+  spending two charges made the second wait a whole interval after the first: Accession then
+  Perpetuance looked 66 s away instead of both returning after 33 s about a second apart. Each
+  spend stores `spent_at + 33 s` now; the next-charge pip and clock use the earliest timer, and
+  a macro's readiness uses the timer of the charge it is waiting for.
+- **A retransmitted ability packet no longer spends a second charge.** The client resends
+  `0x01A` until the server acks it; the same strategem on the same packet sequence inside the
+  phase engine's three-second window is ignored.
+- **The `.sch` file stores the timer list** as a sixth `charges` field (format version 2). A
+  version-1 save only has the first timer; its missing charges are treated as back-to-back with
+  it, which is the case the old serialized clock got wrong. `//sch charges <n>` gives the
+  missing charges timers one interval apart.
+- Tests: `sch_hud_test.sh` covers back-to-back spends, staggered `ready_at`, the version-1
+  migration, the charge-timer round trip and the `//sch charges` command.
+
+## Unreleased — Scholar skillchains wait on the real bars
+
+- **A Scholar macro no longer drops its opener when Immanence is rejected.** Ebullience and
+  Immanence share recast id 231, so one second after Ebullience the server still answered
+  "Immanence is not ready yet."; the first spell then cast without Immanence and opened no
+  chain. The runner now finds the shared recast slot in the client's recast table and waits
+  for it before and after every `/ja`, so the spell goes out with Immanence actually up.
+- **The next step waits for the cast bar, not a fixed four or five seconds.** A long opener
+  (or a slower cast set) used to run past that gap; the next Immanence interrupted it and the
+  skillchain was lost. Each spell and burst now waits for `castbar.Count` to start and clear,
+  then a short aftercast beat. If an ability still fails to go off, the run stops and says so
+  instead of sending spells that cannot chain.
+- The same wait order covers the burst list: Thunder V and similar long casts no longer get
+  cut off by the next burst.
+
 ## Unreleased — a Magic Burst set for Elemental Magic
 
 - **The Nuking card on the Gear page has a third, automatic row: Magic Burst.** A set picked
   there is worn for Elemental Magic instead of the armed **Magic Attack** / **Magic damage**
   mode while a Magic Burst window is open on the player's target, and the armed mode is the
-  fallback. The row is marked `auto`, is not in the Mode dropdown and is not armed by `//modes`;
+  fallback. The `Magic Burst` row is marked `auto`, is not in the Mode dropdown and is not armed by `//modes`;
   a per-spell card still wins over it and the precast set is unchanged. Libraries with
   `sets.midcast.Elemental Magic MB` pre-fill the row (`nuke_mb`).
 - **The window is read from the action the client can see, not from a buff.** The client's status
@@ -144,8 +176,8 @@
   two or three spells, an optional **Use Ebullience** (the title then reads `(Ebullience)` and it
   costs one more charge) and an optional magic burst list.  The editor is a modal with a
   searchable spell picker, a live preview of the chain the spells form, and delete confirmations.
-  A macro runs the old library's tested timing -- Immanence, 1 s, spell, then 5 s before the next
-  Immanence for a Helix closer and 4 s otherwise -- then the burst list.  When the spells cost
+  A macro runs Immanence, the spell, then the next Immanence, then the burst list, waiting on the
+  client's own stratagem recast and cast bar between steps.  When the spells cost
   more charges than are left the card is dim and shows the clock to the next time the chain is
   payable (`next 7:59` for two spells with none left) and clicking it repeats that in chat.
   Sets and the charge clock persist per character in `<data>/sch/<name>-<id>.sch`; `//sch` handles

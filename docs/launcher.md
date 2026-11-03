@@ -639,7 +639,7 @@ On the Sets tab, the phase engine is split into the groups the player thinks in:
   macc or duration (Enfeebling Magic), buff potency or duration (Enhancing Magic), enspell damage
   (Enfire/Enblizzard/Enaero/Enstone/Enthunder/Enwater and their IIs), curing potency or cast,
   nuking magic attack or magic damage and helix magic — and a per-spell card still wins over its
-  category. The Nuking card's third, automatic **MB** row is worn for Elemental Magic while a
+  category. The Nuking card's third, automatic **Magic Burst** row is worn for Elemental Magic while a
   Magic Burst window is open on the target and falls back to the armed mode otherwise; the row
   lights an `open` badge while the client reports the window, and the same flag is
   `phase_status().burst`.

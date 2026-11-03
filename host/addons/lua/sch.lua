@@ -8,7 +8,8 @@ Aero (Wind/Detonation) then Noctohelix (Dark/Compression) forms Gravitation.  Th
 module draws that kit as one window:
 
 * the strategem charges behind Immanence (and Ebullience), with the count left, the
-  recharge progress and the clock to the next charge;
+  recharge progress and the clock to the next charge -- each spent charge has its own
+  return time, so stratagems used back to back come back back to back;
 * one tab per skillchain family (Liquefaction, Induration, ...), each holding the
   player's own named macros (up to three spells, an optional Ebullience, and an
   optional magic-burst list that fires after the chain closes);
@@ -19,9 +20,12 @@ module draws that kit as one window:
 
 The keyboard flow is the game's own: an action is an ordinary ``/ja`` or ``/ma`` line,
 so the client still owns range, the cast bar, recast checks and the packets it sends.
-The waits are the ones from the original SCH GearSwap library, tested in game:
-Immanence, 1 s, spell, then 5 s before the next Immanence when that next spell is a
-Helix and 4 s otherwise.  A macro with three spells repeats the pattern.
+The runner follows those two bars instead of fixed sleeps: it waits for the shared
+stratagem recast (Immanence and Ebullience share recast id 231) before the next
+``/ja``, and for the cast bar to clear before the next step.  A one-second gap after
+Ebullience was short enough for the server to answer "Immanence is not ready yet.",
+and the spell after it opened no chain; the 4/5 s gaps after a spell could also run
+out before a long cast finished.
 
 Installed by ``control.lua`` (``hud.sch``), or standalone with ``install{standalone =
 true}``, which is how the module is tried in a live client while it is still being
@@ -34,7 +38,7 @@ written.
 --   version <n>
 --   window <x> <y> <w> <h>
 --   selected <tab id>
---   charges <count> <next charge epoch or 0> <level> <max>
+--   charges <count> <next charge epoch or 0> <level> <max> <return times, comma separated>
 --   group <tab id> <title>
 --   macro <tab id> <macro id> <title> <ebullience 0|1> <spell1> <spell2> <spell3> <comma-separated bursts>
 --]==]
@@ -52,7 +56,7 @@ local W = {}      -- the windows
 -- gift; it takes 15 s off each charge, which is the 33 s the retail table shows at 99.
 local RECHARGE_TOTAL = 240
 local JP_RECHARGE_BONUS = 15
-local VERSION = 1
+local VERSION = 2
 local SPELL_SLOTS = 3
 local MAX_BURSTS = 6
 local SAVE_EVERY = 0.75
@@ -311,7 +315,7 @@ local function default_state()
         version = VERSION,
         selected = 'liquefaction',
         groups = groups,
-        charges = { count = nil, next_at = nil, level = nil, max = nil },
+        charges = { count = nil, next_at = nil, level = nil, max = nil, timers = nil },
         window = { x = 560, y = 40, w = 720, h = 486 },
     }
 end
@@ -380,6 +384,15 @@ local function sanitize_state(raw)
         state.charges.next_at = tonumber(raw.charges.next_at)
         state.charges.level = tonumber(raw.charges.level)
         state.charges.max = tonumber(raw.charges.max)
+        if type(raw.charges.timers) == 'table' then
+            local timers = {}
+            for _, value in ipairs(raw.charges.timers) do
+                local at = tonumber(value)
+                if at and at > 0 then timers[#timers + 1] = at end
+            end
+            table.sort(timers)
+            state.charges.timers = timers
+        end
     end
     return state
 end
@@ -410,6 +423,17 @@ local function parse_state(source)
                 raw.charges.next_at = tonumber(fields[3])
                 raw.charges.level = tonumber(fields[4])
                 raw.charges.max = tonumber(fields[5])
+                -- Version 2: one return time per missing charge, comma separated.  A
+                -- version-1 line stops after `max`; the caller migrates from next_at.
+                if fields[6] and fields[6] ~= '' then
+                    local timers = {}
+                    for value in fields[6]:gmatch('[^,]+') do
+                        local at = tonumber(trim(value))
+                        if at and at > 0 then timers[#timers + 1] = at end
+                    end
+                    table.sort(timers)
+                    raw.charges.timers = timers
+                end
             elseif kind == 'group' then
                 local group = { id = fields[2] or '', title = fields[3] or '', macros = {} }
                 raw.groups[#raw.groups + 1] = group
@@ -444,6 +468,17 @@ local function parse_state(source)
     return sanitize_state(raw)
 end
 
+-- The charge timers are written as epochs in a sixth field.  `next_at` stays as the
+-- earliest one so a version-1 reader still shows the next charge.
+local function serialized_charge_timers(charges)
+    local out = {}
+    for _, at in ipairs(charges.timers or {}) do
+        local value = math.floor(tonumber(at) or 0)
+        if value > 0 then out[#out + 1] = tostring(value) end
+    end
+    return table.concat(out, ',')
+end
+
 local function serialize_state(state)
     local lines = {
         '# Fanxi Scholar skillchain sets. TAB separated; see host/addons/lua/sch.lua.',
@@ -451,11 +486,12 @@ local function serialize_state(state)
         string.format('window\t%d\t%d\t%d\t%d', state.window.x, state.window.y,
                       state.window.w, state.window.h),
         'selected\t' .. tostring(state.selected or ''),
-        string.format('charges\t%d\t%d\t%d\t%d',
+        string.format('charges\t%d\t%d\t%d\t%d\t%s',
                       math.floor(tonumber(state.charges.count) or 0),
                       math.floor(tonumber(state.charges.next_at) or 0),
                       math.floor(tonumber(state.charges.level) or 0),
-                      math.floor(tonumber(state.charges.max) or 0)),
+                      math.floor(tonumber(state.charges.max) or 0),
+                      serialized_charge_timers(state.charges)),
     }
     for _, group in ipairs(state.groups) do
         lines[#lines + 1] = string.format('group\t%s\t%s', group.id, group.title)
@@ -533,8 +569,51 @@ local function find_macro(group, id)
     return nil
 end
 
--- Bring the charge count up to date: level cap, elapsed recharges, and the clock to the
--- next one.  Called every frame the window draws and before every readiness test.
+-- Bring the charge count up to date from one return time per missing charge.  The
+-- invariant is `count + #timers == max`; the timers are sorted, earliest first.
+--
+-- A version-1 save stored only `next_at`, the first of what the old model assumed was
+-- a serial queue.  The other spends are not in the file, so treat them as back-to-back
+-- with it: those charges all return at `next_at`, which is what a player who spent them
+-- together sees.  The old serialized clock made every later charge wait another full
+-- interval (two back-to-back stratagems looked 66 s away instead of ~33 s).
+local function normalize_charge_timers(charges, cap, now, recharge)
+    local migrated = type(charges.timers) ~= 'table'
+    local timers = {}
+    if not migrated then
+        for _, value in ipairs(charges.timers) do
+            local at = tonumber(value)
+            if at and at > 0 then timers[#timers + 1] = at end
+        end
+    end
+    table.sort(timers)
+    charges.count = tonumber(charges.count) or cap
+    charges.count = math.max(0, math.min(cap, charges.count))
+    local missing = cap - charges.count
+    if #timers > missing then
+        for index = #timers, missing + 1, -1 do timers[index] = nil end
+    end
+    if migrated then
+        local at = tonumber(charges.next_at)
+        if not at or at <= 0 then at = now + recharge end
+        while #timers < missing do timers[#timers + 1] = at end
+    else
+        while #timers < missing do
+            local at = (#timers > 0 and timers[#timers] or now) + recharge
+            timers[#timers + 1] = at
+        end
+    end
+    -- A rate change (or the old 240 s constant) can leave a timer further out than one
+    -- charge now takes; pull it in so the gauge cannot stick for minutes.
+    local limit = now + recharge
+    for index = 1, #timers do
+        if timers[index] > limit then timers[index] = limit end
+    end
+    table.sort(timers)
+    charges.timers = timers
+    charges.next_at = timers[1]
+end
+
 local function charge_level(charges)
     local level = tonumber(charges and charges.level)
     if level and level > 0 then return level end
@@ -551,43 +630,40 @@ local function refresh_charges()
     if main ~= JOB_SCHOLAR then return end
     local cap = max_charges(level)
     local charges = state.charges
-    charges.count = tonumber(charges.count)
-    charges.next_at = tonumber(charges.next_at)
     if charges.level ~= level or charges.max ~= cap then
         charges.level, charges.max = level, cap
         if charges.count == nil then charges.count = cap end
-        mark_dirty()
     end
     if cap <= 0 then
-        charges.count, charges.next_at = 0, nil
+        charges.count, charges.timers, charges.next_at = 0, {}, nil
         return
     end
-    if charges.count == nil then charges.count = cap end
-    if charges.count > cap then charges.count = cap end
-    if charges.count < 0 then charges.count = 0 end
     local now = now_epoch()
     local recharge = recharge_seconds(level)
-    -- A save written by the old four-minute constant (or by a lower-level Scholar) can
-    -- hold a clock further out than one charge now takes.  Pull it in so the change is
-    -- visible on the next draw instead of after the stale interval runs out.
-    if charges.next_at and charges.next_at - now > recharge then
-        charges.next_at = now + recharge
-        mark_dirty()
+    local before_count = charges.count
+    local before_next = charges.next_at
+    local before_n = type(charges.timers) == 'table' and #charges.timers or -1
+    normalize_charge_timers(charges, cap, now, recharge)
+    local count = charges.count
+    local timers = charges.timers
+    local index = 1
+    while index <= #timers and count < cap do
+        -- A logout can be hours long: every timer in the past completes, not just the
+        -- first, and each one adds a charge.
+        if timers[index] <= now then
+            count = count + 1
+            table.remove(timers, index)
+        else
+            index = index + 1
+        end
     end
-    -- A logout can be hours long: catch every charge that completed while the client
-    -- was away, not just the first one.
-    local guard = 0
-    while charges.count < cap and charges.next_at and now >= charges.next_at
-            and guard < 200 do
-        charges.count = charges.count + 1
-        charges.next_at = charges.next_at + recharge
-        guard = guard + 1
-        mark_dirty()
+    if count >= cap then
+        charges.count, charges.timers, charges.next_at = cap, {}, nil
+    else
+        charges.count, charges.next_at = count, timers[1]
     end
-    if charges.count >= cap then
-        charges.next_at = nil
-    elseif not charges.next_at then
-        charges.next_at = now + recharge
+    if charges.count ~= before_count or charges.next_at ~= before_next
+            or (type(charges.timers) == 'table' and #charges.timers or -1) ~= before_n then
         mark_dirty()
     end
 end
@@ -596,31 +672,47 @@ local function spend_charge(count)
     local state = S.state
     if not state then return end
     local charges = state.charges
+    local level = charge_level(charges)
+    local recharge = recharge_seconds(level)
+    if recharge <= 0 then return end
+    local cap = tonumber(charges.max) or max_charges(level)
+    local now = now_epoch()
+    normalize_charge_timers(charges, cap, now, recharge)
+    local spent = 0
     for _ = 1, math.max(1, tonumber(count) or 1) do
-        if (charges.count or 0) > 0 then charges.count = charges.count - 1 end
+        if (charges.count or 0) > 0 then
+            charges.count = charges.count - 1
+            -- Each spend starts its own recharge, so back-to-back abilities return
+            -- back-to-back one interval later, not one interval per charge apart.
+            charges.timers[#charges.timers + 1] = now + recharge
+            spent = spent + 1
+        end
     end
-    local recharge = recharge_seconds(charge_level(charges))
-    if charges.count < (charges.max or 0) and not charges.next_at then
-        charges.next_at = now_epoch() + recharge
+    table.sort(charges.timers)
+    charges.next_at = charges.timers[1]
+    if (charges.count or 0) >= cap then
+        charges.timers, charges.next_at = {}, nil
     end
-    if charges.count >= (charges.max or 0) then charges.next_at = nil end
-    mark_dirty()
+    if spent > 0 then mark_dirty() end
 end
 
 local function charges_needed(macro)
     return #(macro.spells or {}) + (macro.ebullience and 1 or 0)
 end
 
--- The wall-clock second at which `needed` charges are in hand.  Zero means now.
+-- The wall-clock second at which `needed` charges are in hand.  Zero means now.  The
+-- needed-th missing charge is its own timer, so two charges spent a second apart are
+-- one second apart, not a full recharge interval.
 local function ready_at(needed)
     local charges = S.state and S.state.charges or {}
     local count = tonumber(charges.count) or 0
     if count >= needed then return 0 end
-    local missing = needed - count
+    local index = needed - count
+    local timer = type(charges.timers) == 'table' and tonumber(charges.timers[index]) or nil
+    if timer then return timer end
     local recharge = recharge_seconds(charge_level(charges))
     if recharge <= 0 then return 0 end
-    local first = tonumber(charges.next_at) or (now_epoch() + recharge)
-    return first + (missing - 1) * recharge
+    return now_epoch() + recharge + (index - 1) * recharge
 end
 
 -- ---------------------------------------------------------------------------------------------
@@ -806,33 +898,129 @@ local function run_macro(group, macro)
             if run.cancelled then return end
             coroutine.sleep(seconds)
         end
-        if run.cancelled then return end
-        if run.ebullience then
-            step('/ja "Ebullience" <me>', 'Ebullience')
-            wait(1.0)
-        end
-        for index, name in ipairs(run.spells) do
-            if run.cancelled then break end
-            step('/ja "Immanence" <me>', 'Immanence')
-            wait(1.0)
-            if run.cancelled then break end
-            step(string.format('/ma "%s" <t>', name), name)
-            local next_name = run.spells[index + 1]
-            if next_name then
-                -- The library's tested gap: the closer's Immanence waits 5 s when the
-                -- closer is a Helix and 4 s otherwise.
-                wait(is_helix(next_name) and 5 or 4)
-            else
-                -- Let the closing cast finish (and the chain form) before bursting.
-                wait(cast_seconds(name) + 0.6)
+
+        -- Immanence and Ebullience share recast id 231.  A one-second wait after
+        -- Ebullience was not enough: the client's recast/animation still had the shared
+        -- slot busy, the server answered "Immanence is not ready yet.", and the spell
+        -- that followed went out without Immanence, so the chain never opened.  The
+        -- client's recast table is indexed by recast-id slot, not ability id; find the
+        -- slot once and wait on its timer instead of guessing at sleeps.
+        local stratagem_slot
+        for slot = 0, 255 do
+            local ok, _, rid = pcall(xi.game.ability_recast, slot)
+            if ok and tonumber(rid) == 231 then
+                stratagem_slot = slot
+                break
             end
         end
-        for index, name in ipairs(run.bursts) do
-            if run.cancelled then break end
-            step(string.format('/ma "%s" <t>', name),
-                 string.format('Magic Burst %d/%d: %s', index, #run.bursts, name))
-            wait(cast_seconds(name) + 0.5)
+        local function stratagem_timer()
+            if not stratagem_slot then return nil end
+            local ok, timer = pcall(xi.game.ability_recast, stratagem_slot)
+            if not ok then return nil end
+            return tonumber(timer) or 0
         end
+        local function wait_stratagem_ready(timeout)
+            local timer = stratagem_timer()
+            if timer == nil then return true end
+            local deadline = clock() + timeout
+            while clock() < deadline do
+                if timer <= 0 then return true end
+                if run.cancelled then return false end
+                coroutine.sleep(0.05)
+                timer = stratagem_timer()
+            end
+            return timer ~= nil and timer <= 0
+        end
+        local function wait_stratagem_finished(timeout)
+            -- Wait for the use to appear on the shared recast and then clear it, so the
+            -- spell is sent after the ability has really executed.  `seen` separates a
+            -- rejected /ja (no recast ever starts) from a use still cooling.
+            local timer = stratagem_timer()
+            if timer == nil then return true end
+            local seen = timer > 0
+            local deadline = clock() + timeout
+            while clock() < deadline do
+                if timer > 0 then seen = true end
+                if seen and timer <= 0 then return true end
+                if run.cancelled then return false end
+                coroutine.sleep(0.05)
+                timer = stratagem_timer()
+            end
+            return seen and timer ~= nil and timer <= 0
+        end
+        local function use_stratagem(line, phase)
+            if not wait_stratagem_ready(3.0) then
+                notify('Scholar: ' .. phase .. ' is still on recast; sequence stopped.')
+                run.cancelled = true
+                return false
+            end
+            if not step(line, phase) then return false end
+            if stratagem_timer() == nil then
+                -- No recast table on this host: keep the old fixed one-second beat.
+                wait(1.0)
+                return true
+            end
+            if not wait_stratagem_finished(3.0) then
+                notify('Scholar: ' .. phase .. ' did not go off; sequence stopped.')
+                run.cancelled = true
+                return false
+            end
+            wait(0.15)
+            return true
+        end
+
+        -- The cast bar is the real end of a spell.  The old fixed 4/5 s gap after the
+        -- first spell assumed its cast had finished; a long cast (or a slower cast set)
+        -- ran past the next Immanence, which interrupted the opener and dropped the
+        -- chain.  Wait for the bar: start, then clear, then a short aftercast beat.
+        local function cast_count()
+            local ok, count = pcall(function() return xi.game.castbar('Count') end)
+            if not ok then return nil end
+            return tonumber(count) or 0
+        end
+        local function wait_cast(name)
+            local count = cast_count()
+            if count == nil then
+                wait(cast_seconds(name) + 0.8)
+                return
+            end
+            local start = clock() + 1.5
+            while clock() < start and (count or 0) <= 0.001 do
+                if run.cancelled then return end
+                coroutine.sleep(0.05)
+                count = cast_count()
+            end
+            local deadline = clock() + math.max(3.0, cast_seconds(name) + 1.5)
+            while clock() < deadline and (count or 0) > 0.001 do
+                if run.cancelled then return end
+                coroutine.sleep(0.05)
+                count = cast_count()
+            end
+            wait(0.25)
+        end
+
+        local ok, err = pcall(function()
+            if run.cancelled then return end
+            if run.ebullience then
+                if not use_stratagem('/ja "Ebullience" <me>', 'Ebullience') then return end
+            end
+            for index, name in ipairs(run.spells) do
+                if run.cancelled then break end
+                if not use_stratagem('/ja "Immanence" <me>', 'Immanence') then break end
+                if run.cancelled then break end
+                step(string.format('/ma "%s" <t>', name), name)
+                wait_cast(name)
+                -- Let the action's own aftercast clear before the next Immanence.
+                wait(0.35)
+            end
+            for index, name in ipairs(run.bursts) do
+                if run.cancelled then break end
+                step(string.format('/ma "%s" <t>', name),
+                     string.format('Magic Burst %d/%d: %s', index, #run.bursts, name))
+                wait_cast(name)
+            end
+        end)
+        if not ok then notify('Scholar: sequence error: ' .. tostring(err)) end
         if S.run == run then S.run = nil end
     end)
 end
@@ -1565,6 +1753,25 @@ end
 -- ---------------------------------------------------------------------------------------------
 -- install, draw and commands
 
+-- The client resends 0x01A until the server acks it; the same action on the same
+-- packet sequence inside three seconds is a copy, not another charge.  This mirrors the
+-- phase engine's retransmit window and keeps a short ring of them because a retransmit
+-- can arrive after the next ability's packet.
+local recent_stratagems = {}
+
+local function seen_stratagem(id, seq, at)
+    for index = #recent_stratagems, 1, -1 do
+        local entry = recent_stratagems[index]
+        if at - entry.at > 3.0 then
+            table.remove(recent_stratagems, index)
+        elseif entry.id == id and entry.seq == seq then
+            return true
+        end
+    end
+    recent_stratagems[#recent_stratagems + 1] = { id = id, seq = seq, at = at }
+    return false
+end
+
 local function on_packet(e)
     if not S.installed then return end
     -- Not ``e.injected``: an action the HUD's own macro sends is injected by the host's
@@ -1577,6 +1784,8 @@ local function on_packet(e)
     local id = data:byte(13) + data:byte(14) * 256 + data:byte(15) * 65536
         + data:byte(16) * 16777216
     if not STRATAGEM[id] then return end
+    local seq = tonumber(e.sequence) or 0
+    if seen_stratagem(id, seq, clock()) then return end
     M.ensure()
     -- The HUD's own macro and a manual click both land here; the packet is the one
     -- place a strategem is really spent, so the gauge cannot drift from the game.
@@ -1751,11 +1960,18 @@ function M.command(rest)
         if value then
             local _, level = jobs()
             local cap = max_charges(level)
-            S.state.charges.count = clamp(value, 0, cap, 0)
+            local count = clamp(value, 0, cap, 0)
+            local now = now_epoch()
+            local recharge = recharge_seconds(level)
+            -- A manual correction has no real spend times; give each missing charge its
+            -- own slot one interval apart from now.
+            local timers = {}
+            for index = 1, cap - count do timers[index] = now + index * recharge end
+            S.state.charges.count = count
             S.state.charges.level = level
             S.state.charges.max = cap
-            S.state.charges.next_at = S.state.charges.count >= cap
-                and nil or (now_epoch() + recharge_seconds(level))
+            S.state.charges.timers = timers
+            S.state.charges.next_at = timers[1]
             mark_dirty()
             save_state()
         end

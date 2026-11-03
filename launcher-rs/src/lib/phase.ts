@@ -200,7 +200,7 @@ export const SPELL_GROUPS: SpellGroup[] = [
     autoMode: {
       key: "magic_burst",
       label: "Magic Burst",
-      short: "MB",
+      short: "Magic Burst",
       category: "nuke_mb",
       detail:
         "Worn for Elemental Magic while a Magic Burst window is open; the armed mode is the fallback.",

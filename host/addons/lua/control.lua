@@ -1010,7 +1010,7 @@ local SPELL_GROUPS = {
         -- Not an armed mode: the engine wears this set only while a magic burst window is
         -- open on the current target, and the armed mode's set otherwise.
         auto = {
-            key = 'magic_burst', label = 'Magic Burst', short = 'MB', category = 'nuke_mb',
+            key = 'magic_burst', label = 'Magic Burst', short = 'Magic Burst', category = 'nuke_mb',
             detail = 'Worn for Elemental Magic while a Magic Burst window is open.',
         },
     },

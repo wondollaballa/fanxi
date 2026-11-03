@@ -131,27 +131,46 @@ check('round trip keeps spells', saved and saved.spells[1] == 'Stone' and saved.
 check('round trip keeps ebullience', saved and saved.ebullience == true)
 check('round trip keeps bursts', saved and saved.bursts[1] == 'Fire II' and saved.bursts[2] == 'Fire III',
       saved and table.concat(saved.bursts, ','))
+state.charges = { count = 2, max = 5, level = 99, next_at = 1000000033,
+                  timers = { 1000000033, 1000000034 } }
+local round = internal.parse_state(internal.serialize_state(state))
+check('round trip keeps per-charge timers',
+      round and round.charges.timers and #round.charges.timers == 2
+      and round.charges.timers[2] == 1000000034,
+      round and round.charges.timers and table.concat(round.charges.timers, ','))
 check('a tab-free file is still a state',
       internal.parse_state('version\t1\nselected\t\n') ~= nil)
 
--- Spend, readiness and the next-charge clock.
+-- Spend, readiness and the next-charge clock.  Every spent charge starts its own
+-- recharge, so the state stores one return time per missing charge.
 internal.set_state(internal.default_state())
 local T = internal.state()
-T.state.charges = { count = 5, max = 5, level = 99, next_at = nil }
+T.state.charges = { count = 5, max = 5, level = 99, timers = {} }
 internal.spend_charge(2)
 check('spending two leaves three', T.state.charges.count == 3, T.state.charges.count)
+check('each spend gets its own timer',
+      type(T.state.charges.timers) == 'table' and #T.state.charges.timers == 2,
+      T.state.charges.timers and #T.state.charges.timers)
 check('spending starts the clock', T.state.charges.next_at ~= nil)
 local now = os.time()
-T.state.charges = { count = 0, max = 5, level = 99, next_at = now + 33 }
-check('two charges are a minute and six seconds away', internal.ready_at(2) == now + 66,
-      internal.ready_at(2) - now)
-T.state.charges = { count = 1, max = 5, level = 99, next_at = now + 33 }
+T.state.charges = { count = 3, max = 5, level = 99, timers = { now + 33, now + 34 } }
+check('two staggered charges return a second apart', internal.ready_at(5) == now + 34,
+      internal.ready_at(5) - now)
+T.state.charges = { count = 1, max = 5, level = 99, timers = { now + 33 } }
 check('one short waits for the next charge', internal.ready_at(2) == now + 33,
       internal.ready_at(2) - now)
 T.state.charges = { count = 3, max = 5, level = 99, next_at = now + 240 }
 internal.refresh_charges()
 check('a clock saved under the old four-minute rate is pulled in',
       T.state.charges.next_at <= now + 33, T.state.charges.next_at - now)
+check('a version-1 save treats its missing charges as back-to-back',
+      #T.state.charges.timers == 2 and T.state.charges.timers[2] <= now + 33,
+      T.state.charges.timers and table.concat(T.state.charges.timers, ','))
+T.state.charges = { count = 1, max = 5, level = 99, next_at = now + 33 }
+internal.refresh_charges()
+check('both back-to-back charges return near the first timer',
+      internal.ready_at(2) == T.state.charges.next_at,
+      internal.ready_at(2) - now)
 check('a full macro is ready now', internal.ready_at(1) == 0, internal.ready_at(1))
 check('a helix cast is five seconds', internal.cast_seconds('Pyrohelix') == 5,
       internal.cast_seconds('Pyrohelix'))
@@ -246,6 +265,9 @@ check('recentre', T.state.window.x == 560 and T.state.window.w == 720,
       tostring(T.state.window.x) .. ',' .. tostring(T.state.window.w))
 sch.command('charges 2')
 check('charges command', T.state.charges.count == 2, T.state.charges.count)
+check('charges command gives the missing charges timers',
+      T.state.charges.timers and #T.state.charges.timers == 3,
+      T.state.charges.timers and #T.state.charges.timers)
 sch.command('reset')
 check('reset restores the default tabs', #T.state.groups == 12, #T.state.groups)
 

@@ -24,7 +24,9 @@
   player's own self-skillchain macros and magic bursts; see
   [control-panel.md](control-panel.md).  Its clock uses retail's rate: the four-minute
   pool is split across the level's charges, and the 550-JP **Stratagem Recast Time** gift
-  takes 15 seconds off each (48 s → **33 s** at 99).
+  takes 15 seconds off each (48 s → **33 s** at 99).  Each spent charge has its own
+  return time, so two stratagems used back to back come back together after 33 s rather
+  than 33 s apart.
 - The **group-1 Scholar merits** are applied: **Grimoire Recast** takes 2 s a rank off
   Light/Dark Arts, **Max Sublimation** adds 10 MP a rank to its storage, **Helix Magic
   Acc./Atk.** adds +3 Magic Accuracy and +2 Magic Atk. Bonus a rank to Helix spells, and

@@ -231,8 +231,15 @@ level's charges (48 s a charge at 99, 60 s at 70, 80 s at 50, 120 s at 30, 240 s
 each one, so a level-99 Scholar recharges a charge every **33 s**. The footer prints that rate
 beside the count. Every Immanence and Ebullience spends one; the count follows
 the outgoing job-ability packet, so a stratagem used from the Abilities window or a macro keystroke
-counts the same as one clicked here. The charge state is persisted with the sets, so a logout does
-not give them back. A **Dark Arts** chip warns when the active art is Light or none, because
+counts the same as one clicked here, and a retransmitted packet is not a second use.
+
+**Each spent charge starts its own timer.** Using two stratagems back to back (Accession then
+Perpetuance, say) brings them back about a second apart after one 33-second interval, not one
+after 33 seconds and the other after 66. The HUD keeps one return time per missing charge, shows
+the earliest as the next-charge clock and uses the needed-th timer when it decides whether a
+whole macro is affordable. A version-1 save only stored the first timer; those missing charges
+are treated as back-to-back with it. The charge state is persisted with the sets (the timer list
+is the sixth `charges` field), so a logout does not give them back. A **Dark Arts** chip warns when the active art is Light or none, because
 retail's Immanence wants Dark Arts; **Addendum: Black** is accepted too.
 
 The body is a left-hand list of **tabs**, one per skillchain, each holding the player's own named
@@ -252,10 +259,14 @@ burst list. Deleting a macro or a tab asks for confirmation.
 
 ![The macro editor: title, tab, up to three spells, Ebullience and the magic burst list](images/sch-editor.png)
 
-Clicking a macro runs the sequence the way the old GearSwap library did, which is still the
-timing that works in game: `/ja "Immanence"`, one second, the spell; then five seconds before the
-next Immanence when the next spell is a Helix and four seconds otherwise; after the closing cast,
-each burst spell. **Stop** cancels the sequence. A macro whose spells (plus Ebullience) need more
+Clicking a macro runs the same `/ja` / `/ma` sequence, but the runner follows the client's own
+bars instead of fixed sleeps. It waits for the shared stratagem recast (Immanence and Ebullience
+use recast id 231) before every `/ja` and until the cast bar clears before the next step. That
+matters because a one-second gap after Ebullience is still inside the shared recast: the server
+answers "Immanence is not ready yet.", the following spell opens no chain, and the run used to
+drop the skillchain there. A long opener cast (or a slower cast set) could likewise run past the
+old four/five-second gap and be interrupted by the next Immanence. After the closing cast the
+burst spells use the same cast-bar wait. **Stop** cancels the sequence. A macro whose spells (plus Ebullience) need more
 charges than are left is dimmed and shows the clock to the next time the whole chain is payable --
 `next 7:59` for a two-spell macro with none left -- and clicking it repeats that in chat rather
 than sending a sequence the strategems cannot cover. Nothing here bypasses the client's own
@@ -915,7 +926,7 @@ dropdown only changes which one is armed. A missing set for the armed mode falls
 default rather than borrowing the other mode.
 
 `nuke_mb` is the one key that is **not an armed mode**. The Nuking card shows it as a third,
-automatic row (short label `MB`, marked `auto`); a nuke wears it in place of the group's armed
+automatic row (labelled `Magic Burst`, marked `auto`); a nuke wears it in place of the group's armed
 mode while a Magic Burst window is open on the player's target, and the armed mode is the
 fallback. A per-spell card still wins, and the precast set is unchanged: the fast-cast gear is
 the same for a burst and a plain nuke. `phase_status().burst` reports the current window, and the

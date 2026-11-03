@@ -126,8 +126,8 @@ burst list the Scholar HUD runs after the closing spell bursts normally: matchin
 chain's element, with the link count as the burst tier.
 
 The HUD side of this is documented in [control-panel.md](control-panel.md): the
-Scholar window's tabs, macros, strategem clock and the tested `Immanence, 1 s, spell,
-4 s or 5 s` timing.
+Scholar window's tabs, macros, strategem clock and the runner's recast- and
+cast-bar-based timing.
 
 ### State and timing
 
