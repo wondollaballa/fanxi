@@ -57,7 +57,7 @@ Commands the launcher uses:
 | `equip_set {items}` | finds every piece with one bag scan and injects the whole set of `0x050`s in a single frame |
 | `gearswap {path, source}` | parses a GearSwap library in a sandbox and returns its `sets` table; `source` is the library's text when the file is not on the client's machine |
 | `phase {path, source, enabled, engaged, idle_town, idle_field, move, default_ws, default_ja, ws_overrides, ja_overrides, spell_overrides, spell_category_overrides, spell_modes, focus}` | builds the precast/midcast/WS/JA/state plan from a GearSwap library (`source`, or the file at `path`) and hands it to the host (see below) |
-| `phase_status` | the engine's rules, sets, counters, `state`, `town`, `zone`, `job`, `kiting`, `resting`, `focus`, `locked`, `lockedSlots` and armed `modes` |
+| `phase_status` | the engine's rules, sets, counters, `state`, `town`, `zone`, `job`, `kiting`, `resting`, `focus`, `locked`, `lockedSlots`, armed `modes` and whether a magic burst window is open (`burst`) |
 | `phase_lock {locked}` | holds the set that is worn now (`true`) or resumes automatic swaps (`false`) |
 | `phase_kiting {on}` | forced kiting state, on until switched off |
 | `phase_resting {on}` | manual resting state (this server has no rest packet to follow) |
@@ -903,8 +903,8 @@ per-spell choices ride in the `phase` command's options object (`ws_overrides`, 
 
 A mode group holds one set per mode (`spell_category_overrides`, keyed `enfeebles_macc`,
 `enfeebles_duration`, `buff_potency`, `buff_duration`, `cure_potency`, `cure_cast`, `nuke_mab`,
-`nuke_mdmg`, `helix_magic`, `helix_duration` or `enspells`) and an armed mode (`spell_modes`). The
-host puts each spell in exactly one group: Enfeebling Magic -> enfeebles, Enhancing Magic ->
+`nuke_mdmg`, `nuke_mb`, `helix_magic`, `helix_duration` or `enspells`) and an armed mode
+(`spell_modes`). The host puts each spell in exactly one group: Enfeebling Magic -> enfeebles, Enhancing Magic ->
 enhancing, Healing Magic -> curing, Elemental Magic -> nuking, a spell whose name contains `helix`
 -> helix (checked before Elemental), and Enfire / Enblizzard / Enaero / Enstone / Enthunder /
 Enwater (and their IIs, plus Enlight / Endark) -> enspells (checked before the Enhancing Magic
@@ -913,6 +913,28 @@ the armed mode's set for its group, the midcast default, then the library's
 `sets.midcast.<skill>`. Both modes of a group stay configured when the other is edited; the mode
 dropdown only changes which one is armed. A missing set for the armed mode falls through to the
 default rather than borrowing the other mode.
+
+`nuke_mb` is the one key that is **not an armed mode**. The Nuking card shows it as a third,
+automatic row (short label `MB`, marked `auto`); a nuke wears it in place of the group's armed
+mode while a Magic Burst window is open on the player's target, and the armed mode is the
+fallback. A per-spell card still wins, and the precast set is unchanged: the fast-cast gear is
+the same for a burst and a plain nuke. `phase_status().burst` reports the current window, and the
+Nuking card lights its `auto` row while it is open.
+
+The window is **not** a client status: `res.status_ids` carries no Magic Burst or Skillchain
+entry, and the player's buff block never lists one. The addon reads the chain from the closing
+action's `0x028` result instead. An additional-effect block with message `287 + proc` (`384 +
+proc` when the chain was absorbed) is a formed skillchain, so the window opens on that target and
+lasts 11 s after a level-1 link or one second less per level-2/3 link — the same `_next_window`
+rule as `server/fanxi_server/game/skillchain.py` (the Diamond Aspis pin is not modelled; the
+client cannot read another player's shield, and the row is aimed at the caster's own window). A landed weapon skill that forms no chain is a
+fresh opening and ends the window; a skill with no resonance properties and a miss do not. The
+window is tracked per target and reported only while the player's current target has one. It
+opens when the client sees the result (a fraction of a second after the server forms the chain),
+and the 0.5 s close grace only decides whether the next link continues the same chain; it does
+not extend the burst window. The watch loop pushes the flag with `xi.phase.burst(on)`, so the
+outgoing action's rule can choose its `burst` set; a zone, a job change and turning GearSwap off
+clear it.
 
 The same switch is available in game. The spells HUD has one button per group showing the armed
 mode; click it to cycle. `//modes` lists the armed modes, `//modes enhancing` lists that group's
@@ -945,7 +967,8 @@ same pins work from the game:
 `//gs lock main, sub, ranged, ammo` and
 `//gs unlock main, sub` (or `all`); the control addon sees the command before it is sent, blocks
 it from reaching the server, and confirms in the chat log. `//gs rest on|off`, `//gs kite on|off`,
-`//gs focus auto|dt|pdt|mdt|eva|meva`, and `//gs state` are there too. `//modes` and
+`//gs focus auto|dt|pdt|mdt|eva|meva`, and `//gs state` are there too (it appends
+`- MB window` while a Magic Burst window is open). `//modes` and
 `//modes <group> [mode]` arm a spell group's mode from the same chat path. A job change on either the
 main or the support job releases the lock and clears the pins, kiting, resting and focus, wherever
 it happens (Mog House, a Nomad Moogle, or `//job` in the field); so does a plan for a different

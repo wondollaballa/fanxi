@@ -1,0 +1,18 @@
+# The automatic Magic Burst set (host/addons/phase.c).  A rule may carry an extra `burst`
+# midcast set (the Nuking group's Magic Burst row in the launcher); the engine wears it instead
+# of `mid` only while the addon reports an open window with xi.phase.burst(true).  The precast
+# set is unchanged, and a rule without a burst set keeps its ordinary midcast set either way.
+# Run by tests/phase_burst_test.sh.
+frames 2
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=8, sets={{{1,0,0}},{{2,0,0}},{{3,0,0}}}, names={'idle.town','midcast.nuke','midcast.nuke MB'}, engage=1, idle=1, town=1, rules={{category=3, action=42, pre=1, mid=2, burst=3},{category=3, action=43, pre=1, mid=2}}} return xi.phase.status().rules
+echo --- no window: the ordinary midcast set is queued
+lua control return xi.phase.status().burst
+packet_out 1a00010000000000000003002a00
+packet_out 1a00020000000000000003002b00
+echo --- the window opens: a burst-capable nuke wears the burst set
+lua control return xi.phase.burst(true)
+packet_out 1a00030000000000000003002a00
+packet_out 1a00040000000000000003002b00
+echo --- the window closes: the ordinary midcast set comes back
+lua control return xi.phase.burst(false)
+packet_out 1a00050000000000000003002a00

@@ -5512,6 +5512,19 @@ button.ev-cell:hover {
   font-size: 9px;
 }
 
+.set-totals-setbonuses {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.set-total-setbonus {
+  color: #9fd6b8;
+  font-size: 8.5px;
+  line-height: 1.35;
+}
+
 .set-totals-list {
   display: flex;
   flex-direction: column;
@@ -5969,6 +5982,44 @@ button.ev-cell:hover {
 .phase-mode-row .phase-inline-select,
 .phase-mode-set .phase-inline-select {
   flex: 1;
+}
+
+/* The automatic set row (Nuking -> Magic Burst): it is not one of the armed modes, so it is
+   marked "auto" in the label and lights up while the host reports an open burst window. */
+.phase-mode-auto .phase-mode-name em {
+  margin-left: 4px;
+  color: var(--muted-2);
+  font-size: 7px;
+  font-style: normal;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.phase-mode-auto {
+  margin-top: 7px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border-soft);
+}
+
+.phase-mode-auto .phase-mode-name {
+  flex-basis: 56px;
+}
+
+.phase-mode-auto.live .phase-mode-name,
+.phase-mode-auto.live .phase-mode-name em {
+  color: var(--accent);
+}
+
+.phase-mode-live {
+  flex: 0 0 auto;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--accent);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
 }
 
 .phase-category-spells {

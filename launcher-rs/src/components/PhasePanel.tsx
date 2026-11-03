@@ -565,7 +565,7 @@ export function PhasePanel({
             {categoryOverrideCount ? ` · ${categoryOverrideCount} modes` : ""}
           </Badge>
         }
-        hint="Spell precast is worn before any spell; song precast is worn only for Bard songs. The midcast default is worn for every spell. A group card can hold a set for every mode; the Mode dropdown chooses which one is worn for that group's spells. A per-spell card wins over its group. Switching modes is also available in the in-game spell HUD and with //modes."
+        hint="Spell precast is worn before any spell; song precast is worn only for Bard songs. The midcast default is worn for every spell. A group card can hold a set for every mode; the Mode dropdown chooses which one is worn for that group's spells. The Nuking card's Magic Burst row is automatic: it is worn while a Magic Burst window is open, and the armed mode otherwise. A per-spell card wins over its group. Switching modes is also available in the in-game spell HUD and with //modes."
       >
         <div className="phase-row">
           <SetSelect
@@ -600,9 +600,13 @@ export function PhasePanel({
         <div className="phase-category-cards">
           {spellGroups.map((group) => {
             const activeMode = config.spellModes[group.key] ?? group.defaultMode;
-            const configured = group.modes.some(
-              (mode) => config.spellCategoryOverrides[mode.category],
+            const autoMode = group.autoMode;
+            const autoConfigured = Boolean(
+              autoMode && config.spellCategoryOverrides[autoMode.category],
             );
+            const configured =
+              group.modes.some((mode) => config.spellCategoryOverrides[mode.category]) ||
+              autoConfigured;
             return (
               <div key={group.key} className={cn("phase-category", configured && "configured")}>
                 <div className="phase-category-head">
@@ -646,9 +650,42 @@ export function PhasePanel({
                     />
                   </div>
                 ))}
+                {autoMode ? (
+                  <div
+                    className={cn(
+                      "phase-mode-set",
+                      "phase-mode-auto",
+                      autoConfigured && status?.burst && "live",
+                    )}
+                    title={autoMode.detail}
+                  >
+                    <span className="phase-mode-name">
+                      {autoMode.short}
+                      <em>auto</em>
+                    </span>
+                    <InlineSetSelect
+                      value={config.spellCategoryOverrides[autoMode.category] ?? ""}
+                      sets={sets}
+                      prefixes={["midcast.", "precast."]}
+                      empty="— use the armed mode —"
+                      onChange={(nextPath) => {
+                        if (!autoMode) return;
+                        const next = { ...config.spellCategoryOverrides };
+                        if (nextPath) next[autoMode.category] = nextPath;
+                        else delete next[autoMode.category];
+                        onConfig({ spellCategoryOverrides: next });
+                      }}
+                    />
+                    {autoConfigured && status?.burst ? (
+                      <span className="phase-mode-live">open</span>
+                    ) : null}
+                  </div>
+                ) : null}
                 <details className="phase-category-spells">
                   <summary>
-                    {group.modes.map((mode) => `${mode.label}: ${mode.detail}`).join(" ")}
+                    {[...group.modes, ...(autoMode ? [autoMode] : [])]
+                      .map((mode) => `${mode.label}: ${mode.detail}`)
+                      .join(" ")}
                   </summary>
                   <div className="phase-category-names">
                     {group.spells.map((spell) => (

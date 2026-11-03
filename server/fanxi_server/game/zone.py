@@ -17,7 +17,7 @@ import struct
 import time
 from dataclasses import replace
 
-from . import base_stats, capes, geomancy, chain, check, combat, dancer, design as character_design, effects, item_usable, job_points, jugpets, live_state, merits, mounts, pets, prime_weapons, rolls, modifiers as mod, packets, skillchain, skills, stat_report, stats, traits, trust_ai, weapon_skill_effects, weapon_skill_jobs, weapon_skills
+from . import base_stats, capes, geomancy, chain, check, combat, dancer, design as character_design, effects, item_usable, job_points, jugpets, live_state, merits, mounts, pets, prime_weapons, rolls, modifiers as mod, packets, set_bonuses, skillchain, skills, stat_report, stats, traits, trust_ai, weapon_skill_effects, weapon_skill_jobs, weapon_skills
 from .cipher import md5
 from .entities import ZoneEntity
 from .party import PARTY_KIND_PARTY
@@ -11156,6 +11156,10 @@ class ZoneSession:
                         int(self.zone), int(self.engaged_id))
                 if bp_target is not None and bp_target.alive:
                     amount = 300 + job_points.category_total(15, "Blood Pact Damage")
+                    # The set line is flat (no percent sign); the server's BP formula is
+                    # flat too, so add it directly.
+                    amount += max(0, int(self.combat_mods().get(
+                        mod.BLOOD_PACT_DAMAGE, 0)))
                     if float(getattr(self, "_apogee_until", 0.0)) > now:
                         amount += 300
                         self._apogee_until = 0.0
@@ -13185,8 +13189,11 @@ class ZoneSession:
         gear_mods: dict[int, int] = {}
         gear_entries: list[dict] = []
         if detailed:
+            equipped_ids: list[int] = []
             try:
                 for row in self.world.service.equipped_slot_mods(int(char["id"])):
+                    item_id = int(row.get("item_id") or 0)
+                    equipped_ids.append(item_id)
                     mods = {int(key): int(value)
                             for key, value in (row.get("mods") or {}).items()}
                     add(gear_mods, mods)
@@ -13198,8 +13205,13 @@ class ZoneSession:
                         "mods": mods,
                         "augments": str(row.get("augments") or ""),
                         "kind": int(row.get("kind", -1)),
-                        "item_id": int(row.get("item_id") or 0),
+                        "item_id": item_id,
                     })
+                # The +1 armor sets' tiered bonuses are not on any one piece's row.
+                for bonus in set_bonuses.for_item_ids(equipped_ids):
+                    bonus_mods = {int(mod_id): int(value) for mod_id, value in bonus.mods}
+                    add(gear_mods, bonus_mods)
+                    gear_entries.append({"label": bonus.label, "mods": bonus_mods})
             except Exception as exc:
                 log.warning("%s equipment rows unavailable: %s", self.addr, exc)
         if not gear_mods:

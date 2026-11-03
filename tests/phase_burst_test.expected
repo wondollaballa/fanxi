@@ -1,0 +1,12 @@
+[harness] = 2
+--- no window: the ordinary midcast set is queued
+[harness] = false
+[harness] packet_out: 44 bytes in, 36 out : 5004010001000000
+[harness] packet_out: 44 bytes in, 60 out : 1a08020000000000000003002a00000050040200020000005004020001000000
+--- the window opens: a burst-capable nuke wears the burst set
+[harness] = true
+[harness] packet_out: 44 bytes in, 60 out : 1a08030000000000000003002b00000050040300020000005004030001000000
+[harness] packet_out: 44 bytes in, 60 out : 1a08040000000000000003002a00000050040400030000005004040001000000
+--- the window closes: the ordinary midcast set comes back
+[harness] = false
+[harness] packet_out: 44 bytes in, 60 out : 1a08050000000000000003002b00000050040500020000005004050001000000

@@ -91,6 +91,9 @@ int xi_phase_lock_slots(unsigned mask, PhasePlan* plan);
 /* Nightingale + Troubadour are both up: a Bard song may take its instrument off a pinned hand
  * for the action's window, and the locked hand is restored when the song resolves. */
 void xi_phase_nitro(int on);
+/* A magic-burst window is open on the player's target.  A rule with a `burst` set wears it
+ * instead of its ordinary midcast set for the next action.  The addon owns the window timing. */
+void xi_phase_burst(int on);
 /* The player's active status ids, pushed by the addon from the client's buff block.  A rule
  * whose `buffs` list names a set (Victory Smite (Impetus)) only matches while all are up. */
 void xi_phase_buffs(const uint16_t* ids, int n);

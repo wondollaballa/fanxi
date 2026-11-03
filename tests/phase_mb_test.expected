@@ -1,0 +1,20 @@
+[harness] = stubbed
+--- a level-1 (Liquefaction) link opens an 11 s window
+[harness] = true
+[harness] = true
+[harness] = false
+--- a level-2 (Fusion) first link leaves 10 s, the next leaves 9 s
+[harness] = 1
+[harness] = true
+[harness] = false
+[harness] = 1
+[harness] = 1
+[harness] = true
+[harness] = false
+--- a landed weapon skill that forms no chain closes the window
+[harness] = 1
+[harness] = true
+[harness] = false
+--- a weapon skill with no resonance properties and a miss leave it open
+[harness] = true
+[harness] = true

@@ -1,5 +1,53 @@
 # Changelog
 
+## Unreleased — a Magic Burst set for Elemental Magic
+
+- **The Nuking card on the Gear page has a third, automatic row: Magic Burst.** A set picked
+  there is worn for Elemental Magic instead of the armed **Magic Attack** / **Magic damage**
+  mode while a Magic Burst window is open on the player's target, and the armed mode is the
+  fallback. The row is marked `auto`, is not in the Mode dropdown and is not armed by `//modes`;
+  a per-spell card still wins over it and the precast set is unchanged. Libraries with
+  `sets.midcast.Elemental Magic MB` pre-fill the row (`nuke_mb`).
+- **The window is read from the action the client can see, not from a buff.** The client's status
+  table has no Magic Burst or Skillchain entry and the buff block never lists one, so
+  `control.lua` reads the closing action's `0x028` additional-effect block (message `287 + proc`,
+  or `384 + proc` for an absorbed chain). The window lasts 11 s after a level-1 link and one
+  second less per level-2/3 link, the server's `_next_window` rule (Diamond Aspis's full-window
+  pin is not modelled); a landed weapon skill that forms no chain is a fresh opening and closes
+  it, while a skill with no resonance properties and a miss leave it alone. It is tracked per target and only counts while the player's current
+  target has one.
+- **The engine wears it as a per-rule `burst` midcast set.** `xi.phase.burst(on)` (pushed by the
+  watch loop) switches a rule from `mid` to `burst`; a zone, a job change and GearSwap's master
+  off switch clear it. `phase_status` reports `burst`, so the launcher's Nuking card lights an
+  `open` badge while the client sees the window.
+- Tests: `tests/phase_burst_test.sh` covers the engine rule switch (ordinary midcast set with the
+  window closed, burst set while open, a rule without a burst set unchanged) and
+  `tests/phase_mb_test.sh` feeds real 0x028 bodies through the addon harness for the level-1 and
+  level-2/3 window lengths, the chain-breaking weapon skill, a no-property skill and a miss.
+
+## Unreleased — modern +1 armor set bonuses
+
+- **The tiered Escha +1 armor set bonuses are applied on both sides.**  The client only
+  prints `Set: ...` on each piece; the actual values are on the set page.  A shared table
+  (`data/armor_set_bonuses.json`) now carries the eleven modern +1 sets: Adhemar (Critical
+  Hit Rate 4/6/8/10), Amalric (Magic Atk. Bonus 20/30/40/50), Apogee (Blood Pact damage
+  4/6/8/10), Argosy and Emicho (Double Attack 4/6/8/10), Carmine (Accuracy 20/30/40/50),
+  Kaykaus (Cure Potency II 4/6/8/10), Lustratio (Weapon Skill Damage 4/6/8/10), Rao
+  (Martial Arts 8/12/16/20), Ryuo (Attack 20/30/40/50) and Souveran (Damage Taken
+  -4/-6/-8/-10).  Only the +1 pieces count; two pieces start the bonus and the fifth gives
+  the maximum.
+- **The server applies them to combat, healing and the live sheet.**  `equipped_mods`
+  counts the set pieces and adds the reached tier, so the live checkparam report gets a
+  `Set` gear row as well.  This is the missing 8% Cure Potency II on a four-piece Kaykaus
+  Scholar set, for example.  Migration 186 also corrects Kaykaus Bliaut +1's own Cure
+  Potency II row from the stale 6 to the client's 4, so the base and the set bonus add up
+  to the same total in the preview and live sheet.
+- **The launcher's Set totals includes the same bonus.**  The set preview counts the +1
+  pieces by name and adds a green `Kaykaus Attire Set +1 (4 pieces): Cure potency II 8%`
+  line above the totals; the bonus stats participate in the existing cap notes.
+- Tests: `test_set_bonuses.py` covers every tier, NQ exclusion, unit conversion and the
+  equipped-mod path; the catalogue test checks every piece id is a real +1 item.
+
 ## Unreleased — Set totals show stat caps
 
 - **Known caps are marked in the Set totals.**  A capped stat now carries a note and changes

@@ -1,0 +1,36 @@
+# The control addon's Magic Burst window (host/addons/lua/control.lua).  The packets are real
+# 0x028 bodies built by server/fanxi_server/game/packets.py: the closing weapon skill's result
+# with an additional-effect block (message 287 + proc) is what opens the window, a landed
+# weapon skill that forms no chain closes it, and an action with no resonance properties (or a
+# miss) leaves it alone.  The duration follows the server: 11 s after a level-1 link, one second
+# less per level-2/3 link.  Run by tests/phase_mb_test.sh.
+frames 2
+lua control xi.game.target = function() return 1 end xi.game.entity = function(index, field) if field == 'ServerId' then return 16909060 end return nil end xi.clock = function() return 0 end return 'stubbed'
+echo --- a level-1 (Liquefaction) link opens an 11 s window
+packet_in 280000002204030201018c0a00000000000000c1804040600000803e402e000000800890013809
+lua control return phase_burst_open()
+lua control xi.clock = function() return 10.9 end return phase_burst_open()
+lua control xi.clock = function() return 11.1 end return phase_burst_open()
+echo --- a level-2 (Fusion) first link leaves 10 s, the next leaves 9 s
+lua control xi.clock = function() return 20 end return 1
+packet_in 280000002204030201018c0a00000000000000c1804040600000803e402e000000800690012809
+lua control xi.clock = function() return 29.9 end return phase_burst_open()
+lua control xi.clock = function() return 30.1 end return phase_burst_open()
+lua control xi.clock = function() return 40 end return 1
+packet_in 280000002204030201018c0a00000000000000c1804040600000803e402e000000800690012809
+lua control xi.clock = function() return 45 end return 1
+packet_in 280000002204030201018c0a00000000000000c1804040600000803e402e000000800690012809
+lua control xi.clock = function() return 53.9 end return phase_burst_open()
+lua control xi.clock = function() return 54.1 end return phase_burst_open()
+echo --- a landed weapon skill that forms no chain closes the window
+lua control xi.clock = function() return 60 end return 1
+packet_in 280000002204030201018c0a00000000000000c1804040600000803e402e000000800890013809
+lua control return phase_burst_open()
+packet_in 280000001e04030201018c0a00000000000000c1804040600000803e402e0000000000
+lua control return phase_burst_open()
+echo --- a weapon skill with no resonance properties and a miss leave it open
+packet_in 280000002204030201018c0a00000000000000c1804040600000803e402e000000800890013809
+packet_in 280000001e04030201014c9807000000000000c1804040600000803e402e0000000000
+lua control return phase_burst_open()
+packet_in 280000001e04030201018c0a00000000000000c18040402400000000c0030000000000
+lua control return phase_burst_open()

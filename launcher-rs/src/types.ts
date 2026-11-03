@@ -1459,6 +1459,8 @@ export type PhaseStatus = {
   resting?: boolean;
   /** 0 auto, 1 dt, 2 pdt, 3 mdt, 4 eva, 5 meva */
   focus?: number;
+  /** True while the addon has a Magic Burst window open on the player's target. */
+  burst?: boolean;
   /** Equipment slot indices (main 0 ... back 15) pinned by //gs lock. */
   lockedSlots?: number[];
   locked?: boolean;

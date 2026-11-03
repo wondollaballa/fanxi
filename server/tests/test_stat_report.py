@@ -170,6 +170,17 @@ class StatReportTest(unittest.TestCase):
         food = next(source for source in by_key["mp"]["sources"] if source["key"] == "food")
         self.assertEqual(food["label"], "Food")
 
+    def test_set_bonus_reaches_the_gear_source(self):
+        """The four-piece Kaykaus bonus is a gear row, not a second unequipped item."""
+        for kind, item_id in ((4, 25618), (5, 25691), (6, 27122), (7, 27307)):
+            self.assertTrue(self.equip(item_id, kind))
+        by_key = {stat["key"]: stat for stat in self.report()["stats"]}
+        cure = by_key["cure_potency_ii"]
+        self.assertEqual(cure["value"], 12)  # 4 on the Bliaut row + 8 from the set
+        gear = next(source for source in cure["sources"] if source["key"] == "gear")
+        labels = [detail["label"] for detail in gear["details"]]
+        self.assertIn("Kaykaus Attire Set +1 (4 pieces)", labels)
+
     def test_gear_rows_sum_to_the_aggregate_equipment_query(self):
         self.equip(20737, 0)
         self.equip(23947, 5)

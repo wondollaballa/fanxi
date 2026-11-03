@@ -213,6 +213,7 @@ MOD_LABELS.update({
     mod.SONG_DURATION_BONUS: "Song duration", mod.ENH_MAGIC_DURATION: "Enhancing magic duration",
     mod.ENF_MAG_DURATION_FLAT: "Enfeebling magic duration",
     mod.CURE_POTENCY_II: "Cure potency II", mod.CURE_POTENCY_RCVD: "Cure potency received",
+    mod.BLOOD_PACT_DAMAGE: "Blood Pact damage",
     mod.REGEN_POTENCY: "Regen potency", mod.DRAIN_ASPIR: "Drain and Aspir potency",
     mod.FIRE_MEVA: "Fire resistance", mod.ICE_MEVA: "Ice resistance",
     mod.WIND_MEVA: "Wind resistance", mod.EARTH_MEVA: "Earth resistance",

@@ -235,6 +235,10 @@ CRIT_DEF_BONUS = 908
 DAMAGE_LIMIT = 1080
 DAMAGE_LIMITP = 1081
 
+# Blood Pact damage from set bonuses (Apogee Attire Set +1).  LandSandBoat has no
+# named id for this; the BP formula adds it flat after the job-point bonus.
+BLOOD_PACT_DAMAGE = 1241
+
 # Weapon damage rating adjusters.  These move the damage rating without moving the
 # weapon rank, which is why fSTR caps do not change with them.
 DMG_RATING = 287

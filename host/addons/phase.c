@@ -89,6 +89,7 @@ typedef struct PhaseRule
 {
     uint16_t category, action;
     int16_t pre, mid; /* indices into sets, -1 for none */
+    int16_t burst;    /* mid instead of `mid` while a magic-burst window is open, -1 for none */
     uint8_t song;     /* a Bard song: the only magic set allowed the Nitro instrument swap */
     uint8_t n_buffs;  /* 0: the unconditional set for this action */
     uint16_t buffs[PHASE_RULE_BUFFS]; /* all must be active (AND) */
@@ -154,6 +155,10 @@ static _Atomic uint32_t g_locked_equip[4]; /* main, sub, ranged, ammo */
 /* Nightingale + Troubadour are both up.  The Bard's one sanctioned weapon-swap window: the song
  * sets name an instrument, and without it a locked Bard cannot sing at all. */
 static _Atomic int g_nitro;
+/* A magic-burst window is open on the player's current target.  The addon sets this from the
+ * skillchain the closing action's 0x028 reported; a rule with a `burst` set wears that set
+ * instead of its ordinary midcast set while the flag is on. */
+static _Atomic int g_burst;
 static int append_locked_weapons(PhasePlan* plan);
 static void capture_weapon_locks(const PhaseTable* t, unsigned mask, int full);
 /* The state index whose set is on the character now (-1: unknown). A transition that lands on
@@ -845,8 +850,14 @@ int xi_phase_action(uint16_t category, uint16_t action, uint16_t seq, PhasePlan*
                         category == PHASE_ACTION_SKILL ||
                         category == PHASE_ACTION_ABILITY);
     const PhaseRule* r = find_rule(t, category, action);
-    int has_set = r && ((r->pre >= 0 && r->pre < t->nsets) ||
-                        (r->mid >= 0 && r->mid < t->nsets));
+    /* The automatic set (the Nuking group's Magic Burst row) replaces the rule's ordinary
+     * midcast set only while the addon reports an open window.  The precast set is unchanged:
+     * the fast-cast gear is the same either way. */
+    int mid = r ? r->mid : -1;
+    if (r && r->burst >= 0 && r->burst < t->nsets
+            && atomic_load_explicit(&g_burst, memory_order_acquire))
+        mid = r->burst;
+    int has_set = r && ((r->pre >= 0 && r->pre < t->nsets) || (mid >= 0 && mid < t->nsets));
     if (!has_set && !extra_n)
         return 0;
     /* The full lock stops ordinary gear changes, but an action with its own pre/mid set
@@ -901,8 +912,8 @@ int xi_phase_action(uint16_t category, uint16_t action, uint16_t seq, PhasePlan*
     }
     if (r && r->pre >= 0 && r->pre < t->nsets)
         copy_set(&t->sets[r->pre], plan->pre, &plan->pre_n, 0);
-    if (r && r->mid >= 0 && r->mid < t->nsets)
-        copy_set(&t->sets[r->mid], plan->mid, &plan->mid_n, 0);
+    if (mid >= 0 && mid < t->nsets)
+        copy_set(&t->sets[mid], plan->mid, &plan->mid_n, 0);
     if (extra_n)
         merge_precache(plan, extra, extra_n);
     if (r && r->pre >= 0 && r->pre < t->nsets && plan->pre_n)
@@ -1007,6 +1018,7 @@ void xi_phase_zone(int zone, int town)
     int was_engaged = atomic_exchange_explicit(&g_engaged, 0, memory_order_acq_rel);
     atomic_store_explicit(&g_moving, 0, memory_order_release);
     atomic_store_explicit(&g_resting, 0, memory_order_release);
+    atomic_store_explicit(&g_burst, 0, memory_order_release);
     /* A zone-in is a fresh world: the server re-sends the outfit (0x050 echoes refill the
      * worn table) and auto-equips if it has none, so the old table is not trusted.  An action
      * in flight is gone with the old zone too. */
@@ -1031,6 +1043,7 @@ static void release_session_locks(void)
     for (int i = 0; i < 4; ++i)
         atomic_store_explicit(&g_locked_equip[i], 0, memory_order_release);
     atomic_store_explicit(&g_nitro, 0, memory_order_release);
+    atomic_store_explicit(&g_burst, 0, memory_order_release);
     atomic_store_explicit(&g_kiting, 0, memory_order_release);
     atomic_store_explicit(&g_resting, 0, memory_order_release);
     atomic_store_explicit(&g_focus, 0, memory_order_release);
@@ -1212,6 +1225,15 @@ int xi_phase_lock_slots(unsigned mask, PhasePlan* plan)
 void xi_phase_nitro(int on)
 {
     atomic_store_explicit(&g_nitro, on ? 1 : 0, memory_order_release);
+}
+
+/* A magic-burst window is open on the player's target.  The control addon tracks it from the
+ * closing action's 0x028 skillchain proc and pushes the flag every frame; the engine only
+ * chooses a rule's burst set for an action taken while it is on.  It never builds a plan of its
+ * own: the window starts and ends outside gear, so the addon owns the timing. */
+void xi_phase_burst(int on)
+{
+    atomic_store_explicit(&g_burst, on ? 1 : 0, memory_order_release);
 }
 
 void xi_phase_buffs(const uint16_t* ids, int n)
@@ -1411,7 +1433,7 @@ static int p_set(lua_State* L)
             {
                 PhaseRule r;
                 memset(&r, 0, sizeof r);
-                r.pre = r.mid = -1;
+                r.pre = r.mid = r.burst = -1;
                 lua_getfield(L, -1, "category");
                 r.category = (uint16_t)lua_tonumber(L, -1);
                 lua_pop(L, 1);
@@ -1423,6 +1445,9 @@ static int p_set(lua_State* L)
                 lua_pop(L, 1);
                 lua_getfield(L, -1, "mid");
                 r.mid = (int16_t)(lua_tonumber(L, -1) - 1);
+                lua_pop(L, 1);
+                lua_getfield(L, -1, "burst");
+                r.burst = (int16_t)(lua_tonumber(L, -1) - 1);
                 lua_pop(L, 1);
                 lua_getfield(L, -1, "song");
                 r.song = lua_toboolean(L, -1) ? 1 : 0;
@@ -1448,7 +1473,9 @@ static int p_set(lua_State* L)
                     r.pre = -1;
                 if (r.mid >= t->nsets)
                     r.mid = -1;
-                if (r.category && (r.pre >= 0 || r.mid >= 0))
+                if (r.burst >= t->nsets)
+                    r.burst = -1;
+                if (r.category && (r.pre >= 0 || r.mid >= 0 || r.burst >= 0))
                     t->rules[t->nrules++] = r;
             }
             lua_pop(L, 1);
@@ -1535,6 +1562,7 @@ static int p_clear(lua_State* L)
     for (int i = 0; i < 4; ++i)
         atomic_store_explicit(&g_locked_equip[i], 0, memory_order_release);
     atomic_store_explicit(&g_nitro, 0, memory_order_release);
+    atomic_store_explicit(&g_burst, 0, memory_order_release);
     atomic_exchange_explicit(&g_table, t, memory_order_acq_rel);
     xi_phase_reset();
     lua_pushboolean(L, 1);
@@ -1629,6 +1657,8 @@ static int p_status(lua_State* L)
     }
     lua_pushboolean(L, atomic_load_explicit(&g_nitro, memory_order_acquire) ? 1 : 0);
     lua_setfield(L, -2, "nitro");
+    lua_pushboolean(L, atomic_load_explicit(&g_burst, memory_order_acquire) ? 1 : 0);
+    lua_setfield(L, -2, "burst");
     lua_pushstring(L, state);
     lua_setfield(L, -2, "state");
     lua_pushnumber(L, town);
@@ -1823,6 +1853,15 @@ static int p_nitro(lua_State* L)
     return 1;
 }
 
+/* `burst(on)`: a magic-burst window is open on the addon's current target.  It does not build a
+ * plan; the next action's rule wears its `burst` set instead of its ordinary midcast set. */
+static int p_burst(lua_State* L)
+{
+    xi_phase_burst(lua_toboolean(L, 1));
+    lua_pushboolean(L, atomic_load_explicit(&g_burst, memory_order_acquire) ? 1 : 0);
+    return 1;
+}
+
 /* The control addon's live buff list: a table of the client's status ids.  It is pushed once
  * per frame or so and replaces the previous snapshot. */
 static int p_buffs(lua_State* L)
@@ -1898,7 +1937,7 @@ void xi_phase_open(lua_State* L)
         { "pending", p_pending }, { "stale", p_stale }, { "zone", p_zone }, { "job", p_job },
         { "lock", p_lock }, { "kiting", p_kiting }, { "resting", p_resting },
         { "focus", p_focus }, { "lock_slots", p_lock_slots }, { "precache", p_precache },
-        { "nitro", p_nitro }, { "buffs", p_buffs },
+        { "nitro", p_nitro }, { "burst", p_burst }, { "buffs", p_buffs },
         { "forget", p_forget }, { "forget_slot", p_forget_slot }, { "remember", p_remember },
         { NULL, NULL },
     };

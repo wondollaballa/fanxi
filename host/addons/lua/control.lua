@@ -43,13 +43,15 @@ key holds, frame captures, waits). Commands:
                              wears the precast set, sends it, then wears the midcast set behind
                              it, and returns to the state set. spell_category_overrides holds one
                              set per mode (enfeebles_macc, enfeebles_duration, buff_potency,
-                             buff_duration, cure_potency, cure_cast, nuke_mab, nuke_mdmg,
+                             buff_duration, cure_potency, cure_cast, nuke_mab, nuke_mdmg, nuke_mb,
                              helix_magic, helix_duration, enspells); spell_modes arms one mode
                              per group (enfeebles, enhancing, enspells, curing, nuking, helix).
                              A spell uses its group's armed set unless a per-spell override names
-                             one
+                             one.  nuke_mb is not armed: a nuke wears it while a magic burst
+                             window is open on the player's target
   phase_status               the engine's rules, counters, state, the action set that is on and
-                             the recent windows (actionSet/history), armed modes and slot pins
+                             the recent windows (actionSet/history), armed modes, slot pins and
+                             whether a magic burst window is open (burst)
   phase_lock {locked}        hold the set that is worn now (true) or resume auto-swaps (false)
   phase_kiting {on}          forced kiting state, on until switched off
   phase_resting {on}         manual resting state (this server has no rest packet)
@@ -1005,6 +1007,12 @@ local SPELL_GROUPS = {
             { key = 'mab', label = 'Magic Attack', short = 'MAB', category = 'nuke_mab' },
             { key = 'mdmg', label = 'Magic damage', short = 'M.Dmg', category = 'nuke_mdmg' },
         },
+        -- Not an armed mode: the engine wears this set only while a magic burst window is
+        -- open on the current target, and the armed mode's set otherwise.
+        auto = {
+            key = 'magic_burst', label = 'Magic Burst', short = 'MB', category = 'nuke_mb',
+            detail = 'Worn for Elemental Magic while a Magic Burst window is open.',
+        },
     },
     helix = {
         key = 'helix', label = 'Helixes', short = 'Helix', default = 'mab',
@@ -1251,12 +1259,21 @@ local function brd_nitro_on()
     return nitro_on
 end
 
+-- phase_burst_open is defined below, beside the skillchain tables it reads: whether a magic burst
+-- window is open on the player's current target.  watch_phase pushes it to the phase engine every
+-- tick, so a nuke sent inside the window wears the Nuking card's Magic Burst set.  It is a
+-- global (not a local) because the main chunk and hud_init are already near LuaJIT's 200-local
+-- limit.
+
 local function watch_phase()
     local moving, still_since = false, xi.clock()
     local last_x, last_z, origin_x, origin_z
     while phase_watch do
         if phase_job_seen and xi.clock() >= phase_job_at + 1.5 then reload_for_job(phase_job_seen) end
         if xi.phase.nitro then xi.phase.nitro(brd_nitro_on()) end
+        if xi.phase.burst and phase_burst_open then
+            xi.phase.burst(phase_burst_open())
+        end
         -- Conditional gear sets ("Victory Smite (Impetus)"): the phase engine matches a rule
         -- against the player's live buff ids, but it cannot read guest memory on the network
         -- thread.  Push the list here every frame, and only when it actually changes: Impetus
@@ -1640,6 +1657,15 @@ phase = function(a)
         end
     end
     local spell_modes = normalize_spell_modes(a.spell_modes, category_override)
+    -- A group's automatic set (the Nuking card's Magic Burst row) is not an armed mode.  It is
+    -- attached to the group's rules, and the phase engine wears it instead of the ordinary
+    -- midcast set only while the addon's burst window is open (watch_phase below).
+    local auto_override = {}
+    for group_key, group in pairs(SPELL_GROUPS) do
+        local auto = group.auto
+        local index = auto and category_override[auto.category]
+        if index then auto_override[group_key] = index end
+    end
     local claimed = {}
     for id in pairs(spell_override) do claimed[id] = true end
     local song_override = {}
@@ -1681,13 +1707,16 @@ phase = function(a)
                     mid = path_set(fallback, 'spell.special.' .. fallback)
                 end
                 if mid then
-                    rules[#rules + 1] = {
+                    local rule = {
                         category = PHASE_MAGIC, action = index,
                         pre = (group_key == 'songs' and song_precast) or precast, mid = mid,
                         -- Only a Bard song may take an instrument off a pinned hand, and only
                         -- under Nitro; the host keys that exception off this flag.
                         song = group_key == 'songs',
                     }
+                    local burst = group_key and auto_override[group_key]
+                    if burst then rule.burst = burst end
+                    rules[#rules + 1] = rule
                     claimed[index] = true
                 end
             end
@@ -2075,6 +2104,7 @@ local function gs_command(body)
         if status.actionSet and status.actionMs then
             line = line .. string.format(' (%.1fs)', status.actionMs / 1000)
         end
+        if status.burst then line = line .. ' - MB window' end
         return line
     end
     return 'usage: //gs lock|unlock <slots>, rest on|off, kite on|off, focus auto|dt|pdt|mdt|eva|meva'
@@ -2917,6 +2947,101 @@ local function hud_sc_primary(props)
         if tier > best_tier then best, best_tier = id, tier end
     end
     return best
+end
+
+-- Magic Burst windows.  The client has no "Magic Burst" status (res.status_ids carries neither
+-- Magic Burst nor Skillchain), so the window is read from the action that formed the chain: the
+-- closing result's 0x028 additional-effect block carries message 287 + proc (384 + proc when the
+-- chain was absorbed).  The server keeps the window on the target's Skillchain state: 11 s after
+-- a level-1 link, one second less per link on a level-2/3 chain, and a landed weapon skill that
+-- forms no chain replaces that state with a fresh opening and ends the window.
+do
+    -- A `do` block keeps the window state out of hud_init's locals: that function is at LuaJIT's
+    -- 200-local limit, and these closures keep the state alive for the packet handler below.
+    local MB_WINDOW_BASE = HUD_SC_BASE
+    local mb_windows = {} -- target server id -> { expires = xi.clock() deadline, duration = seconds }
+
+    local function mb_open_window(target, sc_id, now)
+        for id, window in pairs(mb_windows) do
+            if now > window.expires + 60 then mb_windows[id] = nil end
+        end
+        local prev = mb_windows[target]
+        -- A link may land just inside the server's half-second close grace.
+        local was_open = prev ~= nil and now <= prev.expires + HUD_SC_GRACE
+        local duration
+        if HUD_SC_TIER[sc_id] == 1 then
+            duration = MB_WINDOW_BASE
+        else
+            -- The opener's 11 s state is the first link's predecessor; a formation with no window
+            -- tracked yet (the opener was not a chain) is therefore the first link.
+            duration = math.max(0, (was_open and prev.duration or MB_WINDOW_BASE) - 1)
+        end
+        mb_windows[target] = { expires = now + duration, duration = duration }
+    end
+
+    -- Every 0x028 action: a landed weapon skill that formed no chain ends the target's burst
+    -- window; a formation opens or extends it.  Spells only form (an Immanence or Chain Affinity
+    -- close), because an ordinary spell does not change a chain's resonance.
+    local function mb_scan_action(data)
+        local category = bits(data, 82, 4)
+        if category ~= 3 and category ~= 4 then return end
+        local action = bits(data, 86, 32)
+        local props = HUD_WS_SC[action]
+        local now = xi.clock()
+        local targets = math.min(bits(data, 72, 10), 32)
+        local pos, limit = 150, #data * 8
+        for _ = 1, targets do
+            if pos + 36 > limit then break end
+            local target = bits(data, pos, 32)
+            local count = math.min(bits(data, pos + 32, 4), 32)
+            pos = pos + 36
+            for _ = 1, count do
+                if pos + 87 > limit then break end
+                local resolution = bits(data, pos, 3)
+                local has_add = bits(data, pos + 85, 1)
+                pos = pos + 86
+                local message = 0
+                if has_add == 1 then
+                    message = bits(data, pos + 27, 10)
+                    pos = pos + 37
+                end
+                if bits(data, pos, 1) == 1 then pos = pos + 34 end
+                pos = pos + 1
+                local sc_id
+                if message >= 287 and message < 287 + 16 then
+                    sc_id = HUD_SC_PROC[message - 287]
+                elseif message >= 384 and message < 384 + 16 then
+                    sc_id = HUD_SC_PROC[message - 384]
+                end
+                if target > 0 then
+                    if sc_id then
+                        mb_open_window(target, sc_id, now)
+                    elseif category == 3 and resolution == 0 and props then
+                        -- A weapon skill that lands but does not link is a new opening.
+                        mb_windows[target] = nil
+                    end
+                end
+            end
+        end
+    end
+
+    function phase_burst_open()
+        local index = game.target('Targets[0].Index') or 0
+        if index <= 0 or (game.target('Targets[0].IsActive') or 0) == 0 then return false end
+        local target = game.entity(index, 'ServerId')
+        local window = target and mb_windows[target] or nil
+        return window ~= nil and xi.clock() <= window.expires
+    end
+
+    if xi.events and xi.events.on then
+        xi.events.on('packet_in', function(e)
+            if e.blocked or e.injected or e.id ~= 0x028 then return end
+            local data = e.modified or e.data
+            if type(data) ~= 'string' or #data < 32 then return end
+            local ok, err = pcall(mb_scan_action, data)
+            if not ok then xi.log('phase: magic burst window: ' .. tostring(err)) end
+        end)
+    end
 end
 
 -- Job ability id -> job, generated from the server's job_abilities table. The client

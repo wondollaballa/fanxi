@@ -39,6 +39,7 @@ data/nav/
 # this line out silently empties the Data page's RP card for Unity gear.
 !data/unity_r15.json
 !data/nolan_mezzotint.json
+!data/armor_set_bonuses.json
 !data/oseem_glyptics.json
 !data/skirmish.json
 !data/sinister_reign.json

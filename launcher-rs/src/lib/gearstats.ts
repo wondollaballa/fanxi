@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { backend } from "./api";
 import type { GearItemStats, GearStat, GearStatQuery } from "../types";
+import { withSetBonuses } from "./setbonuses";
 
 function messageOf(error: unknown): string {
   return error instanceof Error ? error.message : String(error);
@@ -107,7 +108,7 @@ function sortTotals(totals: GearStatTotal[]): GearStatTotal[] {
  */
 export function totalGearStatsBySource(items: GearItemStats[]): GearStatTotal[] {
   const totals = new Map<string, GearStatTotal>();
-  for (const item of items) {
+  for (const item of withSetBonuses(items)) {
     const contributions = new Map<
       string,
       { stat: GearStat; base: number; augment: number }

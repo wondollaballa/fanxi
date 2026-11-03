@@ -1,0 +1,622 @@
+{
+  "note": "Modern iLvl 119 +1 armor set bonuses: the second through fifth equipped pieces add the listed modifier. Only the +1 set pieces count. Values from BG Wiki armor-set pages (2026).",
+  "source": "https://www.bg-wiki.com/ffxi/Kaykaus_Attire_Set",
+  "sets": [
+    {
+      "name": "Adhemar Attire Set +1",
+      "pieces": [
+        {
+          "id": 25614,
+          "name": "Adhemar Bonnet +1",
+          "client_name": "Adhemar Bonnet +1"
+        },
+        {
+          "id": 27474,
+          "name": "Adhemar Gamashes +1",
+          "client_name": "Adhe. Gamashes +1"
+        },
+        {
+          "id": 25687,
+          "name": "Adhemar Jacket +1",
+          "client_name": "Adhemar Jacket +1"
+        },
+        {
+          "id": 27303,
+          "name": "Adhemar Kecks +1",
+          "client_name": "Adhemar Kecks +1"
+        },
+        {
+          "id": 27118,
+          "name": "Adhemar Wristbands +1",
+          "client_name": "Adhemar Wrist. +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "critical hit rate": 4
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "critical hit rate": 6
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "critical hit rate": 8
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "critical hit rate": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "Amalric Attire Set +1",
+      "pieces": [
+        {
+          "id": 25616,
+          "name": "Amalric Coif +1",
+          "client_name": "Amalric Coif +1"
+        },
+        {
+          "id": 25689,
+          "name": "Amalric Doublet +1",
+          "client_name": "Amalric Doublet +1"
+        },
+        {
+          "id": 27120,
+          "name": "Amalric Gages +1",
+          "client_name": "Amalric Gages +1"
+        },
+        {
+          "id": 27476,
+          "name": "Amalric Nails +1",
+          "client_name": "Amalric Nails +1"
+        },
+        {
+          "id": 27305,
+          "name": "Amalric Slops +1",
+          "client_name": "Amalric Slops +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "magic atk. bonus": 20
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "magic atk. bonus": 30
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "magic atk. bonus": 40
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "magic atk. bonus": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "Apogee Attire Set +1",
+      "pieces": [
+        {
+          "id": 26677,
+          "name": "Apogee Crown +1",
+          "client_name": "Apogee Crown +1"
+        },
+        {
+          "id": 26853,
+          "name": "Apogee Dalmatica +1",
+          "client_name": "Apo. Dalmatica +1"
+        },
+        {
+          "id": 27029,
+          "name": "Apogee Mitts +1",
+          "client_name": "Apogee Mitts +1"
+        },
+        {
+          "id": 27381,
+          "name": "Apogee Pumps +1",
+          "client_name": "Apogee Pumps +1"
+        },
+        {
+          "id": 27205,
+          "name": "Apogee Slacks +1",
+          "client_name": "Apogee Slacks +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "blood pact damage": 4
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "blood pact damage": 6
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "blood pact damage": 8
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "blood pact damage": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "Argosy Armor Set +1",
+      "pieces": [
+        {
+          "id": 27201,
+          "name": "Argosy Breeches +1",
+          "client_name": "Argosy Breeches +1"
+        },
+        {
+          "id": 26673,
+          "name": "Argosy Celata +1",
+          "client_name": "Argosy Celata +1"
+        },
+        {
+          "id": 26849,
+          "name": "Argosy Hauberk +1",
+          "client_name": "Argosy Hauberk +1"
+        },
+        {
+          "id": 27025,
+          "name": "Argosy Mufflers +1",
+          "client_name": "Argosy Mufflers +1"
+        },
+        {
+          "id": 27377,
+          "name": "Argosy Sollerets +1",
+          "client_name": "Argosy Sollerets +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "double attack": 4
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "double attack": 6
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "double attack": 8
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "double attack": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "Carmine Armor Set +1",
+      "pieces": [
+        {
+          "id": 27207,
+          "name": "Carmine Cuisses +1",
+          "client_name": "Carmine Cuisses +1"
+        },
+        {
+          "id": 27031,
+          "name": "Carmine Finger Gauntlets +1",
+          "client_name": "Carmine Fin. Ga. +1"
+        },
+        {
+          "id": 27383,
+          "name": "Carmine Greaves +1",
+          "client_name": "Carmine Greaves +1"
+        },
+        {
+          "id": 26679,
+          "name": "Carmine Mask +1",
+          "client_name": "Carmine Mask +1"
+        },
+        {
+          "id": 26855,
+          "name": "Carmine Scale Mail +1",
+          "client_name": "Carm. Sc. Mail +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "accuracy": 20
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "accuracy": 30
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "accuracy": 40
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "accuracy": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "Emicho Armor Set +1",
+      "pieces": [
+        {
+          "id": 25610,
+          "name": "Emicho Coronet +1",
+          "client_name": "Emicho Coronet +1"
+        },
+        {
+          "id": 27470,
+          "name": "Emicho Gambieras +1",
+          "client_name": "Emi. Gambieras +1"
+        },
+        {
+          "id": 27114,
+          "name": "Emicho Gauntlets +1",
+          "client_name": "Emi. Gauntlets +1"
+        },
+        {
+          "id": 25683,
+          "name": "Emicho Haubert +1",
+          "client_name": "Emicho Haubert +1"
+        },
+        {
+          "id": 27299,
+          "name": "Emicho Hose +1",
+          "client_name": "Emicho Hose +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "double attack": 4
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "double attack": 6
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "double attack": 8
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "double attack": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "Kaykaus Attire Set +1",
+      "pieces": [
+        {
+          "id": 25691,
+          "name": "Kaykaus Bliaut +1",
+          "client_name": "Kaykaus Bliaut +1"
+        },
+        {
+          "id": 27478,
+          "name": "Kaykaus Boots +1",
+          "client_name": "Kaykaus Boots +1"
+        },
+        {
+          "id": 27122,
+          "name": "Kaykaus Cuffs +1",
+          "client_name": "Kaykaus Cuffs +1"
+        },
+        {
+          "id": 25618,
+          "name": "Kaykaus Mitra +1",
+          "client_name": "Kaykaus Mitra +1"
+        },
+        {
+          "id": 27307,
+          "name": "Kaykaus Tights +1",
+          "client_name": "Kaykaus Tights +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "cure potency ii": 4
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "cure potency ii": 6
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "cure potency ii": 8
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "cure potency ii": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lustratio Armor Set +1",
+      "pieces": [
+        {
+          "id": 26669,
+          "name": "Lustratio Cap +1",
+          "client_name": "Lustratio Cap +1"
+        },
+        {
+          "id": 26845,
+          "name": "Lustratio Harness +1",
+          "client_name": "Lustr. Harness +1"
+        },
+        {
+          "id": 27373,
+          "name": "Lustratio Leggings +1",
+          "client_name": "Lustra. Leggings +1"
+        },
+        {
+          "id": 27021,
+          "name": "Lustratio Mittens +1",
+          "client_name": "Lustr. Mittens +1"
+        },
+        {
+          "id": 27197,
+          "name": "Lustratio Subligar +1",
+          "client_name": "Lustr. Subligar +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "weapon skill damage": 4
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "weapon skill damage": 6
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "weapon skill damage": 8
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "weapon skill damage": 10
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rao Armor Set +1",
+      "pieces": [
+        {
+          "id": 27203,
+          "name": "Rao Haidate +1",
+          "client_name": "Rao Haidate +1"
+        },
+        {
+          "id": 26675,
+          "name": "Rao Kabuto +1",
+          "client_name": "Rao Kabuto +1"
+        },
+        {
+          "id": 27027,
+          "name": "Rao Kote +1",
+          "client_name": "Rao Kote +1"
+        },
+        {
+          "id": 27379,
+          "name": "Rao Sune-Ate +1",
+          "client_name": "Rao Sune-Ate +1"
+        },
+        {
+          "id": 26851,
+          "name": "Rao Togi +1",
+          "client_name": "Rao Togi +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "martial arts": 8
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "martial arts": 12
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "martial arts": 16
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "martial arts": 20
+          }
+        }
+      ]
+    },
+    {
+      "name": "Ryuo Armor Set +1",
+      "pieces": [
+        {
+          "id": 25685,
+          "name": "Ryuo Domaru +1",
+          "client_name": "Ryuo Domaru +1"
+        },
+        {
+          "id": 27301,
+          "name": "Ryuo Hakama +1",
+          "client_name": "Ryuo Hakama +1"
+        },
+        {
+          "id": 25612,
+          "name": "Ryuo Somen +1",
+          "client_name": "Ryuo Somen +1"
+        },
+        {
+          "id": 27472,
+          "name": "Ryuo Sune-Ate +1",
+          "client_name": "Ryuo Sune-Ate +1"
+        },
+        {
+          "id": 27116,
+          "name": "Ryuo Tekko +1",
+          "client_name": "Ryuo Tekko +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "attack": 20
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "attack": 30
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "attack": 40
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "attack": 50
+          }
+        }
+      ]
+    },
+    {
+      "name": "Souveran Armor Set +1",
+      "pieces": [
+        {
+          "id": 26847,
+          "name": "Souveran Cuirass +1",
+          "client_name": "Souv. Cuirass +1"
+        },
+        {
+          "id": 27199,
+          "name": "Souveran Diechlings +1",
+          "client_name": "Souv. Diechlings +1"
+        },
+        {
+          "id": 27023,
+          "name": "Souveran Handschuhs +1",
+          "client_name": "Souv. Handsch. +1"
+        },
+        {
+          "id": 26671,
+          "name": "Souveran Schaller +1",
+          "client_name": "Souv. Schaller +1"
+        },
+        {
+          "id": 27375,
+          "name": "Souveran Schuhs +1",
+          "client_name": "Souveran Schuhs +1"
+        }
+      ],
+      "tiers": [
+        {
+          "pieces": 2,
+          "mods": {
+            "damage taken": -4
+          }
+        },
+        {
+          "pieces": 3,
+          "mods": {
+            "damage taken": -6
+          }
+        },
+        {
+          "pieces": 4,
+          "mods": {
+            "damage taken": -8
+          }
+        },
+        {
+          "pieces": 5,
+          "mods": {
+            "damage taken": -10
+          }
+        }
+      ]
+    }
+  ]
+}

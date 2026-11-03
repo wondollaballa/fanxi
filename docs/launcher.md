@@ -549,7 +549,9 @@ reads `13 excess`), and gold reads `2 needed` while it is short (equipment Haste
 capped stats are Fast Cast, equipment Haste, Quick Magic, Skillchain Bonus, Cure potency and
 Cure potency II, capped Magic Burst damage, the Damage Taken family, Spell interruption rate,
 Snapshot, Subtle Blow and Subtle Blow II, Conserve MP, and Casting time; an uncapped stat stays
-plain.
+plain. Tiered bonuses from the modern +1 armor sets are counted too: the preview shows a green
+`Kaykaus Attire Set +1 (4 pieces): Cure potency II 8%` line and adds the reached tier to the
+totals.  The server reads the same shared table, so the live sheet and the set preview agree.
 The descriptions are read from the running client's item resources
 through the control port's `lua` command; an item the client cannot resolve still shows its
 augment lines and their totals. A name the server spells differently — the Reforged Bonanza
@@ -635,8 +637,12 @@ On the Sets tab, the phase engine is split into the groups the player thinks in:
   per-spell override cards picked from the current job's spell list (macc/mab/magic-skill sets
   included). A category card gives one set to every spell in its host-classified group — enfeebles
   macc or duration (Enfeebling Magic), buff potency or duration (Enhancing Magic), enspell damage
-  (Enfire/Enblizzard/Enaero/Enstone/Enthunder/Enwater and their IIs), curing potency or cast and
-  helix magic — and a per-spell card still wins over its category.
+  (Enfire/Enblizzard/Enaero/Enstone/Enthunder/Enwater and their IIs), curing potency or cast,
+  nuking magic attack or magic damage and helix magic — and a per-spell card still wins over its
+  category. The Nuking card's third, automatic **MB** row is worn for Elemental Magic while a
+  Magic Burst window is open on the target and falls back to the armed mode otherwise; the row
+  lights an `open` badge while the client reports the window, and the same flag is
+  `phase_status().burst`.
 - **Idle** — field, town, movement, DT/PDT/MDT/Eva/Meva sets and a manual idle focus.
 
 Phase settings are stored in the game database, not only in the WebView's localStorage. The

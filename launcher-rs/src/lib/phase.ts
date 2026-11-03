@@ -54,6 +54,7 @@ export type SpellCategoryKey =
   | "cure_cast"
   | "nuke_mab"
   | "nuke_mdmg"
+  | "nuke_mb"
   | "helix_magic"
   | "helix_duration"
   | "enspells"
@@ -87,6 +88,8 @@ export type SpellGroup = {
   short: string;
   defaultMode: string;
   modes: SpellMode[];
+  /** A set worn by itself while its condition is live, not an armable mode. */
+  autoMode?: SpellMode;
 };
 
 /** The spell groups the host classifies (`job_spells.categories`) and the Spells panel edits. */
@@ -194,6 +197,14 @@ export const SPELL_GROUPS: SpellGroup[] = [
         detail: "Magic Damage set for Elemental Magic nukes.",
       },
     ],
+    autoMode: {
+      key: "magic_burst",
+      label: "Magic Burst",
+      short: "MB",
+      category: "nuke_mb",
+      detail:
+        "Worn for Elemental Magic while a Magic Burst window is open; the armed mode is the fallback.",
+    },
   },
   {
     key: "helix",
@@ -342,6 +353,7 @@ const SPELL_CATEGORY_FALLBACKS: Record<SpellCategoryKey, string[]> = {
   cure_cast: ["midcast.Healing Magic"],
   nuke_mab: ["midcast.Elemental Magic"],
   nuke_mdmg: ["midcast.Elemental Magic"],
+  nuke_mb: ["midcast.Elemental Magic MB"],
   helix_magic: ["midcast.Elemental Magic"],
   helix_duration: [],
   enspells: ["midcast.Enspell", "midcast.EnhancingSkill"],

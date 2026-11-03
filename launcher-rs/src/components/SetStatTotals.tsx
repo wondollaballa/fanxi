@@ -6,6 +6,7 @@ import {
   gearStatsErrorHint,
   totalGearStats,
 } from "../lib/gearstats";
+import { setBonusSummaries } from "../lib/setbonuses";
 import { cn } from "./ui";
 
 /**
@@ -25,6 +26,7 @@ export function SetStatTotals({
   onRetry?: () => void;
 }) {
   const totals = useMemo(() => totalGearStats(items), [items]);
+  const setBonuses = useMemo(() => setBonusSummaries(items), [items]);
 
   return (
     <div className="set-totals" aria-live="polite">
@@ -37,6 +39,15 @@ export function SetStatTotals({
         </span>
         {loading ? <span className="set-totals-note">reading…</span> : null}
       </div>
+      {setBonuses.length > 0 ? (
+        <div className="set-totals-setbonuses">
+          {setBonuses.map((bonus) => (
+            <span className="set-total-setbonus" key={bonus.name}>
+              {bonus.text}
+            </span>
+          ))}
+        </div>
+      ) : null}
       {error ? (
         <div className="set-totals-error">
           <span className="set-totals-note" title={error}>
