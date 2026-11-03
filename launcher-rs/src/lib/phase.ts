@@ -549,6 +549,8 @@ export function phaseStateLabel(state?: string): string {
       return "Resting";
     case "movement":
       return "Moving";
+    case "casting":
+      return "Casting";
     case "idle.town":
       return "Idle · Town";
     case "idle.field":

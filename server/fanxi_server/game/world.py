@@ -3716,7 +3716,7 @@ class World:
                                         kind=0, category=4, info=0)
                     entity.next_attack_at = now + max(1.0, entity.attack_delay_ms / 1000.0)
                     return
-                miss, damage, critical = self.mob_attack(entity, target)
+                miss, damage, critical, defended = self.mob_attack(entity, target)
                 absorbed = False
                 if not miss and target.has_effect(effects.COPY_IMAGE) \
                         and target.effect_power(effects.COPY_IMAGE) > 0:
@@ -3727,7 +3727,7 @@ class World:
                                         message=31, kind=0, category=4, info=0)
                     target.queue.append(target.char_status())
                 if not miss and not absorbed:
-                    target.take_damage(damage, entity)
+                    target.take_damage(damage, entity, blocked=defended == "block")
                 defeated = int(target.char.get("hp_current", 0)) <= 0
                 if not absorbed:
                     target.queue_action(int(target.char["char_id"]), damage, miss=miss,
@@ -4234,7 +4234,7 @@ class World:
         """
         # Invincible and Perfect Dodge negate physical damage outright.
         if session.has_effect(effects.INVINCIBLE) or session.has_effect(effects.PERFECT_DODGE):
-            return True, 0, False
+            return True, 0, False, None
         # Third Eye anticipates the swing outright: the charge is spent and the
         # monster's attack is negated, before any damage roll.
         eye = getattr(session, "third_eye", None)
@@ -4261,7 +4261,7 @@ class World:
                                     % (entity.name, damage))
                         if defeated:
                             self.kill_mob(session, entity, time.time())
-                return True, 0, False
+                return True, 0, False, None
         attacker = self.monster_sheet(entity).fighter
         blind = entity.effect_state.get(effects.BLINDNESS)
         if blind is not None:
@@ -4326,7 +4326,7 @@ class World:
                             % (entity.name, damage))
                 if defeated:
                     self.kill_mob(session, entity, time.time())
-        return hit.missed, hit.damage, hit.critical
+        return hit.missed, hit.damage, hit.critical, hit.defended
 
     # --- monster TP moves ----------------------------------------------------------------
 
@@ -4478,7 +4478,7 @@ class World:
             else:
                 damage = max(0, int(hit.damage))
                 defeated = int(session.char.get("hp_current", 0)) - damage <= 0
-                session.take_damage(damage, entity)
+                session.take_damage(damage, entity, blocked=hit.defended == "block")
                 results.append({
                     "damage": damage, "miss": False, "defeated": defeated, "kind": 0,
                     "animation": int(skill.animation),

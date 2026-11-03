@@ -1458,6 +1458,113 @@ class WorldTest(unittest.TestCase):
         self.assertIsNotNone(self.session.casting)
         self.assertLess(self.session.casting["finish"] - now, 0.1)
 
+    def _interrupt_mob(self):
+        mob = next(entity for entity in self.session.entities
+                   if entity.kind == "mob" and entity.alive)
+        mob.level = 99
+        return mob
+
+    def _begin_cure(self):
+        """WHM99 at full HP/MP, mid-Cure; returns the mob that will hit."""
+        self.zone(100)
+        self.session.char.update(main_job=3, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        self.session.char["hp_current"] = int(self.session.char["hp"])
+        self.session.char["mp_current"] = int(self.session.char["mp"])
+        mob = self._interrupt_mob()
+        self._cast_spell(1)                          # Cure
+        self.assertIsNotNone(self.session.casting)
+        return mob
+
+    def test_a_physical_hit_interrupts_the_cast_and_sends_the_stop_fourcc(self):
+        """The roll happens at the hit and the client gets the "sp" stop-casting 4CC."""
+        mob = self._begin_cure()
+        with mock.patch.object(self.world.rng, "random", return_value=0.0):
+            self.session.take_damage(100, mob)
+        self.assertIsNone(self.session.casting)
+        me = int(self.session.char["char_id"])
+        spell = self.service.spell(1)
+        expected = bytes(sub(0x028, packets.battle_action(
+            me, me, int(spell["id"]), animation=0, message=0, kind=0,
+            category=packets.ACTION_CATEGORY_MAGIC_START,
+            action_id=packets.magic_interrupt_arg(int(spell["skill"])), info=0)))
+        self.assertIn(expected, [bytes(message) for message in self.session.queue])
+        messages = [struct.unpack_from("<H", message, 24)[0]
+                    for message in self.session.queue
+                    if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) == 0x029]
+        self.assertIn(packets.MESSAGE_CASTING_INTERRUPTED, messages)
+        # The spell does not land after the interruption.
+        before = int(self.session.char["hp_current"])
+        self.session.resolve_casting(time.time() + 10)
+        self.assertEqual(before, int(self.session.char["hp_current"]))
+
+    def test_sird_worn_at_the_hit_prevents_the_interrupt(self):
+        mob = self._begin_cure()
+        with mock.patch.object(self.session, "combat_mods",
+                               return_value={mod.SPELL_INTERRUPT: -110}), \
+                mock.patch.object(self.world.rng, "random", return_value=0.0):
+            self.session.take_damage(100, mob)
+        self.assertIsNotNone(self.session.casting)
+
+    def test_interrupt_chance_reads_level_skill_and_sird(self):
+        """50 + attacker level - caster level, over skill and SIRD, at the hit."""
+        self._begin_cure()
+        mob = self._interrupt_mob()
+        self.assertAlmostEqual(0.5, self.session.interrupt_chance(mob), places=3)
+        mob.level = 49
+        self.assertAlmostEqual(0.01, self.session.interrupt_chance(mob), places=3)
+        mob.level = 99
+        with mock.patch.object(self.session, "combat_mods",
+                               return_value={mod.SPELL_INTERRUPT: -50}):
+            self.assertAlmostEqual(0.25, self.session.interrupt_chance(mob), places=3)
+
+    def test_the_spell_interruption_merit_is_a_reduction(self):
+        with mock.patch.object(self.session, "merit_counts", return_value={0x0148: 5}):
+            mods = self.session.combat_mods()
+        self.assertEqual(-10, int(mods.get(mod.SPELL_INTERRUPT, 0)))
+
+    def test_aquaveil_spends_a_charge_instead_of_the_cast(self):
+        mob = self._begin_cure()
+        self.session.add_effect(effects.AQUAVEIL, duration=600)
+        with mock.patch.object(self.world.rng, "random", return_value=0.0):
+            self.session.take_damage(100, mob)
+        self.assertIsNotNone(self.session.casting)
+        self.assertFalse(self.session.has_effect(effects.AQUAVEIL))
+
+    def test_shield_mastery_block_prevents_the_interrupt(self):
+        mob = self._begin_cure()
+        with mock.patch.object(self.session, "combat_mods",
+                               return_value={mod.SHIELD_MASTERY: 10}), \
+                mock.patch.object(self.world.rng, "random", return_value=0.0):
+            self.session.take_damage(100, mob, blocked=True)
+        self.assertIsNotNone(self.session.casting)
+
+    def test_songs_and_manafont_cannot_be_interrupted(self):
+        self.zone(100)
+        self.session.char.update(main_job=10, main_level=99, sub_job=0, sub_level=0)
+        mob = self._interrupt_mob()
+        self.session.casting = {"spell": {"id": 0, "name": "Song", "skill": 40},
+                                "skill": 40, "finish": time.time() + 5.0}
+        self.assertEqual(0.0, self.session.interrupt_chance(mob))
+        self.session.casting["skill"] = 33
+        self.session.add_effect(effects.MANAFONT, duration=30)
+        self.assertEqual(0.0, self.session.interrupt_chance(mob))
+
+    def test_a_hit_after_the_finish_does_not_interrupt(self):
+        mob = self._begin_cure()
+        self.session.casting["finish"] = time.time() - 0.001
+        with mock.patch.object(self.world.rng, "random", return_value=0.0):
+            self.session.take_damage(100, mob)
+        self.assertIsNotNone(self.session.casting)
+
+    def test_a_lethal_hit_cancels_the_cast(self):
+        mob = self._begin_cure()
+        self.session.char["hp_current"] = 10
+        with mock.patch.object(self.world.rng, "random", return_value=1.0):
+            self.session.take_damage(100, mob)
+        self.assertEqual(0, int(self.session.char["hp_current"]))
+        self.assertIsNone(self.session.casting)
+
     def test_quick_magic_proc_refunds_its_job_point_mp(self):
         """Quick Magic is a 5% proc; its job-point row is the 40% MP reduction."""
         self.zone(100)
@@ -2187,7 +2294,7 @@ class WorldTest(unittest.TestCase):
         self._use_war_ability(21)                    # Perfect Dodge
         mob = next(entity for entity in self.session.entities
                    if entity.kind == "mob" and entity.alive)
-        missed, damage, _critical = self.world.mob_attack(mob, self.session)
+        missed, damage, _critical, _defended = self.world.mob_attack(mob, self.session)
         self.assertTrue(missed)
         self.assertEqual(0, damage)
 
@@ -2510,7 +2617,7 @@ class WorldTest(unittest.TestCase):
         self._use_war_ability(22)                    # Invincible
         mob = next(entity for entity in self.session.entities
                    if entity.kind == "mob" and entity.alive)
-        missed, damage, _critical = self.world.mob_attack(mob, self.session)
+        missed, damage, _critical, _defended = self.world.mob_attack(mob, self.session)
         self.assertTrue(missed)
         self.assertEqual(0, damage)
 
@@ -5263,8 +5370,12 @@ class CombatStatsTest(unittest.TestCase):
                           level=level, hp=10000, hp_max=10000, alive=True)
 
     def average(self, swings) -> float:
-        """Mean damage of the swings that landed.  A swing is (missed, damage, critical)."""
-        landed = [damage for missed, damage, _critical in swings if not missed]
+        """Mean damage of the swings that landed.
+
+        ``player_attack`` reports (missed, damage, critical) and ``mob_attack`` adds the
+        defended state as a fourth field, so index the damage instead of unpacking.
+        """
+        landed = [int(swing[1]) for swing in swings if not swing[0]]
         return sum(landed) / max(1, len(landed))
 
     def test_status_packet_reports_su5_and_the_level_119_item_level(self):

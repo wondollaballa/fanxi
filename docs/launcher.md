@@ -652,11 +652,12 @@ changes through `phase_status`. An existing localStorage config is migrated to t
 signed-in bootstrap. The Lua itself lives in `gearswap_libraries`, one row per account and job, so
 it is separate from the shared templates and from every other account's copy.
 
-The phase header shows the live state and set (`Kiting · idle.pdt`), the rule counts and the
-launcher-wide **Turn GearSwap off/on** switch. The same switch is in **Settings → GearSwap**. It
-is a master stop, not a per-window pause: off sends `phase {enabled: false}` to every running
-client, which clears its precast/midcast/idle plan, pending state set and session locks, so the
-host stops holding action packets. Manual **Wear set** and the set editor keep working while it is
+The phase header shows the live state and set (`Kiting · idle.pdt`, `Casting ·
+sets.midcast.Healing Magic`), the rule counts and the launcher-wide **Turn GearSwap off/on**
+switch. The same switch is in **Settings → GearSwap**. It is a master stop, not a per-window
+pause: off sends `phase {enabled: false}` to every running client, which clears its
+precast/midcast/idle plan, pending state set and session locks, so the host stops holding action
+packets. Manual **Wear set** and the set editor keep working while it is
 off, and the choice is remembered for the next launch. It starts off on a fresh profile. The
 **Lock** button in the Active gear card is the narrower override: it holds whatever is worn and
 suppresses every automatic swap until **Unlock** or **a job change** — the new main or support job

@@ -301,7 +301,7 @@ class EffectTest(unittest.TestCase):
         mob.next_attack_at = 0.0
         hp = int(self.session.char["hp_current"])
         self.session.queue.clear()
-        with mock.patch.object(self.world, "mob_attack", return_value=(False, 10, False)):
+        with mock.patch.object(self.world, "mob_attack", return_value=(False, 10, False, None)):
             self.world._tick_mob(mob, [self.session], time.time())
         self.assertEqual(int(self.session.char["hp_current"]), hp)
         self.assertEqual(self.session.effect_power(effects.COPY_IMAGE), 2)

@@ -25,6 +25,7 @@
  */
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -69,8 +70,18 @@ static int is_phantom_roll(unsigned action)
 /* BRD's job id in the client's 0x01B block (WAR 1 ... BRD 10).  Only a Bard main job can sing,
  * so the sub job does not open the instrument window. */
 enum { PHASE_JOB_BRD = 10 };
-/* 0x028 result categories: something finished.  1 is a swing, 8 a cast starting. */
-enum { PHASE_RESULT_SKILL = 3, PHASE_RESULT_MAGIC = 4, PHASE_RESULT_ABILITY = 6 };
+/* 0x028 result categories: something finished.  1 is a swing; 8 is the server starting a cast,
+ * which is not a result and must not restore the return set. */
+enum
+{
+    PHASE_RESULT_SKILL = 3,
+    PHASE_RESULT_MAGIC = 4,
+    PHASE_RESULT_ABILITY = 6,
+    PHASE_RESULT_MAGIC_START = 8,
+};
+/* The fourcc in a category-8 action's 32-bit id field: "ca"+school starts a cast, "sp"+school
+ * stops one.  The low 16 bits are the command, so the school does not matter here. */
+enum { PHASE_FOURCC_INTERRUPT = 0x7073 };
 /* No result in this long (an interrupted cast, a refused action): put the return set back.
  * It has to outlast the longest cast or a slow spell resolves in the idle set: a bard song is
  * 8 s on its own and 12 s under Troubadour (1.5x cast), so 6 s dropped the midcast set before
@@ -219,6 +230,23 @@ static _Atomic uint32_t g_last_action_seq;
 static _Atomic uint64_t g_last_action_at;
 /* A re-sent 0x01A carries the same packet sequence; a real repeat cannot come this fast. */
 #define PHASE_ACTION_REPEAT_MS 3000u
+/* A cast the server has actually started (0x028 category 8) and not yet resolved.  The midcast
+ * set is pinned for that window: GearSwap waits for the result packet before it runs aftercast,
+ * so an automatic state change - a step, a stance flip, a zone settle, a plan push - must not
+ * take the midcast gear off while the cast bar is up.  The server reads a spell's numbers at the
+ * instant it lands (Cure potency, MAB, Macc, skill), so a swap inside the cast would resolve the
+ * spell in the wrong set.  SIRD gear is the same point: it has to be worn for the whole cast.
+ * Set only once Magic Start arrives, so a refused cast (the server never starts it) leaves the
+ * engine free to move gear; cleared by the result, a zone, a job change and the stale timeout. */
+static _Atomic unsigned g_cast_spell; /* the spell id, 0 while no cast is in flight */
+/* The set worn for that cast, as a name: a plan push may renumber the table's sets, and the
+ * status should still say what is on.  Written and read under the history lock. */
+static char g_cast_name[PHASE_NAME];
+
+static int cast_in_flight(void)
+{
+    return atomic_load_explicit(&g_cast_spell, memory_order_acquire) != 0;
+}
 
 static uint64_t now_ms(void) { return rt_monotonic_ns() / 1000000ull; }
 
@@ -531,6 +559,11 @@ static int wear_state(const PhaseTable* t, PhasePlan* plan, int force)
 {
     plan->pre_n = plan->mid_n = plan->restore_n = 0;
     plan->hold = 0;
+    /* A cast the server has started owns the gear until its result.  The state change itself is
+     * already recorded (g_moving, g_engaged, ...); fill_restore wears whatever state is current
+     * when the result arrives, so the step or stance flip is not lost, only deferred. */
+    if (!force && cast_in_flight())
+        return 0;
     /* The full lock holds every piece, but it still re-asserts a locked weapon: a sanctioned
      * swap may have taken the hand off (a cast while disengaged, a Bard's Nitro song), and the
      * lock's own promise is that the chosen weapon is what is worn. */
@@ -930,6 +963,21 @@ int xi_phase_action(uint16_t category, uint16_t action, uint16_t seq, PhasePlan*
         return 0;
     if (plan->pre_n + plan->mid_n >= 6)
         xi_log("[gear] action %u/%u seq=%u: pre %d, mid %d", category, action, seq, plan->pre_n, plan->mid_n);
+    /* A new action supersedes a cast the engine was still pinning: the client cannot start a
+     * second action in the middle of one, and a lost result must not hold the old cast forever.
+     * For a spell, the status names the set the cast will wear: the midcast set, or the precast
+     * set when the rule has no midcast of its own. */
+    atomic_store_explicit(&g_cast_spell, 0, memory_order_release);
+    history_lock();
+    g_cast_name[0] = 0;
+    if (category == PHASE_ACTION_MAGIC)
+    {
+        int shown = mid >= 0 && mid < t->nsets ? mid
+                  : (r && r->pre >= 0 && r->pre < t->nsets ? (int)r->pre : -1);
+        if (shown >= 0)
+            snprintf(g_cast_name, sizeof g_cast_name, "%s", t->names[shown]);
+    }
+    history_unlock();
     plan->hold = 1;
     atomic_store_explicit(&g_pending, 1, memory_order_release);
     atomic_store_explicit(&g_pending_at, now_ms(), memory_order_release);
@@ -948,19 +996,59 @@ int xi_phase_result(const uint8_t* packet, size_t size, PhasePlan* plan)
     /* 0x028 is a 4-byte sub-message header, then the packed byte count, then the bit stream. */
     const uint8_t* body = packet + 5;
     uint32_t category = bits_le(body, 42, 4);
-    if (category != PHASE_RESULT_SKILL && category != PHASE_RESULT_MAGIC &&
-        category != PHASE_RESULT_ABILITY)
-        return 0;
     PhaseTable* t = atomic_load_explicit(&g_table, memory_order_acquire);
     if (!t || !t->enabled)
         return 0;
     uint32_t actor = bits_le(body, 0, 32);
-    uint32_t action = bits_le(body, 46, 32);
     if (t->player && actor != t->player)
         return 0;
+    /* Category 8 is the cast's own traffic, not a finish: the server starts the cast with
+     * "ca"+school (pin the midcast set) or stops it with "sp"+school, which is the interruption
+     * result and ends the window.  Both arrive with the actor set to the caster. */
+    if (category == PHASE_RESULT_MAGIC_START)
+    {
+        unsigned pending_category = atomic_load_explicit(&g_pending_category, memory_order_acquire);
+        if (bits_le(body, 46, 16) == PHASE_FOURCC_INTERRUPT)
+        {
+            if (pending_category == PHASE_ACTION_MAGIC)
+            {
+                atomic_store_explicit(&g_pending, 0, memory_order_release);
+                atomic_store_explicit(&g_cast_spell, 0, memory_order_release);
+                history_lock();
+                g_cast_name[0] = 0;
+                history_unlock();
+                history_close(now_ms());
+                xi_log("[gear] cast interrupted: the midcast set comes off");
+                if (!fill_restore(t, plan))
+                    return 0;
+                atomic_fetch_add(&g_restored, 1);
+                return 1;
+            }
+            return 0;
+        }
+        if (pending_category == PHASE_ACTION_MAGIC)
+        {
+            atomic_store_explicit(&g_cast_spell,
+                                  atomic_load_explicit(&g_pending_action, memory_order_acquire),
+                                  memory_order_release);
+            xi_log("[gear] cast %u started: the midcast set stays on until the result",
+                   atomic_load_explicit(&g_cast_spell, memory_order_acquire));
+        }
+        return 0;
+    }
+    if (category != PHASE_RESULT_SKILL && category != PHASE_RESULT_MAGIC &&
+        category != PHASE_RESULT_ABILITY)
+        return 0;
+    uint32_t action = bits_le(body, 46, 32);
     if (action != atomic_load_explicit(&g_pending_action, memory_order_acquire))
         return 0;
     atomic_store_explicit(&g_pending, 0, memory_order_release);
+    /* This is aftercast: the cast is over, and whatever state the player is in now is the set
+     * the return restores.  A step taken during the cast lands here. */
+    atomic_store_explicit(&g_cast_spell, 0, memory_order_release);
+    history_lock();
+    g_cast_name[0] = 0;
+    history_unlock();
     history_close(now_ms());
     if (!fill_restore(t, plan))
         return 0;
@@ -980,6 +1068,12 @@ void xi_phase_restore_if_stale(PhasePlan* plan, int* have)
     if (now - atomic_load_explicit(&g_pending_at, memory_order_acquire) < timeout)
         return;
     atomic_store_explicit(&g_pending, 0, memory_order_release);
+    /* The cast never resolved (the action was refused, or the client and server lost each
+     * other): let the state set back on, the same path a result uses. */
+    atomic_store_explicit(&g_cast_spell, 0, memory_order_release);
+    history_lock();
+    g_cast_name[0] = 0;
+    history_unlock();
     history_close(now);
     PhaseTable* t = atomic_load_explicit(&g_table, memory_order_acquire);
     if (!t || !t->enabled || !fill_restore(t, plan))
@@ -1021,8 +1115,16 @@ void xi_phase_zone(int zone, int town)
     atomic_store_explicit(&g_burst, 0, memory_order_release);
     /* A zone-in is a fresh world: the server re-sends the outfit (0x050 echoes refill the
      * worn table) and auto-equips if it has none, so the old table is not trusted.  An action
-     * in flight is gone with the old zone too. */
+     * in flight is gone with the old zone too: its result is never coming, so the pending flag
+     * and a pinned cast end here and the settle below wears the new zone's state set. */
     worn_forget();
+    atomic_store_explicit(&g_pending, 0, memory_order_release);
+    atomic_store_explicit(&g_pending_action, 0, memory_order_release);
+    atomic_store_explicit(&g_pending_category, 0, memory_order_release);
+    atomic_store_explicit(&g_cast_spell, 0, memory_order_release);
+    history_lock();
+    g_cast_name[0] = 0;
+    history_unlock();
     history_close(now_ms());
     atomic_store_explicit(&g_override.active, 0, memory_order_release);
     /* Every zone-in is a fresh world for the client: stand in the idle set once it has loaded. */
@@ -1037,6 +1139,15 @@ void xi_phase_zone(int zone, int town)
 static void release_session_locks(void)
 {
     atomic_store_explicit(&g_override.active, 0, memory_order_release);
+    /* A job change cancels whatever was casting: the spell belonged to the old job, and its
+     * result may never arrive. */
+    atomic_store_explicit(&g_pending, 0, memory_order_release);
+    atomic_store_explicit(&g_pending_action, 0, memory_order_release);
+    atomic_store_explicit(&g_pending_category, 0, memory_order_release);
+    atomic_store_explicit(&g_cast_spell, 0, memory_order_release);
+    history_lock();
+    g_cast_name[0] = 0;
+    history_unlock();
     atomic_store_explicit(&g_locked, 0, memory_order_release);
     atomic_store_explicit(&g_lock_set, -1, memory_order_release);
     atomic_store_explicit(&g_locked_slots, 0, memory_order_release);
@@ -1099,6 +1210,11 @@ int xi_phase_apply(PhasePlan* plan)
     PhaseTable* t = atomic_load_explicit(&g_table, memory_order_acquire);
     if (!t || !t->enabled)
         return 0;
+    /* A pushed plan re-wears the state set only when nothing is casting.  This is not the manual
+     * "Wear set" path (that is the addon's equip_set): a library edit or a mode push while the
+     * cast bar is up must not take the midcast set off. */
+    if (cast_in_flight())
+        return 0;
     return wear_state(t, plan, 1);
 }
 
@@ -1109,6 +1225,10 @@ int xi_phase_pending(PhasePlan* plan)
     if (!atomic_load_explicit(&g_state_pending, memory_order_acquire))
         return 0;
     if (now_ms() < atomic_load_explicit(&g_state_due, memory_order_acquire))
+        return 0;
+    /* A zone or job settle that comes due inside a cast waits: the result's return set is the
+     * state, and that same set is compared with what the action left on. */
+    if (cast_in_flight())
         return 0;
     atomic_store_explicit(&g_state_pending, 0, memory_order_release);
     PhaseTable* t = atomic_load_explicit(&g_table, memory_order_acquire);
@@ -1132,6 +1252,10 @@ int xi_phase_lock(int on, PhasePlan* plan)
             capture_weapon_locks(t, PHASE_WEAPON_SLOTS, 1);
             /* Nothing in flight may overwrite the held set. */
             atomic_store_explicit(&g_pending, 0, memory_order_release);
+            atomic_store_explicit(&g_cast_spell, 0, memory_order_release);
+            history_lock();
+            g_cast_name[0] = 0;
+            history_unlock();
             atomic_store_explicit(&g_state_pending, 0, memory_order_release);
             atomic_fetch_add(&g_swapped, 1);
         }
@@ -1267,12 +1391,23 @@ void xi_phase_precache(uint16_t action, const PhaseEquip* equips, int n)
  * wear the whole outfit.  A clear cancels it. */
 static void reset_plan(int keep_settle)
 {
-    atomic_store_explicit(&g_override.active, 0, memory_order_release);
-    atomic_store_explicit(&g_pending, 0, memory_order_release);
-    atomic_store_explicit(&g_pending_action, 0, memory_order_release);
-    atomic_store_explicit(&g_pending_category, 0, memory_order_release);
     if (!keep_settle)
+    {
+        atomic_store_explicit(&g_override.active, 0, memory_order_release);
+        atomic_store_explicit(&g_pending, 0, memory_order_release);
+        atomic_store_explicit(&g_pending_action, 0, memory_order_release);
+        atomic_store_explicit(&g_pending_category, 0, memory_order_release);
+        atomic_store_explicit(&g_cast_spell, 0, memory_order_release);
+        history_lock();
+        g_cast_name[0] = 0;
+        history_unlock();
         atomic_store_explicit(&g_state_pending, 0, memory_order_release);
+    }
+    /* A pushed plan keeps an action that is already in flight, and with it a cast the server
+     * has started: a mode edit or a set edit while the cast bar is up must not strip the
+     * midcast set, and the action's result still has to be matched so the return set goes on.
+     * A zone, a job change and a different character clear it separately (xi_phase_zone,
+     * release_session_locks). */
     atomic_store_explicit(&g_precache_n, 0, memory_order_release);
     /* A new table means new set indices: what was worn no longer names anything.  The worn
      * table itself is kept: it is keyed by item, not by set, and a pushed plan that changes a
@@ -1573,6 +1708,10 @@ static const char* state_name(const PhaseTable* t)
 {
     if (atomic_load_explicit(&g_locked, memory_order_acquire))
         return "locked";
+    /* A cast the server has started is the state the gear is in: the midcast set is pinned and
+     * the aftercast state (engaged, movement, town, ...) is only where it returns to. */
+    if (cast_in_flight())
+        return "casting";
     if (atomic_load_explicit(&g_kiting, memory_order_acquire))
         return "kiting";
     if (atomic_load_explicit(&g_engaged, memory_order_acquire))
@@ -1602,7 +1741,15 @@ static int p_status(lua_State* L)
     int resting = atomic_load_explicit(&g_resting, memory_order_acquire);
     int focus = atomic_load_explicit(&g_focus, memory_order_acquire);
     int town = atomic_load_explicit(&g_town, memory_order_acquire);
+    int casting = cast_in_flight();
+    char cast_name[PHASE_NAME] = { 0 };
     int idx = locked ? atomic_load_explicit(&g_lock_set, memory_order_acquire) : state_index(t);
+    if (casting)
+    {
+        history_lock();
+        memcpy(cast_name, g_cast_name, sizeof cast_name);
+        history_unlock();
+    }
     const char* state = state_name(t);
     lua_createtable(L, 0, 20);
     lua_pushboolean(L, t && t->enabled);
@@ -1659,6 +1806,10 @@ static int p_status(lua_State* L)
     lua_setfield(L, -2, "nitro");
     lua_pushboolean(L, atomic_load_explicit(&g_burst, memory_order_acquire) ? 1 : 0);
     lua_setfield(L, -2, "burst");
+    lua_pushboolean(L, casting);
+    lua_setfield(L, -2, "casting");
+    lua_pushnumber(L, casting ? (lua_Number)atomic_load(&g_cast_spell) : 0);
+    lua_setfield(L, -2, "castSpell");
     lua_pushstring(L, state);
     lua_setfield(L, -2, "state");
     lua_pushnumber(L, town);
@@ -1667,7 +1818,9 @@ static int p_status(lua_State* L)
     lua_setfield(L, -2, "zone");
     lua_pushnumber(L, atomic_load(&g_job));
     lua_setfield(L, -2, "job");
-    if (t && idx >= 0 && idx < t->nsets && t->names[idx][0])
+    if (cast_name[0])
+        lua_pushstring(L, cast_name);
+    else if (t && idx >= 0 && idx < t->nsets && t->names[idx][0])
         lua_pushstring(L, t->names[idx]);
     else
         lua_pushnil(L);

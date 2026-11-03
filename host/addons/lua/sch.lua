@@ -11,8 +11,8 @@ module draws that kit as one window:
   recharge progress and the clock to the next charge -- each spent charge has its own
   return time, so stratagems used back to back come back back to back;
 * one tab per skillchain family (Liquefaction, Induration, ...), each holding the
-  player's own named macros (up to three spells, an optional Ebullience, and an
-  optional magic-burst list that fires after the chain closes);
+  player's own named macros (up to three spells, an optional Ebullience in front of
+  the burst, and an optional magic-burst list that fires after the chain closes);
 * an editor for the macros and the tabs, and per-character persistence under
   ``<data>/sch/<name>-<id>.sch``;
 * a macro that cannot be paid for is dimmed and shows the clock to the next time the
@@ -20,12 +20,15 @@ module draws that kit as one window:
 
 The keyboard flow is the game's own: an action is an ordinary ``/ja`` or ``/ma`` line,
 so the client still owns range, the cast bar, recast checks and the packets it sends.
-The runner follows those two bars instead of fixed sleeps: it waits for the shared
-stratagem recast (Immanence and Ebullience share recast id 231) before the next
-``/ja``, and for the cast bar to clear before the next step.  A one-second gap after
-Ebullience was short enough for the server to answer "Immanence is not ready yet.",
-and the spell after it opened no chain; the 4/5 s gaps after a spell could also run
-out before a long cast finished.
+The runner follows the server's action results instead of fixed sleeps: a job ability
+is confirmed by its ABILITY_FINISH result, a spell by MAGIC_START and MAGIC_FINISH,
+and the next step goes out as soon as the current result lands.  The shared stratagem
+recast (Immanence and Ebullience share id 231) is the one server rule no action result
+carries, so the recast table is read before each job ability.  A command the client
+drops inside its own animation produces no result; it is retried as soon as the
+recast is clear, which lets the action land the moment the client accepts it instead
+of after a guessed beat.  Ebullience is used in front of the magic burst, never before
+the opener, where the first spell would eat it.
 
 Installed by ``control.lua`` (``hud.sch``), or standalone with ``install{standalone =
 true}``, which is how the module is tried in a live client while it is still being
@@ -696,8 +699,16 @@ local function spend_charge(count)
     if spent > 0 then mark_dirty() end
 end
 
+-- Ebullience raises the next black-magic spell's damage, so it belongs in front of the
+-- magic burst, not the opener: checked off before the chain it would be spent on the
+-- opener and the burst would get nothing.  A macro with no burst list has no burst to
+-- raise, so the flag costs no charge.
+local function needs_ebullience(macro)
+    return macro.ebullience == true and #(macro.bursts or {}) > 0
+end
+
 local function charges_needed(macro)
-    return #(macro.spells or {}) + (macro.ebullience and 1 or 0)
+    return #(macro.spells or {}) + (needs_ebullience(macro) and 1 or 0)
 end
 
 -- The wall-clock second at which `needed` charges are in hand.  Zero means now.  The
@@ -880,7 +891,7 @@ local function run_macro(group, macro)
         title = macro.title,
         spells = copy_array(macro.spells),
         bursts = copy_array(macro.bursts),
-        ebullience = macro.ebullience == true,
+        ebullience = needs_ebullience(macro),
         started = clock(),
         phase = 'starting',
         cancelled = false,
@@ -894,17 +905,24 @@ local function run_macro(group, macro)
             if not ok then notify('Scholar: ' .. tostring(err)) end
             return ok
         end
+        -- Polling a state; the only "seconds" left are failure limits.  The sequence
+        -- follows the server's own action results, not a guessed beat.
+        local function wait_until(pred, timeout)
+            local deadline = clock() + timeout
+            while clock() < deadline do
+                if run.cancelled then return false end
+                if pred() then return true end
+                coroutine.sleep(0.03)
+            end
+            return false
+        end
         local function wait(seconds)
             if run.cancelled then return end
             coroutine.sleep(seconds)
         end
 
-        -- Immanence and Ebullience share recast id 231.  A one-second wait after
-        -- Ebullience was not enough: the client's recast/animation still had the shared
-        -- slot busy, the server answered "Immanence is not ready yet.", and the spell
-        -- that followed went out without Immanence, so the chain never opened.  The
-        -- client's recast table is indexed by recast-id slot, not ability id; find the
-        -- slot once and wait on its timer instead of guessing at sleeps.
+        -- Immanence and Ebullience share recast id 231.  This table is still useful
+        -- for the one server rule that is not in a result: the shared recast.
         local stratagem_slot
         for slot = 0, 255 do
             local ok, _, rid = pcall(xi.game.ability_recast, slot)
@@ -926,98 +944,112 @@ local function run_macro(group, macro)
             while clock() < deadline do
                 if timer <= 0 then return true end
                 if run.cancelled then return false end
-                coroutine.sleep(0.05)
+                coroutine.sleep(0.03)
                 timer = stratagem_timer()
             end
             return timer ~= nil and timer <= 0
         end
-        local function wait_stratagem_finished(timeout)
-            -- Wait for the use to appear on the shared recast and then clear it, so the
-            -- spell is sent after the ability has really executed.  `seen` separates a
-            -- rejected /ja (no recast ever starts) from a use still cooling.
-            local timer = stratagem_timer()
-            if timer == nil then return true end
-            local seen = timer > 0
-            local deadline = clock() + timeout
-            while clock() < deadline do
-                if timer > 0 then seen = true end
-                if seen and timer <= 0 then return true end
-                if run.cancelled then return false end
-                coroutine.sleep(0.05)
-                timer = stratagem_timer()
+
+        local function confirmed(before, category, id)
+            local log = S.action_log
+            if not log then return false end
+            for index = 1, 16 do
+                local action = log[index]
+                if action and action.seq > before and action.category == category
+                        and (not id or action.id == id) then
+                    return true
+                end
             end
-            return seen and timer ~= nil and timer <= 0
-        end
-        local function use_stratagem(line, phase)
-            if not wait_stratagem_ready(3.0) then
-                notify('Scholar: ' .. phase .. ' is still on recast; sequence stopped.')
-                run.cancelled = true
-                return false
-            end
-            if not step(line, phase) then return false end
-            if stratagem_timer() == nil then
-                -- No recast table on this host: keep the old fixed one-second beat.
-                wait(1.0)
-                return true
-            end
-            if not wait_stratagem_finished(3.0) then
-                notify('Scholar: ' .. phase .. ' did not go off; sequence stopped.')
-                run.cancelled = true
-                return false
-            end
-            wait(0.15)
-            return true
+            return false
         end
 
-        -- The cast bar is the real end of a spell.  The old fixed 4/5 s gap after the
-        -- first spell assumed its cast had finished; a long cast (or a slower cast set)
-        -- ran past the next Immanence, which interrupted the opener and dropped the
-        -- chain.  Wait for the bar: start, then clear, then a short aftercast beat.
+        -- The server's ABILITY_FINISH result (category 6) is the proof the ability
+        -- really ran.  No result means the client dropped the /ja inside its own
+        -- animation; try again, but only after the shared recast is clear.  Four
+        -- attempts cover the two-second animation without any sleep standing in
+        -- for it.
+        local function use_stratagem(line, phase, ability_id)
+            for attempt = 1, 4 do
+                if not wait_stratagem_ready(3.0) then
+                    notify('Scholar: ' .. phase .. ' is still on recast; sequence stopped.')
+                    run.cancelled = true
+                    return false
+                end
+                local before = S.action_seq or 0
+                if not step(line, phase) then return false end
+                if wait_until(function() return confirmed(before, 6, ability_id) end, 0.7) then
+                    return true
+                end
+            end
+            notify('Scholar: ' .. phase .. ' did not answer; sequence stopped.')
+            run.cancelled = true
+            return false
+        end
+
         local function cast_count()
             local ok, count = pcall(function() return xi.game.castbar('Count') end)
             if not ok then return nil end
             return tonumber(count) or 0
         end
-        local function wait_cast(name)
-            local count = cast_count()
-            if count == nil then
-                wait(cast_seconds(name) + 0.8)
-                return
+        local function cast_spell(name, phase)
+            local info = spell_info(name)
+            local spell_id = info and tonumber(info.id) or nil
+            local before
+            local function send()
+                before = S.action_seq or 0
+                step(string.format('/ma "%s" <t>', name), phase or name)
             end
-            local start = clock() + 1.5
-            while clock() < start and (count or 0) <= 0.001 do
-                if run.cancelled then return end
-                coroutine.sleep(0.05)
-                count = cast_count()
+            local function started()
+                if (cast_count() or 0) > 0.001 then return true end
+                return confirmed(before, 8, spell_id) or confirmed(before, 4, spell_id)
             end
-            local deadline = clock() + math.max(3.0, cast_seconds(name) + 1.5)
-            while clock() < deadline and (count or 0) > 0.001 do
-                if run.cancelled then return end
-                coroutine.sleep(0.05)
-                count = cast_count()
+            send()
+            -- Four attempts cover the two-second ability animation: a /ma sent
+            -- inside it is dropped, and the fourth goes out after it ends.
+            for attempt = 2, 4 do
+                if wait_until(started, 0.8) then break end
+                send()
             end
-            wait(0.25)
+            if not wait_until(started, 1.0) then
+                if cast_count() == nil and (S.action_seq or 0) == (before or 0) then
+                    -- A host with no cast bar and no action stream: the catalog's
+                    -- cast time is the only information left.
+                    wait(cast_seconds(name) + 0.8)
+                    return true
+                end
+                notify('Scholar: ' .. name .. ' did not start; sequence stopped.')
+                run.cancelled = true
+                return false
+            end
+            -- The finished-spell result (category 4) is the real end of the cast,
+            -- and it is the packet that carries a skillchain and opens the burst
+            -- window.  The next step starts as soon as it lands.
+            if not wait_until(function() return confirmed(before, 4, spell_id) end,
+                              cast_seconds(name) + 5.0) then
+                notify('Scholar: ' .. name .. ' did not finish; sequence stopped.')
+                run.cancelled = true
+                return false
+            end
+            return true
         end
 
         local ok, err = pcall(function()
             if run.cancelled then return end
-            if run.ebullience then
-                if not use_stratagem('/ja "Ebullience" <me>', 'Ebullience') then return end
-            end
             for index, name in ipairs(run.spells) do
                 if run.cancelled then break end
-                if not use_stratagem('/ja "Immanence" <me>', 'Immanence') then break end
+                if not use_stratagem('/ja "Immanence" <me>', 'Immanence', 317) then break end
                 if run.cancelled then break end
-                step(string.format('/ma "%s" <t>', name), name)
-                wait_cast(name)
-                -- Let the action's own aftercast clear before the next Immanence.
-                wait(0.35)
+                cast_spell(name, name)
+            end
+            if run.cancelled then return end
+            -- Ebullience belongs in front of the burst: used before the chain it is
+            -- spent on the opener and the burst it was meant to raise gets nothing.
+            if run.ebullience then
+                if not use_stratagem('/ja "Ebullience" <me>', 'Ebullience', 221) then return end
             end
             for index, name in ipairs(run.bursts) do
                 if run.cancelled then break end
-                step(string.format('/ma "%s" <t>', name),
-                     string.format('Magic Burst %d/%d: %s', index, #run.bursts, name))
-                wait_cast(name)
+                cast_spell(name, string.format('Magic Burst %d/%d: %s', index, #run.bursts, name))
             end
         end)
         if not ok then notify('Scholar: sequence error: ' .. tostring(err)) end
@@ -1323,7 +1355,7 @@ function W.macro_card(api, group, macro, width)
     local ready = have >= needed
     local running = S.run and S.run.group_id == group.id and S.run.macro_id == macro.id
     local title = macro.title
-    if macro.ebullience then title = title .. ' (Ebullience)' end
+    if needs_ebullience(macro) then title = title .. ' (Ebullience)' end
     local second = table.concat(macro.spells, ' > ')
     second = second .. '  ·  ' .. needed .. ' strat'
     if #macro.bursts > 0 then second = second .. '  ·  MB x' .. #macro.bursts end
@@ -1416,6 +1448,33 @@ function W.footer(api)
         clock_text(recharge)))
     api.SameLine(0, 12)
     text(api, COLORS.faint, '//hud sch hides  ·  //sch sets')
+end
+
+-- A small live banner while a Magic Burst window is open on the current target.  The
+-- client has no Magic Burst status; control.lua reads the window off the chain's 0x028
+-- action and hands the skillchain and the time left here.
+function W.burst_window(api)
+    if not S.burst_info then return end
+    local ok, info = pcall(S.burst_info)
+    if not ok or type(info) ~= 'table' then return end
+    local screen = 1280
+    local okio, io = pcall(api.GetIO)
+    if okio and io and io.DisplaySize then
+        screen = tonumber(io.DisplaySize.x) or screen
+    end
+    local width, height = 260, 74
+    api.SetNextWindowPos({ math.max(4, (screen - width) / 2), 8 }, 1)
+    api.SetNextWindowSize({ width, height }, 1)
+    api.SetNextWindowBgAlpha(0.92)
+    local open = api.Begin('Magic Burst###fanxi_sch_mb', nil, 15)
+    if open then
+        text(api, COLORS.gold, 'MAGIC BURST WINDOW')
+        local name = SC_NAMES[tonumber(info.sc) or 0] or 'Skillchain'
+        text(api, COLORS.text, name)
+        api.SameLine(0, 10)
+        text(api, COLORS.cyan, string.format('%.1f s', tonumber(info.remaining) or 0))
+    end
+    api.End()
 end
 
 function W.window(api)
@@ -1545,7 +1604,9 @@ function W.editor(api)
         if api.Checkbox('Use Ebullience##ebullience', box) then
             draft.ebullience = box[1] == true
         end
-        text(api, COLORS.faint, '        +1 strategem; title shows (Ebullience)')
+        text(api, COLORS.faint, #draft.bursts > 0
+            and '        +1 strategem before the burst; title shows (Ebullience)'
+            or '        no burst yet: unused, and no charge')
 
         local sc, rows = preview_chain(draft.spells)
         local parts = {}
@@ -1556,7 +1617,7 @@ function W.editor(api)
         for slot = 1, SPELL_SLOTS do
             if clean_field(draft.spells[slot], 40) ~= '' then needed = needed + 1 end
         end
-        if draft.ebullience then needed = needed + 1 end
+        if needs_ebullience(draft) then needed = needed + 1 end
         api.Dummy({ 0, 2 })
         local preview = #parts > 0 and (table.concat(parts, ' > ') .. '  =  ' ..
             (sc > 0 and sc_name(sc) or 'no chain')) or 'Pick an opener and a closer.'
@@ -1753,44 +1814,44 @@ end
 -- ---------------------------------------------------------------------------------------------
 -- install, draw and commands
 
--- The client resends 0x01A until the server acks it; the same action on the same
--- packet sequence inside three seconds is a copy, not another charge.  This mirrors the
--- phase engine's retransmit window and keeps a short ring of them because a retransmit
--- can arrive after the next ability's packet.
-local recent_stratagems = {}
-
-local function seen_stratagem(id, seq, at)
-    for index = #recent_stratagems, 1, -1 do
-        local entry = recent_stratagems[index]
-        if at - entry.at > 3.0 then
-            table.remove(recent_stratagems, index)
-        elseif entry.id == id and entry.seq == seq then
-            return true
-        end
-    end
-    recent_stratagems[#recent_stratagems + 1] = { id = id, seq = seq, at = at }
-    return false
-end
-
-local function on_packet(e)
-    if not S.installed then return end
-    -- Not ``e.injected``: an action the HUD's own macro sends is injected by the host's
-    -- command path, and that is exactly the strategem use this counter exists for.
-    if e.blocked or e.id ~= 0x01A then return end
+-- The server's own 0x028 for one of our actions is the edge the sequencer follows:
+-- 6 = job ability finished, 8 = cast started, 4 = spell landed.  Reading the three
+-- fields here keeps the wait off the clock: a command the client dropped produces
+-- no result, and a result is the proof the server accepted the action.
+local function on_action(e)
+    if not S.installed or e.blocked or e.injected or e.id ~= 0x028 then return end
     local data = e.modified or e.data
-    if type(data) ~= 'string' or #data < 16 then return end
-    local category = data:byte(11) + data:byte(12) * 256
-    if category ~= 9 then return end
-    local id = data:byte(13) + data:byte(14) * 256 + data:byte(15) * 65536
-        + data:byte(16) * 16777216
-    if not STRATAGEM[id] then return end
-    local seq = tonumber(e.sequence) or 0
-    if seen_stratagem(id, seq, clock()) then return end
-    M.ensure()
-    -- The HUD's own macro and a manual click both land here; the packet is the one
-    -- place a strategem is really spent, so the gauge cannot drift from the game.
-    spend_charge(1)
-    save_state()
+    if type(data) ~= 'string' or #data < 32 then return end
+    local function at(pos, n)
+        local v, got, i, off = 0, 0, math.floor(pos / 8), pos % 8
+        while got < n do
+            local b = data:byte(i + 1) or 0
+            local take = math.min(8 - off, n - got)
+            v = v + (math.floor(b / 2 ^ off) % 2 ^ take) * 2 ^ got
+            got, off, i = got + take, 0, i + 1
+        end
+        return v
+    end
+    local index = xi.game.player_index()
+    if not index or index < 0 then return end
+    local me = xi.game.entity(index, 'ServerId')
+    if not me or at(40, 32) ~= tonumber(me) then return end
+    S.action_seq = (S.action_seq or 0) + 1
+    local category, id = at(82, 4), at(86, 32)
+    S.action = { seq = S.action_seq, category = category, id = id, at = clock() }
+    -- An auto-attack packet can follow the result we are waiting for before the
+    -- sequencer next polls; keep a short ring, not just the latest action.
+    local log = S.action_log
+    if not log then log = {}; S.action_log = log end
+    S.action_count = (S.action_count or 0) + 1
+    log[(S.action_count - 1) % 16 + 1] = S.action
+    if category == 6 and STRATAGEM[id] then
+        -- The gauge follows the server's ABILITY_FINISH, not the outgoing request:
+        -- a refused use spends nothing, and a retransmit cannot spend twice.
+        M.ensure()
+        spend_charge(1)
+        save_state()
+    end
 end
 
 local function on_command(e)
@@ -1821,12 +1882,13 @@ function M.install(ctx)
     S.notify = ctx.notify or S.notify
     S.on_hide = ctx.on_hide
     S.get_shown = ctx.get_shown
+    S.burst_info = ctx.burst_info
     S.standalone = ctx.standalone == true
     if ctx.show ~= nil then S.standalone_show = ctx.show end
     local first = not S.installed
     S.installed = true
     if first and xi.events and xi.events.on then
-        xi.events.on('packet_out', on_packet)
+        xi.events.on('packet_in', on_action)
         xi.events.on('command', on_command)
         if S.standalone then xi.events.on('present', on_present) end
     end
@@ -1875,6 +1937,13 @@ function M.draw(api)
     if not ok and not S.warned then
         S.warned = true
         notify('Scholar HUD: ' .. tostring(err))
+    end
+    if S.burst_info then
+        local okb, errb = pcall(W.burst_window, api)
+        if not okb and not S.warned then
+            S.warned = true
+            notify('Scholar HUD: ' .. tostring(errb))
+        end
     end
     if S.editor then
         local ok2, err2 = pcall(W.editor, api)

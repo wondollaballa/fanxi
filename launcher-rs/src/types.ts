@@ -1448,6 +1448,10 @@ export type PhaseStatus = {
   restoredLate?: number;
   pending?: boolean;
   pendingAction?: number;
+  /** True from the server's Magic Start until the spell's result: the midcast set is pinned. */
+  casting?: boolean;
+  /** The spell id whose cast is in flight, 0 when none. */
+  castSpell?: number;
   settling?: boolean;
   ws?: number;
   ja?: number;
@@ -1464,9 +1468,9 @@ export type PhaseStatus = {
   /** Equipment slot indices (main 0 ... back 15) pinned by //gs lock. */
   lockedSlots?: number[];
   locked?: boolean;
-  /** "engaged" | "movement" | "idle.town" | "idle.field" | "locked" */
+  /** "engaged" | "casting" | "movement" | "idle.town" | "idle.field" | "locked" */
   state?: string;
-  /** The set path the host says is active, e.g. "idle.town". */
+  /** The set path the host says is active, e.g. "idle.town", or the midcast set during a cast. */
   set?: string | null;
   /** The action set on right now (e.g. "WS.Blitz") while an action holds it. */
   actionSet?: string | null;

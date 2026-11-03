@@ -1,0 +1,25 @@
+# The Scholar sequencer's server-action hooks (host/addons/lua/sch.lua).  The packets are
+# real 0x028 bodies built by server/fanxi_server/game/packets.py: an ABILITY_FINISH (category
+# 6) confirms Immanence and spends one charge, then MAGIC_START (8) and MAGIC_FINISH (4)
+# confirm the spell without spending another.  Run by tests/sch_action_test.sh.
+frames 2
+load schtest xi
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); S.state.charges={count=5,max=5,level=99,timers={}}; return S.state.charges.count
+packet_in 28000000220100000001584f0000000000004000000040400000000000190000000000
+frames 2
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.state.charges.count
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action_seq
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action and S.action.category
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action and S.action.id
+packet_in 28000000220100000001e00d00000000000040000000400000000000c0510000000000
+frames 1
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.state.charges.count
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action_seq
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action and S.action.category
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action and S.action.id
+packet_in 28000000220100000001d00d00000000000040000000400000000000c0510000000000
+frames 1
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.state.charges.count
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action_seq
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action and S.action.category
+lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action and S.action.id

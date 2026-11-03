@@ -7690,6 +7690,109 @@ class ZoneSession:
             int_bonus=int(cast.get("sch_int") or 0),
             mnd_bonus=int(cast.get("sch_mnd") or 0)))
 
+    # --- spell interruption -------------------------------------------------------------------
+
+    def interrupt_chance(self, attacker, mods: dict[int, int] | None = None) -> float:
+        """The chance one landed hit interrupts the cast in progress.
+
+        Retail rolls this at the moment of the attack round and re-rolls it for every
+        attack, not once at cast start: the attacker's level against the caster's, the
+        caster's skill in the spell's school against that school's cap, and the SIRD worn
+        *then*.  That is why the midcast set has to stay on for the whole cast.  Songs,
+        Manafont and Chainspell cannot be interrupted; Shield Mastery's blocked hits are
+        filtered by the caller.  The return is a ratio for ``rng.random() < chance``.
+        """
+        cast = self.casting
+        if not cast:
+            return 0.0
+        spell = cast.get("spell") or {}
+        skill = int(cast.get("skill") or spell.get("skill") or 0)
+        if skill in effects.SONG_SKILLS:
+            return 0.0
+        if self.has_effect(effects.MANAFONT) or self.has_effect(effects.CHAINSPELL):
+            return 0.0
+        level = int(getattr(attacker, "level", 0) or 0)
+        if level <= 0:
+            return 0.0
+        my_level = int(self.char.get("main_level", 0) or 0)
+        level_ratio = max(0.01, (50 + level - my_level) / 100.0)
+        caps, base_caps = self.effective_skills()
+        skill_cap = int(base_caps.get(skill, 0) or 0)
+        skill_level = int(caps.get(skill, 0) or 0)
+        if skill_level <= 0:
+            skill_ratio = 10.0
+        elif skill_cap <= 0:
+            skill_ratio = 1.0
+        else:
+            skill_ratio = skill_cap / skill_level
+        if mods is None:
+            mods = self.combat_mods()
+        sird = -int(mods.get(mod.SPELL_INTERRUPT, 0))
+        sird_ratio = (100.0 - sird) / 100.0
+        return level_ratio * skill_ratio * sird_ratio
+
+    def try_interrupt_cast(self, attacker, *, blocked: bool = False) -> bool:
+        """Roll a landed hit against the cast and interrupt it when the roll wins."""
+        cast = self.casting
+        if not cast or time.time() >= float(cast.get("finish") or 0):
+            return False
+        mods = self.combat_mods()
+        if blocked and int(mods.get(mod.SHIELD_MASTERY, 0)) > 0:
+            return False
+        chance = self.interrupt_chance(attacker, mods)
+        if chance <= 0.0 or float(self.world.rng.random()) >= chance:
+            return False
+        if self.has_effect(effects.AQUAVEIL):
+            self._consume_aquaveil()
+            return False
+        spell = self.casting.get("spell") or {}
+        log.info("%s: %s interrupted %s (%.0f%%)", self.addr,
+                 getattr(attacker, "name", "a hit"), spell.get("name", "a spell"),
+                 chance * 100.0)
+        self.interrupt_cast()
+        return True
+
+    def _consume_aquaveil(self) -> None:
+        """Spend one Aquaveil charge: one base, three above 500 Enhancing Magic."""
+        state = self.effect_state.get(effects.AQUAVEIL)
+        if state is None:
+            return
+        charges = int(state.get("interrupt_charges") or 0)
+        if charges <= 0:
+            caps, _ = self.effective_skills()
+            charges = 3 if int(caps.get(packets.SKILL_ENHANCING, 0)) > 500 else 1
+        charges -= 1
+        if charges <= 0:
+            self.remove_effect(effects.AQUAVEIL, quiet=True)
+        else:
+            state["interrupt_charges"] = charges
+        self.queue.append(self.char_status())
+
+    def interrupt_cast(self) -> None:
+        """Stop the cast in progress: the client's stop-casting 4CC and the message.
+
+        The action keeps the Magic Start category (8) but carries "sp"+school, so the
+        client drops the cast bar instead of starting another one; the 0x029 basic message
+        16 prints "<player>'s casting is interrupted."  The phase engine reads the same
+        fourcc and restores the aftercast set.
+        """
+        cast = self.casting
+        if not cast:
+            return
+        self.casting = None
+        spell = cast.get("spell") or {}
+        skill = int(cast.get("skill") or spell.get("skill") or 0)
+        me = int(self.char["char_id"])
+        targid = int(getattr(self, "targid", 0) or 0x400)
+        self.queue.append(sub(0x028, packets.battle_action(
+            me, me, int(spell.get("id") or 0), animation=0, message=0, kind=0,
+            category=packets.ACTION_CATEGORY_MAGIC_START,
+            action_id=packets.magic_interrupt_arg(skill), info=0)))
+        self.queue.append(sub(0x029, packets.battle_message(
+            me, me, targid, targid, 0, 0, packets.MESSAGE_CASTING_INTERRUPTED)))
+        if self.engaged_id and not self.zoning:
+            self.assert_stance()
+
     def resolve_casting(self, now: float) -> None:
         """Apply a finished cast: a buff, a debuff, damage, or a heal."""
         if not self.casting or now < self.casting["finish"]:
@@ -12132,7 +12235,7 @@ class ZoneSession:
             self.queue.append(self.party_member())
         return paid
 
-    def take_damage(self, amount: int, entity) -> None:
+    def take_damage(self, amount: int, entity, *, blocked: bool = False) -> int:
         self.stop_resting()
         amount = max(0, int(amount))
         # Stoneskin eats a pool of damage, Phalanx takes a flat amount off every hit.
@@ -12165,8 +12268,13 @@ class ZoneSession:
             self.world.service.save_vitals(self.char["id"], self.char["hp_current"], self.char.get("mp_current", 0))
         except Exception:
             pass
+        # The interrupt roll happens now, on the gear worn for this hit, not at cast
+        # start: a midcast set that has since come off cannot protect the cast.
+        if amount > 0 and int(self.char["hp_current"]) > 0:
+            self.try_interrupt_cast(entity, blocked=blocked)
         if int(self.char["hp_current"]) <= 0:
             self.hit_zero_hp(time.time())
+        return amount
 
     def hit_zero_hp(self, now: float) -> None:
         """0 HP: Reraise brings the character back, otherwise the short recovery.
@@ -12175,6 +12283,7 @@ class ZoneSession:
         experience the next time the character is raised; this server's death is the
         six-second recovery, so the effect is consumed here.
         """
+        self.casting = None
         self.engaged_id = None
         self.engaged_targid = 0
         self.despawn_trusts()
@@ -13313,6 +13422,14 @@ class ZoneSession:
             entry = merits.MERITS.get(merit_id)
             if count > 0 and entry is not None:
                 merit_mods[mod_id] = merit_mods.get(mod_id, 0) + count * int(entry[3])
+        # Spell Interruption Rate is the "others" merit: 2% a rank, -10% at 5/5.  The
+        # modifier convention is negative for a reduction, the same as gear and Choral
+        # Roll, so the sheet shows it and interrupt_chance() reads it from one place.
+        count = int(counts.get(0x0148, 0))
+        entry = merits.MERITS.get(0x0148)
+        if count > 0 and entry is not None:
+            merit_mods[mod.SPELL_INTERRUPT] = (merit_mods.get(mod.SPELL_INTERRUPT, 0)
+                                               - count * int(entry[3]))
         # Multi-attack merits belong to their own job and only count while that job's
         # trait is active: a Warrior's Double Attack Rate does not follow a Ninja main,
         # and a support-job Warrior keeps only the trait itself.

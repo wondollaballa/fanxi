@@ -35,8 +35,10 @@ local function check(label, condition, detail)
     end
 end
 
+local burst_now = nil
 local ok, err = pcall(sch.install, {
     notify = function(text) print('[sch] ' .. tostring(text)) end,
+    burst_info = function() return burst_now end,
 })
 check('install', ok, err)
 
@@ -196,6 +198,9 @@ check('macro ebullience', added.ebullience == true)
 check('macro bursts', #added.bursts == 2, #added.bursts)
 check('cost counts ebullience', internal.charges_needed(added) == 3,
       internal.charges_needed(added))
+local no_burst = { spells = { 'Aero', 'Noctohelix' }, ebullience = true, bursts = {} }
+check('ebullience without a burst is free', internal.charges_needed(no_burst) == 2,
+      internal.charges_needed(no_burst))
 
 -- Running: no charges refuses before a task starts; enough charges starts one.
 T.state.charges = { count = 0, max = 5, level = 99, next_at = os.time() + 240 }
@@ -245,6 +250,10 @@ local windows = internal.windows
 T.state.charges = { count = 3, max = 5, level = 99, next_at = os.time() + 120 }
 local okw, errw = pcall(windows.window, api)
 check('main window draws', okw, errw)
+burst_now = { sc = 8, remaining = 9.5 }
+local okb, errb = pcall(windows.burst_window, api)
+check('magic burst window draws', okb, errb)
+burst_now = nil
 internal.editor_open(group, added)
 local oke, erre = pcall(windows.editor, api)
 check('editor draws', oke, erre)

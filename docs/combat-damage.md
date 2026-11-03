@@ -744,6 +744,29 @@ Three things follow from this shape:
 The wiki's `Corrected Damage = Uncorrected * (100% - PDT - DT)` with a 50% floor and
 the 87.5% overall cap matches these clamps exactly.
 
+## Spell interruption
+
+A landed physical hit on a casting player rolls once, at the hit, for each attack round —
+not once when the cast starts. The ratios are LSB's `TryInterruptSpell`:
+
+```
+levelRatio = max(0.01, (50 + attacker level - caster level) / 100)
+skillRatio = spell school's job cap / caster's skill in that school   (10 when skill is 0)
+sirdRatio  = (100 - SIRD total) / 100
+chance     = levelRatio * skillRatio * sirdRatio    -- interrupt when random() < chance
+```
+
+The SIRD total is the negated `SPELL_INTERRUPT` modifier plus the "Spell Interruption
+Rate" merit (2% a rank, 10% at 5/5); gear and Choral Roll carry the same modifier, so
+one total serves the roll and the checkparam sheet.  At 102% or more the ratio is
+negative and no physical hit can interrupt.  Songs, Manafont and Chainspell are immune,
+and a Shield Mastery block is skipped.  Aquaveil absorbs the interruption instead:
+one charge, three above 500 Enhancing Magic.
+
+The roll reads the gear worn at that hit, which is why the midcast set is pinned for the
+whole cast: a SIRD piece swapped out after the cast starts is not protecting it.  See
+[control-panel.md](control-panel.md#precast-midcast-and-idle-states).
+
 ## Magic
 
 Direct-damage spells use the caster's INT, the spell's own base and multiplier, and the

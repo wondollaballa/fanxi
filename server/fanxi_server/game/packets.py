@@ -42,6 +42,7 @@ MESSAGE_MAGIC_BURST = 252              # "Magic Burst!" on a bursted spell
 MESSAGE_DEFEATS_TARGET = 6
 MESSAGE_MAGIC_RECOVERS_HP = 7
 MESSAGE_ATTACK_MISSES = 15
+MESSAGE_CASTING_INTERRUPTED = 16       # "The <player>'s casting is interrupted."
 MESSAGE_SHADOW_ABSORB = 31
 MESSAGE_ATTACK_CRIT = 67
 MESSAGE_MAGIC_NO_EFFECT = 75
@@ -113,6 +114,17 @@ def magic_cast_arg(skill: int) -> int:
     if skill in (SKILL_ELEMENTAL, SKILL_DARK):
         return MAGIC_CAST_BLACK
     return MAGIC_CAST_WHITE
+
+
+def magic_interrupt_arg(skill: int) -> int:
+    """The 4CC a Magic Interrupt carries for a spell of this skill.
+
+    The interrupt keeps the Magic Start's category (8) but swaps "ca" for "sp", so the
+    client stops the cast bar instead of starting one: "spwh", "spbk", "spnj", ...  The
+    packet's own message is blank; the client prints the interruption line from the 0x029
+    basic message 16 that follows it.
+    """
+    return (magic_cast_arg(skill) & 0xFFFF0000) | 0x7073
 
 SEND_POSITION = 0x01
 SEND_STATUS = 0x02

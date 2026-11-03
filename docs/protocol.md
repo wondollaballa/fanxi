@@ -302,6 +302,12 @@ line: 327 for a player (`<caster> starts casting <spell> on <target>.`) and 3 fo
 monster or Trust (`<caster> starts casting <spell>.`).  Sending the message and a line of
 our own printed it twice, so the server no longer writes that chat line itself.
 
+An interrupted cast is the same category 8 with `sp`+school as the action id (`spwh`, `spbk`,
+`spnj`, ...) and the spell id as its value: the client stops the cast bar instead of starting
+one.  The action's own message stays 0; the line is a separate S2C `0x029` basic message 16,
+"The <player>'s casting is interrupted."  This is the packet the phase engine reads as the
+aftercast result when a cast ends without a Magic Finish.
+
 `0x029` carries the defeat and gil lines; `0x02D` carries EXP and level-up. HP changes update
 `0x00E`, `0x037`, `0x061` and `0x0DF`. See [world.md](world.md) for the full combat loop.
 

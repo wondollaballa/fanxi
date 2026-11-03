@@ -1,0 +1,39 @@
+[harness] = 5
+[harness] = 2
+--- a cast holds the action and sends the precast set
+[harness] = true false idle.town idle
+--- the server starts the cast: the midcast set is pinned and named
+[harness] = true 5 casting midcast
+--- a step during the cast is recorded and sends no gear
+[harness] = 0
+[harness] = true casting midcast
+--- a plan push during the cast does not re-wear the state set
+[harness] = 5
+[harness] = 0
+[harness] = true true
+--- the result restores the state the player is in now (movement)
+[harness] = false false movement move
+--- stopping wears the pushed plan's idle set
+[harness] = 1
+--- a cast the server never starts leaves the state free
+[harness] = true false
+[harness] = 2
+[harness] = 1
+--- another actor's Magic Start does not pin the player's cast
+[harness] = false
+[harness] = 2
+[harness] = 1
+--- /attack during the cast is recorded and the result returns to TP gear
+[harness] = 0
+[harness] = true true casting
+[harness] = false engaged engaged
+--- a zone ends the cast and the next state set goes out
+[harness] = true
+[harness] = 1
+[harness] = false
+[harness] = 2
+--- the interrupt 4CC stops the cast and restores the set at once
+[harness] = 1
+[harness] = true casting midcast
+[harness] = false false idle.town idle
+[harness] = 2

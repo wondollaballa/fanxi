@@ -1,5 +1,82 @@
 # Changelog
 
+## Unreleased — physical hits interrupt casts, and SIRD spends
+
+- **A landed physical hit now rolls spell interruption.** Every auto-attack and TP-move hit
+  that does damage to a casting player rolls the retail ratios: `50 + attacker level - caster
+  level` over 100 (floored at 0.01), the caster's skill in the spell's school against that
+  school's cap, and the SIRD total. The roll is made at the hit, not at cast start, and again
+  for every hit in the cast — the same reason the midcast set is pinned until the result.
+- **Every SIRD source is spent.** Gear's Spell interruption rate (modifier 168, negative for a
+  reduction), Choral Roll's row, and the "Spell Interruption Rate" merit (2% a rank, 10% at
+  5/5) feed one total; the merit now appears in the launcher's stat sheet too. Songs,
+  Manafont, Chainspell and a Shield Mastery blocked hit are immune. Aquaveil spends a charge
+  instead of the cast: one base, three above 500 Enhancing Magic.
+- **The client is told in retail's own shape.** The server sends the `0x028` category 8
+  "sp"+school fourcc that stops the cast bar (the Magic Start's "ca"+school with the command
+  swapped) and follows it with the `0x029` basic message 16, "The <player>'s casting is
+  interrupted." The `0x028` keeps the spell id as its parameter, so it is a proper result.
+- **The phase engine reads that fourcc as the result.** Category 8 is normally the cast start
+  that pins the midcast set; the "sp" form now ends the pin and restores the aftercast state
+  immediately instead of leaving the set on until the 30-second stale timeout.
+- Not wired yet: Stun/Silence/Sleep/Terror/Petrify and Paralyze/Intimidate procs canceling a
+  cast, and the 2-second recast the retail interrupt carries.
+- Tests: `test_world.py` covers the interrupt and its packets, SIRD at the hit, the merit row,
+  Aquaveil, Shield Mastery, songs/Manafont and a hit after the finish; `phase_cast_test.sh`
+  adds the interrupt fourcc restoring the set.
+
+## Unreleased — Scholar sequences on the server's action results
+
+- **Ebullience is used in front of the magic burst, not before the opener.** It raises the next
+  black-magic spell, so the old order spent it on the first opener (Water, Stone, ...) and the
+  burst it was meant to raise got nothing. A macro with no burst list no longer pays a charge
+  for it.
+- **The runner follows action results instead of counting seconds.** A job ability is confirmed
+  by the server's ABILITY_FINISH (`0x028` category 6), a spell by MAGIC_START (8) and
+  MAGIC_FINISH (4). The next `/ja` or `/ma` goes out as soon as the current result lands. The
+  shared stratagem recast (id 231) is still read from the recast table because no result carries
+  it. If the client drops a command inside its own animation, there is no result, so it is
+  retried as soon as the recast is clear; a spell is retried until the cast bar or MAGIC_START
+  appears. The old 2.2 s and 1.2 s beats are gone.
+- **The charge gauge uses the same proof.** A strategem spends a charge on its ABILITY_FINISH,
+  not on the outgoing request: a refused use spends nothing, and a retransmit cannot spend twice.
+- **The Scholar HUD draws the open Magic Burst window.** A small banner at the top of the
+  screen names the skillchain and the seconds left while the window is open, read from the
+  same chain action as the launcher's Nuking card. It is the in-game counterpart to the
+  launcher's `open` badge.
+- Tests: `sch_hud_test.sh` also checks that Ebullience without a burst list costs no strategem
+  and that the burst banner draws; `sch_action_test.sh` sends real `0x028` ABILITY_FINISH,
+  MAGIC_START and MAGIC_FINISH bodies and checks the action log, the charge spend and that the
+  spell results spend nothing.
+
+## Unreleased — the midcast set stays on until the spell lands
+
+- **A cast now pins the midcast set until the server reports the result.** The engine already
+  restored on the action's `0x028` result, but an automatic state change during the cast could
+  still put other gear on first. The server reads a spell's numbers at the instant it lands
+  (Cure potency, Magic Attack Bonus, Magic Accuracy, the magic skills, a song's duration), so a
+  swap inside the cast resolves the spell in the wrong set. The same window is what retail's
+  SIRD gear protects; this server does not roll cast interruption yet (`docs/rolls.md`), but the
+  midcast set stays on either way. The pin starts at the server's Magic Start (`0x028` category
+  8), which is the first packet that proves a cast is really under way, and ends at the result.
+- **Movement, `/attack`, a zone or job settle and a plan push are deferred, not dropped.** A step
+  during the cast still records the movement state; the state set goes on when the result
+  arrives, through the same aftercast path (`fill_restore`). A plan push while casting keeps the
+  in-flight action and does not re-wear the state set (editing a set or toggling a mode used to
+  strip the midcast gear and cancel the pending action). The explicit **Wear set**, the lock and
+  a slot-pin change still act at once, like a hand equip.
+- **A refused cast is not pinned.** The client's action packet alone does not start the window,
+  so a spell refused for MP, range or no target leaves the state free straight away. A zone, a
+  job change or a different character clears the window, and the 30-second stale timeout still
+  covers a result that never comes (the timeout was already 30 s; the documentation still said
+  six).
+- **`phase_status` names the window.** `casting` and `castSpell` are reported, `state` is
+  `casting` and `set` is the midcast set while the pin is on, so the Active gear card reads
+  `Casting · sets.midcast.Healing Magic` instead of the idle set underneath it.
+- Tests: `tests/phase_cast_test.sh` covers the pin, a step and `/attack` during the cast, a plan
+  push mid-cast, the result returning to the current state, a refused cast, another actor's
+  Magic Start and a zone ending the cast; the other phase tests still pass.
+
 ## Unreleased — Scholar strategem charges recharge independently
 
 - **Each spent charge now keeps its own return time.** The HUD used one serialized clock, so
@@ -7,9 +84,9 @@
   Perpetuance looked 66 s away instead of both returning after 33 s about a second apart. Each
   spend stores `spent_at + 33 s` now; the next-charge pip and clock use the earliest timer, and
   a macro's readiness uses the timer of the charge it is waiting for.
-- **A retransmitted ability packet no longer spends a second charge.** The client resends
-  `0x01A` until the server acks it; the same strategem on the same packet sequence inside the
-  phase engine's three-second window is ignored.
+- **A refused or retransmitted request no longer spends a charge.** The gauge follows the
+  server's ABILITY_FINISH rather than the outgoing `0x01A`, so only a use the server accepted
+  starts a timer.
 - **The `.sch` file stores the timer list** as a sixth `charges` field (format version 2). A
   version-1 save only has the first timer; its missing charges are treated as back-to-back with
   it, which is the case the old serialized clock got wrong. `//sch charges <n>` gives the
@@ -22,13 +99,12 @@
 - **A Scholar macro no longer drops its opener when Immanence is rejected.** Ebullience and
   Immanence share recast id 231, so one second after Ebullience the server still answered
   "Immanence is not ready yet."; the first spell then cast without Immanence and opened no
-  chain. The runner now finds the shared recast slot in the client's recast table and waits
-  for it before and after every `/ja`, so the spell goes out with Immanence actually up.
+  chain. The runner finds the shared recast slot in the client's recast table and waits out a
+  recast that is already running before each `/ja` (the animation wait above covers the rest).
 - **The next step waits for the cast bar, not a fixed four or five seconds.** A long opener
   (or a slower cast set) used to run past that gap; the next Immanence interrupted it and the
   skillchain was lost. Each spell and burst now waits for `castbar.Count` to start and clear,
-  then a short aftercast beat. If an ability still fails to go off, the run stops and says so
-  instead of sending spells that cannot chain.
+  then the aftercast beat described above.
 - The same wait order covers the burst list: Thunder V and similar long casts no longer get
   cut off by the next burst.
 

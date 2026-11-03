@@ -2976,7 +2976,7 @@ do
             -- tracked yet (the opener was not a chain) is therefore the first link.
             duration = math.max(0, (was_open and prev.duration or MB_WINDOW_BASE) - 1)
         end
-        mb_windows[target] = { expires = now + duration, duration = duration }
+        mb_windows[target] = { expires = now + duration, duration = duration, sc = sc_id }
     end
 
     -- Every 0x028 action: a landed weapon skill that formed no chain ends the target's burst
@@ -3031,6 +3031,20 @@ do
         local target = game.entity(index, 'ServerId')
         local window = target and mb_windows[target] or nil
         return window ~= nil and xi.clock() <= window.expires
+    end
+
+    -- The Scholar HUD's small live banner: the chain that is bursting and the time
+    -- left in its window.  Kept separate from phase_burst_open so the phase engine's
+    -- boolean path does not have to carry the extra fields.
+    function phase_burst_info()
+        local index = game.target('Targets[0].Index') or 0
+        if index <= 0 or (game.target('Targets[0].IsActive') or 0) == 0 then return nil end
+        local target = game.entity(index, 'ServerId')
+        local window = target and mb_windows[target] or nil
+        if not window then return nil end
+        local remaining = window.expires - xi.clock()
+        if remaining <= 0 then return nil end
+        return { sc = window.sc or 0, remaining = remaining, duration = window.duration }
     end
 
     if xi.events and xi.events.on then
@@ -10940,6 +10954,7 @@ hud.install_sch = function()
             hud_save(hud.state, hud.path)
         end,
         get_shown = hud.sch_visible,
+        burst_info = phase_burst_info,
     })
     if not installed then
         hud.sch = nil

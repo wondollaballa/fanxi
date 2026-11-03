@@ -229,9 +229,10 @@ its interval runs down. The interval is retail's: the pool's four minutes are sp
 level's charges (48 s a charge at 99, 60 s at 70, 80 s at 50, 120 s at 30, 240 s at 10), and the
 550-JP **Stratagem Recast Time** gift — which every Fanxi job has at its 2,100 JP — takes 15 s off
 each one, so a level-99 Scholar recharges a charge every **33 s**. The footer prints that rate
-beside the count. Every Immanence and Ebullience spends one; the count follows
-the outgoing job-ability packet, so a stratagem used from the Abilities window or a macro keystroke
-counts the same as one clicked here, and a retransmitted packet is not a second use.
+beside the count. Every Immanence, and Ebullience when the macro has a burst to raise, spends one;
+the count follows the server's job-ability result, so a stratagem used from the Abilities window or
+a macro keystroke counts the same as one clicked here, a refused use spends nothing, and a
+retransmitted request cannot spend twice.
 
 **Each spent charge starts its own timer.** Using two stratagems back to back (Accession then
 Perpetuance, say) brings them back about a second apart after one 33-second interval, not one
@@ -250,7 +251,10 @@ seeded with the pairs from the old Scholar library — Stone → Pyrohelix for L
 variants where they differ. A tab can be renamed in place, added with **+ New tab**, or deleted
 with its macros. A macro is a title, **two or three spells**, an optional **Use Ebullience** check
 (its title then reads `(Ebullience)` and it costs one more charge), and an optional **magic burst
-sequence**: a list of spells cast after the closing spell, inside the skillchain window. The
+sequence**: a list of spells cast after the closing spell, inside the skillchain window. Ebullience
+is used **just before the first burst**, never before the opener: it raises the next black-magic
+spell, so used before the chain the opener would eat it and the burst would get nothing. A macro
+with no burst list leaves the check unused and does not pay for it. The
 editor is a modal with a tab picker, a title, a searchable spell picker for each slot (Divine,
 Elemental and Ninjutsu spells), a live preview of the chain the chosen spells form, and the
 burst list. Deleting a macro or a tab asks for confirmation.
@@ -259,14 +263,18 @@ burst list. Deleting a macro or a tab asks for confirmation.
 
 ![The macro editor: title, tab, up to three spells, Ebullience and the magic burst list](images/sch-editor.png)
 
-Clicking a macro runs the same `/ja` / `/ma` sequence, but the runner follows the client's own
-bars instead of fixed sleeps. It waits for the shared stratagem recast (Immanence and Ebullience
-use recast id 231) before every `/ja` and until the cast bar clears before the next step. That
-matters because a one-second gap after Ebullience is still inside the shared recast: the server
-answers "Immanence is not ready yet.", the following spell opens no chain, and the run used to
-drop the skillchain there. A long opener cast (or a slower cast set) could likewise run past the
-old four/five-second gap and be interrupted by the next Immanence. After the closing cast the
-burst spells use the same cast-bar wait. **Stop** cancels the sequence. A macro whose spells (plus Ebullience) need more
+Clicking a macro runs the same `/ja` / `/ma` sequence, but the runner follows the server's own
+action results, not a beat: a job ability is confirmed by its ABILITY_FINISH result (category 6),
+a spell by its MAGIC_START (8) and MAGIC_FINISH (4), and the next step goes out as soon as the
+result for the current one lands. The only timer left is the shared stratagem recast (Immanence
+and Ebullience use recast id 231), which is a server rule no action result carries; the sequence
+waits for that table to clear before a job ability. A command the client drops inside its own
+animation produces no result, so it is sent again as soon as the recast is clear -- no
+two-second or aftercast sleep stands in for the animation, and the action lands as soon as the
+client accepts it. **Stop** cancels the sequence. While a burst window is open the
+HUD draws a small **Magic Burst** banner at the top of the screen with the chain's name and the
+seconds left; it reads the same chain action as the launcher's Nuking card, so the in-game and
+launcher indicators agree. A macro whose spells (plus Ebullience) need more
 charges than are left is dimmed and shows the clock to the next time the whole chain is payable --
 `next 7:59` for a two-spell macro with none left -- and clicking it repeats that in chat rather
 than sending a sequence the strategems cannot cover. Nothing here bypasses the client's own
@@ -738,9 +746,25 @@ The host does what GearSwap does with the action packet. A `0x01A` (the client's
 category and action id have a rule is **held out of its buffer**: the precast `0x050`s go out in
 that buffer, the action and the midcast `0x050`s go out in the next one, in that order, and the
 return set goes back on when the action's result (`0x028` categories 3, 4 and 6) arrives. A
-result that never comes (an interrupted cast, a refused action) brings the return set after six
-seconds. This is the same order whether the weapon is drawn or not: casting off a target and
-casting from the field both go through it.
+result that never comes (a refused action, a lost packet) brings the return set after 30
+seconds — long enough for the slowest song under Troubadour, which is why the old six-second
+timeout was wrong. This is the same order whether the weapon is drawn or not: casting off a
+target and casting from the field both go through it.
+
+**A cast keeps its midcast set until it lands.** The server reads a spell's numbers (Cure
+potency, Magic Attack Bonus, Magic Accuracy, the magic skills, a song's duration) at the instant
+the cast finishes, so the midcast set is *pinned* from the server's Magic Start (`0x028`
+category 8) to its result. While that window is open, a movement step, a drawn-weapon flip, a
+zone or job settle and a plan push are recorded but send no gear; the state set they would have
+worn goes on with the result, through the same aftercast path. The same window is what SIRD
+protects: every landed physical hit rolls the interruption on the gear worn *at that hit* — the
+attacker's level, the caster's skill in the spell's school and the SIRD total
+([the ratios](combat-damage.md#spell-interruption)) — so a midcast set that comes off mid-cast
+cannot protect it. A cast the server never starts (refused for MP,
+range or no target) sends no Magic Start, so its precast set leaves the state free straight
+away. The Active gear card names the window — `Casting · sets.midcast.Healing Magic` — instead
+of the idle state underneath it. The manual controls are still manual: **Wear set**, the lock
+and a slot pin change gear at once, the way a hand equip does.
 
 The client's outgoing `0x01A` carries the target at `0x04`, the target index at `0x08`, the
 action **category** at `0x0A` and the **action id** at `0x0C`. Those last two are what the plan is

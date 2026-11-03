@@ -114,7 +114,7 @@ class SamuraiTest(unittest.TestCase):
         self.ability(62)   # Third Eye
         self.assertEqual(1, int(self.session.third_eye["charges"]))
         mob = self.mob()
-        missed, damage, _critical = self.world.mob_attack(mob, self.session)
+        missed, damage, _critical, _defended = self.world.mob_attack(mob, self.session)
         self.assertTrue(missed)
         self.assertEqual(0, damage)
         self.assertIsNone(self.session.third_eye)
@@ -188,7 +188,7 @@ class SamuraiTest(unittest.TestCase):
         with mock.patch.object(self.world, "player_attack",
                                return_value=(False, 123, False)), \
                 mock.patch.object(self.world.rng, "random", return_value=0.0):
-            missed, damage, _critical = self.world.mob_attack(mob, self.session)
+            missed, damage, _critical, _defended = self.world.mob_attack(mob, self.session)
         self.assertTrue(missed)
         self.assertEqual(0, damage)
         self.assertEqual(5000 - 123, mob.hp)

@@ -97,7 +97,10 @@ then does what GearSwap does with the action packet: a weaponskill or job abilit
 *before* the packet is sent, a spell's fast-cast set before the cast is timed, the midcast set
 immediately after the action, and the state set when the result arrives. **Idle modes** picks the
 town, field and movement sets; the zone-in packet selects town or field, and the Lock button
-holds the worn set as an override. Paths it reads:
+holds the worn set as an override. The midcast set then stays on until that result: a step,
+`/attack`, a zone or job settle or a plan push while the cast bar is up does not take it off,
+because the server reads the spell's numbers at the instant it lands, and the interruption
+roll reads the SIRD pieces worn at each hit. Paths it reads:
 
 | Path | Worn |
 |---|---|

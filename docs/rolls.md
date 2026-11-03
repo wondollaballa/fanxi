@@ -117,9 +117,10 @@ Double Attack while VI is only +5%, and Chaos Roll IV is +25% Attack while VIII 
 
 ## Known limits
 
-- Conserve MP, Snapshot and spell-interruption rate are stored as modifiers and
-  appear in the launcher's stat report, but the spell-cost/ranged-delay/cast-
-  interruption formulas do not spend them yet.
+- Conserve MP and Snapshot are stored as modifiers and appear in the launcher's
+  stat report, but the spell-cost and ranged-delay formulas do not spend them yet.
+  Spell-interruption rate (Choral Roll included) is spent: a landed physical hit
+  rolls it against the cast in progress.
 - Pet Regain/Regen is stored on the pet; the pet tick does not restore TP/HP from
   it yet.
 - Rolls do not apply the retail "job modifier" bonus from a party member of the

@@ -1,0 +1,62 @@
+# The midcast set stays on until the spell resolves (host/addons/phase.c).  GearSwap waits for
+# the server's result packet before aftercast, and the server reads a spell's numbers (Cure
+# potency, MAB, Macc, the magic skills) at the instant it lands, so a step, a stance flip, a
+# zone/job settle or a plan push must not take the midcast set off while the cast bar is up.
+# The pin starts at the server's Magic Start (0x028 category 8, "ca"+school), not at the
+# client's action packet, so a refused cast leaves the state free; the same category with
+# "sp"+school is the interrupt and ends the pin at once.  Run by tests/phase_cast_test.sh.
+frames 2
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=5, sets={{{1,0,0},{2,1,0}},{{3,0,0},{4,1,0}},{{5,0,0}},{{6,0,0},{7,1,0}},{{9,4,0}}}, names={'idle','move','precast','midcast','engaged'}, engage=5, idle=1, town=1, move=2, rules={{category=3, action=5, pre=3, mid=4}}} return xi.phase.status().sets
+lua control local e = xi.phase.apply() return e and #e or 0
+echo --- a cast holds the action and sends the precast set
+packet_out 1a00000000000000000003000500
+lua control local s = xi.phase.status() return tostring(s.pending) .. ' ' .. tostring(s.casting) .. ' ' .. s.state .. ' ' .. tostring(s.set)
+echo --- the server starts the cast: the midcast set is pinned and named
+packet_in 28000000000403020101e058d81d1a00000000
+lua control local s = xi.phase.status() return tostring(s.casting) .. ' ' .. tostring(s.castSpell) .. ' ' .. s.state .. ' ' .. tostring(s.set)
+echo --- a step during the cast is recorded and sends no gear
+lua control local e = xi.phase.moving(true) return e and #e or 0
+lua control local s = xi.phase.status() return tostring(s.moving) .. ' ' .. s.state .. ' ' .. tostring(s.set)
+echo --- a plan push during the cast does not re-wear the state set
+lua control xi.phase.set{enabled=true, player=16909060, zone=230, town=1, job=5, sets={{{8,0,0}},{{3,0,0},{4,1,0}},{{5,0,0}},{{6,0,0},{7,1,0}},{{9,4,0}}}, names={'idle','move','precast','midcast','engaged'}, engage=5, idle=1, town=1, move=2, rules={{category=3, action=5, pre=3, mid=4}}} return xi.phase.status().sets
+lua control local e = xi.phase.apply() return e and #e or 0
+lua control local s = xi.phase.status() return tostring(s.casting) .. ' ' .. tostring(s.pending)
+echo --- the result restores the state the player is in now (movement)
+packet_in 28000000000403020101500100000000000000
+lua control local s = xi.phase.status() return tostring(s.casting) .. ' ' .. tostring(s.pending) .. ' ' .. s.state .. ' ' .. tostring(s.set)
+echo --- stopping wears the pushed plan's idle set
+lua control local e = xi.phase.moving(false) return e and #e or 0
+echo --- a cast the server never starts leaves the state free
+packet_out 1a00010000000000000003000500
+lua control local s = xi.phase.status() return tostring(s.pending) .. ' ' .. tostring(s.casting)
+lua control local e = xi.phase.moving(true) return e and #e or 0
+lua control local e = xi.phase.moving(false) return e and #e or 0
+echo --- another actor's Magic Start does not pin the player's cast
+packet_out 1a00020000000000000003000500
+packet_in 28000000000403020501e058d81d1a00000000
+lua control local s = xi.phase.status() return tostring(s.casting)
+lua control local e = xi.phase.moving(true) return e and #e or 0
+lua control local e = xi.phase.moving(false) return e and #e or 0
+echo --- /attack during the cast is recorded and the result returns to TP gear
+lua control local e = xi.phase.apply() return e and #e or 0
+packet_out 1a00030000000000000003000500
+packet_in 28000000000403020101e058d81d1a00000000
+packet_out 1a00040000000000000002000000
+lua control local s = xi.phase.status() return tostring(s.casting) .. ' ' .. tostring(s.engaged) .. ' ' .. s.state
+packet_in 28000000000403020101500100000000000000
+lua control local s = xi.phase.status() return tostring(s.casting) .. ' ' .. s.state .. ' ' .. tostring(s.set)
+echo --- a zone ends the cast and the next state set goes out
+packet_out 1a00050000000000000003000500
+packet_in 28000000000403020101e058d81d1a00000000
+lua control local s = xi.phase.status() return tostring(s.casting)
+lua control xi.phase.zone(231, true) return 1
+lua control local s = xi.phase.status() return tostring(s.casting)
+lua control local e = xi.phase.moving(true) return e and #e or 0
+echo --- the interrupt 4CC stops the cast and restores the set at once
+lua control local e = xi.phase.moving(false) return e and #e or 0
+packet_out 1a00060000000000000003000500
+packet_in 28000000000403020101e058d81d1a00000000
+lua control local s = xi.phase.status() return tostring(s.casting) .. ' ' .. s.state .. ' ' .. tostring(s.set)
+packet_in 28000000000403020101e01cdc1d1a00000000
+lua control local s = xi.phase.status() return tostring(s.casting) .. ' ' .. tostring(s.pending) .. ' ' .. s.state .. ' ' .. tostring(s.set)
+lua control local e = xi.phase.moving(true) return e and #e or 0
