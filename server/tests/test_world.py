@@ -3956,7 +3956,8 @@ class WorldTest(unittest.TestCase):
         self.assertEqual(trust.name, "Sylvie Uc")
         self.assertEqual([str(spell["name"]) for spell in trust.kit["aura"]],
                          ["Indi-regen", "Indi-refresh", "Indi-haste", "Indi-fury",
-                          "Indi-acumen", "Indi-precision", "Indi-frailty"])
+                          "Indi-acumen", "Indi-precision", "Indi-frailty",
+                          "Geo-malaise"])
         self.assertEqual([str(spell["name"]) for spell in trust.kit["buff"]],
                          ["Haste"])                       # geomancy left the buff rotation
 
@@ -3972,22 +3973,25 @@ class WorldTest(unittest.TestCase):
                 self.world._tick_trust(
                     trust, self.world.sessions_in_zone(100), start + beat * step)
 
-        # A healthy melee owner with nothing short: one hex, and no aura on the owner.
+        # A healthy melee owner: Indi-Fury on the owner and the entrusted Defense Down
+        # on the monster.  Sylvie keeps the owner aura and the Entrust separately.
         start = time.time()
         tick(8, start)
         self.assertEqual([status for status in self.session.effect_state
-                          if status in geomancy.STATUSES], [])
-        self.assertIn(geomancy.GEO_DEFENSE_DOWN, mob.effect_state)
-        # Idris: her Frailty is the 27% Defense cut, not the plain 10%.
-        self.assertEqual(int(mob.effect_state[geomancy.GEO_DEFENSE_DOWN]["potency"]), 27)
+                          if status in geomancy.STATUSES], [geomancy.GEO_ATTACK])
+        # The Entrust lands as a normal Defense Down on the monster, not as an
+        # Indi-Frailty aura whose caster would be the monster itself.
+        self.assertIn(effects.DEFENSE_DOWN, mob.effect_state)
+        self.assertEqual(int(mob.effect_state[effects.DEFENSE_DOWN]["potency"]), 12)
 
-        # The owner runs dry: the hex comes off and Indi-refresh takes its place.
+        # The owner runs dry: the owner aura swaps to Indi-refresh, but the Entrust
+        # Defense Down on the monster is its own effect and stays up.
         self.session.char["mp"] = 600
         self.session.char["mp_current"] = 120
         tick(8, start + 30)
         self.assertEqual([status for status in self.session.effect_state
                           if status in geomancy.STATUSES], [geomancy.GEO_REFRESH])
-        self.assertNotIn(geomancy.GEO_DEFENSE_DOWN, mob.effect_state)
+        self.assertIn(effects.DEFENSE_DOWN, mob.effect_state)
 
         # A Geomancer owner maintains their own bubble, so the Trust leaves it alone.
         self.session.char["main_job"] = 21

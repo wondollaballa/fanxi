@@ -17,6 +17,8 @@ GEO_REGEN = 539
 GEO_POISON = 540
 GEO_REFRESH = 541
 GEO_HASTE = 580
+GEO_ATTACK = 549        # Indi-Fury / Geo-Fury
+GEO_PRECISION = 553     # Indi-Precision / Geo-Precision
 # Hexes: each one cuts a monster stat by its aura's potency (10% here).
 GEO_ATTACK_DOWN = 557       # wilt
 GEO_DEFENSE_DOWN = 558      # frailty

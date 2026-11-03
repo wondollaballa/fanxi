@@ -994,13 +994,14 @@ class World:
         if not in_danger:
             spell = self._trust_aura_choice(entity, owner, target, now, kit)
             if spell is not None:
-                aura_spec = trust_ai.effect_of(spell)
+                aura_spec = trust_ai.effect_of(spell, trust_name=entity.name)
                 if (aura_spec is not None and aura_spec.kind == "debuff"
                         and target is None):
                     spell = None                 # a hex needs a monster to land on
             if spell is not None and int(spell.get("mp") or 0) > int(entity.mp):
                 spell = None                     # cannot pay for it: fall through to a cure
-            spec = trust_ai.effect_of(spell) if spell is not None else None
+            spec = (trust_ai.effect_of(spell, trust_name=entity.name)
+                    if spell is not None else None)
             kind = (spec.kind if spec is not None else "buff") if spell else ""
         if spell is None and missing_hp >= max(1, hp_max * 15 // 100):
             spell = trust_ai.cure_for(kit, int(entity.level), int(entity.mp), missing_hp)
@@ -1008,6 +1009,22 @@ class World:
         if spell is None:
             spell = self._trust_song_choice(entity, owner, target, now)
             kind = "buff" if spell is not None else ""
+        # Damage-first enfeebles.  A caster Trust used to check buff_for before
+        # debuff_for, so Koru-Moru refreshed Protect/Shell/Haste/Refresh/Phalanx
+        # forever and never cast Dia; Sylvie's Entrust Indi-Frailty was never tried at
+        # all.  Dia (10-30% Defense cut) and the entrusted frailty hex (12.5%) are the
+        # two debuffs that lift every physical hit, so they get the beat before the
+        # next buff refresh.  Cures still win, and the rest of the enfeebles still run
+        # after the buffs below.
+        entrust = False
+        if spell is None and target is not None:
+            spell = trust_ai.entrust_debuff_for(
+                entity.name, kit, target.effect_state, now)
+            kind = "debuff" if spell is not None else ""
+            entrust = spell is not None
+        if spell is None and target is not None:
+            spell = trust_ai.opening_debuff_for(kit, target.effect_state, now)
+            kind = "debuff" if spell is not None else ""
         if spell is None:
             spell = trust_ai.buff_for(kit, owner.effect_state, now)
             kind = "buff" if spell is not None else ""
@@ -1027,11 +1044,20 @@ class World:
                      else int(owner.char["char_id"]))
         finish = now + combat.cast_time(int(spell.get("cast_time") or 0), 0) / 1000.0
         entity.mp = max(0, int(entity.mp) - cost)
+        if entrust:
+            # An Entrust is an Indi- aura placed on a party member, not an aura whose
+            # caster is the monster.  Applying the GEO_FRAILTY status to the monster
+            # would say "the monster casts Indi-Frailty", which debuffs the players
+            # inside its bubble; instead land the same -12.5% Defense as an ordinary
+            # Defense Down on the monster.
+            effect = effects.SpellEffect(
+                effects.DEFENSE_DOWN, "debuff", trust_ai.GEO_AURA_SECONDS, potency=12)
+        else:
+            effect = trust_ai.effect_of(
+                spell, int(getattr(entity, "geomancy_plus", 0) or 0), entity.name)
         entity.casting = {
             "spell": spell, "kind": kind, "target_id": target_id,
-            "finish": finish,
-            "effect": trust_ai.effect_of(
-                spell, int(getattr(entity, "geomancy_plus", 0) or 0)),
+            "finish": finish, "entrust": entrust, "effect": effect,
         }
         entity.trust_has_acted = True
         entity.next_cast_at = finish + 1.0
@@ -1295,6 +1321,17 @@ class World:
         selected = self._trust_action_set(owner, entity.trust_spell)
         custom_pool = bool(selected) and int(entity.trust_spell) in trust_ai.SPELL_ACTION_TRUSTS
         chosen = None
+        if not custom_pool and trust_ai.is_entrust_trust(entity.name):
+            # Sylvie keeps an owner aura (Indi-Fury or Precision) and Entrusts the
+            # frailty hex on the monster.  The owner aura must not be the hostile hex
+            # itself, or she spends the whole fight on the monster and leaves the
+            # owner's Attack/Accuracy unbuffed.
+            kit = dict(kit)
+            kit["aura"] = [
+                spell for spell in kit.get("aura", ())
+                if (trust_ai.effect_of(spell).kind != "debuff"
+                    if trust_ai.effect_of(spell) is not None else False)
+            ]
         if custom_pool:
             # An explicit aura list is the owner's order, not the role heuristic.  A hex
             # still needs a monster; skip it between fights and try the next selected aura.
@@ -1460,7 +1497,8 @@ class World:
         elif kind == "debuff" and spec is not None:
             target = self.entity_by_id(entity.zone, int(cast.get("target_id") or 0))
             if target is not None and target.is_mob() and target.alive:
-                self._land_trust_debuff(entity, owner, spell, spec, target, now)
+                self._land_trust_debuff(entity, owner, spell, spec, target, now,
+                                        entrust=bool(cast.get("entrust")))
             else:
                 self._say_trust_fizzle(owner, entity, spell)
         elif kind == "nuke":
@@ -1481,6 +1519,8 @@ class World:
         name = str(spell.get("name") or "")
         skill = int(spell.get("skill") or 0)
         if geomancy.indi_effect(name) is not None:
+            # An entrust Trust has two independent bubbles: swapping the owner's
+            # Indi-Fury/Precision must not take the Entrust Frailty off the monster.
             self._clear_trust_aura(entity, owner, int(spec.effect), 0)
         # A Trust's weapons are part of its kit: Joachim's Loughnashade is Song+4, so the
         # song line reads the loadout's modifiers the way a player's gear would.
@@ -1559,9 +1599,10 @@ class World:
             target_mods=target_mods)
 
     def _land_trust_debuff(self, entity: ZoneEntity, owner, spell: dict, spec,
-                           target, now: float) -> None:
+                           target, now: float, *, entrust: bool = False) -> None:
         """Land a Trust enfeeble, including Dia's small opening hit."""
-        if geomancy.indi_effect(str(spell.get("name") or "")) is not None:
+        if (geomancy.indi_effect(str(spell.get("name") or "")) is not None
+                and not entrust):
             self._clear_trust_aura(entity, owner, int(spec.effect), int(target.id))
         target_sheet = self.monster_sheet(target)
         target_mnd = int(target_sheet.attributes.get("mnd", 0))
@@ -1585,7 +1626,8 @@ class World:
             first_tick_delay=(self.rng.uniform(*effects.HELIX_FIRST_TICK)
                               if spec.helix else None),
             tier=(effects.tier_of(spell.get("name") or "") if spec.helix else 0),
-            name=str(spell.get("name") or ""))
+            name=("Defense Down" if entrust
+                  else str(spell.get("name") or "")))
         defeated = False
         if damage > 0:
             defeated = int(target.hp) - damage <= 0

@@ -27,6 +27,31 @@ SKILL_ELEMENTAL = 36
 # same window because the server has no Geomancy-skill duration term yet.
 GEO_AURA_SECONDS = 180.0
 
+# A Trust's Geomancy is not the player's: Sylvie (UC) is a level-99 alter ego with fixed
+# published values (+37.5% Attack, +56 Accuracy, +28.8% Haste, Entrust Indi-Frailty for
+# -12.5% Defense), not the weaker Geomancy+0 column the player's Indi- spells use.  These
+# are the numbers BG-wiki's Trust: Sylvie (UC) page lists for her level-99 kit.
+TRUST_AURA_EFFECTS: dict[str, dict[str, tuple[dict[int, int], int]]] = {
+    "sylvie uc": {
+        "fury": ({mod.ATT_PERCENT: 37, mod.RATT: 37}, 0),
+        "precision": ({mod.ACC: 56}, 0),
+        "haste": ({mod.HASTE_ABILITY: 2880}, 0),
+        "frailty": ({}, 12),
+        "acumen": ({mod.MATT: 21}, 0),
+        "refresh": ({mod.REFRESH: 5}, 0),
+        "regen": ({mod.REGEN: 30}, 0),
+    },
+}
+
+# Sylvie's second aura: she puts Entrust on the monster, so the fight gets the
+# Indi-Frailty defense cut even while her own Indi-Fury bubble stays on the owner.
+ENTRUST_TRUSTS = frozenset({"sylvie uc"})
+
+
+def is_entrust_trust(name: str) -> bool:
+    """True for a Trust that keeps an owner aura and a separate Entrust on the mob."""
+    return _key(name) in ENTRUST_TRUSTS
+
 # Casters that should hold their distance instead of joining the melee.  Paladins,
 # Dark Knights, Red Mages, Blue Mages and Rune Fencers have spells but still fight from
 # the front; White/Black/Summoner/Scholar/Geomancer/Bard do not.
@@ -438,7 +463,7 @@ def _name(spell: dict) -> str:
     return " ".join(str(spell.get("name") or "").casefold().split())
 
 
-def effect_of(spell: dict, geomancy_plus: int = 0):
+def effect_of(spell: dict, geomancy_plus: int = 0, trust_name: str = ""):
     """The effect a spell applies, geomancy included.
 
     The Indi-/Geo- family is not in ``effects.SPELLS``: the zone server applies those
@@ -463,8 +488,65 @@ def effect_of(spell: dict, geomancy_plus: int = 0):
         idris = geomancy.idris_effect(name)
         if idris is not None:
             mods, potency = idris
+    trust_values = TRUST_AURA_EFFECTS.get(_key(trust_name))
+    if trust_values is not None:
+        fixed = trust_values.get(geomancy.family(name))
+        if fixed is not None:
+            mods, potency = fixed
     return effects.SpellEffect(status, "debuff" if hostile else "buff",
                                GEO_AURA_SECONDS, potency=potency, mods=dict(mods))
+
+
+def _key(name: str) -> str:
+    """Trust display names compare without case or extra whitespace."""
+    return " ".join(str(name or "").casefold().split())
+
+
+def opening_debuff_for(kit: dict, active: dict[int, dict], now: float,
+                       refresh_within: float = 30.0) -> dict | None:
+    """The damage-first debuff: Dia, before the buff rotation gets a turn.
+
+    Koru-Moru carries Protect/Shell/Haste/Refresh/Phalanx and will otherwise spend
+    every cast refreshing one of them; ``buff_for`` is checked before ``debuff_for`` in
+    the zone tick, so his Dia -- a 10-30% Defense cut that raises every physical hit --
+    never lands.  This returns Dia when it is missing or about to expire, so the cast
+    order is Dia, then the owner's buffs, then the rest of the enfeebles.
+    """
+    for spell in kit.get("debuff", ()):
+        spec = effect_of(spell)
+        if spec is None or int(spec.effect) != effects.DIA:
+            continue
+        state = active.get(int(spec.effect))
+        if state is None:
+            return spell
+        until = float(state.get("until") or 0.0)
+        if until and until - now <= refresh_within:
+            return spell
+    return None
+
+
+def entrust_debuff_for(name: str, kit: dict, active: dict[int, dict], now: float,
+                       refresh_within: float = 30.0) -> dict | None:
+    """The Entrust aura a Geomancer Trust puts on the monster, if it is missing.
+
+    Sylvie (UC) does not have a Geo- frailty in her spell table; she keeps Indi-Fury on
+    the owner and Entrusts Indi-Frailty onto the fight.  The server models the Entrust
+    as the same Indi-Frailty status landing on the monster, which is what the combat
+    engine's ``GEO_DEFENSE_DOWN`` cut reads.
+    """
+    if _key(name) not in ENTRUST_TRUSTS:
+        return None
+    for spell in kit.get("aura", ()):
+        spec = effect_of(spell)
+        if spec is None or int(spec.effect) != geomancy.GEO_DEFENSE_DOWN:
+            continue
+        state = active.get(int(spec.effect))
+        if state is None:
+            return spell
+        until = float(state.get("until") or 0.0)
+        if until and until - now <= refresh_within:
+            return spell
+    return None
 
 
 def is_cure(spell: dict) -> bool:

@@ -1,5 +1,27 @@
 # Changelog
 
+## Unreleased — Trusts cast their damage debuffs and Sylvie's real aura
+
+- **Koru-Moru never cast Dia.**  The trust tick checked `buff_for` before `debuff_for`,
+  and a Red Mage with Protect/Shell/Haste/Refresh/Phalanx to maintain always had one
+  expiring, so the monster stayed clean and every physical hit was missing Dia's 10–30%
+  Defense cut.  A new `trust_ai.opening_debuff_for` puts Dia ahead of the buff refresh;
+  cures still win, and the rest of the enfeebles run after the buffs.  Koru's recorded
+  casts are now Dia → buffs, and the test asserts Dia III lands first.
+- **Sylvie's Entrust was not modelled.**  Her spell table has no Geo- frailty, so she
+  held Indi-Fury and nothing ever applied the **-12.5% Defense** cut.  The Entrust
+  bubble is on the party, not the monster; applying the Indi-Frailty aura to the mob
+  would make the mob its caster and debuff the players inside it.  The server therefore
+  lands an ordinary **Defense Down** on the monster, and
+  `trust_ai.entrust_debuff_for` schedules it between her own aura and the rest of the
+  rotation.
+- **Her aura used the player's Idris column, not the Trust's.**  A level-99 Sylvie (UC)
+  is **Attack +37.5%, Accuracy +56, Haste +28.8%, frailty -12.5%**, not the player's
+  Geomancy+10 row (+27% / +50 / +11% / -27%).  `trust_ai.TRUST_AURA_EFFECTS` carries the
+  published alter-ego values; the player's own Indi- spells are unchanged.
+- Tests: `test_trust_support.py` pins Koru's Dia-first cast, Sylvie's entrusted
+  Defense Down landing on the monster with potency 12, and the 37/56/2880 trust values.
+
 ## Unreleased — H2H swings twice and uses its natural damage
 
 - **Maru Kala was low because the H2H natural damage was dropped.**  `stats._damage_rating`

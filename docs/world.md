@@ -206,13 +206,17 @@ my way" — it does not change collision itself, it keeps the team out of the bu
 
 A Trust follows its owner and fights the monster the owner is fighting.  Its opening
 action at melee reach is a weapon swing (the client's stance tell); after that the AI
-casts from its kit: a Cure when the owner is below 85% HP, a missing or expiring buff,
-a missing debuff on the monster, then a nuke.  Buffs land on the owner with the normal
-`0x037`/`0x063` status icons and a `0x028` gain-effect result; a cast shows the client's
-magic-start bar.  Koru-Moru's Red Mage list carries Flurry and Flurry II, but those only
-speed up ranged attacks, so his tactics drop that family and Haste II is the attack-speed
-buff he keeps up.  The Geomancy family is not in the spell table the AI classifies by, so
-`trust_ai.effect_of()` resolves an Indi-/Geo- spell through `geomancy.INDI_EFFECTS`.
+casts from its kit: a Cure when the owner is below 85% HP, then the damage-first
+enfeebles (Koru-Moru's Dia, Sylvie's entrusted Indi-Frailty), a missing or expiring
+buff, the rest of the monster debuffs, then a nuke.  Dia is deliberately before the buff
+rotation: a Red Mage with Protect/Shell/Haste/Refresh/Phalanx to maintain otherwise
+spends every cast refreshing one of them and never lands the 20% Defense cut.  Buffs
+land on the owner with the normal `0x037`/`0x063` status icons and a `0x028` gain-effect
+result; a cast shows the client's magic-start bar.  Koru-Moru's Red Mage list carries
+Flurry and Flurry II, but those only speed up ranged attacks, so his tactics drop that
+family and Haste II is the attack-speed buff he keeps up.  The Geomancy family is not in
+the spell table the AI classifies by, so `trust_ai.effect_of()` resolves an Indi-/Geo-
+spell through `geomancy.INDI_EFFECTS`.
 Geomancy is not a buff the rotation puts up, though: a Geomancer keeps one aura per bubble
 and the next cast in a bubble replaces it -- Sylvie's list is all Indi-, so she holds a
 single aura -- and `trust_ai.choose_aura()` picks the one the moment needs, from
@@ -223,14 +227,20 @@ before a pull, when there is no monster to measure), Indi-fury when the
 Attack/Defense ratio is under 1.3, and otherwise Indi-frailty, whose Defense cut helps
 every physical attacker and is the play when a weapon skill is ready.  A swap waits eight
 seconds, and the old aura is taken down when the new one lands.  Sylvie (UC) is the only
-Trust whose `mob_spell_list` carries Geomancy.
+Trust whose `mob_spell_list` carries Geomancy.  On top of her own aura she **Entrusts
+Indi-Frailty** whenever the fight's 12.5% Defense cut is missing or expiring.  The
+Entrust bubble itself is on the party, not the monster, so the server lands the cut as
+an ordinary **Defense Down** on the monster -- putting the Indi-Frailty aura on the mob
+would make the mob the aura's caster and debuff the players inside it.
+`trust_ai.entrust_debuff_for()` is the second half of her kit.
 
 Every Trust carries the weapons its design gives it (`trust_gear`, migration 159).
-**Sylvie (UC) has Idris**, whose Geomancy +10 is the Idris column of BGWiki's table: her
-Indi- spells cast at ACC +50, Attack +27%, Haste +11%, Regen +20 and Refresh +10, and her
-Frailty cuts the monster's Defense by 27% instead of 10%.  **Joachim has the Prime
-Loughnashade** (the final iLvl 119 III horn, item 22307), so his songs are Song+4 and four
-of them fit.  He sings
+**Sylvie (UC) has Idris**, but her Trust kit uses the published level-99 alter-ego
+values rather than the player's Geomancy+10 column: Indi-Fury **Attack +37.5%**,
+Indi-Precision **Accuracy +56**, Indi-Haste **+28.8%**, and the entrusted
+**-12.5% Defense** cut.  `trust_ai.TRUST_AURA_EFFECTS` holds that row.  **Joachim has the
+Prime Loughnashade** (the final iLvl 119 III horn, item 22307), so his songs are Song+4
+and four of them fit.  He sings
 the plan rather than his spell list: **Victory March** while the owner's magic haste is
 short -- and **Honor March** once that Haste would be redundant, since the two share the
 March status and Honor trades it for Attack, Accuracy and the ranged lines -- **Valor
