@@ -20,8 +20,10 @@ import {
 } from "lucide-react";
 import type { ArmoryItem, Character, CharacterData, InstanceView } from "../types";
 import { backend, LauncherError } from "../lib/api";
+import { INVENTORY_FULL_MESSAGE, INVENTORY_FULL_TOAST, isInventoryFull } from "../lib/inventory";
 import { useTablePagination } from "../lib/pagination";
 import { AmbuscadeCapes } from "./AmbuscadeCapes";
+import { InventoryFullDialog } from "./InventoryFullDialog";
 import { NolanMezzotint } from "./NolanMezzotint";
 import { OseemGlyptics } from "./OseemGlyptics";
 import { SkirmishAugments } from "./SkirmishAugments";
@@ -258,6 +260,8 @@ export function DataPage({
   const [active, setActive] = useState(0);
   const [selected, setSelected] = useState<ArmoryItem | null>(null);
   const [addingId, setAddingId] = useState<number | null>(null);
+  /** The item whose purchase the server refused because the bag is full. */
+  const [inventoryFailure, setInventoryFailure] = useState<ArmoryItem | null>(null);
   const searchSeq = useRef(0);
   const typeaheadRef = useRef<HTMLDivElement | null>(null);
   const activeOptionRef = useRef<HTMLButtonElement | null>(null);
@@ -283,6 +287,7 @@ export function DataPage({
     setItems([]);
     setSearched(false);
     setSelected(null);
+    setInventoryFailure(null);
     setOpen(false);
     setQuery("");
     searchSeq.current += 1;
@@ -399,7 +404,14 @@ export function DataPage({
         "success",
       );
     } catch (problem) {
-      notify(messageOf(problem), "error");
+      if (isInventoryFull(problem)) {
+        // The Armory card has its own dialog; this covers the other Data-page
+        // buy paths (the Oboro weapon card) with the same instructions.
+        setError(INVENTORY_FULL_MESSAGE);
+        notify(INVENTORY_FULL_TOAST, "error");
+      } else {
+        notify(messageOf(problem), "error");
+      }
     } finally {
       setBusy(null);
     }
@@ -456,6 +468,7 @@ export function DataPage({
         quantity: 1,
       });
       if (result.data) setData(result.data);
+      setInventoryFailure(null);
       const live = await reloadClient();
       const paid = result.item?.price ?? item.price;
       setItems((current) =>
@@ -471,7 +484,11 @@ export function DataPage({
         "success",
       );
     } catch (problem) {
-      if (problem instanceof LauncherError && problem.code === "already_owned") {
+      if (isInventoryFull(problem)) {
+        setInventoryFailure(item);
+        notify(INVENTORY_FULL_TOAST, "error");
+      } else if (problem instanceof LauncherError && problem.code === "already_owned") {
+        setInventoryFailure(null);
         notify(`${item.name} is already in the character's possession`, "info");
         setItems((current) =>
           current.map((row) =>
@@ -482,8 +499,10 @@ export function DataPage({
           current && current.item_id === item.item_id ? { ...current, owned: true } : current,
         );
       } else if (problem instanceof LauncherError && problem.code === "insufficient_gil") {
+        setInventoryFailure(null);
         notify(problem.message, "error");
       } else {
+        setInventoryFailure(null);
         notify(messageOf(problem), "error");
       }
     } finally {
@@ -1208,6 +1227,15 @@ export function DataPage({
             )}
           </div>
         </>
+      )}
+
+      {inventoryFailure && (
+        <InventoryFullDialog
+          itemName={inventoryFailure.name}
+          onRetry={() => void addArmoryItem(inventoryFailure)}
+          retrying={addingId === inventoryFailure.item_id}
+          onClose={() => setInventoryFailure(null)}
+        />
       )}
     </div>
   );

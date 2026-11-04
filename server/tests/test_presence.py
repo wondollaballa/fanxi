@@ -14,7 +14,7 @@ from pathlib import Path
 
 from support import make_huffman_dir, make_service
 
-from fanxi_server.game import packets
+from fanxi_server.game import effects, packets
 from fanxi_server.game.cipher import Huffman, md5
 from fanxi_server.game.world import (
     PLAYER_TARGID_FIRST,
@@ -124,6 +124,29 @@ class PresenceTest(unittest.TestCase):
         updates = [player_fields(message) for message in player_messages(self.b)]
         self.assertEqual(len(updates), 1)
         self.assertEqual(updates[0]["walk"], 0)
+
+    def test_invisible_reaches_the_observer_before_the_next_heartbeat(self):
+        """0x00D Flags1 bit 29 is InvisFlag: the other client stops drawing the player.
+
+        The effect's own refresh has to carry it.  A General block otherwise only rides
+        an HP update, so an invisible character standing still stayed visible to every
+        other client until something happened to their HP.
+        """
+        self.a.sync_players()
+        self.b.sync_players()
+        self.b.queue.clear()
+        self.a.add_effect(effects.INVISIBLE, duration=420)
+        updates = player_messages(self.b)
+        self.assertTrue(updates)
+        self.assertEqual(updates[-1][4 + 6], packets.SEND_HP)  # General block, not position
+        flags1 = struct.unpack_from("<I", updates[-1], 4 + 0x1C)[0]
+        self.assertTrue(flags1 & (1 << 29))
+        # Wearing off clears the flag for the observers too.
+        self.b.queue.clear()
+        self.a.remove_effect(effects.INVISIBLE)
+        updates = player_messages(self.b)
+        self.assertTrue(updates)
+        self.assertFalse(struct.unpack_from("<I", updates[-1], 4 + 0x1C)[0] & (1 << 29))
 
     def test_a_stationary_player_refreshes_its_position(self):
         """A late-loading observer converges without waiting for the leader to move again.

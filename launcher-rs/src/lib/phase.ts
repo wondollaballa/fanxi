@@ -57,6 +57,11 @@ export type SpellCategoryKey =
   | "nuke_mb"
   | "helix_magic"
   | "helix_duration"
+  | "dark_potency"
+  | "dark_macc"
+  | "dark_duration"
+  | "divine_mab"
+  | "divine_macc"
   | "enspells"
   | "song_duration"
   | "song_potency"
@@ -70,6 +75,8 @@ export type SpellGroupKey =
   | "curing"
   | "nuking"
   | "helix"
+  | "dark"
+  | "divine"
   | "songs";
 
 export type SpellMode = {
@@ -229,6 +236,59 @@ export const SPELL_GROUPS: SpellGroup[] = [
     ],
   },
   {
+    key: "dark",
+    label: "Dark Magic",
+    short: "Dark",
+    defaultMode: "potency",
+    modes: [
+      {
+        key: "potency",
+        label: "Potency",
+        short: "Pot",
+        category: "dark_potency",
+        detail:
+          "Drain and Aspir potency set, plus Magic Attack for Kaustra and Death.",
+      },
+      {
+        key: "macc",
+        label: "Macc / landing",
+        short: "Macc",
+        category: "dark_macc",
+        detail:
+          "Dark Magic Skill / Magic Accuracy set for landing Stun, Bio, Curse and the Absorb spells.",
+      },
+      {
+        key: "duration",
+        label: "Duration",
+        short: "Dur",
+        category: "dark_duration",
+        detail: "Dark Magic duration set for Bio, Absorb and the other Dark Magic debuffs.",
+      },
+    ],
+  },
+  {
+    key: "divine",
+    label: "Divine Magic",
+    short: "Divine",
+    defaultMode: "mab",
+    modes: [
+      {
+        key: "mab",
+        label: "Magic Attack",
+        short: "MAB",
+        category: "divine_mab",
+        detail: "Magic Attack / MND set for the Banish and Holy lines.",
+      },
+      {
+        key: "macc",
+        label: "Macc / landing",
+        short: "Macc",
+        category: "divine_macc",
+        detail: "Divine Magic Skill / Magic Accuracy set for landing Flash and Repose.",
+      },
+    ],
+  },
+  {
     key: "songs",
     label: "Bard songs",
     short: "Song",
@@ -356,6 +416,11 @@ const SPELL_CATEGORY_FALLBACKS: Record<SpellCategoryKey, string[]> = {
   nuke_mb: ["midcast.Elemental Magic MB"],
   helix_magic: ["midcast.Elemental Magic"],
   helix_duration: [],
+  dark_potency: ["midcast.Dark Magic"],
+  dark_macc: ["midcast.Dark Magic"],
+  dark_duration: ["midcast.Dark Magic"],
+  divine_mab: ["midcast.Divine Magic"],
+  divine_macc: ["midcast.Divine Magic"],
   enspells: ["midcast.Enspell", "midcast.EnhancingSkill"],
   song_duration: ["midcast.SongDuration", "midcast.Song", "midcast.Singing"],
   song_potency: ["midcast.SongPotency", "midcast.Song", "midcast.Singing"],

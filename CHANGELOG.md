@@ -1,5 +1,64 @@
 # Changelog
 
+## Unreleased — the launcher explains a full inventory
+
+- **A purchase that cannot fit opens an Inventory full dialog, not just a toast.** The dialog
+  names the item, confirms that no gil was charged, tells the player to free a slot in game with
+  `//storage organize` (or `//bags`), and offers **Retry purchase** once they are back. The
+  Items tab uses the same dialog; the other Data-page buy paths (the Oboro weapon card) show the
+  same instructions in the page banner. `inventory_full` errors are recognised by their server
+  code, so a different failure still reports its own message.
+
+## Unreleased — Invisible looks like retail
+
+- **Casting Invisible now turns your own character semi-transparent.** The client decides
+  how to draw a hidden character; the server was never sending the flag it reads. `0x037`
+  Flags1 **bit 15** (InvisFlag) is now set while the Invisible effect is up, and the
+  retail client renders its own model translucent from it — the buff icon used to appear
+  while the character stayed solid.
+- **Other players stop drawing you while you are invisible.** The General block of
+  `0x00D` now carries InvisFlag in Flags1 **bit 29**, so the clients around you hide the
+  character instead of seeing a fully opaque player walk past.
+- **Both packets go out when the effect lands or wears off.** `add_effect` / `remove_effect`
+  queue the same `char_status` + General `0x00D` + `status_icons` bundle a mount swap sends
+  and broadcast the entity update to the clients that draw the player, so the ghost look
+  follows the buff at once instead of waiting for the next HP heartbeat. A job change or a
+  Mog House trip that drops the effect clears the flag the same way. Sneak sets neither
+  bit: it changes aggro, not the model.
+- Tests: `test_world.py` pins the two flag bits on the self packets and that Sneak leaves
+  them clear; `test_presence.py` drives two real sessions and checks the observer receives
+  the invisible and the visible update on the effect's own refresh.
+
+## Unreleased — Dark and Divine Magic get their own spell mode groups
+
+- **The Spells panel has Dark Magic and Divine Magic cards.** Every spell of those two skills
+  (Dark, skill 37: Drain, Aspir, Bio, Stun, Curse, the Absorb spells, Kaustra, Death, Tractor,
+  Klimaform, ...; Divine, skill 32: Banish, Banishga, Holy, Flash, Repose, ...) used to fall
+  through to the library's `sets.midcast["Dark Magic"]` / `["Divine Magic"]` with no way to arm
+  a different set for it.
+- **Dark Magic carries three modes.** **Potency** (`dark_potency`, the default) is the Drain /
+  Aspir potency set and the Magic Attack a Kaustra or Death cast wants; **Macc / landing**
+  (`dark_macc`) is the Dark Magic Skill / Magic Accuracy set for landing Stun, Bio, Curse and
+  the Absorb spells; **Duration** (`dark_duration`) wears the Dark Magic duration gear that
+  scales Bio and the other Dark Magic debuffs. `midcast.Dark Magic` is the conventional
+  fallback for all three, so a library that only has the skill set keeps behaving as before.
+- **Divine Magic carries two modes.** **Magic Attack** (`divine_mab`, the default) is the Magic
+  Attack / MND set for the Banish and Holy lines; **Macc / landing** (`divine_macc`) is the
+  Divine Magic Skill / Magic Accuracy set for landing Flash and Repose. `midcast.Divine Magic`
+  is the conventional fallback for both, so a PLD or WHM library that only has the skill set
+  keeps behaving as before, and a RUN still wears it for Flash.
+- **The host classifies the spells and the in-game HUD gains `Dark` and `Divine` buttons.**
+  `job_spells` now reports `dark` / `divine` in each spell's `categories`, the plan wears the
+  armed mode's set, and the spell window's mode strip gains both beside `Helix`.
+  `//modes dark potency|macc|duration` and `//modes divine mab|macc` switch them from chat (the
+  help now lists every group straight from the table, so a future group needs no second edit).
+  Endark / Endark II and Enlight / Enlight II stay in **Enspells** because they are
+  self-enspells despite their Dark / Divine Magic skill.
+- Tests: `spell_groups_test.py` runs the host's real group table and classifier against every
+  skill-37 and skill-32 spell in the spell migration, pins the self-enspells to Enspells, and
+  fails if the launcher's `phase.ts` and the host's `control.lua` ever disagree about a group,
+  mode or category key.
+
 ## Unreleased — lockstyle keeps a same-type weapon from blinking
 
 - **A weapon swap no longer repaints the character while style lock is on.** The lock

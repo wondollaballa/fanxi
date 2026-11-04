@@ -375,6 +375,42 @@ class WorldTest(unittest.TestCase):
         """
         self.assertEqual(self.session.char_status()[4 + 0x5C], 0x7B)
 
+    def test_invisible_sets_the_flag_the_client_draws_the_ghost_from(self):
+        """0x037 Flags1 bit 15 is InvisFlag: retail's semi-transparent self while invisible.
+
+        The flag is what the client reads to draw its own model translucent; the buff bar
+        icon alone left the character looking solid.  The same effect refresh carries the
+        General 0x00D whose Flags1 bit 29 hides the player from the other clients.
+        """
+        session = self.session
+        self.assertEqual(struct.unpack_from("<I", session.char_status(), 4 + 0x28)[0]
+                         & (1 << 15), 0)
+        session.queue.clear()
+        session.add_effect(effects.INVISIBLE, duration=420)
+        self.assertTrue(struct.unpack_from("<I", session.char_status(), 4 + 0x28)[0]
+                        & (1 << 15))
+        self.assertTrue(struct.unpack_from("<I", session.char_update(), 4 + 0x1C)[0]
+                        & (1 << 29))
+        # The add queues the refresh itself: the status packet and the entity update.
+        kinds = msg_types(session)
+        self.assertIn(0x037, kinds)
+        self.assertIn(0x00D, kinds)
+        session.queue.clear()
+        session.remove_effect(effects.INVISIBLE)
+        self.assertEqual(struct.unpack_from("<I", session.char_status(), 4 + 0x28)[0]
+                         & (1 << 15), 0)
+        self.assertEqual(struct.unpack_from("<I", session.char_update(), 4 + 0x1C)[0]
+                         & (1 << 29), 0)
+
+    def test_sneak_leaves_the_invisible_flag_clear(self):
+        """Sneak changes the aggro rules, not the model: only Invisible sets the flag."""
+        session = self.session
+        session.add_effect(effects.SNEAK, duration=420)
+        self.assertEqual(struct.unpack_from("<I", session.char_status(), 4 + 0x28)[0]
+                         & (1 << 15), 0)
+        self.assertEqual(struct.unpack_from("<I", session.char_update(), 4 + 0x1C)[0]
+                         & (1 << 29), 0)
+
     def test_entering_the_mog_house_rests_the_character(self):
         """The Mog House refills HP/MP, drops every status effect and persists both."""
         session = self.session

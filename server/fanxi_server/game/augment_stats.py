@@ -28,7 +28,7 @@ from __future__ import annotations
 import re
 from functools import lru_cache
 
-from . import augment_gear, augments, capes, magian, mezzotint
+from . import augment_gear, augments, capes, glyptics, magian, mezzotint
 from . import modifiers as mod
 
 # A value is always signed: "Accuracy+30", "Damage taken-10%", '"+7%"' after the name.
@@ -119,6 +119,10 @@ _PERCENT = {
     # Oboro path C: the magical weapon-skill base multiplier on Crocea Mors,
     # Vitiation Sword and Duelist's Sword.  Applied by the magical WS path.
     "elementalweaponskilldamage": mod.ELEMENTAL_WS_DAMAGE,
+    # Capes spell this line "Spell interruption rate down".  It is the same
+    # modifier 168 the gear/merit SIRD uses; without this mapping the tooltip
+    # displayed it as a separate stat and the interrupt roll never saw it.
+    "spellinterruptionratedown": mod.SPELL_INTERRUPT,
 }
 
 # "Reduction" lines whose tooltip carries a minus but whose modifier is stored as a
@@ -164,7 +168,6 @@ UNMODELLED = {
     "parryingrate",             # the engine has no parry-rate pool yet
     "phalanxreceived",
     "snapshot",
-    "spellinterruptionratedown",
     "waltzpotency",             # Dancer waltz potency is not modelled
     # Unity accessory rows the engine has no pool for yet.
     "enhancingmagicreceivedduration",
@@ -465,6 +468,12 @@ def describe_augments(item_id: int, extra: bytes | None) -> str:
     if raw[0] == magian.KIND and (raw[1] & magian.TRIAL):
         return magian.describe(raw)
     if raw[0] == capes.AUGMENT_KIND and raw[1] == capes.AUGMENT_SUBKIND:
+        # Ambuscade capes and Oseem Arcane Glyptics share the same 0x02/0x03
+        # five-slot block but not the same id table.  Reading a Chironic/Herculean/
+        # Merlinic/Odyssean/Valorous piece through the cape table produced no rows,
+        # which is why those augments vanished from both the card and the sheet.
+        if glyptics.entry(int(item_id)) is not None:
+            return glyptics.describe(raw)
         return capes.describe(raw)
     if raw[0] != 0x03 or raw[1] != 0x83:
         return ""
@@ -513,6 +522,10 @@ def item_mods(item_id: int, extra: bytes | None) -> dict[int, int]:
         decoded = mezzotint.decode(raw)
         return parse_rows([row["text"] for row in decoded["rows"]]) if decoded else {}
     if raw[0] == capes.AUGMENT_KIND and raw[1] == capes.AUGMENT_SUBKIND:
+        if glyptics.entry(int(item_id)) is not None:
+            decoded = glyptics.decode(raw)
+            return parse_rows([row["text"] for slot in decoded
+                               for row in slot.get("rows", ())])
         return _standard_mods(raw)
     return {}
 

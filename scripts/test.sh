@@ -16,6 +16,8 @@ echo "== hud labels"
 python3 tests/spell_names_test.py
 echo "== hud spell sections"
 python3 tests/spell_sections_test.py
+echo "== spell mode groups"
+python3 tests/spell_groups_test.py
 echo "== hud cooldowns"
 python3 tests/hud_cool_test.py
 echo "== magic bag"

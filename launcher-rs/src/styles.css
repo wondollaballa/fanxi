@@ -4003,6 +4003,77 @@ code {
   opacity: 1;
 }
 
+/* ---------- inventory-full purchase error ---------- */
+
+.inventory-full-dialog {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  color: var(--muted);
+  font-size: 11.5px;
+  line-height: 1.6;
+}
+
+.inventory-full-dialog p {
+  margin: 0;
+}
+
+.inventory-full-callout {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  padding: 11px 12px;
+  border: 1px solid rgba(255, 123, 114, 0.28);
+  border-radius: 9px;
+  background: rgba(255, 123, 114, 0.08);
+}
+
+.inventory-full-callout svg {
+  flex: none;
+  margin-top: 1px;
+  color: var(--red);
+}
+
+.inventory-full-callout strong {
+  display: block;
+  margin-bottom: 2px;
+  color: #ffd1cd;
+  font-size: 12px;
+}
+
+.inventory-full-callout p {
+  color: var(--muted);
+}
+
+.inventory-full-dialog ul {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  margin: 0;
+  padding-left: 18px;
+}
+
+.inventory-full-dialog li::marker {
+  color: var(--red);
+}
+
+.inventory-full-dialog code {
+  color: var(--accent);
+  font-size: 10.5px;
+}
+
+.inventory-full-dialog kbd {
+  display: inline-block;
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-bottom-width: 2px;
+  border-radius: 5px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-family: var(--mono);
+  font-size: 9.5px;
+}
+
 .toast {
   position: fixed;
   right: 22px;

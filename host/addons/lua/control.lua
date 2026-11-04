@@ -44,8 +44,10 @@ key holds, frame captures, waits). Commands:
                              it, and returns to the state set. spell_category_overrides holds one
                              set per mode (enfeebles_macc, enfeebles_duration, buff_potency,
                              buff_duration, cure_potency, cure_cast, nuke_mab, nuke_mdmg, nuke_mb,
-                             helix_magic, helix_duration, enspells); spell_modes arms one mode
-                             per group (enfeebles, enhancing, enspells, curing, nuking, helix).
+                             helix_magic, helix_duration, dark_potency, dark_macc, dark_duration,
+                             divine_mab, divine_macc, enspells); spell_modes arms one mode per
+                             group (enfeebles, enhancing, enspells, curing, nuking, helix, dark,
+                             divine, songs).
                              A spell uses its group's armed set unless a per-spell override names
                              one.  nuke_mb is not armed: a nuke wears it while a magic burst
                              window is open on the player's target
@@ -59,7 +61,8 @@ key holds, frame captures, waits). Commands:
   phase_lock_slots {mask}    pin equipment slots (bit 0 main .. bit 15 back) out of every set
   job_spells                 the current job pair's spell list for the override form, with the
                              spell group (enfeebles, enhancing, enspells, curing, nuking,
-                             helix or songs) of each; a level-99 main job also gets its job-point spells
+                             helix, dark, divine or songs) of each; a level-99 main job also gets
+                             its job-point spells
   job_abilities              the current main/sub job abilities the client's menu lists
   hud {show_hud, show_abilities, show_spells, show_trusts, show_weapon_skills, show_mounts,
        show_target, show_equipview, show_battle_hud, show_sch,
@@ -962,6 +965,7 @@ end
 -- the same numbers GearSwap maps /ma, /ws and /ja to; the skill ids are the client's own, named
 -- the way GearSwap libraries key sets.midcast.
 local PHASE_MAGIC, PHASE_WS, PHASE_JA = 3, 7, 9
+-- BEGIN spell mode groups -- tests/spell_groups_test.py extracts this region and runs it.
 local MIDCAST_SKILL = {
     [32] = 'Divine Magic', [33] = 'Healing Magic', [34] = 'Enhancing Magic',
     [35] = 'Enfeebling Magic', [36] = 'Elemental Magic', [37] = 'Dark Magic',
@@ -1021,6 +1025,21 @@ local SPELL_GROUPS = {
             { key = 'duration', label = 'Duration', short = 'Dur', category = 'helix_duration' },
         },
     },
+    dark = {
+        key = 'dark', label = 'Dark Magic', short = 'Dark', default = 'potency',
+        modes = {
+            { key = 'potency', label = 'Potency', short = 'Pot', category = 'dark_potency' },
+            { key = 'macc', label = 'Macc / landing', short = 'Macc', category = 'dark_macc' },
+            { key = 'duration', label = 'Duration', short = 'Dur', category = 'dark_duration' },
+        },
+    },
+    divine = {
+        key = 'divine', label = 'Divine Magic', short = 'Divine', default = 'mab',
+        modes = {
+            { key = 'mab', label = 'Magic Attack', short = 'MAB', category = 'divine_mab' },
+            { key = 'macc', label = 'Macc / landing', short = 'Macc', category = 'divine_macc' },
+        },
+    },
     songs = {
         key = 'songs', label = 'Bard songs', short = 'Song', default = 'duration',
         modes = {
@@ -1030,7 +1049,8 @@ local SPELL_GROUPS = {
     },
 }
 local SPELL_GROUP_ORDER = {
-    'enfeebles', 'enhancing', 'enspells', 'curing', 'nuking', 'helix', 'songs',
+    'enfeebles', 'enhancing', 'enspells', 'curing', 'nuking', 'helix', 'dark', 'divine',
+    'songs',
 }
 local function spell_name(spell)
     local name = spell and spell.name
@@ -1041,7 +1061,8 @@ end
 -- The one group a spell belongs to.  Helix is checked first because a helix is also an
 -- Elemental Magic spell.  Enspells (Enfire, Enblizzard, ... and their IIs) are Enhancing Magic
 -- but cast from the Enhancing Magic Skill set, so they get their own group before the skill
--- fallback.  Everything else follows its skill.
+-- fallback; Enlight and Endark stay there although their own skill is Divine / Dark Magic.
+-- Everything else follows its skill.
 local ENSPELL_BASE = {
     enfire = true, enblizzard = true, enaero = true, enstone = true, enthunder = true,
     enwater = true, enlight = true, endark = true,
@@ -1060,8 +1081,11 @@ local function spell_group(spell)
     if skill == 'Enhancing Magic' then return 'enhancing' end
     if skill == 'Healing Magic' then return 'curing' end
     if skill == 'Elemental Magic' then return 'nuking' end
+    if skill == 'Dark Magic' then return 'dark' end
+    if skill == 'Divine Magic' then return 'divine' end
     return nil
 end
+-- END spell mode groups
 
 local function group_mode(group_key, mode_key)
     local group = SPELL_GROUPS[group_key]
@@ -1988,6 +2012,8 @@ local MODE_GROUP_ALIASES = {
     curing = 'curing', cure = 'curing', healing = 'curing', heals = 'curing',
     nuking = 'nuking', nuke = 'nuking', nukes = 'nuking', elemental = 'nuking',
     helix = 'helix', helixes = 'helix',
+    dark = 'dark', darkmagic = 'dark', darks = 'dark', drain = 'dark', aspir = 'dark',
+    divine = 'divine', divinemagic = 'divine', holy = 'divine', banish = 'divine',
     songs = 'songs', song = 'songs', bard = 'songs', bards = 'songs',
 }
 
@@ -2012,6 +2038,15 @@ local function spell_mode_summary()
         parts[#parts + 1] = SPELL_GROUPS[group_key].short .. ': ' .. mode_short(group_key, mode)
     end
     return table.concat(parts, ', ')
+end
+
+-- The //modes help reads the group list from the table, so a new group needs no second edit.
+local function spell_group_names()
+    local names = {}
+    for _, group_key in ipairs(SPELL_GROUP_ORDER) do
+        names[#names + 1] = SPELL_GROUPS[group_key].key
+    end
+    return table.concat(names, ', ')
 end
 
 local function resolve_mode_key(group_key, text)
@@ -2057,12 +2092,12 @@ local function modes_command(body)
     if #words == 0 then
         if not phase_plan then return 'GearSwap is off; turn it on in the launcher first' end
         return spell_mode_summary() ..
-            '  |  //modes <group> <mode>  (enhancing, enspells, enfeebles, curing, nuking, helix, songs)'
+            '  |  //modes <group> <mode>  (' .. spell_group_names() .. ')'
     end
     local group_key = MODE_GROUP_ALIASES[tostring(words[1]):lower()]
     if not group_key then
         return 'unknown group "' .. tostring(words[1]) ..
-            '"; use enhancing, enspells, enfeebles, curing, nuking, helix or songs'
+            '"; use one of: ' .. spell_group_names()
     end
     local group = SPELL_GROUPS[group_key]
     if #words < 2 then

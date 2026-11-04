@@ -1148,6 +1148,15 @@ its duration and the numbers the engine reads:
   Scholar level; the first tock lands 1-10 s after the cast.
 - Sneak and Invisible keep a monster from aggroing.  Regen/Refresh and Poison tick on the
   player through the same three-second timer as the passive Auto Regen/Auto Refresh.
+- **Invisible looks like retail.**  The client does the drawing; the server only has to
+  set the flag.  `0x037` Flags1 bit 15 (InvisFlag) makes the local client render its own
+  model semi-transparent, and `0x00D` Flags1 bit 29 (the General block) makes every other
+  client stop drawing the player.  `add_effect` / `remove_effect` refresh both packets
+  when Invisible lands or wears off (the same `char_status` + General `0x00D` +
+  `status_icons` bundle a mount swap sends), so the look changes at once instead of
+  waiting for the next HP heartbeat; a job change or a Mog House trip that drops the
+  effect clears the flag the same way.  Sneak sets neither flag — it changes aggro, not
+  the model.
 - **Geomancy** is two bubbles: the Indi- aura around the Geomancer and the Geo- one around
   the Luopan (a Geo- cast also drops the Luopan and sets its drain, potency and MP cost).
   A cast replaces that bubble's previous aura — Indi-haste and Geo-frailty are up together,

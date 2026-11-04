@@ -1259,6 +1259,12 @@ BIND = 11
 TRIPLE_SHOT = 467
 DECOY_SHOT = 482
 SUBLIMATION_COMPLETE = 188
+# The -storm line.  Retail gives each element its own icon (178-185, and 589-596 for
+# the tier-II line) but only one storm can be up: a new storm replaces the old one.
+STORM_EFFECTS = frozenset({
+    178, 179, 180, 181, 182, 183, 184, 185,
+    589, 590, 591, 592, 593, 594, 595, 596,
+})
 LIGHT_ARTS = 358
 DARK_ARTS = 359
 PENURY = 360

@@ -11,7 +11,9 @@ import {
 import type { CharacterData, ItemCategory, StoreItem } from "../types";
 import { backend, LauncherError } from "../lib/api";
 import { formatNumber } from "../lib/format";
+import { INVENTORY_FULL_TOAST, isInventoryFull } from "../lib/inventory";
 import { ItemIcon } from "./ItemIcon";
+import { InventoryFullDialog } from "./InventoryFullDialog";
 import { Badge, Button, Card, TextInput, cn } from "./ui";
 
 type Notify = (message: string, kind?: "success" | "error" | "info") => void;
@@ -47,6 +49,11 @@ export function ItemsCatalog({
   const [searched, setSearched] = useState(false);
   const [selected, setSelected] = useState<StoreItem | null>(null);
   const [busy, setBusy] = useState<string | null>(null);
+  /** The last attempted purchase the server refused because the bag is full. */
+  const [inventoryFailure, setInventoryFailure] = useState<{
+    item: StoreItem;
+    quantity: number;
+  } | null>(null);
   const searchSeq = useRef(0);
 
   const trimmedQuery = query.trim();
@@ -126,6 +133,7 @@ export function ItemsCatalog({
         quantity,
       });
       if (result.data) onData(result.data);
+      setInventoryFailure(null);
       const live = await reloadClient();
       const paid = result.item?.price ?? item.price * quantity;
       setItems((current) =>
@@ -147,7 +155,11 @@ export function ItemsCatalog({
         "success",
       );
     } catch (problem) {
-      if (problem instanceof LauncherError && problem.code === "already_owned") {
+      if (isInventoryFull(problem)) {
+        setInventoryFailure({ item, quantity });
+        notify(INVENTORY_FULL_TOAST, "error");
+      } else if (problem instanceof LauncherError && problem.code === "already_owned") {
+        setInventoryFailure(null);
         notify(`${item.name} is already in the character's possession`, "info");
         const mark = (row: StoreItem) => ({ ...row, owned: true, held: Math.max(1, row.held) });
         setItems((current) =>
@@ -157,6 +169,7 @@ export function ItemsCatalog({
           current && current.item_id === item.item_id ? mark(current) : current,
         );
       } else {
+        setInventoryFailure(null);
         notify(messageOf(problem), "error");
       }
     } finally {
@@ -392,6 +405,19 @@ export function ItemsCatalog({
           )}
         </aside>
       </div>
+
+      {inventoryFailure && (
+        <InventoryFullDialog
+          itemName={
+            inventoryFailure.quantity > 1
+              ? `${formatNumber(inventoryFailure.quantity)}× ${inventoryFailure.item.name}`
+              : inventoryFailure.item.name
+          }
+          onRetry={() => void buy(inventoryFailure.item, inventoryFailure.quantity)}
+          retrying={busy === `${inventoryFailure.item.item_id}:${inventoryFailure.quantity}`}
+          onClose={() => setInventoryFailure(null)}
+        />
+      )}
     </Card>
   );
 }

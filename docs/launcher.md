@@ -166,6 +166,12 @@ the longer BG Wiki name for the 2,068 abbreviated equipment rows that have one (
 purchase history is paginated at **20 rows by default**; the **Rows per page** picker offers
 10, 20, 50 or 100, and the choice is kept for the next visit.
 
+If the normal 80-slot inventory has no free slot, the launcher opens an **Inventory full**
+dialog naming the item, confirms that no gil was charged, and points at `//storage organize`
+and `//bags`. Its **Retry purchase** button repeats the same purchase once a slot is free.
+The Items tab uses the same dialog, and the other Data-page buy paths show the same
+instructions in the page banner.
+
 Prime weapons are sold only in their final iLvl 119 III form. A family's four upgraded rows
 share one name, so the typeahead collapses them into a single **Final** row and maps the
 stage-1 `Prime ...` item to the same row: `Foenaria` and `Prime Scythe` both offer the one

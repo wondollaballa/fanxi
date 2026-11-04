@@ -5861,9 +5861,12 @@ class ZoneSession:
 
     def clear_status_effects(self) -> None:
         """Take every status effect away; the next 0x037 (its 0xFF slots) removes the icons."""
+        invisible = effects.INVISIBLE in self.effect_state
         self.status_effects.clear()
         self.effect_state.clear()
         self.food = live_state.empty_food()
+        if invisible:
+            self._sync_stealth()
 
     # --- the reconnect snapshot -------------------------------------------------------
 
@@ -5992,14 +5995,24 @@ class ZoneSession:
         """Record a player effect and put its icon in the next 0x037.
 
         The caller queues ``char_status()``; this only mutates the state so two effects
-        landing in the same packet do not each send the client a partial list.  A song
-        carries its unenhanced base in ``song_base``: that is what the overwrite and
-        recast rules compare against, and it is also how the effect list knows which
-        entries count against the instrument's song slots.
+        landing in the same packet do not each send the client a partial list.  Invisible
+        is the exception: gaining or losing it refreshes 0x037 and the entity 0x00D here
+        (``_sync_stealth``) so the client's semi-transparent ghost look follows the buff
+        and the other clients stop drawing the player.  A song carries its unenhanced
+        base in ``song_base``: that is what the overwrite and recast rules compare
+        against, and it is also how the effect list knows which entries count against the
+        instrument's song slots.
         """
         effect_id = int(effect_id)
         if effect_id <= 0:
             return
+        if effect_id in effects.STORM_EFFECTS:
+            # One weather spell per character.  The icons differ by element, but the
+            # status slot does not: the next storm replaces the previous one, exactly
+            # as retail's weather line does.
+            for other in effects.STORM_EFFECTS:
+                if int(other) != effect_id:
+                    self.remove_effect(int(other), quiet=True)
         if (getattr(self, "_fealty", False)
                 and effect_id in weapon_skill_effects.AILMENTS):
             self._fealty = False
@@ -6047,6 +6060,22 @@ class ZoneSession:
                 "song_cast_at": float(song_cast_at or now),
                 "song_effect": int(song_effect),
             })
+        if effect_id == effects.INVISIBLE:
+            self._sync_stealth()
+
+    def _sync_stealth(self) -> None:
+        """Refresh the Invisible flag on this client and on every client that draws it.
+
+        The local client reads 0x037's Flags1.InvisFlag (bit 15) and draws its own model
+        semi-transparent; every other client reads 0x00D's Flags1.InvisFlag (bit 29) and
+        stops drawing the character.  Both packets have to go out when Invisible lands or
+        wears off, or the flag waits for the next HP heartbeat.  A mount refresh sends the
+        same bundle for the same reason.
+        """
+        self.queue.append(self.char_status())
+        self.queue.append(self.char_update(packets.SEND_HP))
+        self.queue.append(self.status_icons())
+        self.world.broadcast_player(self, packets.SEND_HP)
 
     def remove_effect(self, effect_id: int, *, quiet: bool = False) -> bool:
         """Drop one effect; the caller queues 0x037 (and a wear-off line) as needed."""
@@ -6064,6 +6093,8 @@ class ZoneSession:
                 int(self.char["char_id"]), int(self.char["char_id"]),
                 int(self.char.get("targid", 0x400)), int(self.char.get("targid", 0x400)),
                 icon, 0, packets.MESSAGE_STATUS_WEARS_OFF)))
+        if effect_id == effects.INVISIBLE:
+            self._sync_stealth()
         return True
 
     def drop_shadow(self) -> int:
@@ -6270,10 +6301,15 @@ class ZoneSession:
                       if effect in self.effect_state}
         changed = bool(self.status_effects or self.effect_state
                        or int(self.food.get("item_id") or 0))
+        invisible = effects.INVISIBLE in self.effect_state
         self.status_effects[:] = kept
         self.effect_state.clear()
         self.effect_state.update(kept_state)
         self.food = live_state.empty_food()
+        if invisible and effects.INVISIBLE not in self.effect_state:
+            # A job change drops Invisible: clear the flag on every client that draws the
+            # player, or the character stays a ghost until the next HP heartbeat.
+            self._sync_stealth()
         if changed:
             # Do not let the reconnect snapshot hand the old buffs back if the client
             # drops before the next tick writes the new state.
@@ -14416,7 +14452,13 @@ class ZoneSession:
         chocobo_index = ridden.chocobo_index() if ridden else 0
         flags0 = ((self.female() << 8) | ((c["size"] & 3) << 11)
                   | ((chocobo_index & 7) << 13) | (hpp << 16))
+        # Flags1: Speed, SpeedBase (animation speed) and, at bit 15, InvisFlag.  The local
+        # client reads that flag as "this character is invisible" and draws its own model
+        # semi-transparent, which is retail's Invisible look.  Without it the buff icon
+        # shows but the character stays fully opaque.
         flags1 = (self.own_speed() & 0xFFF) | (40 << 17)
+        if self.has_effect(effects.INVISIBLE):
+            flags1 |= 1 << 15
         struct.pack_into("<III", b, 0x20, c["char_id"], flags0, flags1)
         struct.pack_into("<II", b, 0x38, 60 * 360, int(time.time()) - VANA_EPOCH + self.world.clock + 360)
         b[0x54] = 0x10
@@ -14527,8 +14569,14 @@ class ZoneSession:
         # personal chocobo: mount id 0 has to look different from "no mount" in Flags6,
         # and index 1 is the client's ordinary chocobo seat.
         chocobo_index = ridden.chocobo_index() if ridden else 0
-        struct.pack_into("<I", b, 0x1C, ((c["size"] & 3) << 9) | ((chocobo_index & 7) << 5)
-                         | (self.female() << 15))
+        # Flags1 (body 0x1C): ChocoboIndex in bits 5-7, GraphSize in bits 9-10, Gender in
+        # bit 15 and InvisFlag in bit 29.  Every other client reads InvisFlag and stops
+        # drawing the character, so an invisible player has to carry it on each General
+        # update; a position-only update never carries the block.
+        flags1 = ((c["size"] & 3) << 9) | ((chocobo_index & 7) << 5) | (self.female() << 15)
+        if self.has_effect(effects.INVISIBLE):
+            flags1 |= 1 << 29
+        struct.pack_into("<I", b, 0x1C, flags1)
         if ridden is not None:
             # CustomProperties (body 0x30): the Noble Chocobo is told apart from a plain
             # one by the second word; every other mount leaves both clear.

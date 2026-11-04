@@ -944,16 +944,38 @@ per-spell choices ride in the `phase` command's options object (`ws_overrides`, 
 
 A mode group holds one set per mode (`spell_category_overrides`, keyed `enfeebles_macc`,
 `enfeebles_duration`, `buff_potency`, `buff_duration`, `cure_potency`, `cure_cast`, `nuke_mab`,
-`nuke_mdmg`, `nuke_mb`, `helix_magic`, `helix_duration` or `enspells`) and an armed mode
-(`spell_modes`). The host puts each spell in exactly one group: Enfeebling Magic -> enfeebles, Enhancing Magic ->
-enhancing, Healing Magic -> curing, Elemental Magic -> nuking, a spell whose name contains `helix`
--> helix (checked before Elemental), and Enfire / Enblizzard / Enaero / Enstone / Enthunder /
-Enwater (and their IIs, plus Enlight / Endark) -> enspells (checked before the Enhancing Magic
-fallback). The plan resolves a spell in this order: per-spell override,
-the armed mode's set for its group, the midcast default, then the library's
-`sets.midcast.<skill>`. Both modes of a group stay configured when the other is edited; the mode
-dropdown only changes which one is armed. A missing set for the armed mode falls through to the
-default rather than borrowing the other mode.
+`nuke_mdmg`, `nuke_mb`, `helix_magic`, `helix_duration`, `dark_potency`, `dark_macc`,
+`dark_duration`, `divine_mab`, `divine_macc` or `enspells`) and an armed mode
+(`spell_modes`). The host puts each spell in exactly one group: Enfeebling Magic -> enfeebles,
+Enhancing Magic -> enhancing, Healing Magic -> curing, Elemental Magic -> nuking, Dark Magic ->
+dark, Divine Magic -> divine, a spell whose name contains `helix` -> helix (checked before
+Elemental), and Enfire / Enblizzard / Enaero / Enstone / Enthunder / Enwater (and their IIs, plus
+Enlight / Endark) -> enspells (checked before the skill fallback). The plan resolves a spell in
+this order: per-spell override, the armed mode's set for its group, the midcast default, then the
+library's `sets.midcast.<skill>`. Both modes of a group stay configured when the other is edited;
+the mode dropdown only changes which one is armed. A missing set for the armed mode falls through
+to the default rather than borrowing the other mode.
+
+**Dark Magic has its own group** (`dark`) with three modes. **Potency** (`dark_potency`, the
+default) is the Drain / Aspir potency set and carries the Magic Attack a Kaustra or Death cast
+wants; **Macc / landing** (`dark_macc`) is the Dark Magic Skill / Magic Accuracy set for landing
+Stun, Bio, Curse and the Absorb spells; **Duration** (`dark_duration`) wears the Dark Magic
+duration gear, which scales Bio and the other Dark Magic debuffs. `midcast.Dark Magic` is the
+conventional fallback for all three, so a library that only carries the skill set behaves exactly
+as it did before the group existed. Endark and Endark II stay in **Enspells** because they are
+self-enspells despite their Dark Magic skill.
+
+**Divine Magic has its own group** (`divine`) with two modes. **Magic Attack** (`divine_mab`, the
+default) is the Magic Attack / MND set for the Banish and Holy lines; **Macc / landing**
+(`divine_macc`) is the Divine Magic Skill / Magic Accuracy set for landing Flash and Repose.
+`midcast.Divine Magic` is the conventional fallback for both, so a PLD or WHM library that only
+carries the skill set behaves exactly as it did before the group existed, and a RUN still wears
+it for Flash. Enlight and Enlight II stay in **Enspells** for the same reason as Endark, and a
+Divine Magic spell never lands in the Nuking group even though Banish and Holy are damage spells.
+
+Switch either group with `//modes dark potency|macc|duration` and
+`//modes divine mab|macc`; the in-game spell HUD's mode strip gains `Dark` and `Divine` buttons
+next to `Helix`.
 
 `nuke_mb` is the one key that is **not an armed mode**. The Nuking card shows it as a third,
 automatic row (labelled `Magic Burst`, marked `auto`); a nuke wears it in place of the group's armed
