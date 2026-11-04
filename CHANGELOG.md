@@ -1,5 +1,48 @@
 # Changelog
 
+## Unreleased — lockstyle keeps a same-type weapon from blinking
+
+- **A weapon swap no longer repaints the character while style lock is on.** The lock
+  stored only the weapon model, so the grap list changed on every main/sub swap and
+  `equipment_sync` sent a fresh `0x051`; the client answered with the gear-swap blink.
+  The character row now stores the locked weapon **type** beside the model
+  (`style_main_type`/`style_sub_type`, migration 0188).  A same-type swap keeps the
+  locked graphic, so the grap list is byte-for-byte unchanged and no `0x051` leaves.
+  That is retail's rule and it makes a normal GearSwap TP/WS weapon pair blink-free.
+- **A different weapon type still draws the equipped piece.** A two-hander becoming a
+  one-hander plus a shield has to show both new models; switching back to the locked
+  type restores its look.  This preserves the shield fix from the previous lockstyle
+  change.  An old lock saved before the migration is upgraded on the next login
+  keepalive: its untyped weapon slots adopt the weapon that is actually worn, which is
+  what the player was already seeing.
+- Tests: `test_style_emotes.py` drives a same-type sword swap (no `0x051`), a sword to
+  great-axe change (new graphic), switching back, the two-hander ↔ shield case and the
+  H2H left-fist mirror.
+
+## Unreleased — a K.O. waits for a raise
+
+- **Death no longer sends the character home on a six-second timer.** The old `tick`
+  recovered the body at 50% HP/MP and warped it to the set Home Point, which cut a fight in
+  an instance or event short and made a timed-out warp look like a bug.  A K.O. now stays
+  down until a Raise spell lands or the player deliberately gives up and leaves the zone.
+- **Raise, Raise II, Raise III and Arise revive a fallen player.** Their spell rows carry
+  only the client's `player_dead` target bit (0x20), so `cast_magic` resolves the selected
+  body as a session rather than a monster and `resolve_casting` restores 10/25/50/100% of
+  maximum HP.  Arise also leaves a full-duration Reraise III.  The result is an ordinary
+  magic-finish action (message 7, the restored HP) sent to the caster and the raised
+  player, and both clients get the `0x00D`/`0x037`/`0x061`/`0x0DF` refresh.
+- **A zone change is still the way out.** `//hp`, `//home`, the Home Point menu and any
+  other warp revive a fallen character at half HP/MP instead of landing them at the
+  destination still dead.  `hp_current = 0` survives a logout, so the next login is still
+  K.O. rather than a free recovery.
+- **The Battle hub raises its own.** A living box with healing enabled and a saved raise
+  spell casts it on a fallen party member when the party row reads 0 HP, with a recast
+  guard; `Reraise` is skipped because it is self-only.  Its **Return to home point** mode
+  now honors the saved `death.wait` delay instead of firing `//hp` after one second, so a
+  healer gets the configured time to raise before the player gives up.
+- Tests: `test_effects.py` pins the no-timer K.O., Raise at 10%, Arise at full HP with
+  Reraise, and the half-vitals Home Point return.
+
 ## Unreleased — Trust action sets survive a relog again
 
 - **The Set dialog now restores the saved songs/spells/rolls after a logout.** The server

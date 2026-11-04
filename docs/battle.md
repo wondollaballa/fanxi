@@ -103,9 +103,12 @@ movement during a cast is suppressed.
 - **Enfeebles/dispel.** The interval is the re-application clock because the client does not
   expose a monster's active-effect list. A mob we just slept is skipped until the sleep clock
   expires.
-- **Death.** The server this build talks to recovers a K.O.'d character after six seconds. `raise`
-  waits for that recovery; `homepoint` sends `//hp <number>` as soon as death is seen. The saved
-  raise-spell field is reserved for a server that implements Raise.
+- **Death.** A K.O. waits for a raise: the server keeps the character down until a Raise
+  (`Raise`/`Raise II`/`Raise III`/`Arise`) lands or the player returns to the Home Point.
+  A living box with `heal.enabled` and a saved raise spell casts it on a fallen party member
+  as soon as the party row shows 0 HP; `Reraise` is self-only and is never cast on another
+  player.  The dead box's own `raise` mode waits for that spell; `homepoint` waits the
+  profile's `death.wait` seconds and then sends `//hp <number>`.
 - **Kiting.** The assigned kiter runs a circle around the camp, away from the mob, or holds camp,
   once player HP is at or below `kiting.below`. Other roles never leave camp except the tank,
   puller and melee formation.

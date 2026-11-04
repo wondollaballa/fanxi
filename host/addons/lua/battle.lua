@@ -4018,12 +4018,48 @@ function B.death_tick()
         note('action', 'Battle: back on your feet; resuming.')
     end
     if R.dead then
-        if S.profile.death.mode == 'homepoint' and not R.home_sent and now - R.dead_at >= 1.0 then
+        -- Home point is the deliberate way out, and the saved wait is what gives a
+        -- healer time to land the raise first.  The old one-second timer ignored this
+        -- field and yanked the player out of an instance before the raise could land.
+        local wait = math.max(0, tonumber(S.profile.death.wait) or 0)
+        if S.profile.death.mode == 'homepoint' and not R.home_sent
+                and now - R.dead_at >= wait then
             R.home_sent = true
             pcall(xi.chat.run, '//hp ' .. tostring(S.profile.death.home_point or 1), 1)
             B.log_action('home point')
         end
         return true
+    end
+    return false
+end
+
+function B.raise_tick()
+    -- A dead party member is a heal target, not a cure target: the server keeps the body
+    -- down until a Raise spell lands.  Only the box that knows the saved raise spell
+    -- acts, so a party with two casters does not race.  Reraise is self-only and its
+    -- player_dead bit is clear, so it is never cast on someone else.
+    local p = S.profile.heal
+    if not p.enabled then return false end
+    local name = text(p.raise_spell, 40)
+    if name == '' then return false end
+    local spell = B.spell(name)
+    if not spell or not spell_known(spell) then return false end
+    local targets = tonumber(spell.targets) or 0
+    if math.floor(targets / 32) % 2 ~= 1 then return false end
+    if spell_recast(spell) > 0.05 then return false end
+    local me = B.self()
+    if not me then return false end
+    local now = clock()
+    for _, member in ipairs(observe_slots()) do
+        if member.slot ~= nil and member.slot ~= 0 and member.zone == me.zone
+                and member.hp <= 0 and now >= (R.last_raise[member.slot] or 0) then
+            if B.cast_on_member(name, member.slot) then
+                R.last_raise[member.slot] = now + 12
+                note('action', 'Battle: raising ' .. member.name .. '.')
+                return true
+            end
+            R.last_raise[member.slot] = now + 4
+        end
     end
     return false
 end
@@ -4137,6 +4173,7 @@ function B.tick()
         B.stop_move()
         return
     end
+    if B.raise_tick() then return end
 
     for _, step in ipairs(S.profile.priority) do
         local done = false
@@ -6818,14 +6855,14 @@ function H.rules(api)
 
     section(api, 'Death')
     local mode = combo(api, 'death-mode', DEATH_MODES,
-        { 'Wait for raise / recovery', 'Return to home point' }, p.death.mode, 230)
+        { 'Wait for raise', 'Return to home point' }, p.death.mode, 230)
     if mode then p.death.mode = mode; touched() end
     local wait = int_field(api, 'death-wait', p.death.wait, 94, 0, 600, '%d s wait')
     if wait then p.death.wait = wait; touched() end
     local hp = int_field(api, 'death-hp', p.death.home_point, 92, 1, 128, 'HP %d')
     if hp then p.death.home_point = hp; touched() end
-    api.TextDisabled('This server recovers a K.O.\'d character after six seconds.  Home point mode sends')
-    api.TextDisabled('//hp <number> as soon as the death is seen; wait mode leaves it to the recovery.')
+    api.TextDisabled('The server keeps a K.O.\'d character down until a raise lands.  A healer with a')
+    api.TextDisabled('saved raise spell raises the party; home point mode sends //hp <number> after the wait.')
 
     section(api, 'Kiting')
     local k = p.kiting

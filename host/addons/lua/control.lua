@@ -4101,10 +4101,6 @@ local function hud_save(state, path)
     file:close()
 end
 
-function hud.save_now()
-    if hud.state and hud.path then hud_save(hud.state, hud.path) end
-end
-
 local hud_icon_textures = {}
 
 local function hud_icon_texture(id)
@@ -4667,6 +4663,10 @@ function hud.cor_open(kind)
     state.search[1] = ''
 end
 -- END COR roll menu
+
+function hud.save_now()
+    if hud.state and hud.path then hud_save(hud.state, hud.path) end
+end
 
 function hud.ensure()
     local name = hud_character()

@@ -819,14 +819,14 @@ export function BattlePage({
         <div className="form-grid three">
           <Field label="On K.O.">
             <Select value={profile!.death.mode} onChange={(event) => edit((draft) => { draft.death.mode = event.target.value as BattleProfile["death"]["mode"]; })}>
-              <option value="raise">Wait for raise / recovery</option>
+              <option value="raise">Wait for raise</option>
               <option value="homepoint">Return to home point</option>
             </Select>
           </Field>
           <NumberField label="Wait (seconds)" value={profile!.death.wait} min={0} max={600} onChange={(value) => edit((draft) => { draft.death.wait = value; })} />
           <NumberField label="Home point number" value={profile!.death.home_point} min={1} max={128} onChange={(value) => edit((draft) => { draft.death.home_point = value; })} />
         </div>
-        <p className="battle-hint">This server recovers a K.O.'d character after six seconds; home point mode sends //hp as soon as death is seen.</p>
+        <p className="battle-hint">The server keeps a K.O.'d character down until a raise lands. A healer with a raise spell raises the party; home point mode sends //hp after the wait.</p>
 
         <h3 className="battle-subhead">Kiting</h3>
         <Check checked={profile!.kiting.enabled} title="Kiter runs the kite" onChange={(value) => edit((draft) => { draft.kiting.enabled = value; })} />
@@ -912,7 +912,7 @@ export function BattlePage({
         <Check checked={profile!.heal.status} title="Remove status effects with -na spells" onChange={(value) => edit((draft) => { draft.heal.status = value; })} />
         <Check checked={profile!.heal.erase} title="Use Erase for anything the -na list cannot name" onChange={(value) => edit((draft) => { draft.heal.erase = value; })} />
         <div className="form-grid two">
-          <Field label="Raise spell" hint="Saved for the engine's death policy; this server currently recovers on its own.">
+          <Field label="Raise spell" hint="A living healer casts this on a fallen party member; the server implements Raise and Arise.">
             <TextInput value={profile!.heal.raise_spell} onChange={(event) => edit((draft) => { draft.heal.raise_spell = event.target.value; })} />
           </Field>
           <Field label="Never cast">

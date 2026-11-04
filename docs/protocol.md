@@ -412,9 +412,13 @@ models in the `characters.style_*` columns (migration 0085) and replies:
 
 Every later `0x051`, login `0x3C` look block and `0x00D` character update reads the locked
 models while the lock is on, so an equipment change cannot repaint the character (the "blink").
-Main and sub are the exception: they always follow the equipped weapon, so a two-hander
-becoming a one-hander plus a shield (or any other weapon swap) draws the new graphics even
-with the lock on; the armour keeps the locked look.
+Main and sub are locked only while the equipped weapon is the same **type** as the one that was
+locked; the stored `style_main_type`/`style_sub_type` are the weapon skill id (or a shield/grip
+marker). A same-type swap, which is what a GearSwap TP/WS weapon pair normally is, leaves the
+grap list byte-for-byte unchanged, so the follow-up sends no `0x051` and the client does not
+blink. A different type draws the equipped graphic instead, and switching back to the locked
+type restores the locked appearance. That is also what makes a two-hander becoming a one-hander
+plus a shield draw both new models. The armour and ranged slots keep their locked models.
 An H2H main hand is the one case where the sub look is not a sub item: retail writes the
 same model with the `+0x1000` left-fist tag into the sub slot (wire value `model + 0x8000`),
 and without it the client draws only the main-hand knuckle.  `_apply_equip_model` mirrors

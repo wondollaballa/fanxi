@@ -212,10 +212,16 @@ STYLE_SLOTS = {
     5: "style_body", 6: "style_hands", 7: "style_legs", 8: "style_feet",
 }
 
-# Main and sub are never drawn from the locked models: the equipped weapon always
-# shows, so swapping between a two-hander and a one-hander + shield (or between two
-# weapons) updates the graphic while the armour stays locked.
+# A locked weapon keeps its look only while the equipped weapon is the same type as the
+# one that was locked, as retail does.  A same-type swap must leave the grap list alone:
+# the client blinks whenever the server echoes a new model list.  A different type draws
+# the equipped piece instead, and switching back to the locked type restores its look.
 WEAPON_STYLE_SLOTS = (0, 1)
+STYLE_WEAPON_TYPES = {0: "style_main_type", 1: "style_sub_type"}
+WEAPON_TYPE_KEYS = {0: "main_weapon_type", 1: "sub_weapon_type"}
+STYLE_TYPE_EMPTY = 0
+STYLE_TYPE_SHIELD = 0x100
+STYLE_TYPE_GRIP = 0x101
 
 # 0x009 system-message ids from the client's ROM/27/76.DAT table.
 MSG_STYLE_LOCK_ON = 267
@@ -3931,6 +3937,12 @@ class ZoneSession:
             log.info("%s zone change to %d deferred: the hand-off to %d is in flight",
                      self.addr, int(zone), self.zone)
             return False
+        if self.dead_until or int(self.char.get("hp_current", 0)) <= 0:
+            # Leaving a zone is the Home Point return: the character gives up waiting
+            # for a raise rather than arriving at the destination still on the ground.
+            # //hp, //home and the Home Point menu all come through here, so this is
+            # also what makes a deliberate K.O. warp work.
+            self.revive_from_ko()
         if self.zone_loaded and self.position_seen and self.already_at(zone, pos):
             # The client itself reported standing at this spot, so this really is a
             # no-op.  position_seen matters: before the first position packet the server
@@ -4011,12 +4023,69 @@ class ZoneSession:
         c = self.char
         return {kind: int(c.get(key) or 0) for kind, key in STYLE_SLOTS.items()}
 
-    def _apply_style(self, locked: bool, models: dict[int, int] | None = None) -> None:
-        """Set the style-lock flag and its models, and persist both.
+    def _style_types(self) -> dict[int, int]:
+        c = self.char
+        return {kind: int(c.get(key) or 0) for kind, key in STYLE_WEAPON_TYPES.items()}
+
+    def _current_style_types(self) -> dict[int, int]:
+        """The weapon type in each hand, as ``_apply_equip_model`` last recorded it."""
+        c = self.char
+        return {kind: int(c.get(key) or 0) for kind, key in WEAPON_TYPE_KEYS.items()}
+
+    def _snapshot_style_types(self) -> dict[int, int]:
+        """The weapon types a new lock records, resolving the equipped items if needed.
+
+        A session that predates the type fields -- or a test that set a model directly --
+        has no recorded type, so the first lock asks the equipped item.
+        """
+        types = self._current_style_types()
+        if not types[0]:
+            types[0] = self._style_weapon_type(0, self._equipped_item(0))
+        if not types[1]:
+            types[1] = self._style_weapon_type(1, self._equipped_item(1))
+            if not types[1] and self._is_h2h(self._equipped_item(0)):
+                # The left-fist copy is not a sub item; it is part of the H2H main.
+                types[1] = combat.H2H_SKILL
+        return types
+
+    def _style_weapon_type(self, kind: int, item: dict | None) -> int:
+        """A stable weapon type for lockstyle's same-type rule.
+
+        Real weapons use their combat skill id (1-12, 25-27).  A sub slot can also hold
+        a shield or a grip; both carry skill 0 and have to stay distinct from an empty
+        hand, so they get their own ids.
+        """
+        if item is None:
+            return STYLE_TYPE_EMPTY
+        if kind == 1 and self._is_grip(item):
+            return STYLE_TYPE_GRIP
+        skill = int(item.get("skill") or 0)
+        if not skill:
+            # ``items.skill`` is 0 on a few older GearSwap rows; ``item_weapon.skill``
+            # is the authoritative type for a real weapon.  Shields still come back 0.
+            item_id = int(item.get("item_id") or 0)
+            if item_id:
+                try:
+                    skill = int(self.world.service.item_skill(item_id) or 0)
+                except Exception:
+                    skill = 0
+        if skill:
+            return skill
+        if kind == 1:
+            return STYLE_TYPE_SHIELD
+        return STYLE_TYPE_EMPTY
+
+    def _apply_style(self, locked: bool, models: dict[int, int] | None = None,
+                     types: dict[int, int] | None = None) -> None:
+        """Set the style-lock flag, its models and its weapon types, and persist them.
 
         A locked appearance is kept in its own columns, so every later gear change can
         still update the stats without changing the grap list.  That is what stops the
         "blinking" the client shows when the server echoes new models.
+
+        The weapon types are what let a same-type weapon swap keep the locked model.  A
+        different type is drawn from the real gear in ``looks()`` instead, and switching
+        back to the locked type restores the locked look.
 
         Turning the lock off forgets the stored look too, as retail does.  Leaving the
         models behind let an old save or a stale keepalive paint the previous job's
@@ -4026,16 +4095,54 @@ class ZoneSession:
         if not locked:
             for key in STYLE_SLOTS.values():
                 self.char[key] = 0
-        elif models is not None:
-            for kind, key in STYLE_SLOTS.items():
-                if kind in models:
-                    self.char[key] = int(models[kind] or 0)
+            for key in STYLE_WEAPON_TYPES.values():
+                self.char[key] = 0
+        else:
+            if models is not None:
+                for kind, key in STYLE_SLOTS.items():
+                    if kind in models:
+                        self.char[key] = int(models[kind] or 0)
+            if types is not None:
+                for kind, key in STYLE_WEAPON_TYPES.items():
+                    if kind in types:
+                        self.char[key] = int(types[kind] or 0)
         saved = self._style_models()
+        saved_types = self._style_types()
         try:
-            self.world.service.save_style_lock(int(self.char["id"]), bool(locked), saved)
+            self.world.service.save_style_lock(
+                int(self.char["id"]), bool(locked), saved, saved_types)
         except Exception as exc:
             log.warning("%s could not save the style lock: %s", self.addr, exc)
-        log.info("%s style lock %s: %s", self.addr, "on" if locked else "off", saved)
+        log.info("%s style lock %s: %s types=%s", self.addr,
+                 "on" if locked else "off", saved, saved_types)
+
+    def _backfill_style_types(self) -> None:
+        """Upgrade a lock saved before migration 0188 with the weapon types it needs.
+
+        The client sends mode 1 on login, so this runs once per old save.  Before the
+        types existed the weapon slots were always drawn from the equipped gear, so an
+        old lock's weapon *model* was not being shown.  Taking the equipped model and
+        type for a slot without one therefore changes nothing on screen; it only makes
+        the next same-type swap keep the look the player was already seeing.  Armour and
+        already-typed slots are untouched.
+        """
+        stored = self._style_models()
+        types = self._style_types()
+        if not any(stored.values()):
+            return
+        if all(types[kind] or not stored[kind] for kind in WEAPON_STYLE_SLOTS):
+            return
+        current = self._current_models()
+        resolved = self._snapshot_style_types()
+        models = dict(stored)
+        updated = dict(types)
+        for kind in WEAPON_STYLE_SLOTS:
+            if updated[kind] or not current[kind]:
+                continue
+            models[kind] = current[kind]
+            updated[kind] = resolved[kind]
+        if models != stored or updated != types:
+            self._apply_style(True, models, updated)
 
     def style_packets(self) -> list[Msg]:
         """The two packets the client needs to repaint the player after a lock change."""
@@ -4069,14 +4176,16 @@ class ZoneSession:
             # A continue cannot resurrect an old look: turning the lock off clears the
             # stored models, so this locks the appearance the character is wearing now.
             if not self.style_locked():
-                self._apply_style(True, self._current_models())
+                self._apply_style(True, self._current_models(), self._snapshot_style_types())
                 self.queue += self.style_packets()
                 self.queue.append(self.system_message(MSG_STYLE_LOCK_ON))
             elif not any(self._style_models().values()):
                 # A save from before the models were stored has the flag without any
                 # appearance.  Fill it in silently; the client already believes it is on.
-                self._apply_style(True, self._current_models())
+                self._apply_style(True, self._current_models(), self._snapshot_style_types())
                 self.queue += self.style_packets()
+            else:
+                self._backfill_style_types()
             return
         if mode == LOCKSTYLE_DISABLE:
             was_locked = self.style_locked()
@@ -4094,7 +4203,11 @@ class ZoneSession:
         # the set does not name keeps the appearance already on screen (the locked one),
         # or the real gear when nothing has been locked yet.
         stored = self._style_models()
-        models = stored if (self.style_locked() and any(stored.values())) else self._current_models()
+        already_locked = self.style_locked() and any(stored.values())
+        models = stored if already_locked else self._current_models()
+        # The same rule picks the weapon types: an existing lock keeps the types that
+        # were locked, while a fresh one takes the types that are worn now.
+        types = self._style_types() if already_locked else self._snapshot_style_types()
         failed: list[int] = []
         if mode == LOCKSTYLE_SET:
             for index in range(min(count, 16)):
@@ -4111,11 +4224,23 @@ class ZoneSession:
                     failed.append(int(item_no))
                     continue
                 models[kind] = model
-        elif self.style_locked() and any(self._style_models().values()):
+                if kind in STYLE_WEAPON_TYPES:
+                    types[kind] = self._style_weapon_type(kind, item)
+            if types.get(0) == combat.H2H_SKILL and models.get(0):
+                # A H2H main draws its left fist from the same model; a set does not
+                # normally name the sub slot for it.
+                models[1] = int(models[0]) + 0x1000
+                types[1] = combat.H2H_SKILL
+            elif types.get(1) == combat.H2H_SKILL:
+                # The set replaced an H2H main with another weapon, so the left-fist
+                # copy cannot stay on the hand.
+                models[1] = 0
+                types[1] = STYLE_TYPE_EMPTY
+        elif already_locked:
             # /lockstyle on while it is already on: keep the locked look instead of
             # re-snapshotting whatever gear the swap engine last wore.
             models = self._style_models()
-        self._apply_style(True, models)
+        self._apply_style(True, models, types)
         self.queue += self.style_packets()
         if failed:
             self.queue.append(sub(0x11C, packets.lockstyle_error(failed)))
@@ -4197,13 +4322,10 @@ class ZoneSession:
             # cooldown: it survives the logout just as it survives a dropped link.
             self.restore_live_state(include_effects=False)
         elif int(self.char.get("hp_current", 1)) <= 0:
-            self.char["hp_current"] = max(1, int(self.char["hp"]) // 2)
-            self.char["mp_current"] = int(self.char.get("mp", 0)) // 2
-            try:
-                self.world.service.save_vitals(
-                    self.char["id"], self.char["hp_current"], self.char["mp_current"])
-            except Exception:
-                pass
+            # A character who logged out while K.O.'d is still down on the next login:
+            # only a Raise or a Home Point return brings them back.  The record keeps
+            # their 0 HP, so this only restores the in-session flag.
+            self.dead_until = float("inf")
             # A K.O. takes the buffs in retail; the recasts still come back.
             self.restore_live_state(include_effects=False)
         else:
@@ -4875,7 +4997,7 @@ class ZoneSession:
                  "next one)." % (name, int(model)))
 
     def _apply_equip_model(self, kind: int, item: dict) -> None:
-        """Put the item's visual model into the character's grap list."""
+        """Put the item's visual model and weapon type into the character."""
         model = int(item.get("model", 0) or 0)
         if not model:
             # A weapon slot must clear even when the item has no grap of its own: a grip
@@ -4885,6 +5007,9 @@ class ZoneSession:
             # than a naked slot), but a stale weapon is never acceptable.
             if kind in (0, 1, 2):
                 self._clear_equip_model(kind)
+            # The clear also forgot the weapon type; the item that was just put on still
+            # has one, and a grip (model 0) has to keep counting as a grip.
+            self._record_weapon_type(kind, item)
             if 0 <= kind <= 8 and not self._is_grip(item):
                 log.warning("%s equipped %s in slot %d with no grap model: it will not show",
                             self.addr, item.get("name", "?"), kind)
@@ -4916,22 +5041,41 @@ class ZoneSession:
             self.char["legs"] = model
         elif kind == 8:
             self.char["feet"] = model
+        self._record_weapon_type(kind, item)
+
+    def _record_weapon_type(self, kind: int, item: dict) -> None:
+        """Keep the hand's weapon type in step with what is actually equipped.
+
+        ``looks()`` needs this on every packet, so it cannot query the item tables; the
+        model hook is the one place every equip path (login, GearSwap, //equip) reaches.
+        """
+        if kind == 0:
+            self.char["main_weapon_type"] = self._style_weapon_type(0, item)
+            if self._is_h2h(item):
+                self.char["sub_weapon_type"] = combat.H2H_SKILL
+            elif 1 not in self.equipped:
+                self.char["sub_weapon_type"] = STYLE_TYPE_EMPTY
+        elif kind == 1:
+            self.char["sub_weapon_type"] = self._style_weapon_type(1, item)
 
     def _clear_equip_model(self, kind: int) -> None:
         if kind == 0:
             self.char["main"] = 0
+            self.char["main_weapon_type"] = STYLE_TYPE_EMPTY
             # The left-fist copy lives in the sub look but is not a sub item.  Leave a
             # real sub item's model alone; only clear the mirror when the hand is empty.
             if 1 not in self.equipped:
                 self.char["sub"] = 0
+                self.char["sub_weapon_type"] = STYLE_TYPE_EMPTY
             return
         if kind == 1:
             # Removing a shield or off-hand weapon from an H2H main hand restores the
             # mirrored left fist instead of leaving that hand bare.
             main = self._equipped_item(0)
             main_model = int(self.char.get("main") or 0)
-            self.char["sub"] = (main_model + 0x1000
-                                if main_model and self._is_h2h(main) else 0)
+            h2h = bool(main_model and self._is_h2h(main))
+            self.char["sub"] = main_model + 0x1000 if h2h else 0
+            self.char["sub_weapon_type"] = combat.H2H_SKILL if h2h else STYLE_TYPE_EMPTY
             return
         for key, slot in (("ranged", 2), ("head", 4), ("body", 5),
                           ("hands", 6), ("legs", 7), ("feet", 8)):
@@ -5599,6 +5743,11 @@ class ZoneSession:
 
     def tick_player_effects(self, now: float) -> None:
         """Expire self buffs and apply Regen/Refresh/Poison ticks."""
+        if self.dead_until or int(self.char.get("hp_current", 0)) <= 0:
+            # A body on the ground takes no damage-over-time ticks: a poison tick on a
+            # K.O. used to call ``hit_zero_hp`` again every three seconds and increment
+            # the death counter until someone raised the player.
+            return
         changed = False
         food_expired = False
         if self.food.get("until") and now >= float(self.food["until"]):
@@ -5666,6 +5815,12 @@ class ZoneSession:
                 if hp > 1 and stored < cap:
                     self.char["hp_current"] = hp - 1
                     state["power"] = stored + 1
+                    if stored + 1 >= cap:
+                        # Retail swaps the Sublimation icon to its completed form when
+                        # the pool is full; the status packet carries only the icon, so
+                        # this is the one visible sign of the stored MP without using
+                        # the ability again.
+                        state["icon"] = effects.SUBLIMATION_COMPLETE
                     changed = True
             elif effect_id in (effects.POISON, effects.BIO, effects.PLAGUE):
                 hp = int(self.char.get("hp_current", 0))
@@ -6334,7 +6489,7 @@ class ZoneSession:
         # the clients that draw this character -- an observer only re-reads another
         # player's models when it spawns the entity, so without the respawn a box
         # leader's window keeps drawing the previous job's clothing.
-        self._apply_style(True, self._current_models())
+        self._apply_style(True, self._current_models(), self._snapshot_style_types())
         self.queue += self.style_packets()
         self.queue.append(self.system_message(MSG_STYLE_LOCK_ON))
         self.world.refresh_player_appearance(self)
@@ -7267,6 +7422,17 @@ class ZoneSession:
         # Raise shares the healing skill but must not be treated as a heal on the caster.
         healing = (int(spell["skill"]) == packets.SKILL_HEALING
                    and not (targets & 0x20) and not effects.is_buff(spec))
+        # Raise, Raise II, Raise III and Arise carry only the client's player_dead
+        # target bit, so there is no ZoneEntity to resolve.  The selected party member
+        # is a session row, and the spell must reach a body rather than fizzle as a
+        # self-cast.  Tractor shares the bit but not the name, so it keeps the old path.
+        raise_target = None
+        if effects.raise_hp_fraction(str(spell.get("name") or "")) is not None:
+            raise_target = self._fallen_player_target(int(act_index))
+            if raise_target is None:
+                self.say("There is no fallen player in range.")
+                self.assert_stance()
+                return
         # A spell only needs a monster when it can be aimed at one and cannot be aimed at
         # you.  An enfeebling spell is always aimed at the monster even when its data also
         # carries the self bit, and so is Drain/Aspir/Dispel.
@@ -7275,8 +7441,8 @@ class ZoneSession:
         if effects.is_debuff(spec) or (spec is not None and spec.kind == "special"
                                        and bool(targets & ENEMY_TARGET)):
             needs_enemy = True
-        self_cast = not needs_enemy
-        party_target = None
+        self_cast = not needs_enemy and raise_target is None
+        party_target = raise_target
         if (self_cast and act_index and not accession
                 and str(spell.get("name") or "").casefold().startswith("indi-")
                 and self.has_effect(effects.ENTRUST)):
@@ -7940,6 +8106,12 @@ class ZoneSession:
         if str(spell.get("name") or "").casefold().startswith(("indi-", "geo-")):
             self._indi_aura(spell, now, cast)
             self.assert_stance()
+            return
+        raise_fraction = effects.raise_hp_fraction(str(spell.get("name") or ""))
+        if raise_fraction is not None:
+            self._resolve_raise(spell, cast, raise_fraction)
+            if self.engaged_id and not self.zoning:
+                self.assert_stance()
             return
         party_target_id = int(cast.get("party_target") or 0)
         if party_target_id:
@@ -11517,8 +11689,7 @@ class ZoneSession:
             if defeated:
                 self.world.kill_mob(self, target, now)
             self.char["hp_current"] = 0
-            self.dead_until = now + 6.0
-            self.despawn_trusts()
+            self.hit_zero_hp(now)
             system_handled = True
 
         # Scholar Caper Emissarius and Modus Veritas.
@@ -11926,6 +12097,77 @@ class ZoneSession:
                 return None
             return other
         return None
+
+    def _fallen_player_target(self, act_index: int):
+        """The K.O.'d player the client selected for a Raise spell, or None.
+
+        A raise can land on any player in the zone, not only a party member, so this
+        walks the live sessions and compares the targid every client in the zone knows
+        them by.  Self is 0x400 in the caster's own view and is never a valid target;
+        an out-of-range body is refused here, before the cast spends MP.
+        """
+        if not act_index:
+            return None
+        if int(act_index) in (TARGID, int(getattr(self, "targid", 0) or 0)):
+            return None
+        for other in self.world.sessions_in_zone(self.zone):
+            if other is self or int(getattr(other, "targid", 0) or 0) != int(act_index):
+                continue
+            if (not other.dead_until
+                    and int(other.char.get("hp_current", 0)) > 0):
+                return None
+            if math.dist(self.pos[:3], other.pos[:3]) > 25.0:
+                return None
+            return other
+        return None
+
+    def _resolve_raise(self, spell: dict, cast: dict, fraction: float) -> None:
+        """Bring a fallen player back at ``fraction`` of max HP and tell both clients.
+
+        The target may have been raised by someone else, or moved out of range, during
+        the cast; that fizzles instead of restoring HP a second time.  MP stays where
+        the death left it and no weakness is modelled; Arise adds its full Reraise.
+        """
+        target = self.world.session_by_char(int(cast.get("party_target") or 0))
+        if (target is None or int(target.zone) != int(self.zone)
+                or (not target.dead_until
+                    and int(target.char.get("hp_current", 0)) > 0)
+                or math.dist(self.pos[:3], target.pos[:3]) > 25.0):
+            self.say("The spell fizzles.")
+            return
+        restored = max(1, int(int(target.char.get("hp", 1)) * float(fraction)))
+        target.dead_until = 0.0
+        target.casting = None
+        target.resting = False
+        target.engaged_id = None
+        target.engaged_targid = 0
+        target.char["hp_current"] = restored
+        if str(spell.get("name") or "").casefold() == "arise":
+            # Arise is the full-HP revive; its Reraise III stays for an hour.
+            target.add_effect(effects.RERAISE, duration=3600)
+        target.queue += [target.char_status(), target.char_stats(),
+                         target.char_update(packets.SEND_HP), target.party_member()]
+        # The body stands for every nearby client, not only for the two in the cast.
+        self.world.broadcast_player(target, packets.SEND_HP)
+        me = int(self.char["char_id"])
+        action = sub(0x028, packets.battle_action(
+            me, int(target.char["char_id"]), restored,
+            animation=spell_animation(spell), kind=0,
+            message=packets.MESSAGE_MAGIC_RECOVERS_HP, info=0,
+            category=packets.ACTION_CATEGORY_MAGIC_FINISH,
+            action_id=int(spell["id"])))
+        self.queue.append(action)
+        target.queue.append(action)
+        self.queue.append(self.party_member())
+        target.say("You have been raised by %s."
+                   % (self.char.get("name") or "a party member"))
+        try:
+            self.world.service.save_vitals(int(target.char["id"]), restored,
+                                           int(target.char.get("mp_current", 0)))
+        except Exception:
+            pass
+        if self.resting:
+            self.stop_resting()
 
     def _heal_target(self, target, spell: dict, cast: dict) -> None:
         """Apply a finished Cure to ``target`` and refresh both clients."""
@@ -12402,12 +12644,19 @@ class ZoneSession:
         return amount
 
     def hit_zero_hp(self, now: float) -> None:
-        """0 HP: Reraise brings the character back, otherwise the short recovery.
+        """0 HP: Reraise brings the character back, otherwise they stay down.
 
-        Reraise (and Goddess's Hymnus) restores 10% of max HP and half the lost
-        experience the next time the character is raised; this server's death is the
-        six-second recovery, so the effect is consumed here.
+        Reraise (and Goddess's Hymnus) restores 10% of max HP and is consumed here.
+        Without it the character keeps 0 HP until another player's Raise spell lands or
+        a zone change returns them to their Home Point; there is no timed recovery, so
+        a fight inside an instance or event is not cut short by an automatic warp.
         """
+        if self.dead_until > now:
+            # Repeat damage or a second zero-HP call must not count the death again.
+            return
+        # Death empties the MP bar; `record_death` already stores 0, so keep the live
+        # session in step or a Raise would hand the pre-death pool back to the player.
+        self.char["mp_current"] = 0
         self.casting = None
         self.engaged_id = None
         self.engaged_targid = 0
@@ -12431,6 +12680,7 @@ class ZoneSession:
             self.dead_until = 0.0
             self.queue += [self.char_status(), self.char_stats(),
                            self.char_update(packets.SEND_HP)]
+            self.world.broadcast_player(self, packets.SEND_HP)
             self.say("Reraise raises you.")
             try:
                 self.world.service.save_vitals(int(self.char["id"]),
@@ -12439,13 +12689,45 @@ class ZoneSession:
             except Exception:
                 pass
             return
-        self.dead_until = now + 6.0
-        self.queue.append(self.char_update(packets.SEND_HP))
-        self.say("You have been defeated. You recover in a moment.")
+        self.dead_until = float("inf")
+        self.queue += [self.char_status(), self.party_member(),
+                       self.char_update(packets.SEND_HP)]
+        # Observers draw the body from its HP byte; without this the K.O. was only
+        # visible to the player who died.
+        self.world.broadcast_player(self, packets.SEND_HP)
+        self.say("You have been defeated. Wait for a raise, or use //hp to return "
+                 "to your Home Point.")
         try:
             self.world.service.record_death(int(self.char["id"]))
         except Exception:
             pass
+
+    def revive_from_ko(self, hp_fraction: float = 0.5) -> None:
+        """Bring a K.O.'d character back at a fraction of maximum HP/MP.
+
+        A zone change is the Home Point return: the character gives up waiting for a
+        raise, so they arrive at the destination conscious.  A Raise spell does not use
+        this path; it restores the spell's own fraction and leaves the character where
+        they fell.
+        """
+        self.dead_until = 0.0
+        self.casting = None
+        self.resting = False
+        self.engaged_id = None
+        self.engaged_targid = 0
+        self.char["hp_current"] = max(
+            1, int(int(self.char.get("hp", 1)) * float(hp_fraction)))
+        self.char["mp_current"] = max(
+            0, int(int(self.char.get("mp", 0)) * float(hp_fraction)))
+        try:
+            self.world.service.save_vitals(int(self.char["id"]),
+                                           int(self.char["hp_current"]),
+                                           int(self.char.get("mp_current", 0)))
+        except Exception:
+            pass
+        self.queue += [self.char_status(), self.char_stats(),
+                       self.char_update(packets.SEND_HP), self.party_member()]
+        self.world.broadcast_player(self, packets.SEND_HP)
 
     def tick_regen(self, now: float) -> None:
         """Apply Auto Refresh/Auto Regen and gear Refresh/Regen/Regain once per 3 seconds.
@@ -12689,27 +12971,9 @@ class ZoneSession:
             self.stats_refresh_at = 0.0
             self.queue += [self.char_stats(), self.char_status(), self.party_member()]
         if self.dead_until:
-            if now < self.dead_until:
-                return
-            self.dead_until = 0.0
-            self.char["hp_current"] = max(1, int(self.char["hp"]) // 2)
-            self.char["mp_current"] = int(self.char.get("mp", 0)) // 2
-            try:
-                self.world.service.save_vitals(self.char["id"], self.char["hp_current"], self.char["mp_current"])
-            except Exception:
-                pass
-            zone = int(self.char.get("home_zone") or 0)
-            if zone > 0:
-                # K.O. without a Raise sends you back to your set Home Point.
-                self.say("You awaken at your Home Point in %s."
-                         % self.world.zones.name(zone))
-                self.change_zone(zone, [float(self.char.get("home_x") or 0.0),
-                                        float(self.char.get("home_y") or 0.0),
-                                        float(self.char.get("home_z") or 0.0),
-                                        int(self.char.get("home_rot") or 0)])
-            else:
-                self.queue += [self.char_status(), self.char_stats(), self.party_member()]
-                self.say("You recover from your wounds.")
+            # A K.O. is not a timer: the character stays down until a Raise lands or a
+            # zone change returns them to the Home Point.  Do not run the battle tick
+            # for a body on the ground.
             return
         if not self.engaged_id:
             return
@@ -13051,15 +13315,18 @@ class ZoneSession:
         c = self.char
         if self.style_locked():
             model = self._style_models()
-            # Weapons are the exception to the locked look: a main/sub swap has to show
-            # the piece that is actually equipped.  This is what makes a two-handed main
-            # becoming a one-handed main plus a shield draw both new models instead of
-            # keeping the old weapon (the shield used to show only because its locked
-            # model was zero and fell through to the real gear below).  Armour and the
-            # ranged slot stay locked.
             current = self._current_models()
+            # A weapon stays locked only while its type matches the type that was
+            # locked.  A same-type swap leaves this list byte-for-byte unchanged, so
+            # equipment_sync drops the 0x051 and the client does not blink.  A different
+            # type draws the equipped piece, which is also what makes a two-hander
+            # becoming a one-hander plus a shield draw both new models.  Armour and the
+            # ranged slot stay locked.
+            locked_types = self._style_types()
+            current_types = self._current_style_types()
             for kind in WEAPON_STYLE_SLOTS:
-                model[kind] = current[kind]
+                if not locked_types[kind] or locked_types[kind] != current_types[kind]:
+                    model[kind] = current[kind]
             # A zero model would draw the naked default for that slot; fall back to the
             # real gear so a character saved before a slot was locked still looks whole.
             for kind in STYLE_SLOTS:

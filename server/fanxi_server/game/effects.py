@@ -902,6 +902,25 @@ def is_debuff(effect: SpellEffect | None) -> bool:
     return effect is not None and effect.kind == "debuff"
 
 
+# --- revive spells --------------------------------------------------------------------------
+
+# The share of maximum HP a Raise spell returns, from the BG-wiki pages: Raise 10%,
+# Raise II 25%, Raise III 50%, Arise 100%.  Their data rows all carry the client's
+# "player_dead" target bit (0x20) and no status effect, so the spell name is what tells
+# the revive handler which fraction to use.
+RAISE_HP = {
+    "raise": 0.10,
+    "raise ii": 0.25,
+    "raise iii": 0.50,
+    "arise": 1.00,
+}
+
+
+def raise_hp_fraction(name: str) -> float | None:
+    """The HP fraction a revive spell restores, or None when ``name`` is not one."""
+    return RAISE_HP.get(" ".join(str(name or "").casefold().split()))
+
+
 def tier_of(name: str) -> int:
     return _tier(name)
 

@@ -518,8 +518,9 @@ When a monster reaches 0 HP:
 - the quest hook advances if the monster belongs to the quest's template;
 - after the spawn's respawn time the monster returns at full HP with a fresh `0x00E` spawn.
 
-Player death is temporary: Fanxi records the death, disengages, and restores the player at half HP
-and MP after six seconds. There is no home-point teleport or EXP loss yet.
+Player death is not temporary: Fanxi records the death, disengages, and leaves the body at
+0 HP until another player's Raise, Raise II, Raise III or Arise lands.  A zone change
+returns the character to the Home Point at half HP and MP.  There is no EXP loss yet.
 
 ### Zone navigation
 
@@ -934,8 +935,9 @@ The client parses its own slash commands; the server only has to answer the ones
 world state. The commands that used to disappear are now covered:
 
 ```
-/lockstyle on|off         lock the current appearance; armour swaps keep the look, weapons still
-                          show the equipped main/sub models
+/lockstyle on|off         lock the current appearance; armour swaps keep the look, and a
+                          same-type weapon swap keeps it too (no blink); a different weapon
+                          type shows the equipped weapon
 /lockstyleset [n]         lock an equipment set's appearance (no argument: what is worn now)
 /lockstyle                ask whether style lock is on
 /wave /nod /bow /goodbye  emotes: animation and text, for the player and everyone in the zone
@@ -944,8 +946,11 @@ world state. The commands that used to disappear are now covered:
 ```
 
 An emote is the client's `C2S 0x05D`; Fanxi echoes `S2C 0x05A` back. Style lock is `C2S 0x053`
-and is stored per character (the `style_*` columns from migration 0085), so it survives a
-relog and a zone change. Locking a new appearance has the client's usual ~10-second cooldown;
+and is stored per character (the `style_*` columns from migrations 0085 and 0188), so it
+survives a relog and a zone change. The locked weapon type is stored with the model: a
+same-type main/sub swap keeps the locked graphic and does not blink, while equipping a
+different weapon type shows that weapon until the locked type is worn again. Locking a new
+appearance has the client's usual ~10-second cooldown;
 a command typed sooner is ignored by the client, not by the server. The client has its own
 copy of the flag, so `/lockstyle on` sends mode 1 ("continue") rather than mode 4 while it
 believes the lock is already on; Fanxi honours it by locking what is worn, otherwise the
@@ -1223,7 +1228,11 @@ Warp, Warp II and Retrace send the character to the **one Home Point set in Prof
 (`characters.home_*`, updated by the crystal's "Set Home Point" choice), not to a crystal
 registered in the current zone.  South Gustaberg has no Home Point crystal, so the old
 current-zone lookup refused Warp there even though the character's set Home Point existed.
-A K.O. without a Raise returns to the same set Home Point instead of reviving in place.
+A K.O. has no timed recovery: the character stays down until another player's Raise,
+Raise II, Raise III or Arise lands.  A zone change is the deliberate way out, so `//hp`,
+`//home`, the Home Point menu and every other warp revive a fallen character at half HP
+and MP.  `characters.hp_current` keeps the 0 across a logout, and the next login is still
+K.O.
 Home Point teleportation from a crystal uses the registered `char_home_points` list and
 the client menu index (`home_points.hp_index`); opening the crystal menu requires the
 `world_npcs.hp_index` column, which migration 0084 fills.

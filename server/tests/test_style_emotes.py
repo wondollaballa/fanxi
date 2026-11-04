@@ -70,6 +70,15 @@ class StyleAndEmoteTest(unittest.TestCase):
         self.session.after_zone_in()
         self.session.queue.clear()
 
+    def give(self, slot: int, item_id: int, container: int = 0) -> None:
+        self.db.execute(
+            "INSERT OR REPLACE INTO char_inventory "
+            "(character_id, container, slot, item_id, quantity) VALUES (?, ?, ?, ?, 1)",
+            (int(self.character["id"]), int(container), int(slot), int(item_id)))
+
+    def equip_slot(self, slot: int, kind: int = 0, container: int = 0) -> None:
+        self.session.equip(bytes((0x50, 4, 0, 0, slot, kind, container, 0)))
+
     # --- style lock ----------------------------------------------------------------------------
     def test_enable_snapshots_the_worn_appearance(self):
         self.session.char["head"] = 88
@@ -105,33 +114,157 @@ class StyleAndEmoteTest(unittest.TestCase):
         update = self.session.char_update()
         self.assertEqual(struct.unpack_from("<9H", update, 0x44 + 4)[1], 0x1000 + 88)
 
-    def test_a_weapon_swap_shows_the_new_weapons_while_locked(self):
-        """Main and sub always follow the equipped gear, even with the lock on.
+    def test_a_same_type_weapon_swap_does_not_repaint_the_character(self):
+        """A GearSwap weapon swap keeps the locked look, so the client does not blink.
 
-        The reported case: a two-handed main (and no shield) locked, then a one-handed
-        main plus a shield.  The shield used to appear on its own because its locked
-        model was zero, while the main kept the old two-hander.
+        The client blinks when the server echoes a new grap list.  Two swords are the
+        same weapon type, so the locked model stays and the follow-up carries no 0x051.
         """
-        self.session.char["head"] = 88
-        self.session.char["main"] = 914
-        self.session.char["sub"] = 0
+        self.session.char["main_job"] = 1
+        self.session.char["main_level"] = 99
+        self.give(10, 21621)  # Naegling, sword model 848
+        self.give(11, 21620)  # Kaja Sword, sword model 837
+        self.equip_slot(10)
+        self.session.flush_equipment()
+        self.session.queue.clear()
         self.session.handle(0x053, lockstyle_packet(LOCKSTYLE_ENABLE))
-        self.session.char["main"] = 500
-        self.session.char["sub"] = 600
-        looks = struct.unpack_from("<9H", self.session.grap_list(), 4)
-        self.assertEqual(looks[1], 0x1000 + 88)      # armour stays locked
-        self.assertEqual(looks[6], 0x6000 + 500)     # new main hand
-        self.assertEqual(looks[7], 0x7000 + 600)     # new shield
+        # Seed the copy the client already holds, the way pack() does when the lock's
+        # 0x051 actually leaves.
+        self.session.equipment_sync()
+        self.session.queue.clear()
+        before = self.session.grap_list()
+        self.equip_slot(11)
+        self.session.flush_equipment()
+        self.assertEqual(self.session.grap_list(), before)
+        self.assertNotIn(0x051, message_types(self.session))
+        self.assertEqual(self.session.char["main"], 837)  # the real gear did change
+        self.assertEqual(struct.unpack_from("<9H", before, 4)[6], 0x6000 + 848)
+        self.assertEqual(int(self.session.char["style_main_type"]), 3)
 
-    def test_switching_back_to_a_two_hander_removes_the_shield(self):
-        self.session.char["main"] = 500
-        self.session.char["sub"] = 600
+    def test_a_different_weapon_type_draws_the_equipped_weapon(self):
+        """Retail changes the weapon graphic when the equipped type is not the locked one."""
+        self.session.char["main_job"] = 1
+        self.session.char["main_level"] = 99
+        self.give(10, 21621)  # Naegling, sword model 848
+        self.give(12, 20843)  # Chango, great axe model 764
+        self.equip_slot(10)
+        self.session.flush_equipment()
+        self.session.queue.clear()
         self.session.handle(0x053, lockstyle_packet(LOCKSTYLE_ENABLE))
-        self.session.char["main"] = 914
-        self.session.char["sub"] = 0
+        self.session.equipment_sync()
+        self.session.queue.clear()
+        self.equip_slot(12)
+        self.session.flush_equipment()
         looks = struct.unpack_from("<9H", self.session.grap_list(), 4)
-        self.assertEqual(looks[6], 0x6000 + 914)
-        self.assertEqual(looks[7], 0x7000)           # the shield model is gone
+        self.assertEqual(looks[6], 0x6000 + 764)
+        self.assertIn(0x051, message_types(self.session))
+
+    def test_switching_back_to_the_locked_weapon_type_restores_its_look(self):
+        self.session.char["main_job"] = 1
+        self.session.char["main_level"] = 99
+        self.give(10, 21621)  # Naegling, sword model 848
+        self.give(12, 20843)  # Chango, great axe model 764
+        self.equip_slot(10)
+        self.session.flush_equipment()
+        self.session.queue.clear()
+        self.session.handle(0x053, lockstyle_packet(LOCKSTYLE_ENABLE))
+        self.equip_slot(12)
+        self.session.flush_equipment()
+        self.equip_slot(10)
+        self.session.flush_equipment()
+        looks = struct.unpack_from("<9H", self.session.grap_list(), 4)
+        self.assertEqual(looks[6], 0x6000 + 848)
+
+    def test_a_two_hander_becoming_one_hander_plus_shield_draws_both(self):
+        """The different types still update, which is what the shield fix was for."""
+        self.session.char["main_job"] = 1
+        self.session.char["main_level"] = 99
+        self.give(10, 20843)  # Chango, great axe model 764
+        self.give(11, 22212)  # Utu Grip
+        self.give(12, 21621)  # Naegling, sword model 848
+        self.give(13, 27644)  # Blurred Shield +1, model 656
+        self.equip_slot(10)
+        self.equip_slot(11, kind=1)
+        self.session.flush_equipment()
+        self.session.queue.clear()
+        self.session.handle(0x053, lockstyle_packet(LOCKSTYLE_ENABLE))
+        self.session.equipment_sync()
+        self.session.queue.clear()
+        self.equip_slot(12)
+        self.equip_slot(13, kind=1)
+        self.session.flush_equipment()
+        looks = struct.unpack_from("<9H", self.session.grap_list(), 4)
+        self.assertEqual(looks[6], 0x6000 + 848)  # the one-handed sword
+        self.assertEqual(looks[7], 0x7000 + 656)  # and the shield
+
+        self.equip_slot(10)
+        self.session.flush_equipment()
+        looks = struct.unpack_from("<9H", self.session.grap_list(), 4)
+        self.assertEqual(looks[6], 0x6000 + 764)  # back to the two-hander
+        self.assertEqual(looks[7], 0x7000)        # the shield is gone
+
+    def test_a_same_type_h2h_swap_keeps_the_left_fist_mirror(self):
+        self.session.char["main_job"] = 2
+        self.session.char["main_level"] = 99
+        self.give(10, 21540)  # Dragon Fangs, H2H model 482
+        self.give(11, 21535)  # Varga Purnikawa, H2H model 474
+        self.equip_slot(10)
+        self.session.flush_equipment()
+        self.session.queue.clear()
+        self.session.handle(0x053, lockstyle_packet(LOCKSTYLE_ENABLE))
+        self.session.equipment_sync()
+        self.session.queue.clear()
+        self.equip_slot(11)
+        self.session.flush_equipment()
+        looks = struct.unpack_from("<9H", self.session.grap_list(), 4)
+        self.assertEqual(looks[6], 0x6000 + 482)
+        self.assertEqual(looks[7], 0x7000 + 0x1000 + 482)
+        self.assertNotIn(0x051, message_types(self.session))
+
+    def test_an_old_lock_adopts_the_worn_weapon_on_keepalive(self):
+        """A pre-0188 lock has a model but no type; login fills in what is worn now."""
+        self.session.char["main_job"] = 1
+        self.session.char["main_level"] = 99
+        self.give(10, 21621)  # Naegling, sword model 848
+        self.give(11, 21620)  # Kaja Sword, sword model 837
+        self.equip_slot(10)
+        self.session.flush_equipment()
+        self.session.handle(0x053, lockstyle_packet(LOCKSTYLE_ENABLE))
+        # An old save has the model but none of the type columns.
+        self.session._apply_style(True, self.session._style_models(), {0: 0, 1: 0})
+        self.equip_slot(11)
+        self.session.flush_equipment()
+        self.session.queue.clear()
+        self.session.handle(0x053, lockstyle_packet(LOCKSTYLE_KEEPALIVE))
+        self.assertEqual(self.session._style_types(), {0: 3, 1: 0})
+        saved = self.service.character(self.character["id"])
+        self.assertEqual(int(saved["style_main"]), 837)  # what was on screen already
+        self.assertEqual(int(saved["style_main_type"]), 3)
+
+    def test_the_locked_weapon_type_survives_a_new_session(self):
+        self.session.char["main_job"] = 1
+        self.session.char["main_level"] = 99
+        self.give(10, 21621)  # Naegling, sword model 848
+        self.equip_slot(10)
+        self.session.flush_equipment()
+        self.session.handle(0x053, lockstyle_packet(LOCKSTYLE_ENABLE))
+        self.assertEqual(self.session._style_types(), {0: 3, 1: 0})
+        saved = self.service.character(self.character["id"])
+        self.assertEqual(int(saved["style_main_type"]), 3)
+        fresh = ZoneSession(
+            self.world, None, self.service.character_record(saved, "Fanxi"))
+        self.assertEqual(fresh._style_types(), {0: 3, 1: 0})
+
+    def test_a_locked_set_uses_the_set_weapon_type(self):
+        self.session.char["main_job"] = 1
+        self.session.char["main_level"] = 99
+        self.give(11, 21620)  # Kaja Sword, same sword type as Naegling
+        self.session.handle(0x053, lockstyle_packet(LOCKSTYLE_SET, [(0, 21621)]))
+        self.assertEqual(int(self.service.character(self.character["id"])["style_main_type"]), 3)
+        self.equip_slot(11)
+        self.session.flush_equipment()
+        looks = struct.unpack_from("<9H", self.session.grap_list(), 4)
+        self.assertEqual(looks[6], 0x6000 + 848)  # the set's Naegling, not Kaja
 
     def test_set_uses_the_item_models(self):
         # Hachiya Hatsuburi +4 has grap model 4184 (Ninja Hatsuburi's look) and is a head item.

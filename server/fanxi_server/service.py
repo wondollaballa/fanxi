@@ -1828,6 +1828,10 @@ class FanxiService:
             "style_main": int(row.get("style_main") or 0),
             "style_sub": int(row.get("style_sub") or 0),
             "style_ranged": int(row.get("style_ranged") or 0),
+            # The weapon type each locked hand had, so a same-type swap keeps the locked
+            # model (and never repaints the client) while a different type updates it.
+            "style_main_type": int(row.get("style_main_type") or 0),
+            "style_sub_type": int(row.get("style_sub_type") or 0),
             "speed": row["speed"],
             "server_name": server_name,
             "server_id": 1,
@@ -2461,11 +2465,14 @@ class FanxiService:
                     " VALUES (?, ?, ?, ?, ?)",
                     (int(character_id), int(kind), int(container), int(slot), int(item_id)))
 
-    def save_style_lock(self, character_id: int, locked: bool, models: dict[int, int]) -> None:
-        """Persist /lockstyle and the appearance models it locked in.
+    def save_style_lock(self, character_id: int, locked: bool, models: dict[int, int],
+                        types: dict[int, int] | None = None) -> None:
+        """Persist /lockstyle and the appearance models and weapon types it locked in.
 
         ``models`` uses the client's equip kinds (0 main, 1 sub, 2 ranged, 4..8 armour).
-        Keeping the models on the character row means a relog does not blink back to the
+        ``types`` is the weapon type in each hand (0 main, 1 sub); a later same-type swap
+        keeps the locked model, so the client never sees a new grap list to repaint.
+        Keeping both on the character row means a relog does not blink back to the
         current gear, and a later /lockstyle off can simply return to the real look.
         """
         columns = {
@@ -2473,13 +2480,18 @@ class FanxiService:
             5: "style_body", 6: "style_hands", 7: "style_legs", 8: "style_feet",
         }
         values = {name: int(models.get(kind) or 0) for kind, name in columns.items()}
+        type_columns = {0: "style_main_type", 1: "style_sub_type"}
+        type_values = {name: int((types or {}).get(kind) or 0)
+                       for kind, name in type_columns.items()}
         self.db.execute(
             "UPDATE characters SET style_lock = ?, style_main = ?, style_sub = ?, "
             "style_ranged = ?, style_head = ?, style_body = ?, style_hands = ?, "
-            "style_legs = ?, style_feet = ?, updated_at = ? WHERE id = ?",
+            "style_legs = ?, style_feet = ?, style_main_type = ?, style_sub_type = ?, "
+            "updated_at = ? WHERE id = ?",
             (1 if locked else 0, values["style_main"], values["style_sub"],
              values["style_ranged"], values["style_head"], values["style_body"],
              values["style_hands"], values["style_legs"], values["style_feet"],
+             type_values["style_main_type"], type_values["style_sub_type"],
              now_iso(), int(character_id)),
         )
 

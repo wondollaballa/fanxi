@@ -570,6 +570,78 @@ class EffectTest(unittest.TestCase):
                           record["home_z"], record["home_rot"]),
                          (235, -344.0, -10.0, -155.0, 0))
 
+    def test_zero_hp_waits_for_a_raise_instead_of_returning_home(self):
+        """A K.O. has no timer: six seconds (the old recovery) changes nothing."""
+        self.session.char["hp_current"] = 0
+        self.session.hit_zero_hp(time.time())
+        self.assertEqual(float("inf"), self.session.dead_until)
+        self.assertEqual(int(self.session.char["hp_current"]), 0)
+        self.session.tick(time.time() + 6.5)
+        self.session.tick(time.time() + 60.0)
+        self.assertEqual(int(self.session.char["hp_current"]), 0)
+        self.assertEqual(float("inf"), self.session.dead_until)
+        self.assertIn("Wait for a raise", "\n".join(chats(self.session)))
+
+    def test_raise_revives_a_fallen_party_member_at_ten_percent_hp(self):
+        """Raise lands on a dead session, restores 10% HP and leaves it where it fell."""
+        self.session.char.update({"mp": 1000, "mp_current": 1000})
+        other = self.party_with(offset=4.0)
+        other.char["hp"] = 1000
+        other.char["hp_current"] = 0
+        other.hit_zero_hp(time.time())
+        self.assertEqual(float("inf"), other.dead_until)
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Raise'")
+        self.cast(int(row["id"]), other.targid, wait=16.0)
+        self.assertEqual(int(other.char["hp_current"]), 100)
+        self.assertEqual(other.dead_until, 0.0)
+        self.assertIn("You have been raised", "\n".join(chats(other)))
+        result = next(message for message in messages(other)
+                      if message["category"] == packets.ACTION_CATEGORY_MAGIC_FINISH)
+        self.assertEqual(result["target"], int(other.char["char_id"]))
+        self.assertEqual(result["message"], packets.MESSAGE_MAGIC_RECOVERS_HP)
+        self.assertEqual(result["value"], 100)
+
+    def test_arise_restores_full_hp_and_grants_reraise(self):
+        self.session.char.update({"mp": 1000, "mp_current": 1000})
+        other = self.party_with(offset=4.0)
+        other.char["hp"] = 1000
+        other.char["hp_current"] = 0
+        other.hit_zero_hp(time.time())
+        row = self.db.one("SELECT * FROM spells WHERE name = 'Arise'")
+        self.cast(int(row["id"]), other.targid, wait=13.0)
+        self.assertEqual(int(other.char["hp_current"]), 1000)
+        self.assertEqual(other.dead_until, 0.0)
+        self.assertIn(effects.RERAISE, other.effect_state)
+        self.assertGreater(float(other.effect(effects.RERAISE)["until"]), time.time())
+
+    def test_a_poison_tick_cannot_count_a_death_twice(self):
+        """A body on the ground takes no more DoT ticks, so death_count stays at one."""
+        self.session.char.update({"hp": 100, "hp_current": 1})
+        self.session.add_effect(effects.POISON, duration=60, tick=10)
+        self.session.effect(effects.POISON)["next_tick"] = 0.0
+        self.session.tick_player_effects(time.time())
+        self.assertEqual(float("inf"), self.session.dead_until)
+        self.session.tick_player_effects(time.time() + 3.0)
+        row = self.db.one("SELECT death_count FROM characters WHERE id = ?",
+                          (int(self.character["id"]),))
+        self.assertEqual(int(row["death_count"]), 1)
+        self.assertEqual(int(self.session.char["hp_current"]), 0)
+        self.assertEqual(int(self.session.char["mp_current"]), 0)
+
+    def test_home_point_return_revives_a_fallen_character(self):
+        """Giving up on the raise is a zone change; it comes back at half vitals."""
+        self.session.char.update({"home_zone": 235, "home_x": -344.0, "home_y": -10.0,
+                                  "home_z": -155.0, "home_rot": 0,
+                                  "hp": 1000, "hp_current": 0})
+        self.session.zone = 107
+        self.session.pos = [231.0, 2.5, -223.0, 60]
+        self.session.hit_zero_hp(time.time())
+        self.session.command(["home"])
+        self.assertEqual(self.session.zone, 235)
+        self.assertEqual(self.session.dead_until, 0.0)
+        self.assertEqual(int(self.session.char["hp_current"]), 500)
+        self.assertEqual(int(self.session.char["mp_current"]), int(self.session.char["mp"]) // 2)
+
     def test_heal_command_recovers_hp_and_mp_over_time(self):
         self.session.char["hp_current"] = 1
         self.session.char["mp_current"] = 0
