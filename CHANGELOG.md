@@ -40,6 +40,10 @@
   appears. The old 2.2 s and 1.2 s beats are gone.
 - **The charge gauge uses the same proof.** A strategem spends a charge on its ABILITY_FINISH,
   not on the outgoing request: a refused use spends nothing, and a retransmit cannot spend twice.
+- **An interrupted cast is reported as such.** A second category-8 result before the
+  MAGIC_FINISH is the server's hit interrupt; the run stops with "was interrupted" instead of
+  the old ten-second "did not finish". The client's cast-bar Count keeps the old cast after an
+  interrupt, so it is no longer used to decide that a spell started.
 - **The Scholar HUD draws the open Magic Burst window.** A small banner at the top of the
   screen names the skillchain and the seconds left while the window is open, read from the
   same chain action as the launcher's Nuking card. It is the in-game counterpart to the

@@ -254,7 +254,7 @@ MOD_LABELS.update(traits.MOD_LABELS)
 #: (percent, display scale, negate the raw value).  LSB stores several defensive
 #: reductions as positive numbers and some percentages in hundredths.
 _EXTRA_DISPLAY = {
-    168: (True, 1, True),    # Spell interruption rate is a reduction
+    168: (True, 1, False),   # Spell interruption rate: raw negative is a reduction
     455: (True, 1, True),    # Song spellcasting time is a reduction
     491: (True, 1, False),   # Waltz potency
     598: (True, 1, False),   # Weapon-skill-specific damage

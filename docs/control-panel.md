@@ -266,7 +266,10 @@ burst list. Deleting a macro or a tab asks for confirmation.
 Clicking a macro runs the same `/ja` / `/ma` sequence, but the runner follows the server's own
 action results, not a beat: a job ability is confirmed by its ABILITY_FINISH result (category 6),
 a spell by its MAGIC_START (8) and MAGIC_FINISH (4), and the next step goes out as soon as the
-result for the current one lands. The only timer left is the shared stratagem recast (Immanence
+result for the current one lands. A second category-8 result before the finish is the new hit
+interrupt: the run stops with "was interrupted" instead of waiting for a finish that will not
+come. The client's cast-bar Count is not used as the start: after an interrupt it keeps the old
+cast's count, which made the next spell look started when the client had not begun it. The only timer left is the shared stratagem recast (Immanence
 and Ebullience use recast id 231), which is a server rule no action result carries; the sequence
 waits for that table to clear before a job ability. A command the client drops inside its own
 animation produces no result, so it is sent again as soon as the recast is clear -- no

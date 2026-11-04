@@ -953,7 +953,7 @@ local function run_macro(group, macro)
         local function confirmed(before, category, id)
             local log = S.action_log
             if not log then return false end
-            for index = 1, 16 do
+            for index = 1, 64 do
                 local action = log[index]
                 if action and action.seq > before and action.category == category
                         and (not id or action.id == id) then
@@ -962,6 +962,18 @@ local function run_macro(group, macro)
             end
             return false
         end
+        local function action_count(before, category)
+            local log = S.action_log
+            if not log then return 0 end
+            local n = 0
+            for index = 1, 64 do
+                local action = log[index]
+                if action and action.seq > before and action.category == category then
+                    n = n + 1
+                end
+            end
+            return n
+        end
 
         -- The server's ABILITY_FINISH result (category 6) is the proof the ability
         -- really ran.  No result means the client dropped the /ja inside its own
@@ -969,15 +981,18 @@ local function run_macro(group, macro)
         -- attempts cover the two-second animation without any sleep standing in
         -- for it.
         local function use_stratagem(line, phase, ability_id)
-            for attempt = 1, 4 do
+            local before = S.action_seq or 0
+            for attempt = 1, 3 do
                 if not wait_stratagem_ready(3.0) then
                     notify('Scholar: ' .. phase .. ' is still on recast; sequence stopped.')
                     run.cancelled = true
                     return false
                 end
-                local before = S.action_seq or 0
+                -- The previous attempt may have been accepted but its result
+                -- arrived while the recast was clearing; do not use it twice.
+                if attempt > 1 and confirmed(before, 6, ability_id) then return true end
                 if not step(line, phase) then return false end
-                if wait_until(function() return confirmed(before, 6, ability_id) end, 0.7) then
+                if wait_until(function() return confirmed(before, 6, ability_id) end, 2.5) then
                     return true
                 end
             end
@@ -986,11 +1001,6 @@ local function run_macro(group, macro)
             return false
         end
 
-        local function cast_count()
-            local ok, count = pcall(function() return xi.game.castbar('Count') end)
-            if not ok then return nil end
-            return tonumber(count) or 0
-        end
         local function cast_spell(name, phase)
             local info = spell_info(name)
             local spell_id = info and tonumber(info.id) or nil
@@ -1000,32 +1010,43 @@ local function run_macro(group, macro)
                 step(string.format('/ma "%s" <t>', name), phase or name)
             end
             local function started()
-                if (cast_count() or 0) > 0.001 then return true end
-                return confirmed(before, 8, spell_id) or confirmed(before, 4, spell_id)
+                -- MAGIC_START is the server's cast start.  It is a category-8
+                -- fourcc, not the spell id, so match the category.  The client's
+                -- cast-bar Count is stale after an interrupted cast and cannot be
+                -- used as the start signal.
+                return confirmed(before, 8, nil) or confirmed(before, 4, nil)
             end
             send()
-            -- Four attempts cover the two-second ability animation: a /ma sent
-            -- inside it is dropped, and the fourth goes out after it ends.
-            for attempt = 2, 4 do
-                if wait_until(started, 0.8) then break end
+            -- A /ma sent inside the ability animation is queued by the client;
+            -- wait for the server's start before deciding it was dropped, then
+            -- retry only if no start arrived.
+            for attempt = 2, 3 do
+                if wait_until(started, 3.0) then break end
                 send()
             end
             if not wait_until(started, 1.0) then
-                if cast_count() == nil and (S.action_seq or 0) == (before or 0) then
-                    -- A host with no cast bar and no action stream: the catalog's
-                    -- cast time is the only information left.
-                    wait(cast_seconds(name) + 0.8)
-                    return true
-                end
                 notify('Scholar: ' .. name .. ' did not start; sequence stopped.')
                 run.cancelled = true
                 return false
             end
-            -- The finished-spell result (category 4) is the real end of the cast,
-            -- and it is the packet that carries a skillchain and opens the burst
-            -- window.  The next step starts as soon as it lands.
-            if not wait_until(function() return confirmed(before, 4, spell_id) end,
-                              cast_seconds(name) + 5.0) then
+            -- The first category-8 result is the start; a second before the
+            -- MAGIC_FINISH is the server's interrupt (the "sp" fourcc).  A finish
+            -- is category 4, whose action id is the spell/animation.
+            local interrupted = false
+            local finished = wait_until(function()
+                if confirmed(before, 4, nil) then return true end
+                if action_count(before, 8) >= 2 then
+                    interrupted = true
+                    return true
+                end
+                return false
+            end, cast_seconds(name) + 5.0)
+            if interrupted then
+                notify('Scholar: ' .. name .. ' was interrupted; sequence stopped.')
+                run.cancelled = true
+                return false
+            end
+            if not finished then
                 notify('Scholar: ' .. name .. ' did not finish; sequence stopped.')
                 run.cancelled = true
                 return false
@@ -1814,6 +1835,25 @@ end
 -- ---------------------------------------------------------------------------------------------
 -- install, draw and commands
 
+-- The client can raise the same 0x028 twice (a self copy and a broadcast, say).
+-- Identical action data inside a short window is one event: otherwise the gauge
+-- spends two charges for one Immanence and the sequencer sees a duplicate result.
+local recent_actions = {}
+
+local function seen_action(data)
+    local now = clock()
+    for index = #recent_actions, 1, -1 do
+        local entry = recent_actions[index]
+        if now - entry.at > 0.75 then
+            table.remove(recent_actions, index)
+        elseif entry.data == data then
+            return true
+        end
+    end
+    recent_actions[#recent_actions + 1] = { data = data, at = now }
+    return false
+end
+
 -- The server's own 0x028 for one of our actions is the edge the sequencer follows:
 -- 6 = job ability finished, 8 = cast started, 4 = spell landed.  Reading the three
 -- fields here keeps the wait off the clock: a command the client dropped produces
@@ -1836,6 +1876,7 @@ local function on_action(e)
     if not index or index < 0 then return end
     local me = xi.game.entity(index, 'ServerId')
     if not me or at(40, 32) ~= tonumber(me) then return end
+    if seen_action(data) then return end
     S.action_seq = (S.action_seq or 0) + 1
     local category, id = at(82, 4), at(86, 32)
     S.action = { seq = S.action_seq, category = category, id = id, at = clock() }
@@ -1844,7 +1885,7 @@ local function on_action(e)
     local log = S.action_log
     if not log then log = {}; S.action_log = log end
     S.action_count = (S.action_count or 0) + 1
-    log[(S.action_count - 1) % 16 + 1] = S.action
+    log[(S.action_count - 1) % 64 + 1] = S.action
     if category == 6 and STRATAGEM[id] then
         -- The gauge follows the server's ABILITY_FINISH, not the outgoing request:
         -- a refused use spends nothing, and a retransmit cannot spend twice.

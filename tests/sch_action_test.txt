@@ -6,6 +6,7 @@ frames 2
 load schtest xi
 lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); S.state.charges={count=5,max=5,level=99,timers={}}; return S.state.charges.count
 packet_in 28000000220100000001584f0000000000004000000040400000000000190000000000
+packet_in 28000000220100000001584f0000000000004000000040400000000000190000000000
 frames 2
 lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.state.charges.count
 lua schtest local sch=require('xi.sch'); local S=sch._internal.state(); return S.action_seq

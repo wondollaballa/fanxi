@@ -240,15 +240,15 @@ class StatReportTest(unittest.TestCase):
         sources = {
             "gear": {
                 "label": "Gear",
-                "mods": {168: 11},
+                "mods": {168: -11},
                 "entries": [
-                    {"label": "Item with interrupts", "mods": {168: 11}},
+                    {"label": "Item with interrupts", "mods": {168: -11}},
                 ],
             },
         }
         interrupts = stat_report._raw_entry(
             "mod:168", "Spell interruption rate", 168, True, 1, False, "Other", 2068,
-            sources, {168: 11}, None, negate=True)
+            sources, {168: -11}, None, negate=False)
         self.assertEqual(interrupts["value"], -11)
         self.assertTrue(interrupts["percent"])
         self.assertEqual(interrupts["sources"][0]["details"][0]["value"], -11)
