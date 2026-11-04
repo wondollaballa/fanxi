@@ -171,9 +171,12 @@ pub struct GearDefaults {
 
 #[tauri::command]
 pub async fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> AppResult<Bootstrap> {
+    tracing::info!("bootstrap: enter");
     let config = state.config.lock().await.clone();
+    tracing::info!("bootstrap: config loaded");
     let api = ApiClient::new(&config.api_url, config.api_insecure)?;
     let public = fetch_public(&api).await;
+    tracing::info!("bootstrap: public fetched");
 
     let mut session: Option<SessionView> = None;
     let mut session_error: Option<String> = None;
@@ -209,6 +212,7 @@ pub async fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> AppResult<
         }
     }
 
+    tracing::info!("bootstrap: session done");
     let gearswap_config = if !config.token.is_empty() {
         match api.gearswap_settings(&config.token).await {
             Ok(value) => value
@@ -233,7 +237,9 @@ pub async fn bootstrap(app: AppHandle, state: State<'_, AppState>) -> AppResult<
     let game_dir = game::find_game_dir(&config.game_dir);
     let host64 = game::find_host64(&config);
     let gearswap = gear::defaults_dir(repo.as_deref(), resource.as_deref());
+    tracing::info!("bootstrap: paths done");
 
+    tracing::info!("bootstrap: returning");
     let final_config = state.config.lock().await.clone();
     Ok(Bootstrap {
         config: ConfigView::from(&final_config),

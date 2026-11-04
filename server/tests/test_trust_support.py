@@ -72,6 +72,10 @@ class TrustSupportTest(unittest.TestCase):
         # Keep Indi-Fury up on the owner so the next beats are her two monster
         # effects: the Geo-Malaise bubble first, then the entrusted Frailty.
         self.session.add_effect(549, duration=180.0)      # GEO_ATTACK / Indi-Fury
+        # The owner already has the magic-haste cap, so the new Indi-Haste priority
+        # leaves the aura alone and the test can reach the Geo-Malaise beat.
+        self.session.add_effect(effects.HASTE, duration=180.0,
+                                mods={mod.HASTE_MAGIC: 5000})
         self.assertTrue(self.world._try_trust_cast(
             sylvie, self.session, [self.session], self.mob, self.now))
         self.assertEqual("Geo-malaise", sylvie.casting["spell"]["name"])

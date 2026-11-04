@@ -183,9 +183,12 @@ control addon:
   Indi-/Geo- spells for Sylvie) with the level each unlocks at; tick up to 24 in the order
   they should be used and **Save**. **Use default logic** is the checkbox that returns the Trust to its
   built-in rotation (and disables the list). The set is stored on the character by the server
-  (`//trust <id> set ...`), so it survives a relog; the HUD reads the catalogue and selection back
-  through hidden `TrustData|` lines rather than printing chat. A Trust with no selected actions
-  uses the default logic.
+  (`//trust <id> set ...`), so it survives a relog. The HUD reads the catalogue and selection back
+  through a handful of hidden `TrustData|` lines: `//trust <id> ui hud2` returns four-hex-digit
+  action ids and one category letter per action, and the addon resolves each name and unlock level
+  from the client's own spell/ability table. The old one-line-per-action form was ~150 chat lines
+  and the client dropped most of them, so the dialog opened empty after a relog. A Trust with no
+  selected actions uses the default logic.
 - **Magic Bag** is the inventory and Recycle Bin HUD. The launcher fetches
   `/api/v1/characters/<id>/magicbag` (visible bags, Storage Slips, `char_locker`, and the
   Armory purchase history as Claim Storage) and

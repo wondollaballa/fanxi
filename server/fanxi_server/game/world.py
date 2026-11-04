@@ -1047,6 +1047,13 @@ class World:
             spec = (trust_ai.effect_of(spell, trust_name=entity.name)
                     if spell is not None else None)
             kind = (spec.kind if spec is not None else "buff") if spell else ""
+        # A damage-first hex goes up before the routine cure when the owner is not in
+        # danger.  The old order let the 15% cure rule keep Sylvie in cure-forever at
+        # 85% HP, so Geo-Malaise (the -30% Magic Defense hex) never got a turn and the
+        # party's nukes ran without it.
+        if spell is None and not in_danger and target is not None:
+            spell = self._trust_hex_choice(entity, owner, target, now, kit)
+            kind = "debuff" if spell is not None else ""
         if spell is None and missing_hp >= max(1, hp_max * 15 // 100):
             spell = trust_ai.cure_for(kit, int(entity.level), int(entity.mp), missing_hp)
             kind = "cure" if spell is not None else ""
@@ -1467,9 +1474,12 @@ class World:
         if max_mp:
             mp_percent = 100.0 * max(0, int(char.get("mp_current", 0))) / max_mp
         party_mp, party_melee = self._trust_party_need(owner)
+        fighter = owner.stat_sheet().fighter
+        haste = (int(fighter.mods.get(mod.HASTE_GEAR, 0))
+                 + int(fighter.mods.get(mod.HASTE_MAGIC, 0))
+                 + int(fighter.mods.get(mod.HASTE_ABILITY, 0))) / 10000.0
         hit_rate, attack_ratio = 1.0, 2.0
         if target is not None and target.is_mob():
-            fighter = owner.stat_sheet().fighter
             mob = self.debuffed_monster(target)
             hit_rate = self._fighter_hit_rate(owner, fighter, mob)
             attack_ratio = float(fighter.attack) / max(1, int(mob.defense))
@@ -1478,7 +1488,8 @@ class World:
             caster=int(char.get("main_job", 0) or 0) in trust_ai.MAGE_JOBS,
             target=target is not None, hit_rate=hit_rate,
             attack_ratio=attack_ratio, party_melee=party_melee,
-            tp_ready=int(char.get("tp", 0) or 0) >= 1000)
+            tp_ready=int(char.get("tp", 0) or 0) >= 1000,
+            haste_percent=max(0.0, min(1.0, haste)))
 
     def _fighter_hit_rate(self, owner, fighter, mob) -> float:
         """How often this fighter's swings land on the monster, 0..1.

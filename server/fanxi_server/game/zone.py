@@ -53,6 +53,9 @@ KEY_HISTORY = 8
 # auto-pull racing a box that is already back; it is answered without a hand-off.
 WARP_REPEAT_GUARD = 120.0
 VANA_HOUR, VANA_DAY = 144, 3456
+# Vana'diel day order: Firesday, Earthsday, Watersday, Windsday, Iceday,
+# Lightningday, Lightsday, Darksday, using the client element ids (1 fire .. 8 dark).
+VANA_DAY_ELEMENTS = (1, 4, 6, 3, 2, 5, 7, 8)
 # A zone session has no keepalive of its own: the client sends 0x015 and expects the
 # server to answer.  A character standing still in a quiet zone (a city, an empty field)
 # makes the server send nothing for minutes, and the client's own receive timer then
@@ -93,6 +96,18 @@ TRUST_ACTION_LABEL = {"song": "songs", "spell": "spells", "roll": "rolls"}
 TRUST_ACTION_ORDER = {
     "cure": 0, "buff": 1, "debuff": 2, "aura": 3, "nuke": 4, "song": 5, "roll": 6,
 }
+#: The compact HUD catalogue sends one letter per action instead of its category name.
+#: The HUD maps it back in control.lua; keep the two tables in step.
+TRUST_HUD_KIND_CHAR = {
+    "cure": "c", "buff": "b", "debuff": "d", "aura": "a", "nuke": "n",
+    "song": "s", "roll": "r",
+}
+#: `//trust <id> ui hud` is the legacy one-row-per-line catalogue.  `hud2` is the
+#: compact form the current HUD asks for: action ids and category letters only, with
+#: names and levels resolved from the client's own spell/ability table.  A 135-spell
+#: catalogue is ~150 chat lines in the legacy form, which the client cannot rely on
+#: receiving; `hud2` is eight short lines.
+TRUST_HUD_COMPACT = "hud2"
 # 0x063 type 9: one u16 icon per bar slot, then one u32 timer.  0xFF is an empty slot and
 # 0x7FFFFFFF is an effect that never wears off, so the client draws its icon without a
 # countdown.
@@ -472,6 +487,10 @@ class Msg(bytearray):
     # packet has gone out since then, which guarantees the start is not in the same
     # datagram even when the flush is late.
     after_packet = -1
+    # Send this message first in a packet of its own.  The client's chat hook reliably
+    # forwards the first sub-message of a datagram; the hidden TrustData catalogue lines
+    # use this so a batch cannot hide all but the first (game/zone.py _trust_hud_line).
+    own_packet = False
 
 
 def sub(ptype: int, body: bytes) -> Msg:
@@ -981,8 +1000,17 @@ class ZoneSession:
         ids = self._trust_selected_ids(trust_id) if action_ids is None else action_ids
         return [options[int(action_id)] for action_id in ids if int(action_id) in options]
 
-    def _trust_send_ui(self, trust_id: int) -> None:
-        """Send the HUD's hidden action catalogue and current selection, one line each."""
+    def _trust_send_ui(self, trust_id: int, *, compact: bool = False) -> None:
+        """Send the HUD's hidden action catalogue and current selection.
+
+        The legacy form writes one ``A`` line per action.  A caster's expanded spellbook
+        is 130-180 rows, and the zone chat pipe cannot be relied on to deliver a burst
+        that large: the client shows only a few of the lines, so the Set dialog opened
+        empty after a relog and players re-picked every spell.  The compact form sends
+        only the ids and a category letter per action; the HUD resolves the name and
+        level from the client's own spell/ability table.  Each line is queued as its own
+        packet (see ``Msg.own_packet``), so one line arriving cannot hide the rest.
+        """
         trust_id = int(trust_id)
         rows = self._trust_action_catalog(trust_id)
         by_id = {int(row["id"]): row for row in rows}
@@ -990,9 +1018,15 @@ class ZoneSession:
                     if int(action_id) in by_id]
         limit = trust_ai.TRUST_ACTION_LIMIT.get(trust_id, 12)
         kind = trust_ai.TRUST_ACTION_KIND.get(trust_id, "spell")
+        trust = self.world.service.trust(trust_id) or {}
         name = SUPPORT_TRUST_NAMES.get(
-            trust_id, str((self.world.service.trust(trust_id) or {}).get("name") or "Trust"))
+            trust_id, str(trust.get("name") or "Trust"))
         auto = 0 if selected else 1
+        if compact:
+            self._trust_send_compact(trust_id, rows, selected, limit, kind, name,
+                                     auto, int(trust.get("job") or 0),
+                                     int(trust.get("sub_job") or 0))
+            return
         self.say("TrustData|%d|B|%s|%s|%d|%d|%s" % (
             trust_id, name, kind, limit, auto,
             ",".join(str(action_id) for action_id in selected)))
@@ -1002,11 +1036,52 @@ class ZoneSession:
                 str(row["kind"]), str(row["name"])))
         self.say("TrustData|%d|E" % trust_id)
 
-    def _trust_say_selection(self, trust_id: int, *, hud: bool = False) -> None:
+    def _trust_send_compact(self, trust_id: int, rows: list[dict],
+                            selected: list[int], limit: int, kind: str,
+                            name: str, auto: int, main_job: int,
+                            sub_job: int) -> None:
+        """One ``B`` line, hex ids, category letters and an ``E``, in short packets."""
+        selected_hex = "".join("%04x" % int(action_id) for action_id in selected)
+        begin = "TrustData|%d|B|%s|%s|%d|%d|%d|%d" % (
+            trust_id, name, kind, limit, auto, main_job, sub_job)
+        if selected_hex:
+            with_selected = begin + "|" + selected_hex
+            if len(with_selected) <= 150:
+                self._trust_hud_line(with_selected)
+            else:
+                # The name plus 24 four-digit ids does not fit the client's line; the
+                # selection still arrives on its own line.
+                self._trust_hud_line(begin)
+                self._trust_hud_line("TrustData|%d|S|%s" % (trust_id, selected_hex))
+        else:
+            self._trust_hud_line(begin)
+        ids = "".join("%04x" % int(row["id"]) for row in rows)
+        for offset in range(0, len(ids), 132):
+            self._trust_hud_line("TrustData|%d|I|%s" % (trust_id, ids[offset:offset + 132]))
+        kinds = "".join(TRUST_HUD_KIND_CHAR.get(str(row["kind"]), "?") for row in rows)
+        for offset in range(0, len(kinds), 132):
+            self._trust_hud_line("TrustData|%d|K|%s" % (
+                trust_id, kinds[offset:offset + 132]))
+        self._trust_hud_line("TrustData|%d|E" % trust_id)
+
+    def _trust_hud_line(self, text: str) -> None:
+        """Queue one hidden HUD line in a packet of its own.
+
+        The zone packet's first sub-message is the one the client's chat hook reliably
+        forwards; a batch of catalogue lines loses everything after the first.  Marking
+        the message ``own_packet`` lets ``pack`` put it at the front alone, so each line
+        reaches the HUD.  Six to ten short packets at the flush interval still arrive
+        well inside the dialog's load window.
+        """
+        self.say(text)
+        self.queue[-1].own_packet = True
+
+    def _trust_say_selection(self, trust_id: int, *, hud: bool = False,
+                             compact: bool = False) -> None:
         """Report the current set: hidden data lines for the HUD, prose for chat."""
         trust_id = int(trust_id)
         if hud:
-            self._trust_send_ui(trust_id)
+            self._trust_send_ui(trust_id, compact=compact)
             return
         kind = trust_ai.TRUST_ACTION_KIND.get(trust_id, "spell")
         label = TRUST_ACTION_LABEL.get(kind, "actions")
@@ -1028,10 +1103,13 @@ class ZoneSession:
           //trust <id|name> set songs|spells|rolls "..."  explicit set (ordered)
           //trust <id|name> set default                    built-in logic
           //trust <id|name> ui hud                         HUD catalogue/data line
+          //trust <id|name> ui hud2                        compact catalogue/data
         """
         trust_id = int(trust_id)
         args = list(args or [])
-        hud = bool(args and args[-1].casefold() == "hud")
+        token = args[-1].casefold() if args else ""
+        hud = token in ("hud", TRUST_HUD_COMPACT)
+        compact = token == TRUST_HUD_COMPACT
         if hud:
             args.pop()
         kind = trust_ai.TRUST_ACTION_KIND.get(trust_id, "spell")
@@ -1040,18 +1118,18 @@ class ZoneSession:
         if not args or args[0].casefold() in (
                 "list", "status", "show", "actions", "action",
                 "song", "songs", "spell", "spells", "roll", "rolls"):
-            self._trust_say_selection(trust_id, hud=hud)
+            self._trust_say_selection(trust_id, hud=hud, compact=compact)
             return
         action = args[0].casefold()
         if action in ("ui", "data"):
             if not hud:
                 self.say("Use //trust %d ui hud from the HUD." % trust_id)
                 return
-            self._trust_send_ui(trust_id)
+            self._trust_send_ui(trust_id, compact=compact)
             return
         if action in ("auto", "default", "reset"):
             if self._save_trust_selected(trust_id, []):
-                self._trust_say_selection(trust_id, hud=hud)
+                self._trust_say_selection(trust_id, hud=hud, compact=compact)
             return
         if action not in ("set", "choose"):
             self.say("Usage: //trust %d [set songs|spells|rolls \"<name>\" ... | "
@@ -1065,7 +1143,7 @@ class ZoneSession:
         if not rest or (len(rest) == 1
                         and rest[0].casefold() in ("auto", "default", "reset")):
             if self._save_trust_selected(trust_id, []):
-                self._trust_say_selection(trust_id, hud=hud)
+                self._trust_say_selection(trust_id, hud=hud, compact=compact)
             return
         options = self._trust_action_catalog(trust_id)
         if not options:
@@ -1086,7 +1164,7 @@ class ZoneSession:
                 self.say("%s can keep at most %d %s." % (name, limit, label))
             return
         if self._save_trust_selected(trust_id, chosen):
-            self._trust_say_selection(trust_id, hud=hud)
+            self._trust_say_selection(trust_id, hud=hud, compact=compact)
 
     def set_key(self, key: bytes, history: list[bytes] | None = None) -> None:
         self.key = bytearray(key)
@@ -7525,6 +7603,17 @@ class ZoneSession:
         # Helix Magic Acc./Atk. merits add +3 Magic Accuracy and +2 Magic Atk. Bonus
         # a rank to Helix spells only; every other spell keeps the sheet's mods.
         spell_mods = sheet.fighter.mods
+        element = int(spell.get("element") or 0)
+        if 1 <= element <= 8 and not healing:
+            # Elemental affinity (Fire MAB and the other seven) is a percentage added to
+            # the generic Magic Atk. Bonus.  The reforged sets carry it; the old path
+            # read only mod.MATT, so a Tupsimati or an elemental staff contributed
+            # nothing to a nuke.
+            elemental = int(spell_mods.get(mod.ELEMENTAL_MAB[element - 1], 0))
+            if elemental:
+                spell_mods = dict(spell_mods)
+                spell_mods[mod.MATT] = (int(spell_mods.get(mod.MATT, 0))
+                                        + elemental)
         if spec is not None and spec.helix:
             helix_rank = self._sch_merit(merits.SCH_HELIX_MAGIC)
             if helix_rank:
@@ -7537,6 +7626,14 @@ class ZoneSession:
             spell_mods = dict(spell_mods)
             spell_mods[mod.MACC] = (int(spell_mods.get(mod.MACC, 0))
                                     + int(macc_bonus))
+        klimaform = self.has_effect(effects.KLIMAFORM)
+        if klimaform:
+            # Klimaform's published effect is +10 Magic Accuracy and +10% magic damage
+            # while the weather matches.  The server has no weather state yet, so the
+            # flat +10% is applied whenever Klimaform is up; the caller also adds the
+            # single-weather half in the damage multipliers below.
+            spell_mods = dict(spell_mods)
+            spell_mods[mod.MACC] = int(spell_mods.get(mod.MACC, 0)) + 10
         if healing:
             amount = effects.healing_amount(
                 int(cost * 3 + level), sheet.fighter.mods, target_mods)
@@ -7586,6 +7683,15 @@ class ZoneSession:
             amount = int(amount) + int(cascade_bonus)
         if convergence and not healing and int(amount) > 0:
             amount = int(amount * 3 // 2)
+        if not healing and int(amount) > 0:
+            # Klimaform's +10% and the client's single-weather +10%: the server has no
+            # weather clock, so the pair is applied together while the buff is up.
+            if klimaform:
+                amount = int(amount * 1.20)
+            if element and element == self._vana_day_element():
+                amount = int(amount * 1.10)
+            if self.has_effect(effects.EBULLIENCE):
+                amount = int(amount * 1.20)
         # Enfeebles share the Magic Accuracy roll: an under-geared caster keeps the
         # effect for less time instead of the spell always landing at full duration.
         resist = 1.0
@@ -7677,6 +7783,22 @@ class ZoneSession:
                 "magic_burst": int(burst_tier),
                 "effect_duration": effect_duration,
                 "effect_potency": effect_potency}
+
+    def _vana_day_element(self) -> int:
+        """The element of the current Vana'diel day (1 fire .. 8 dark)."""
+        vana = int(time.time()) - VANA_EPOCH + int(self.world.clock)
+        return VANA_DAY_ELEMENTS[(vana // VANA_DAY) % 8]
+
+    def _consume_ebullience(self) -> None:
+        """Spend Ebullience on the cast whose numbers were just frozen.
+
+        Retail consumes the stratagem on the next spell, not only a damaging one; the
+        damage path is where this build calls it, because the buff's effect is the
+        damage multiplier in ``_cast_numbers``.
+        """
+        if self.has_effect(effects.EBULLIENCE):
+            self.remove_effect(effects.EBULLIENCE, quiet=True)
+            self.queue.append(self.char_status())
 
     def _refresh_cast_numbers(self, cast: dict, target) -> None:
         """Re-read a finished cast's numbers from the gear worn at the finish."""
@@ -7880,6 +8002,7 @@ class ZoneSession:
             self.assert_stance()
             return
         self._refresh_cast_numbers(cast, entity)
+        self._consume_ebullience()
         self._last_target_hp = entity.hp_max
         animation = spell_animation(spell)
         if effects.is_debuff(spec):
@@ -11734,8 +11857,10 @@ class ZoneSession:
         perpetuance = white_enhancing and self.has_effect(effects.PERPETUANCE)
         main_job = int(self.char.get("main_job") or 0)
         main_level = int(self.char.get("main_level") or 0)
-        # Enlightenment optimizes both arts for its one spell.
+        # Enlightenment optimizes both arts for its one spell.  Addendum: White is
+        # the upgraded Light Arts and carries the same Regen/enhancing bonuses.
         light_arts = (self.has_effect(effects.LIGHT_ARTS)
+                      or self.has_effect(effects.ADDENDUM_WHITE)
                       or self.has_effect(effects.ENLIGHTENMENT))
         tabula_rasa = self.has_effect(effects.TABULA_RASA)
         # job_points_detail sends every category at rank 20, so the Light Arts Effect
@@ -14286,7 +14411,13 @@ class ZoneSession:
             zone_out = zone_out or message.zone_out
             return True
 
-        for message in urgent:
+        # A message that must go out on its own leads the packet so the client's chat
+        # hook sees it first; the rest of the catalogue waits for the next flush.  Only
+        # one such line per packet, which is what makes a burst of TrustData lines
+        # reliable instead of "the first one arrives, the others vanish".
+        solo = [message for message in urgent if getattr(message, "own_packet", False)]
+        normal = [message for message in urgent if not getattr(message, "own_packet", False)]
+        for message in ([solo[0]] if solo else []) + normal:
             if not take(message):
                 held.append(message)
                 continue
@@ -14308,7 +14439,7 @@ class ZoneSession:
             spent += len(message)
             self.pending_positions.pop((message.ptype, message.targid), None)
         self.ambient_tokens = max(0.0, self.ambient_tokens - spent)
-        self.queue = held + deferred
+        self.queue = solo[1:] + held + deferred
         if not body:
             return b"", 0, False
         data, nbits = self.world.huff.compress(bytes(body))

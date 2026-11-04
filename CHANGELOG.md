@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — Trust action sets survive a relog again
+
+- **The Set dialog now restores the saved songs/spells/rolls after a logout.** The server
+  already wrote `char_settings.trust_actions`/`joachim_songs` on every Save and read it back
+  in the next `ZoneSession`, but the HUD asked for its catalogue as one `TrustData|A` chat
+  line per action. A caster's expanded spellbook is 130-180 rows, and the zone chat pipe
+  loses most of a burst that size (the client forwards the first line of a packet and drops
+  the rest), so the dialog opened empty after a relog and players re-picked every spell.
+- **`//trust <id> ui hud2` is the compact catalogue.** It sends the action ids as four hex
+  digits and one category letter per action; the addon resolves each name and unlock level
+  from the client's own spell/ability table. Koru-Moru's 130-row catalogue is seven short
+  lines instead of ~130. Each line is queued as its own packet (`Msg.own_packet`) so a batch
+  cannot hide all but the first. The legacy `ui hud` form is unchanged for an un-rebuilt
+  client.
+- **The dialog gives the compact lines time to arrive** (the load timeout moved from 5 s to
+  12 s), and a long selection that will not fit beside the header travels on its own `S`
+  line.
+- Tests: `test_world.py` saves sets and builds a fresh `ZoneSession` to prove the next login
+  reloads them, checks the compact Begin/id/kind lines and that every hidden line is its own
+  packet; `tests/trust_hud_test.py` parses the compact catalogue against a client spell-table
+  stub (rolls come from the ability table), checks the `S` fallback and the restored
+  selection.
+
 ## Unreleased — physical hits interrupt casts, and SIRD spends
 
 - **A landed physical hit now rolls spell interruption.** Every auto-attack and TP-move hit

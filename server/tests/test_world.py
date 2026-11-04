@@ -10,13 +10,13 @@ import unittest
 from pathlib import Path
 from unittest import mock
 
-from support import make_service
+from support import make_huffman_dir, make_service
 
 from fanxi_server.game import (
     augments, base_stats, capes, combat, content, effects, geomancy, merits,
     modifiers as mod, packets, rolls, skillchain, trust_ai,
 )
-from fanxi_server.game.world import SYNC_RANGE, World
+from fanxi_server.game.world import SYNC_RANGE, World, load_huffman
 from fanxi_server.game.zone import (
     ALL_CONTAINERS, TWO_HOUR_RECAST_BASE, ZoneSession, job_id, sub,
 )
@@ -4345,6 +4345,29 @@ class WorldTest(unittest.TestCase):
         self.assertIn("TrustData|911|A|418|99|song|Aria of Passion", lines)
         self.assertIn("TrustData|911|E", lines)
 
+        # The HUD's compact query carries the same selection but only ids and one
+        # category letter per action; names and levels come from the client table.
+        self.session.queue.clear()
+        self.session.command(["trust", "911", "ui", "hud2"])
+        lines = self.chats()
+        self.assertIn("TrustData|911|B|Joachim|song|4|0|10|3|01a2018e018d01a1", lines)
+        compact_ids = "".join(line[16:] for line in lines
+                              if line.startswith("TrustData|911|I|"))
+        self.assertIn("01a2", compact_ids)
+        kinds = "".join(line[16:] for line in lines
+                        if line.startswith("TrustData|911|K|"))
+        self.assertEqual(len(kinds), len(compact_ids) // 4)
+        self.assertIn("TrustData|911|E", lines)
+        self.assertFalse(any(line.startswith("TrustData|911|A|") for line in lines))
+        # Each HUD line rides in a packet of its own, so the client cannot lose all but
+        # the first line of a batch.
+        for message in self.session.queue:
+            if (struct.unpack_from("<H", message, 0)[0] & 0x1FF) != 0x017:
+                continue
+            text = bytes(message[4:])[19:].split(b"\0")[0].decode("ascii", "replace")
+            if text.startswith("TrustData|"):
+                self.assertTrue(getattr(message, "own_packet", False), text)
+
         # More than the horn's four slots is refused, and leaving a name out of the set
         # does not rewrite it.
         self.session.queue.clear()
@@ -4391,6 +4414,16 @@ class WorldTest(unittest.TestCase):
         self.assertIn("TrustData|952|A|511|96|buff|Haste II", lines)
         self.assertIn("TrustData|952|E", lines)
 
+        self.session.queue.clear()
+        self.session.command(["trust", "952", "ui", "hud2"])
+        lines = self.chats()
+        self.assertIn("TrustData|952|B|Koru-moru|spell|24|0|5|0|01ff01d9", lines)
+        self.assertTrue(any(line.startswith("TrustData|952|I|") for line in lines))
+        self.assertTrue(any(line.startswith("TrustData|952|K|") for line in lines))
+        self.assertFalse(any(line.startswith("TrustData|952|A|") for line in lines))
+        # The compact form stays a handful of lines even for a 150-spell catalogue.
+        self.assertLessEqual(len(lines), 12, lines)
+
         self.session.command(["trust", "ygnas", "set", "spells",
                               '"Cure', 'VI"', '"Haste"'])
         self.assertEqual(self.session.trust_actions[998], [6, 57])
@@ -4419,6 +4452,44 @@ class WorldTest(unittest.TestCase):
                               '"Blizzard', 'II"', '"Thunder', 'II"'])
         self.assertIn("at most 24 spells", " ".join(self.chats()))
         self.assertNotIn(952, self.session.trust_actions)
+
+    def test_support_trust_sets_survive_a_logout(self):
+        """The next login (a fresh ZoneSession) reloads every set from char_settings."""
+        self.zone(100)
+        self.session.char.update(main_job=17, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        self.session.command(["trust", "952", "set", "spells",
+                              '"Haste', 'II"', '"Refresh', 'II"'])
+        self.session.command(["trust", "911", "set", "songs",
+                              '"Aria', 'of', 'Passion"', '"Honor', 'March"'])
+        self.session.command(["trust", "928", "set", "rolls",
+                              '"Chaos', 'Roll"', '"Samurai', 'Roll"'])
+
+        # A relog builds a new session from the character row; __init__ has to put the
+        # saved sets back before the first trust tick can read them.
+        fresh = ZoneSession(self.world, None, self.service.character_record(
+            self.service.character(self.character["id"]), "Fanxi"))
+        self.assertEqual(fresh.trust_actions.get(952), [511, 473])
+        self.assertEqual(fresh.trust_actions.get(928), [105, 109])
+        self.assertEqual(fresh.joachim_songs, [418, 417])
+        self.assertEqual(fresh._trust_selected_ids(952), [511, 473])
+
+    def test_hidden_trust_lines_ride_in_their_own_packets(self):
+        """One catalogue line per packet: the client loses the rest of a chat batch."""
+        self.zone(100)
+        self.session.char.update(main_job=17, main_level=99, sub_job=0, sub_level=0)
+        self.session.refresh_vitals()
+        self.session.trust_actions[952] = [511]
+        self.session.queue.clear()
+        self.session.command(["trust", "952", "ui", "hud2"])
+        lines = [message for message in self.session.queue
+                 if getattr(message, "own_packet", False)]
+        self.assertGreater(len(lines), 4)
+        self.world.huff = load_huffman(make_huffman_dir(Path(self.tmp.name)))
+        self.session.pack()
+        left = [message for message in self.session.queue
+                if getattr(message, "own_packet", False)]
+        self.assertEqual(len(left), len(lines) - 1)
 
     def test_koru_moru_casts_only_the_owners_spell_pool(self):
         """An explicit spell pool replaces the whole rotation, including its cures."""

@@ -71,8 +71,8 @@ def check_wiring(source: str) -> None:
         raise SystemExit(f'{CONTROL}: the trust menu does not keep the HUD frame alive')
     if 'if hud.trust_menu.open then hud.trust_window(api) end' not in source:
         raise SystemExit(f'{CONTROL}: hud.frame never draws the trust menu')
-    if "'//trust %d ui hud'" not in source:
-        raise SystemExit(f'{CONTROL}: the HUD does not ask for the action catalogue')
+    if "'//trust %d ui hud2'" not in source:
+        raise SystemExit(f'{CONTROL}: the HUD does not ask for the compact action catalogue')
     if "text:sub(1, 10) == 'TrustData|'" not in source:
         raise SystemExit(f'{CONTROL}: the HUD does not swallow TrustData lines')
     if "body:sub(1, 10) == 'TrustData|'" not in source:
@@ -88,6 +88,29 @@ def check_wiring(source: str) -> None:
             raise SystemExit(f'{CONTROL}: the trust menu lost {label!r}')
     if 'hud.trust_config' not in source or 'hud.trust_save()' not in source:
         raise SystemExit(f'{CONTROL}: the trust action helpers are missing')
+
+
+def check_control_compiles(source: str) -> None:
+    """The real addon must load as one chunk; Lua's 200-local limit is easy to cross.
+
+    `hud_init()` is a very large function, so a new file-scope local there can push it
+    over the limit and the whole control addon fails to load (the client then has no HUD
+    and no control port).  LuaJIT and the client agree on the limit, so compiling here is
+    the same check the game makes on startup.
+    """
+    runtime_class = None
+    try:
+        from lupa import LuaRuntime as runtime_class  # type: ignore  # noqa: F401
+    except ImportError:
+        runtime_class = None
+    if runtime_class is None:
+        return
+    runtime = runtime_class()
+    loader = runtime.eval(
+        'function(src) local loader = loadstring or load; local f, err = loader(src, "control"); return f, err end')
+    _function, error = loader(source)
+    if error:
+        raise SystemExit(f'{CONTROL}: control.lua does not compile: {error}')
 
 
 LUA_TEST = r'''
@@ -182,6 +205,68 @@ hud.trust_data('952|E')
 eq(names(), 'Haste II', 'stale id dropped')
 eq(hud.trust_menu.auto, false, 'valid set stays custom')
 
+-- The compact catalogue carries four-hex-digit ids and one category letter each; the
+-- names and unlock levels come from the client's own spell/ability table.
+res = {
+  spell = function(id)
+    local rows = {
+      [4] = { name = 'Cure IV', level = 48 },
+      [511] = { name = 'Haste II', level = 96 },
+      [473] = { name = 'Refresh II', level = 82 },
+      [846] = { name = 'Flurry II', level = 96 },
+    }
+    local row = rows[id]
+    if not row then return nil end
+    return { id = id, name = { en = row.name }, name_utf8 = { en = row.name },
+             levels = { [5] = row.level } }
+  end,
+  ability = function(id)
+    if id == 0x200 + 105 then
+      return { id = id, name = { en = 'Chaos Roll' }, name_utf8 = { en = 'Chaos Roll' } }
+    end
+  end,
+}
+hud.trust_menu.open = true
+hud.trust_menu.trust_id = 952
+hud.trust_menu.loading = true
+hud.trust_data('952|B|Koru-moru|spell|24|0|5|0|000401ff01d9')
+hud.trust_data('952|I|000401ff01d9')
+hud.trust_data('952|K|cbb')
+hud.trust_data('952|E')
+eq(#hud.trust_menu.actions, 3, 'compact action count')
+eq(hud.trust_menu.actions[1].name, 'Cure IV', 'compact first name')
+eq(hud.trust_menu.actions[1].kind, 'cure', 'compact cure kind')
+eq(hud.trust_menu.actions[2].name, 'Haste II', 'compact second name')
+eq(hud.trust_menu.actions[2].level, 96, 'level from the client spell table')
+eq(names(), 'Cure IV|Haste II|Refresh II', 'compact saved names keep order')
+
+-- A long selection that did not fit beside the header arrives on its own S line.
+hud.trust_data('952|B|Koru-moru|spell|24|0|5|0')
+hud.trust_data('952|S|01ff')
+hud.trust_data('952|I|01ff')
+hud.trust_data('952|K|b')
+hud.trust_data('952|E')
+eq(names(), 'Haste II', 'selection from the S line')
+
+-- UDP can deliver End before an id chunk; the late chunk still folds into the picker.
+hud.trust_menu.trust_id = 952
+hud.trust_data('952|B|Koru-moru|spell|24|0|5|0')
+hud.trust_data('952|E')
+eq(#hud.trust_menu.actions, 0, 'empty before the late chunk')
+hud.trust_data('952|I|01ff')
+hud.trust_data('952|K|b')
+eq(#hud.trust_menu.actions, 1, 'late id chunk folds in')
+eq(hud.trust_menu.actions[1].name, 'Haste II', 'late chunk name')
+
+-- Corsair rolls are job abilities, not spells: the same id would name a spell.
+hud.trust_menu.trust_id = 928
+hud.trust_data('928|B|Luzaf|roll|8|0|17|13|0069')
+hud.trust_data('928|I|0069')
+hud.trust_data('928|K|r')
+hud.trust_data('928|E')
+eq(hud.trust_menu.actions[1].name, 'Chaos Roll', 'roll name from the ability table')
+eq(names(), 'Chaos Roll', 'roll selection restored')
+
 -- Both views draw with the host's ImGui API.  A metatable stands in for every method the
 -- window calls; Begin opens and Checkbox never clicks.
 HUB_C = { text = {1,1,1,1}, dim = {1,1,1,1}, cyan = {1,1,1,1}, gold = {1,1,1,1},
@@ -237,14 +322,14 @@ return 'OK: trust ids, data parsing, order, limits, commands and both views'
 
 
 def run_lua(script: str) -> str:
-    lupa = None
+    runtime_class = None
     if os.environ.get('TRUST_HUD_TEST_LUAJIT') != '1':
         try:
-            from lupa import LuaRuntime  # type: ignore  # noqa: F401
+            from lupa import LuaRuntime as runtime_class  # type: ignore  # noqa: F401
         except ImportError:
-            lupa = None
-    if lupa is not None:
-        runtime = LuaRuntime(unpack_returned_tuples=True)
+            runtime_class = None
+    if runtime_class is not None:
+        runtime = runtime_class(unpack_returned_tuples=True)
         return str(runtime.execute(script))
     if LUAJIT.is_file():
         wrapped = ('local ok, result = pcall(function()\n' + script
@@ -311,6 +396,22 @@ def check_live_server() -> None:
             raise SystemExit('Koru-Moru UI data has no End line')
 
         session.queue.clear()
+        session.command(['trust', '952', 'ui', 'hud2'])
+        lines = chat_lines(session)
+        if not any(line.startswith('TrustData|952|B|') for line in lines):
+            raise SystemExit('Koru-Moru compact UI data has no Begin line')
+        if not any(line.startswith('TrustData|952|I|') for line in lines):
+            raise SystemExit('Koru-Moru compact UI data has no id lines')
+        if not any(line.startswith('TrustData|952|K|') for line in lines):
+            raise SystemExit('Koru-Moru compact UI data has no kind lines')
+        if any(line.startswith('TrustData|952|A|') for line in lines):
+            raise SystemExit('Koru-Moru compact UI data still carries one row per line')
+        if len(lines) > 12:
+            raise SystemExit(f'Koru-Moru compact UI data is {len(lines)} lines')
+        if not any(line == 'TrustData|952|E' for line in lines):
+            raise SystemExit('Koru-Moru compact UI data has no End line')
+
+        session.queue.clear()
         session.command(['trust', '952', 'set', 'spells', '"Haste', 'II"', '"Refresh', 'II"'])
         if session.trust_actions.get(952) != [511, 473]:
             raise SystemExit(f'Koru-Moru set did not persist: {session.trust_actions}')
@@ -329,6 +430,7 @@ def main() -> int:
     block = helper_block()
     check_server_constants(block)
     check_wiring(source)
+    check_control_compiles(source)
     check_live_server()
     print(run_lua('hud = {}\n' + block + LUA_TEST))
     return 0

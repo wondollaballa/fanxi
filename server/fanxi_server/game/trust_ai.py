@@ -371,6 +371,9 @@ class AuraNeed:
     attack_ratio: float = 2.0
     party_melee: int = 1
     tp_ready: bool = False
+    #: The owner's current total haste (gear + magic + ability) as a fraction of 1.
+    #: A Geomancer's Indi-Haste fills the gap up to the magic-haste cap.
+    haste_percent: float = 1.0
 
 
 def choose_aura(kit: dict, need: AuraNeed) -> dict | None:
@@ -387,6 +390,13 @@ def choose_aura(kit: dict, need: AuraNeed) -> dict | None:
         return None
     if need.mp_percent < MP_LOW_PERCENT or need.party_mp_percent < PARTY_MP_LOW_PERCENT:
         spell = _aura(kit, "refresh")
+        if spell is not None:
+            return spell
+    # Haste first: a capped owner gets more turns, which is worth more than a caster's
+    # +21 Magic Atk. Bonus.  This is also the only place the Indi-Haste aura was ever
+    # referenced; the old chooser never picked it, so Sylvie sat on Acumen forever.
+    if need.haste_percent < HASTE_CAP_PERCENT:
+        spell = _aura(kit, "haste")
         if spell is not None:
             return spell
     if need.caster:

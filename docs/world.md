@@ -286,7 +286,16 @@ the built-in logic.  Chat uses
 `//trust <id|name> set spells|rolls "..." ...`, `//trust <id|name> songs`, and
 `//trust <id|name> set default`; the HUD's **Use default logic** checkbox is the same
 switch.  The selection is stored in `char_settings.trust_actions` (JSON keyed by Trust
-spell id), except Joachim's legacy `joachim_songs` key.
+spell id), except Joachim's legacy `joachim_songs` key.  A relog rebuilds the session
+from that row before the first Trust tick, so the altered egos keep the chosen actions;
+`test_world.py` pins that with a fresh-session test.
+
+The HUD asks `//trust <id> ui hud2` for the catalogue.  That compact form sends the
+action ids as four hex digits plus one category letter each, and the addon fills in the
+spell names and unlock levels from the client's own table; the older `ui hud` form still
+writes one `A` row per action for a client that has not rebuilt.  The compact lines are
+queued as one message per packet (`Msg.own_packet`), because a large chat burst is not
+delivered reliably and used to leave the Set dialog empty after a relog.
 
 A Trust also grows
 with its owner: it inherits half of the owner's gear modifiers at item level 119, scaled

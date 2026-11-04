@@ -72,8 +72,8 @@ key holds, frame captures, waits). Commands:
                              Done box; false saves and leaves), menu-side hiding, the default
                              corner reset (reset_positions) or the move-mode reset that parks all
                              six windows in the middle (center_positions), per-tab spell target
-                             modes (targets map, or target + target_tab; values selected, stnpc or
-                             stpc), and the character's saved //warp places for the Zoning spell
+                             modes (targets map, or target + target_tab; values selected, stnpc,
+                             stpc or me), and the character's saved //warp places for the Zoning spell
                              page (warp_marks: [{slot, alias, zone_name}, ...]); returns the
                              saved state (also in metrics.hud).  show_mounts is the Mount HUD,
                              show_target is the Target Debuffs window, show_equipview is the
@@ -3863,7 +3863,7 @@ local function hud_sanitize_type(key, raw)
             local count = 0
             for tab, mode in pairs(raw.targets) do
                 if type(tab) == 'string' and #tab <= 24 and count < 24
-                    and (mode == 'selected' or mode == 'stnpc' or mode == 'stpc') then
+                    and (mode == 'selected' or mode == 'stnpc' or mode == 'stpc' or mode == 'me') then
                     spec.targets[tab] = mode
                     count = count + 1
                 end
@@ -4326,6 +4326,7 @@ local function hud_click(hud, item)
         if self_only then target = '<me>'
         elseif mode == 'stnpc' then target = '<stnpc>'
         elseif mode == 'stpc' then target = '<stpc>'
+        elseif mode == 'me' then target = '<me>'
         else target = hud_target() end
     else
         target = hud_target()
@@ -4706,6 +4707,9 @@ function hud.ensure()
     hud.trust_menu.actions = {}
     hud.trust_menu.by_id = {}
     hud.trust_menu.selected = {}
+    hud.trust_menu.ids = {}
+    hud.trust_menu.kinds = ''
+    hud.trust_menu.main_job, hud.trust_menu.sub_job = 0, 0
     hud.trust_menu.auto = true
     hud.trust_menu.loading = false
     hud.trust_menu.notice = nil
@@ -5342,14 +5346,15 @@ local function hud_apply_type(spec, key, args)
             local count = 0
             for tab, mode in pairs(args.targets) do
                 if type(tab) == 'string' and #tab <= 24 and count < 24
-                    and (mode == 'selected' or mode == 'stnpc' or mode == 'stpc') then
+                    and (mode == 'selected' or mode == 'stnpc' or mode == 'stpc' or mode == 'me') then
                     spec.targets[tab] = mode
                     count = count + 1
                 end
             end
         end
         if type(args.target_tab) == 'string' and #args.target_tab <= 24
-            and (args.target == 'selected' or args.target == 'stnpc' or args.target == 'stpc') then
+            and (args.target == 'selected' or args.target == 'stnpc' or args.target == 'stpc'
+                 or args.target == 'me') then
             spec.targets[args.target_tab] = args.target
         end
     end
@@ -6717,19 +6722,24 @@ local function hud_spell_modes(api, width, spec, tab_key)
     tab_key = tab_key or 'Other'
     spec.targets = spec.targets or {}
     local target = spec.targets[tab_key] == 'stnpc' and 'stnpc'
-        or spec.targets[tab_key] == 'stpc' and 'stpc' or 'selected'
-    local target_short = target == 'stnpc' and 'NPC' or target == 'stpc' and 'PC' or 'Sel'
+        or spec.targets[tab_key] == 'stpc' and 'stpc'
+        or spec.targets[tab_key] == 'me' and 'me' or 'selected'
+    local target_short = target == 'stnpc' and 'NPC' or target == 'stpc' and 'PC'
+        or target == 'me' and 'Me' or 'Sel'
     local target_w = math.max(48, math.min(78, math.floor(width * 0.13)))
     local button_w = modes and math.max(40, math.floor((width - 8 - target_w - gap * n) / n)) or target_w
     api.PushFont(nil, font)
     if api.Button('Tgt:' .. target_short .. '##hud-spell-target', { target_w, button_h }) then
-        local next_target = target == 'selected' and 'stnpc' or target == 'stnpc' and 'stpc' or 'selected'
+        local next_target = target == 'selected' and 'stnpc' or target == 'stnpc' and 'stpc'
+            or target == 'stpc' and 'me' or 'selected'
         spec.targets[tab_key] = next_target
         hud_save(hud.state, hud.path)
         if next_target == 'stnpc' then
             xi.chat.write('HUD: ' .. tab_key .. ' spells use the NPC sub-cursor (<stnpc>)', 1)
         elseif next_target == 'stpc' then
             xi.chat.write('HUD: ' .. tab_key .. ' spells use the party sub-cursor (<stpc>)', 1)
+        elseif next_target == 'me' then
+            xi.chat.write('HUD: ' .. tab_key .. ' spells cast on <me>', 1)
         else
             xi.chat.write('HUD: ' .. tab_key .. ' spells use the selected target', 1)
         end
@@ -6741,6 +6751,8 @@ local function hud_spell_modes(api, width, spec, tab_key)
         caption = 'Target: NPC sub-cursor (<stnpc>). Click for the party cursor.'
     elseif target == 'stpc' then
         caption = 'Target: party sub-cursor (<stpc>). Tab picks a party member.'
+    elseif target == 'me' then
+        caption = 'Target: <me> (self). Click for the selected target.'
     else
         caption = 'Target: selected (<t>/<me>). Click for the NPC cursor.'
     end
@@ -9634,6 +9646,12 @@ hud.trust_category = {
     cure = 'CURES', buff = 'BUFFS', debuff = 'DEBUFFS',
     aura = 'AURAS', nuke = 'NUKES', song = 'SONGS', roll = 'ROLLS',
 }
+-- The compact server catalogue carries one letter per action; keep in step with
+-- TRUST_HUD_KIND_CHAR in server/fanxi_server/game/zone.py.
+hud.trust_kind_letter = {
+    c = 'cure', b = 'buff', d = 'debuff', a = 'aura', n = 'nuke',
+    s = 'song', r = 'roll',
+}
 hud.trust_menu = {
     open = false,
     mode = 'menu',
@@ -9646,6 +9664,12 @@ hud.trust_menu = {
     actions = {},
     by_id = {},
     selected = {},
+    -- The compact catalogue (//trust <id> ui hud2): ids in display order, one
+    -- category letter per id, and the Trust's job pair for the level column.
+    ids = {},
+    kinds = '',
+    main_job = 0,
+    sub_job = 0,
     auto = true,
     loading = false,
     notice = nil,
@@ -9703,6 +9727,89 @@ function hud.trust_selected_names()
     return out
 end
 
+-- The compact catalogue sends four hex digits per id; parse them back to numbers.
+function hud.trust_hex_ids(text)
+    local out = {}
+    for hex in tostring(text or ''):gmatch('%x%x%x%x') do
+        local action_id = tonumber(hex, 16)
+        if action_id and action_id > 0 then out[#out + 1] = action_id end
+    end
+    return out
+end
+
+-- The client's own spell/ability table names an id, so the compact catalogue does not
+-- have to spend a chat line on every name.  `res` is the file-local alias of xi.res
+-- (line 98) in the addon; the test block has no such local and supplies a global stub.
+function hud.trust_res_record(kind, action_id)
+    local lib = res
+    if type(lib) ~= 'table' or type(lib[kind]) ~= 'function' then return nil end
+    local ok, record = pcall(lib[kind], action_id)
+    return ok and record or nil
+end
+
+function hud.trust_record_name(record)
+    if type(record) ~= 'table' then return nil end
+    local name = record.name_utf8 or record.name
+    if type(name) == 'table' then name = name.en or name[2] or name[1] end
+    if type(name) ~= 'string' then return nil end
+    name = name:gsub('%z', ''):match('^%s*(.-)%s*$')
+    if name == '' or name == '.' then return nil end
+    return name
+end
+
+-- The name and unlock level of one catalogue id.  Rolls are job abilities, not spells;
+-- their ids overlap the spell table, so the kind decides which table wins.
+function hud.trust_action_info(action_id, kind)
+    local spell, ability
+    if kind == 'roll' then
+        -- The client's ability table names a job ability as 0x200 + its id; the server's
+        -- roll table carries the bare id (98 = Fighter's Roll, 105 = Chaos Roll).
+        ability = hud.trust_res_record('ability', 0x200 + action_id)
+            or hud.trust_res_record('ability', action_id)
+    else
+        spell = hud.trust_res_record('spell', action_id)
+        if not spell then ability = hud.trust_res_record('ability', action_id) end
+    end
+    local name = hud.trust_record_name(spell) or hud.trust_record_name(ability)
+    if not name then return nil, 0 end
+    local level = 0
+    local state = hud.trust_menu
+    if spell and type(spell.levels) == 'table' then
+        local main = tonumber(state.main_job) or 0
+        if main > 0 then level = tonumber(spell.levels[main]) or 0 end
+        if level <= 0 then
+            local sub = tonumber(state.sub_job) or 0
+            local sub_level = sub > 0 and tonumber(spell.levels[sub]) or 0
+            if sub_level and sub_level > 0 and sub_level <= 49 then level = sub_level end
+        end
+        level = math.max(0, tonumber(level) or 0)
+    end
+    return name, level
+end
+
+-- Turn the compact id/letter streams into the same rows the legacy A lines carried.
+function hud.trust_build_actions()
+    local state = hud.trust_menu
+    local actions, seen = {}, {}
+    for index, action_id in ipairs(state.ids) do
+        if not seen[action_id] then
+            seen[action_id] = true
+            local kind = hud.trust_kind_letter[state.kinds:sub(index, index)]
+                or (state.kind == 'roll' and 'roll')
+                or (state.kind == 'song' and 'song') or 'buff'
+            local name, level = hud.trust_action_info(action_id, kind)
+            if name then
+                actions[#actions + 1] = {
+                    id = action_id, name = name, level = level, kind = kind,
+                }
+            end
+        end
+    end
+    state.actions = actions
+    state.by_id = {}
+    for _, row in ipairs(actions) do state.by_id[row.id] = row end
+end
+
 function hud.trust_data(text)
     local parts = {}
     for part in (tostring(text or '') .. '|'):gmatch('([^|]*)|') do
@@ -9719,14 +9826,37 @@ function hud.trust_data(text)
         state.limit = tonumber(parts[5]) or state.limit
         state.auto = parts[6] == '1'
         state.actions, state.by_id, state.selected = {}, {}, {}
-        for part in (parts[7] or ''):gmatch('[^,]+') do
-            local action_id = tonumber(part)
-            if action_id and action_id > 0 then
-                state.selected[#state.selected + 1] = action_id
+        state.ids, state.kinds = {}, ''
+        state.main_job, state.sub_job = 0, 0
+        if parts[8] ~= nil then
+            -- Compact header: |main job|sub job[|selected ids, hex]
+            state.main_job = tonumber(parts[7]) or 0
+            state.sub_job = tonumber(parts[8]) or 0
+            state.selected = hud.trust_hex_ids(parts[9] or '')
+        else
+            -- Legacy header: |selected,ids
+            for part in (parts[7] or ''):gmatch('[^,]+') do
+                local action_id = tonumber(part)
+                if action_id and action_id > 0 then
+                    state.selected[#state.selected + 1] = action_id
+                end
             end
         end
         state.loading = true
         state.at = os.clock()
+    elseif op == 'S' then
+        -- The selection did not fit beside the header (24 ids on a long Trust name).
+        state.selected = hud.trust_hex_ids(parts[3] or '')
+    elseif op == 'I' then
+        for _, action_id in ipairs(hud.trust_hex_ids(parts[3] or '')) do
+            state.ids[#state.ids + 1] = action_id
+        end
+        -- Datagrams can overtake each other: if End already arrived, fold this chunk in
+        -- now instead of leaving the picker with the rows it had at End.
+        if not state.loading and #state.ids > 0 then hud.trust_build_actions() end
+    elseif op == 'K' then
+        state.kinds = state.kinds .. tostring(parts[3] or '')
+        if not state.loading and #state.ids > 0 then hud.trust_build_actions() end
     elseif op == 'A' then
         local action_id = tonumber(parts[3]) or 0
         if action_id <= 0 or state.by_id[action_id] then return end
@@ -9739,6 +9869,7 @@ function hud.trust_data(text)
         state.actions[#state.actions + 1] = row
         state.by_id[action_id] = row
     elseif op == 'E' then
+        if #state.ids > 0 then hud.trust_build_actions() end
         local selected, seen = {}, {}
         for _, action_id in ipairs(state.selected) do
             if state.by_id[action_id] and not seen[action_id] then
@@ -9789,14 +9920,19 @@ function hud.trust_open(item)
     state.label = config.label
     state.limit = config.limit
     state.actions, state.by_id, state.selected = {}, {}, {}
+    state.ids, state.kinds = {}, ''
+    state.main_job, state.sub_job = 0, 0
     state.auto = true
     state.loading = true
     state.notice = nil
     state.at = os.clock()
     hud.next_trust_scan = 0
     hud_refresh_trusts()
+    -- hud2 is the compact catalogue: ids and category letters only.  The legacy
+    -- one-row-per-line form floods the chat pipe and the dialog opened empty after a
+    -- relog, which made players re-pick every spell.
     local ok, err = pcall(xi.chat.run,
-        string.format('//trust %d ui hud', state.trust_id), 1)
+        string.format('//trust %d ui hud2', state.trust_id), 1)
     if not ok then
         state.loading = false
         state.notice = tostring(err)
@@ -9846,7 +9982,10 @@ function hud.trust_window(api)
     local state = hud.trust_menu
     if not state.open then return end
     hud_refresh_trusts()
-    if state.loading and os.clock() - (state.at or 0) > 5 then
+    -- The compact catalogue is eight short packets, but a slow link (or a busy zone)
+    -- still needs room for a couple of missed flushes; the old five seconds fired before
+    -- the legacy catalogue's first rows had even arrived.
+    if state.loading and os.clock() - (state.at or 0) > 12 then
         state.loading = false
         state.notice = 'Could not read the action list; try again.'
     end
