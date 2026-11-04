@@ -53,7 +53,7 @@ import { SetStatTotals } from "./SetStatTotals";
 import { LiveSetStats } from "./LiveSetStats";
 import { useCharacterStatReport } from "../lib/characterstats";
 import { useGearStats } from "../lib/gearstats";
-import { augmentsForSlot, splitAugments } from "../lib/itemcard";
+import { augmentsForSetItem, augmentsForSlot, splitAugments } from "../lib/itemcard";
 import {
   Badge,
   Button,
@@ -842,14 +842,32 @@ export function GearPage({
   }, [library]);
   const selectedDetails: Record<string, GearItem> =
     library && selected ? library.detailed[selected] ?? {} : {};
+  // A GearSwap set often names only the piece. When the library does not spell out the
+  // augments, fall back to the matching bag copy so the hover card, set preview and Set
+  // totals see the actual Oseem/Ambuscade block the character owns.
+  const selectedAugments = useMemo(() => {
+    const out: Record<string, string[]> = {};
+    for (const slot of SLOT_KEYS) {
+      const name = selectedItems[slot];
+      if (!name) continue;
+      const fromLibrary = selectedDetails[slot]?.augments ?? [];
+      if (fromLibrary.length) {
+        out[slot] = fromLibrary;
+        continue;
+      }
+      const fromBag = augmentsForSetItem(bagItems, name);
+      if (fromBag.length) out[slot] = fromBag;
+    }
+    return out;
+  }, [selectedItems, selectedDetails, bagItems]);
   const statQueries = useMemo(
     () =>
       SLOT_KEYS.filter((slot) => selectedItems[slot]).map((slot) => ({
         slot,
         name: selectedItems[slot],
-        augments: selectedDetails[slot]?.augments ?? [],
+        augments: selectedAugments[slot] ?? [],
       })),
-    [selectedItems, selectedDetails],
+    [selectedItems, selectedAugments],
   );
   const gearStats = useGearStats(
     tab === "manage" ? instance?.port ?? null : null,
@@ -867,15 +885,6 @@ export function GearPage({
     [gearStats.items],
   );
 
-  // The hover card's augment rows. A GearSwap set keeps them with the piece; the live grid has
-  // to read them back from the equipped bag copy, because two copies of one item can differ.
-  const selectedAugments = useMemo(() => {
-    const out: Record<string, string[]> = {};
-    for (const [slot, detail] of Object.entries(selectedDetails)) {
-      if (detail?.augments?.length) out[slot] = detail.augments;
-    }
-    return out;
-  }, [selectedDetails]);
   const editorAugments = useMemo(() => {
     const out: Record<string, string[]> = {};
     for (const [slot, picked] of Object.entries(editor?.details ?? {})) {
@@ -2152,8 +2161,8 @@ export function GearPage({
                         </div>
                         <div className="set-items">
                           {SLOT_KEYS.filter((slot) => selectedItems[slot]).map((slot) => {
-                            const detail = selectedDetails[slot];
                             const stats = statsBySlot[slot];
+                            const augments = selectedAugments[slot] ?? [];
                             return (
                               <div key={slot} className="set-item">
                                 <span className="set-slot">{slotLabel(slot)}</span>
@@ -2169,12 +2178,12 @@ export function GearPage({
                                       ))}
                                     </div>
                                   ) : null}
-                                  {detail?.augments?.length ? (
+                                  {augments.length ? (
                                     <div
                                       className="augments"
-                                      title="Augments recorded in this GearSwap set"
+                                      title="Augments recorded in this GearSwap set or on the matching bag copy"
                                     >
-                                      {detail.augments.map((augment, index) => (
+                                      {augments.map((augment, index) => (
                                         <span key={`${augment}-${index}`}>{augment}</span>
                                       ))}
                                     </div>

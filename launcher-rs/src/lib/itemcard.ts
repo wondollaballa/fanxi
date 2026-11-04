@@ -104,6 +104,24 @@ export function augmentsForSlot(
   return splitAugments((augmented ?? sameItem[0])?.augments);
 }
 
+/**
+ * Augment rows for a GearSwap set slot. A library often names only the piece, while the
+ * actual bag copy carries the Oseem/Ambuscade block; when the set itself does not spell
+ * out the augments, show the matching copy the character owns. The first augmented copy
+ * wins so two differently-rolled pieces remain distinguishable by their library entries.
+ */
+export function augmentsForSetItem(
+  rows: CharacterBagItem[],
+  name: string | undefined,
+): string[] {
+  if (!name || rows.length === 0) return [];
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return [];
+  const matches = rows.filter((row) => row.name.trim().toLowerCase() === wanted);
+  const augmented = matches.find((row) => (row.augments ?? "").trim());
+  return splitAugments(augmented?.augments);
+}
+
 const BAGS = new Map<number, CharacterBagItem[]>();
 const BAG_REQUESTS = new Map<number, Promise<CharacterBagItem[]>>();
 

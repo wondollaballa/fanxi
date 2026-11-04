@@ -594,7 +594,10 @@ launcher. The character has to be in a zone and the **server must be running the
 then the card says it is waiting for the live sheet. The refresh button re-reads the report. The
 Manage tab's **Set totals** remain the client-tooltip/augment view for a GearSwap set; they are a
 set preview, not the live character sheet.  They normally agree once the set is worn, because the
-server reads `item_mods` instead of the tooltip.  A live total lower than the tooltip total usually
+server reads `item_mods` instead of the tooltip.  When a library set names only the piece and does
+not spell out its augments, the preview falls back to the matching bag copy's decoded rows, so an
+Oseem or Ambuscade block still contributes to the card and the totals.  A live total lower than the
+tooltip total usually
 means the server's item table has no row for that piece (some client-only gear is absent from the
 LandSandBoat dump); the live sheet is the authoritative one, and the fix belongs in a migration.
 

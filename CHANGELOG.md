@@ -1,5 +1,21 @@
 # Changelog
 
+## Unreleased — the set preview reads the bag copy's augments
+
+- **A GearSwap set that names only the piece now shows the copy's augments on its card and Set
+  totals.** The Manage tab used to read augments only from the library's own `augments` table; a
+  set listing `Chironic Hat` (and the other Oseem/Ambuscade pieces) without spelling the block out
+  showed base stats only, even though the bag row carried the decoded augment rows. The set
+  preview now falls back to the matching bag copy the character owns, so the hover card, the set
+  item rows and **Set totals** include Magic Accuracy, INT, SIRD and the rest. A set that does
+  spell out its augments keeps its own values.
+- **The server's `Spell Interruption Rate Down-11%` spelling totals as the canonical SIRD row.**
+  `DOWN_RE` only rewrote `down 11` (with a space), so the hyphenated form the glyptic decoder
+  emits became a separate `Spell Interruption Rate Down` stat and missed the SIRD cap. It now
+  aliases to `Spell interruption rate`.
+- Tests: `cargo test --manifest-path launcher-rs/src-tauri/Cargo.toml gear_stats` pins both SIRD
+  spellings and the full Chironic block; `npm run check` and the production build pass.
+
 ## Unreleased — the launcher explains a full inventory
 
 - **A purchase that cannot fit opens an Inventory full dialog, not just a toast.** The dialog

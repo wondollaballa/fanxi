@@ -1024,6 +1024,14 @@ const ALIASES: &[(&str, &str, &str)] = &[
         "Spell interruption rate",
     ),
     (
+        // The server's augment text writes the penalty as "Spell Interruption Rate
+        // Down-11%"; DOWN_RE only rewrites "down 11", so the hyphenated form would
+        // otherwise total as its own stat and miss the SIRD cap.
+        "spell interruption rate down",
+        "spell interruption rate",
+        "Spell interruption rate",
+    ),
+    (
         "shield block rate",
         "shield block rate",
         "Shield block rate",
@@ -1302,6 +1310,26 @@ mod tests {
         let rate = stat(&stats, "Spell interruption rate");
         assert_eq!(rate.value, -5);
         assert!(rate.percent);
+    }
+
+    #[test]
+    fn reads_the_server_spelling_of_sird() {
+        let stats = parse_augment("Spell Interruption Rate Down-11%");
+        let rate = stat(&stats, "Spell interruption rate");
+        assert_eq!(rate.value, -11);
+        assert!(rate.percent);
+    }
+
+    #[test]
+    fn reads_the_chironic_glyptic_rows() {
+        let stats = parse_augment(
+            "Magic Accuracy+40 | Spell Interruption Rate Down-11% | INT+15 | MND+15 | Physical Damage Taken-5%",
+        );
+        assert_eq!(stat(&stats, "Magic Accuracy").value, 40);
+        assert_eq!(stat(&stats, "Spell interruption rate").value, -11);
+        assert_eq!(stat(&stats, "INT").value, 15);
+        assert_eq!(stat(&stats, "MND").value, 15);
+        assert_eq!(stat(&stats, "Physical damage taken").value, -5);
     }
 
     #[test]
