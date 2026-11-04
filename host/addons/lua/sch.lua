@@ -1651,7 +1651,7 @@ function W.editor(api)
         end
         api.Separator()
         text(api, COLORS.cyan, 'MAGIC BURST SEQUENCE')
-        text(api, COLORS.faint, 'After the closing spell, inside the ~11 s window.')
+        text(api, COLORS.faint, 'After the closing spell, inside the ~15 s window.')
         if api.BeginChild('sch_bursts', { 0, 88 }, true) then
             if #draft.bursts == 0 then
                 text(api, COLORS.dim, 'None')

@@ -1372,6 +1372,9 @@ if xi.phase and xi.events and xi.events.on then
             if #data >= 4 + 0x2E then
                 local zone = data:byte(4 + 0x2C + 1) + data:byte(4 + 0x2C + 2) * 256
                 if zone > 0 then xi.phase.zone(zone, zone_town(zone)) end
+                -- A zone-in is the last reliable moment before a logout: flush the
+                -- dragged window positions so they survive the next login.
+                if hud and hud.save_now then hud.save_now() end
             end
         elseif e.id == 0x01B then
             -- Job/equipment block: body offset 4 is the main job and offset 7 the support job.
@@ -2909,7 +2912,7 @@ local HUD_SC_DELAY = 3.0
 -- The server's skillchain window: 11 s for the opener; a level-1 link keeps the full
 -- 11 s (the Savage Blade / Hot Shot loop), while a level-2/3 link loses a second per
 -- step.  That is one second longer than AutoSkillchains' 10 s base (see skillchain.py).
-local HUD_SC_BASE = 11.0
+local HUD_SC_BASE = 15.0
 -- The server accepts a close up to half a second after the window closes (the status
 -- effect's tick).  The HUD uses the same allowance when deciding whether a new TP drop
 -- continues the chain or starts a fresh opener.
@@ -4096,6 +4099,10 @@ local function hud_save(state, path)
         },
     }))
     file:close()
+end
+
+function hud.save_now()
+    if hud.state and hud.path then hud_save(hud.state, hud.path) end
 end
 
 local hud_icon_textures = {}
@@ -10057,6 +10064,12 @@ function hud.trust_window(api)
             if hub_button(api, 'Set ' .. state.label, HUB_C.cyan, 190) then
                 state.mode = 'actions'
                 state.notice = nil
+            end
+            if hub_button(api, 'Release all', HUB_C.red, 120) then
+                local ok, err = pcall(xi.chat.run, '//trust release all', 1)
+                if not ok then state.notice = tostring(err) end
+                if type(hud.active_trusts) == 'table' then hud.active_trusts = {} end
+                state.notice = 'Released every alter ego.'
             end
             if hub_button(api, 'Close', HUB_C.dim, 80) then
                 state.open = false

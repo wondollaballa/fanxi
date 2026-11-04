@@ -186,8 +186,9 @@ RESISTANCE_RANK_MULTIPLIER = {
 # AutoSkillchains (SnickySnacks/AutoSkillchains) is the retail reference for the
 # displayed window: `times = clock + delay + 8 - step`, where `delay` is the weapon
 # skill's 3 s action lock and `step` is 1 for the opener, 2 for the first link, and so
-# on.  That is 10/9/8/7 s, shrinking one second per link.  Fanxi deliberately adds one
-# second to the base: 11/10/9/8/7 s, which leaves room for the slower TP cycles here.
+# on.  That is 10/9/8/7 s, shrinking one second per link.  Fanxi deliberately adds four
+# seconds to the base: 15/14/13/12/11 s, which leaves room for the slower TP cycles and
+# for two or three burst casts inside one window.
 #
 # Fanxi differs from retail in one more place: a **level-1 link keeps the full
 # OPEN_SECONDS**.  Retail shrinks the window for every link, so a level-1 loop
@@ -198,7 +199,7 @@ RESISTANCE_RANK_MULTIPLIER = {
 # job while the level-2/3 chains still shrink exactly as retail does.  A status effect
 # expires on its container's next tick, so a close up to 0.5 s past the boundary still
 # lands.
-OPEN_SECONDS = 11.0
+OPEN_SECONDS = 15.0
 CHAIN_DELAY_SECONDS = 3.0
 MAX_CHAIN_COUNT = 5
 CLOSE_GRACE_SECONDS = 0.5
@@ -208,7 +209,7 @@ CLOSE_GRACE_SECONDS = 0.5
 # exception.  It matters for level-2/3 chains now that level-1 links already keep the
 # full window.
 DIAMOND_ASPIS_ITEM_ID = 26488
-DIAMOND_ASPIS_SECONDS = 11.0
+DIAMOND_ASPIS_SECONDS = 15.0
 
 # 0x028 additional-effect proc ids (``ActionProcSkillChain``).  Note that this is a
 # permutation of the SC_* ids and that Light II / Darkness II use the Light / Darkness
@@ -324,7 +325,7 @@ def advance(state: SkillchainState | None, props, now: float, *,
     opened (or reset) the state.  A WS with no properties does not alter the state at
     all, matching LSB's ``primary_sc != 0`` gate.  ``diamond`` is set when the closing
     weapon skill's owner wears the Diamond Aspis: the next window is then the full
-    ``OPEN_SECONDS`` (11 s) at any step of the chain.  Without it a level-1 link still
+    ``OPEN_SECONDS`` (15 s) at any step of the chain.  Without it a level-1 link still
     keeps the full window; only level-2/3 links shrink (see :func:`_next_window`).
     ``opener`` labels the state for the log; a formed chain keeps the character that
     opened it, so a closing line can say who it is chaining with.
