@@ -428,6 +428,69 @@ class ApiTest(unittest.TestCase):
                     if entry["job"] == "WAR")["copies"][0]
         self.assertEqual(copy["current"]["text"], "not augmented")
 
+    def test_reive_cape_card_and_detrovio_augment(self):
+        token = self.register()["token"]
+        character = json.loads(self.call(
+            "POST", "/api/v1/characters",
+            {"name": "Reive", "race": 1, "face": 1, "size": 1, "nation": 0},
+            token=token).payload)["character"]
+        base = "/api/v1/characters/%d" % character["id"]
+        self.call("POST", base + "/gil", {"top_off": True}, token=token)
+
+        data = json.loads(self.call("GET", base + "/data", token=token).payload)
+        self.assertEqual(len(data["reive"]["capes"]), 22)
+        pld = next(entry for entry in data["reive"]["capes"]
+                   if entry["job"] == "PLD")
+        self.assertEqual(pld["name"], "Weard Mantle")
+        self.assertEqual(pld["owned"], 0)
+        self.assertEqual(len(pld["rows"]), 4)
+        self.assertEqual(pld["rows"][2]["best"], 7)
+        self.assertIn("source", data["reive"])
+
+        bought = self.call("POST", base + "/armory", {"item_id": 28623}, token=token)
+        self.assertEqual(bought.status, 201, bought.payload)
+        pld = next(entry for entry in json.loads(bought.payload)["data"]["reive"]["capes"]
+                   if entry["job"] == "PLD")
+        copy = pld["copies"][0]
+
+        applied = self.call("POST", base + "/progress", {
+            "op": "reive-augment", "container": copy["container"],
+            "slot": copy["slot"],
+            "choices": {"dex": 5, "vit": 5, "enmity": 7, "phalanx": 5},
+        }, token=token)
+        self.assertEqual(applied.status, 200, applied.payload)
+        pld = next(entry for entry in json.loads(applied.payload)["reive"]["capes"]
+                   if entry["job"] == "PLD")
+        self.assertEqual(pld["copies"][0]["current"]["text"],
+                         "DEX+5, VIT+5, Enmity+7, Phalanx+5")
+        self.assertEqual(pld["copies"][0]["current"]["selection"],
+                         {"dex": 5, "vit": 5, "enmity": 7, "phalanx": 5})
+
+        # The cape only offers its own four rows, and a value must be in range.
+        bad_option = self.call("POST", base + "/progress", {
+            "op": "reive-augment", "container": copy["container"],
+            "slot": copy["slot"], "choices": {"str": 5},
+        }, token=token)
+        self.assertEqual(bad_option.status, 422, bad_option.payload)
+        bad_value = self.call("POST", base + "/progress", {
+            "op": "reive-augment", "container": copy["container"],
+            "slot": copy["slot"], "choices": {"enmity": 8},
+        }, token=token)
+        self.assertEqual(bad_value.status, 422, bad_value.payload)
+        missing = self.call("POST", base + "/progress", {
+            "op": "reive-clear", "container": 99, "slot": 99,
+        }, token=token)
+        self.assertEqual(missing.status, 404, missing.payload)
+
+        cleared = self.call("POST", base + "/progress", {
+            "op": "reive-clear", "container": copy["container"],
+            "slot": copy["slot"],
+        }, token=token)
+        self.assertEqual(cleared.status, 200, cleared.payload)
+        pld = next(entry for entry in json.loads(cleared.payload)["reive"]["capes"]
+                   if entry["job"] == "PLD")
+        self.assertEqual(pld["copies"][0]["current"]["text"], "not augmented")
+
     def test_nolan_and_oseem_cards(self):
         token = self.register()["token"]
         character = json.loads(self.call(

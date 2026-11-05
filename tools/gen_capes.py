@@ -115,6 +115,9 @@ def doc() -> str:
     lines = [
         "# Ambuscade JSE cape augments",
         "",
+        "> This page covers the **Ambuscade** capes.  The Reive and Incursion capes",
+        "> (Detrovio / Refractive Crystal) are in [reive-capes.md](reive-capes.md).",
+        "",
         "All 22 jobs have one Ambuscade cape, and every cape build is a copy of the",
         "same job item with a five-slot standard augment block:",
         "",

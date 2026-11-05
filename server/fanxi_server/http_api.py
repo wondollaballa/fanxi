@@ -18,7 +18,8 @@ from urllib.parse import parse_qs, urlsplit
 from . import __version__
 from .config import Config
 from .security import ValidationError, safe_equal
-from .game import augment_gear, capes, glyptics, magian, mezzotint, moonshade, sinister, skirmish
+from .game import (augment_gear, capes, glyptics, magian, mezzotint, moonshade, reive,
+                   sinister, skirmish)
 from .service import ApiError, FanxiService, GIL_MAX
 
 log = logging.getLogger("fanxi.http")
@@ -502,7 +503,7 @@ class Api:
             int(row["id"]), query, family=family))
 
     def character_progress(self, request: Request) -> Response:
-        """Ranks, fame, jobs, crafts, Trusts, augment paths, cape, Nolan and Oseem augments."""
+        """Ranks, fame, jobs, crafts, Trusts, augment paths, capes and the augment cards."""
         row = self._data_character(request)
         cid = int(row["id"])
         body = request.json()
@@ -569,6 +570,21 @@ class Api:
         elif op == "cape-clear":
             try:
                 capes.clear(self.service, cid, body.get("container"), body.get("slot"))
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "reive-augment":
+            try:
+                reive.apply(self.service, cid, body.get("container"), body.get("slot"),
+                            body.get("choices") or {})
+            except LookupError as exc:
+                raise ApiError(404, "not_found", str(exc))
+            except (TypeError, ValueError) as exc:
+                raise ApiError(422, "validation_error", str(exc))
+        elif op == "reive-clear":
+            try:
+                reive.clear(self.service, cid, body.get("container"), body.get("slot"))
             except LookupError as exc:
                 raise ApiError(404, "not_found", str(exc))
             except (TypeError, ValueError) as exc:

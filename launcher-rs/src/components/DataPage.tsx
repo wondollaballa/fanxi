@@ -23,6 +23,7 @@ import { backend, LauncherError } from "../lib/api";
 import { INVENTORY_FULL_MESSAGE, INVENTORY_FULL_TOAST, isInventoryFull } from "../lib/inventory";
 import { useTablePagination } from "../lib/pagination";
 import { AmbuscadeCapes } from "./AmbuscadeCapes";
+import { ReiveCapes } from "./ReiveCapes";
 import { InventoryFullDialog } from "./InventoryFullDialog";
 import { NolanMezzotint } from "./NolanMezzotint";
 import { OseemGlyptics } from "./OseemGlyptics";
@@ -154,14 +155,14 @@ const DATA_TABS = [
   {
     key: "progression",
     label: "Progression",
-    hint: "Mission ranks, jobs and Master Levels, skills, Trusts, RP paths and Oboro weapons.",
+    hint: "Mission ranks, jobs and Master Levels, skills, Trusts, RP paths and Oboro weapons and JSE necks.",
     icon: TrendingUp,
   },
   {
     key: "augments",
     label: "Augments",
     hint:
-      "Ambuscade capes, Nolan mezzotints, Oseem glyptics, Skirmish, Sinister Reign, Moonshade, Magian and Shantotto's Ascension.",
+      "Ambuscade and Reive/Incursion capes (Detrovio), Nolan mezzotints, Oseem glyptics, Skirmish, Sinister Reign, Moonshade, Magian and Shantotto's Ascension.",
     icon: Sparkles,
   },
   {
@@ -406,7 +407,7 @@ export function DataPage({
     } catch (problem) {
       if (isInventoryFull(problem)) {
         // The Armory card has its own dialog; this covers the other Data-page
-        // buy paths (the Oboro weapon card) with the same instructions.
+        // buy paths (the Oboro card) with the same instructions.
         setError(INVENTORY_FULL_MESSAGE);
         notify(INVENTORY_FULL_TOAST, "error");
       } else {
@@ -552,7 +553,7 @@ export function DataPage({
       <SectionHeader
         eyebrow="Data"
         title="Character data"
-        subtitle="Assign merits, job points, profile values, ranks, levels, skills, travel, currencies, key items, Trusts, RP paths, Oboro weapon augments, Ambuscade cape augments, Nolan mezzotints, Oseem Arcane Glyptics, Skirmish, Sinister Reign, Moonshade and Magian trials, Armory gear and general items to the selected tenant. The tabs keep each group one click away."
+        subtitle="Assign merits, job points, profile values, ranks, levels, skills, travel, currencies, key items, Trusts, RP paths, Oboro weapon and JSE neck augments, Ambuscade and Reive/Incursion cape augments, Nolan mezzotints, Oseem Arcane Glyptics, Skirmish, Sinister Reign, Moonshade and Magian trials, Armory gear and general items to the selected tenant. The tabs keep each group one click away."
         actions={
           <>
             <Button
@@ -939,6 +940,8 @@ export function DataPage({
             {tab === "augments" && (
               <>
                 <AmbuscadeCapes data={data} run={run} busy={busy} />
+
+                <ReiveCapes data={data} run={run} busy={busy} />
 
                 <NolanMezzotint data={data} run={run} busy={busy} />
 

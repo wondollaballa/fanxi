@@ -6131,6 +6131,159 @@ button.ev-cell:hover {
   font-size: 9px;
 }
 
+/* Enfeebles: one row per spell kind, then the gear preview for the kind that is open.
+   The rows and the Mode dropdown edit the same categories; Mode only forces one set. */
+.phase-kind-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 4px;
+  min-width: 0;
+}
+
+.phase-kind-label {
+  display: inline-flex;
+  flex: 0 0 74px;
+  align-items: center;
+  gap: 5px;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--muted-2);
+  font: inherit;
+  font-size: 9px;
+  font-weight: 600;
+  letter-spacing: 0.05em;
+  text-align: left;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.phase-kind-label:hover,
+.phase-kind-row.selected .phase-kind-label {
+  color: var(--accent);
+}
+
+.phase-kind-label em {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--muted-2);
+  font-size: 7px;
+  font-style: normal;
+  letter-spacing: 0;
+}
+
+.phase-kind-row .phase-inline-select {
+  flex: 1;
+}
+
+.phase-kind-gear {
+  margin-top: 8px;
+  padding: 7px 8px 8px;
+  border: 1px solid var(--border-soft);
+  border-radius: 7px;
+  background: rgba(0, 0, 0, 0.16);
+}
+
+.phase-kind-gear-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.phase-kind-gear-head code {
+  overflow: hidden;
+  color: var(--muted-2);
+  font-size: 8.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phase-kind-gear-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 6px;
+}
+
+.phase-kind-pieces {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 2px 10px;
+  min-width: 0;
+}
+
+.phase-kind-pieces span {
+  display: flex;
+  gap: 5px;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 8.5px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.phase-kind-pieces b {
+  flex: 0 0 42px;
+  color: var(--muted-2);
+  font-size: 8px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
+.phase-kind-spells {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 3px 5px;
+  margin: 7px 0 0;
+}
+
+.phase-kind-spells span {
+  padding: 1px 5px;
+  border: 1px solid var(--border-soft);
+  border-radius: 5px;
+  color: var(--muted-2);
+  font-size: 8px;
+}
+
+.phase-kind-spells em {
+  color: var(--muted-2);
+  font-size: 8.5px;
+}
+
+/* A buff-conditional overlay (Saboteur hands): the one swap laid over the kind set. */
+.phase-kind-overlay {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 3px 8px;
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px dashed var(--border-soft);
+}
+
+.phase-kind-overlay .eyebrow {
+  color: var(--accent);
+}
+
+.phase-kind-overlay span {
+  color: var(--muted);
+  font-size: 8.5px;
+}
+
+.phase-mode-forced {
+  overflow: hidden;
+  color: var(--accent);
+  font-size: 8px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .phase-card-row {
   display: flex;
   align-items: center;
@@ -7785,6 +7938,11 @@ button.ev-cell:hover {
   grid-template-columns: repeat(3, minmax(0, 1fr));
 }
 
+/* A JSE neck has one path, so its card shows a single full-width row. */
+.data-paths-1 {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .data-path {
   display: flex;
   flex-direction: column;
@@ -8005,6 +8163,20 @@ button.ev-cell:hover {
 .cape-actions-note {
   color: var(--muted-2);
   font-size: 10px;
+}
+
+/* Detrovio Reive/Incursion capes: four independent augment rows. */
+.reive-rows {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
+@media (max-width: 720px) {
+  .reive-rows {
+    grid-template-columns: 1fr;
+  }
 }
 
 @media (max-width: 1180px) {

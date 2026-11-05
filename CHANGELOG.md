@@ -1,5 +1,98 @@
 # Changelog
 
+## Unreleased — all 22 JSE necks augment at Oboro
+
+- **Oboro now augments the JSE necks, not just the Dynamis-Divergence weapons.** All 22 necks
+  × three qualities (NQ R15, +1 R20, +2 R25) are in `data/oboro_r25.json` and the Data page's
+  Oboro card, grouped under **JSE necks**. A neck has one path; its three qualities share the
+  job's client bundle (199-220, FFXI job order), and the block's rank/tier prints the R15,
+  R20 or R25 row. Capping writes the same 24-byte `AugmentBundle` block the weapons use and
+  sends `//reload` to a live client, so the neck's tooltip shows its three augment lines.
+- **The RDM neck is real gear now.** `Duelist's Torque +2` (bundle 203) at R25 is INT/MND +15,
+  enhancing magic duration +25% and enfeebling magic duration +25%; `augment_stats` maps the
+  last row to `ENF_MAG_DURATION`, so `debuff_duration` extends Sleep/Bind/Slow/Paralyze casts
+  and the stat sheet gains an **Enfeebling magic duration +%** row alongside the job-point
+  seconds. The BLU neck's `Crit Rate` maps to critical hit rate, the THF neck's `Trip. Atk.`
+  to Triple Attack, and the remaining job-system rows (Daken, Kick Attacks, Helix duration,
+  Magic Burst DMG/ACC, Luopan/Wyvern/Avatar/Automaton/Pet rows) are listed in `UNMODELLED` so
+  the coverage test keeps walking every dataset row.
+- **The launcher card is generic.** The Oboro dropdown groups **JSE weapons** and **JSE necks**,
+  the info row says `Neck` instead of `Main hand`, and a one-path neck gets a full-width Cap
+  row instead of the three-path grid. A missing neck can be bought from the card for its
+  98,010 gil price like a missing weapon.
+- `tools/gen_oboro.py` generates the dataset, `docs/oboro-r25.md` (new **JSE necks** table) and
+  the unchanged migration in one pass; `--check` stays clean. Tests: `test_oboro.py` pins the
+  66 necks (one path, 199-220), Duelist's Torque's R25/R15 bundles and stats, the 132-item
+  catalog and the card payload; `test_augment_stats.py` covers the new rows.
+
+## Unreleased — Red Mage enfeebles pick their set from the spell's own kind
+
+- **`gearswap/RDM.lua` now carries the BG Wiki Community Red Mage Guide's enfeebling builds.**
+  The guide splits Enfeebling Magic by what decides a spell's value, so the library has one set
+  per kind: `midcast.Enfeebling Magic Skill` (Frazzle III, Distract III, Poison, Poison II),
+  `… Macc` (Frazzle II, Distract II, Dia, Sleep, Bind, Break, Silence), `… Duration` (the
+  crowd-control timers), `… Hybrid` (Gravity), `… MND` (Slow II, Paralyze II, Addle II),
+  `… INT` (Blind II) and `… General` (Dispel, Inundation). The generic
+  `midcast.Enfeebling Magic` remains as the fallback. The same pass adds the guide's Enhancing
+  splits (`Enhancing Magic SIRD` for Aquaveil, `Enhancing Magic Stoneskin`,
+  `EnhancingDuration`/`EnhancingDurationOthers`), its Malignance TP set, the enspell-damage
+  melee set and its Seraph/Sanguine Blade builds, and puts the job back on the shared library
+  layout: `local capes` (18 Sucellos's Cape builds), `unity`, the Odyssey R30 path tables and
+  the five Limbus families, with the Cape augments named per set. RDM now shows 65 sets.
+- **The host classifies each enfeebling spell and the plan follows it.** `control.lua` maps
+  every Enfeebling Magic spell to a kind (`spell_enfeebling_kind`), reports it in
+  `job_spells.categories` (`enfeebles_mnd`, ...) and resolves a cast in the order per-spell card
+  → the spell's kind when Enfeebles is in **Auto** → the midcast default → `midcast.<skill>`.
+  Duration falls back to Macc when no Duration set is configured; an unknown enfeebling spell
+  (Virus) falls back to Macc. The Enfeebles group's modes are now `auto` plus the seven kinds,
+  so `//modes enfeebles macc` (or `duration`, `mnd`, ...) still forces one set, and
+  `//modes enfeebles auto` restores the per-spell behaviour.
+- **The Gear page's Spells card shows the gear behind each kind.** The Enfeebles card has one
+  row per kind with its set picker and spell count; clicking a kind's name opens a compact 4×4
+  gear grid plus the slot → item list for that set, with the cape augment line. A forced Mode
+  shows a `forced` note. The launcher's `SPELL_GROUPS` grew the seven enfeebling categories and
+  their fallbacks (`midcast.Enfeebling Magic Skill / Macc / Duration / Hybrid / MND / INT /
+  General`), so a job whose library only has `midcast.Enfeebling Magic` binds every kind to it
+  and behaves exactly as before.
+- **Saboteur is a live-status rule, the way SCH's Immanence is.** The guide's "override the
+  hands on enfeebles under Saboteur" note is now real gear behaviour: the Enfeebles card has an
+  automatic **Saboteur** row bound to `midcast.Enfeebling Magic Saboteur` (a one-piece overlay,
+  `hands = "Lethargy Gantherots +3"`), the host registers a conditional rule for every
+  enfeebling spell with status **454** in its buff list, and it *merges* the overlay over the
+  spell's kind set instead of replacing it. While Saboteur is up the engine picks that rule (a
+  rule naming more buffs wins); after the result the kind set's hands return. One overlay set
+  covers all seven kinds, and a library or character without the Gantherots binds nothing.
+- Tests: `tests/spell_groups_test.py` pins the host/launcher group, mode, kind and automatic-row
+  lists, the enfeebling kind cases, the Auto/forced/duration-fallback plan rules, the Saboteur
+  status id (454) and its merge overlay, the eight category fallbacks and the RDM set builds.
+  Docs: `docs/rdm.md` (the guide's nuances and the sets), `docs/control-panel.md`,
+  `docs/launcher.md`, `gearswap/README.md` (counts refreshed to 850 importable sets).
+
+## Unreleased — Reive and Incursion capes augment through Detrovio
+
+- **The Data page's Augments tab has a Reive & Incursion capes card.** It covers all 22
+  level-99 job capes (Mauler's Mantle through Evasionist's Cape, items 28617-28638) and the
+  four Refractive Crystal rows BG Wiki lists for each. A trade can fill several rows at once,
+  so the card gives every row its own potency select (and `— none —`), preloads a clean cape
+  with the four row maxima, and writes them all with **Apply augments**; **Clear augments**
+  empties the block the same way Makel-Pakel does. The card uses the same cape and copy pickers
+  as the Ambuscade card, so a character with several copies can target the exact bag or
+  wardrobe row.
+- **The server exposes it as `reive` in `character_data`, with `reive-augment` / `reive-clear`
+  progress ops.** `game/reive.py` owns the 22 capes and their BG Wiki ranges, encodes the four
+  rows through the shared `capes` standard block (BST's `STR/DEX` row is the client's one
+  combined word), and decodes each stored word back to its row/value pair. A partial `choices`
+  object keeps the rows it does not name. A wrong item, a row the cape does not offer, an
+  out-of-range value or an empty selection is a 422; a missing container slot is a 404.
+- **The new rows show up in the tooltip and the stat sheet.** `capes.TABLE` gained Blood Pact
+  recast time II (0x16E), Reverse Flourish (0x172), Embolden (0x174), Helix effect duration
+  (0x4E1) and Meditate effect duration (0x4F0), so `augment_stats` renders every Detrovio line
+  and applies the modifiers the engine models. The five rows with no engine pool yet are listed
+  in `UNMODELLED`.
+- Tests: `test_reive.py` pins all 22 item ids, every row/range/tooltip, the negative-value and
+  Pet: TP Bonus encodings, the service catalog/apply/clear round trip and the stat-sheet
+  modifiers; `test_api.py` covers the card payload and both HTTP ops. Docs: `docs/reive-capes.md`.
+
 ## Unreleased — the set preview reads the bag copy's augments
 
 - **A GearSwap set that names only the piece now shows the copy's augments on its card and Set

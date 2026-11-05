@@ -8,7 +8,8 @@ Four datasets expose a 24-byte ``AugmentBundle`` block:
 * Unity +1 gear (every accessory, armour piece and weapon/grip in
   ``data/unity_r15.json``, one Rank 15 row each, RP curve A),
 * Oboro Dynamis-Divergence JSE weapons (three paths A-C, NQ R15 / HQ1 R20 /
-  HQ2 R25, RP curve A).
+  HQ2 R25, RP curve A) and all 22 JSE necks (one path, the same three
+  qualities, the job's bundle shared across them).
 
 The client draws the augment lines from the bundle index.  The RP field is the
 accumulated total for the client's curve; the caps are the curve maxima in

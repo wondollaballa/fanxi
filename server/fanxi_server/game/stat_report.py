@@ -164,6 +164,9 @@ RAW_STATS = (
     ("song_duration", "Song duration", mod.SONG_DURATION_BONUS, True, 1, False, "Magic", 420),
     ("enhancing_magic_duration", "Enhancing magic duration", mod.ENH_MAGIC_DURATION, True, 1, False, "Magic", 421),
     ("enfeebling_magic_duration", "Enfeebling magic duration", mod.ENF_MAG_DURATION_FLAT, False, 1, False, "Magic", 422),
+    # The JSE necks' "Enf. Mag. eff. dur.+25%" row is a percentage, not seconds;
+    # the flat job-point seconds stay on their own row above.
+    ("enfeebling_magic_duration_pct", "Enfeebling magic duration +%", mod.ENF_MAG_DURATION, True, 1, False, "Magic", 427),
     ("cure_potency_ii", "Cure potency II", mod.CURE_POTENCY_II, True, 1, False, "Magic", 423),
     ("cure_potency_received", "Cure potency received", mod.CURE_POTENCY_RCVD, True, 1, False, "Magic", 424),
     ("regen_potency", "Regen potency", mod.REGEN_POTENCY, True, 1, False, "Magic", 425),
@@ -212,6 +215,7 @@ MOD_LABELS.update({
     mod.FENCER_CRIT_RATE: "Fencer critical rate", mod.COUNTER: "Counter",
     mod.SONG_DURATION_BONUS: "Song duration", mod.ENH_MAGIC_DURATION: "Enhancing magic duration",
     mod.ENF_MAG_DURATION_FLAT: "Enfeebling magic duration",
+    mod.ENF_MAG_DURATION: "Enfeebling magic duration +%",
     mod.CURE_POTENCY_II: "Cure potency II", mod.CURE_POTENCY_RCVD: "Cure potency received",
     mod.BLOOD_PACT_DAMAGE: "Blood Pact damage",
     mod.REGEN_POTENCY: "Regen potency", mod.DRAIN_ASPIR: "Drain and Aspir potency",

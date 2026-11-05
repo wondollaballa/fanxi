@@ -545,7 +545,7 @@ export function ProgressCards({
         {gear.length === 0 ? (
           <p className="data-note">
             No Odyssey, Limbus, Temenos or Unity gear in the inventory. Those pieces show
-            here once they are in a bag; Oboro weapons have their own card below.
+            here once they are in a bag; Oboro weapons and JSE necks have their own card below.
           </p>
         ) : (
           <>
@@ -741,7 +741,7 @@ function OboroCard({
       <Head
         icon={<Swords size={17} />}
         title="Oboro"
-        hint="Dynamis-Divergence JSE weapons · NQ R15 / HQ1 R20 / HQ2 R25 · Path A, B or C"
+        hint="Dynamis-Divergence gear · JSE weapons (Path A, B or C) and all 22 JSE necks (Path A) · NQ R15 / HQ1 R20 / HQ2 R25"
         badge={
           <Badge tone={owned.length ? "success" : "neutral"}>
             {owned.length} in bags
@@ -749,9 +749,10 @@ function OboroCard({
         }
       />
       <p className="data-note">
-        {data.oboro.note} Pick the weapon, then cap a path. Capping writes the client&apos;s
+        {data.oboro.note} Pick the piece, then cap a path. Capping writes the client&apos;s
         24-byte augment block and sends <code>//reload</code> to a live client; changing a
-        path overwrites the old block.
+        weapon&apos;s path overwrites the old block. A neck has one path: its three qualities
+        share the job&apos;s bundle and the rank picks the R15/R20/R25 row.
       </p>
 
       <div className="data-form-row" style={{ marginTop: 10 }}>
@@ -761,13 +762,22 @@ function OboroCard({
             setItemId(Number(event.target.value));
             setCopyKey(null);
           }}
-          aria-label="Oboro weapon"
+          aria-label="Oboro item"
         >
-          {items.map((item) => (
-            <option key={item.item_id} value={item.item_id}>
-              {item.name} · {item.quality} · {item.job}
-              {item.owned ? " · in bags" : ""}
-            </option>
+          {(["weapon", "neck"] as const).map((category) => (
+            <optgroup
+              key={category}
+              label={category === "neck" ? "JSE necks" : "JSE weapons"}
+            >
+              {items
+                .filter((item) => (item.category ?? "weapon") === category)
+                .map((item) => (
+                  <option key={item.item_id} value={item.item_id}>
+                    {item.name} · {item.quality} · {item.job}
+                    {item.owned ? " · in bags" : ""}
+                  </option>
+                ))}
+            </optgroup>
           ))}
         </Select>
         {copies.length > 1 && (
@@ -807,8 +817,14 @@ function OboroCard({
 
       <div className="data-row" style={{ marginTop: 10 }}>
         <span>
-          {selected.job} · {selected.weapon} · {selected.quality} ·{" "}
-          {selected.slot === "range" ? "Ranged" : "Main hand"}
+          {selected.job} ·{" "}
+          {selected.category === "neck" ? "JSE neck" : selected.weapon} ·{" "}
+          {selected.quality} ·{" "}
+          {selected.slot === "range"
+            ? "Ranged"
+            : selected.slot === "neck"
+              ? "Neck"
+              : "Main hand"}
         </span>
         <strong>
           {current
@@ -826,7 +842,13 @@ function OboroCard({
       </div>
       <ProgressBar value={isCapped ? 100 : copy ? pct(current?.rank ?? 0, selected.rank) : 0} />
 
-      <div className="data-paths data-paths-3">
+      <div
+        className={
+          selected.paths.length === 1
+            ? "data-paths data-paths-1"
+            : "data-paths data-paths-3"
+        }
+      >
         {selected.paths.map((path) => {
           const key = `oboro-${selected.item_id}-${copy?.container ?? "x"}-${
             copy?.slot ?? "x"

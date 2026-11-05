@@ -6,6 +6,9 @@ export const PHASE_CONFIG_KEY = "fanxi.phase.config";
 /** Master switch for the host's auto-swap. "1" means on; anything else (including a fresh
  * profile) means off. The launcher owns the setting, not an individual client. */
 export const PHASE_ON_KEY = "fanxi.phase.on";
+/** Bumped when a default mode changes in a way a saved config should follow. 2 split
+ * Enfeebles into per-spell kinds and made Auto the default. */
+export const PHASE_CONFIG_VERSION = 2;
 
 export function loadPhaseEnabled(): boolean {
   return localStorage.getItem(PHASE_ON_KEY) === "1";
@@ -46,8 +49,14 @@ export type PhaseFocusSets = {
 export type FocusMode = "auto" | "dt" | "pdt" | "mdt" | "eva" | "meva";
 
 export type SpellCategoryKey =
+  | "enfeebles_skill"
   | "enfeebles_macc"
   | "enfeebles_duration"
+  | "enfeebles_hybrid"
+  | "enfeebles_mnd"
+  | "enfeebles_int"
+  | "enfeebles_general"
+  | "enfeebles_saboteur"
   | "buff_potency"
   | "buff_duration"
   | "cure_potency"
@@ -55,7 +64,13 @@ export type SpellCategoryKey =
   | "nuke_mab"
   | "nuke_mdmg"
   | "nuke_mb"
+  | "nuke_immanence"
   | "helix_magic"
+  | "helix_immanence"
+  | "blue_mab"
+  | "blue_macc"
+  | "ninjutsu_macc"
+  | "ninjutsu_damage"
   | "helix_duration"
   | "dark_potency"
   | "dark_macc"
@@ -77,12 +92,32 @@ export type SpellGroupKey =
   | "helix"
   | "dark"
   | "divine"
-  | "songs";
+  | "songs"
+  | "blue"
+  | "ninjutsu";
 
 export type SpellMode = {
   key: string;
   label: string;
   /** Short label for the in-game mode strip. */
+  short: string;
+  /** The category this mode forces.  Auto has none: it follows each spell's kind. */
+  category?: SpellCategoryKey;
+  detail: string;
+  /** A live status id that activates this automatic set (Immanence = 470). */
+  buff?: number;
+  /**
+   * Lay this set over the spell's own set instead of replacing it, slot by slot.  The
+   * Enfeebles Saboteur row is only the hands, so one set covers every kind.
+   */
+  merge?: boolean;
+};
+
+/** One enfeebling kind: a spell group inside Enfeebles with its own set row. */
+export type SpellKind = {
+  key: string;
+  label: string;
+  /** Short label for the gear rows. */
   short: string;
   category: SpellCategoryKey;
   detail: string;
@@ -95,8 +130,12 @@ export type SpellGroup = {
   short: string;
   defaultMode: string;
   modes: SpellMode[];
+  /** Per-spell-type sets inside the group (Enfeebles: skill, macc, mnd, ...). */
+  kinds?: SpellKind[];
   /** A set worn by itself while its condition is live, not an armable mode. */
   autoMode?: SpellMode;
+  /** Additional automatic sets with their own condition (Immanence, ...). */
+  autoModes?: SpellMode[];
 };
 
 /** The spell groups the host classifies (`job_spells.categories`) and the Spells panel edits. */
@@ -105,21 +144,132 @@ export const SPELL_GROUPS: SpellGroup[] = [
     key: "enfeebles",
     label: "Enfeebles",
     short: "Enf",
-    defaultMode: "macc",
+    defaultMode: "auto",
+    // BG Wiki's Community Red Mage Guide splits the enfeebles by what their value reads:
+    // Enfeebling Magic Skill, landing (Macc), duration, dMND, dINT, Macc + potency and the
+    // non-scaling spells.  Auto follows the spell's own kind; arming another mode forces
+    // every enfeebling spell through that one set.
     modes: [
+      {
+        key: "auto",
+        label: "Auto — by spell type",
+        short: "Auto",
+        detail: "Wear the kind row for each spell (Skill, Macc, MND, INT, Hybrid, General).",
+      },
+      {
+        key: "skill",
+        label: "Skill",
+        short: "Skill",
+        category: "enfeebles_skill",
+        detail: "Force every enfeebling spell through the Skill build.",
+      },
       {
         key: "macc",
         label: "Macc / landing",
         short: "Macc",
         category: "enfeebles_macc",
-        detail: "Magic Accuracy set for landing every Enfeebling Magic spell.",
+        detail: "Force every enfeebling spell through the Macc build.",
       },
       {
         key: "duration",
         label: "Duration",
         short: "Dur",
         category: "enfeebles_duration",
-        detail: "Duration set for every Enfeebling Magic spell.",
+        detail: "Force every enfeebling spell through the Duration build.",
+      },
+      {
+        key: "hybrid",
+        label: "Macc + potency",
+        short: "Hybrid",
+        category: "enfeebles_hybrid",
+        detail: "Force every enfeebling spell through the Macc + potency build.",
+      },
+      {
+        key: "mnd",
+        label: "MND",
+        short: "MND",
+        category: "enfeebles_mnd",
+        detail: "Force every enfeebling spell through the MND build.",
+      },
+      {
+        key: "int",
+        label: "INT",
+        short: "INT",
+        category: "enfeebles_int",
+        detail: "Force every enfeebling spell through the INT build.",
+      },
+      {
+        key: "general",
+        label: "General",
+        short: "Gen",
+        category: "enfeebles_general",
+        detail: "Force every enfeebling spell through the non-scaling build.",
+      },
+    ],
+    kinds: [
+      {
+        key: "skill",
+        label: "Skill",
+        short: "Skill",
+        category: "enfeebles_skill",
+        detail: "Enfeebling Magic Skill carries the potency: Frazzle III, Distract III, Poison, Poison II.",
+      },
+      {
+        key: "macc",
+        label: "Macc / landing",
+        short: "Macc",
+        category: "enfeebles_macc",
+        detail: "All-or-nothing landing: Frazzle II, Distract II, Dia, Sleep, Bind, Break, Silence.",
+      },
+      {
+        key: "duration",
+        label: "Duration",
+        short: "Dur",
+        category: "enfeebles_duration",
+        detail: "Crowd control where the timer matters: Sleep, Sleep II, Bind, Break, Silence.",
+      },
+      {
+        key: "hybrid",
+        label: "Macc + potency",
+        short: "Hybrid",
+        category: "enfeebles_hybrid",
+        detail: "Magic Accuracy and Enfeebling potency together: Gravity and Gravity II.",
+      },
+      {
+        key: "mnd",
+        label: "MND",
+        short: "MND",
+        category: "enfeebles_mnd",
+        detail: "dMND sets the potency: Slow II, Paralyze II, Addle II.",
+      },
+      {
+        key: "int",
+        label: "INT",
+        short: "INT",
+        category: "enfeebles_int",
+        detail: "dINT sets the potency: Blind II.",
+      },
+      {
+        key: "general",
+        label: "General",
+        short: "Gen",
+        category: "enfeebles_general",
+        detail: "Nothing to scale and nothing to resist: Dispel, Dispelga, Inundation.",
+      },
+    ],
+    // A live status, not an armed mode.  While Saboteur is up the host adds a
+    // higher-priority rule for every enfeebling spell; merge keeps the kind set and lays the
+    // hands-only overlay on top.
+    autoModes: [
+      {
+        key: "saboteur",
+        label: "Saboteur",
+        short: "Sab",
+        category: "enfeebles_saboteur",
+        buff: 454,
+        merge: true,
+        detail:
+          "While Saboteur is up, every enfeebling cast swaps the hands to Lethargy Gantherots.",
       },
     ],
   },
@@ -212,6 +362,17 @@ export const SPELL_GROUPS: SpellGroup[] = [
       detail:
         "Worn for Elemental Magic while a Magic Burst window is open; the armed mode is the fallback.",
     },
+    autoModes: [
+      {
+        key: "immanence",
+        label: "Immanence",
+        short: "Immanence",
+        category: "nuke_immanence",
+        buff: 470,
+        detail:
+          "Worn for Elemental Magic while Immanence is active; the armed mode is the fallback.",
+      },
+    ],
   },
   {
     key: "helix",
@@ -232,6 +393,17 @@ export const SPELL_GROUPS: SpellGroup[] = [
         short: "Dur",
         category: "helix_duration",
         detail: "Duration set for helix spells.",
+      },
+    ],
+    autoModes: [
+      {
+        key: "immanence",
+        label: "Immanence",
+        short: "Immanence",
+        category: "helix_immanence",
+        buff: 470,
+        detail:
+          "Worn for helix spells while Immanence is active; the armed mode is the fallback.",
       },
     ],
   },
@@ -310,13 +482,75 @@ export const SPELL_GROUPS: SpellGroup[] = [
       },
     ],
   },
+  {
+    key: "blue",
+    label: "Blue Magic",
+    short: "Blue",
+    defaultMode: "mab",
+    modes: [
+      {
+        key: "mab",
+        label: "Magic Attack",
+        short: "MAB",
+        category: "blue_mab",
+        detail: "Magic Attack set for Blue Magic.",
+      },
+      {
+        key: "macc",
+        label: "Magic Accuracy",
+        short: "Macc",
+        category: "blue_macc",
+        detail: "Magic Accuracy set for landing Blue Magic.",
+      },
+    ],
+  },
+  {
+    key: "ninjutsu",
+    label: "Ninjutsu",
+    short: "Nin",
+    defaultMode: "macc",
+    modes: [
+      {
+        key: "macc",
+        label: "Magic Accuracy",
+        short: "Macc",
+        category: "ninjutsu_macc",
+        detail: "Magic Accuracy / Ninjutsu skill set for landing Ninjutsu.",
+      },
+      {
+        key: "damage",
+        label: "Ninjutsu damage",
+        short: "Dmg",
+        category: "ninjutsu_damage",
+        detail: "Ninjutsu skill / Magic Attack set for elemental Ninjutsu.",
+      },
+    ],
+  },
 ];
+
+/** Jobs that can cast one spell group.  The sub job opens its groups at 49, so the same
+ *  table drives main and sub cards; the spell list then trims to what that job can learn. */
+export const SPELL_GROUP_JOBS: Record<SpellGroupKey, number[]> = {
+  enfeebles: [3, 4, 5, 8, 16, 20, 21],
+  enhancing: [3, 5, 16, 20, 21],
+  enspells: [5, 8, 20, 21],
+  curing: [3, 5, 7, 16, 20, 21],
+  nuking: [4, 5, 15, 16, 20, 21],
+  helix: [20],
+  dark: [4, 5, 8, 16, 20, 21],
+  divine: [3, 5, 7, 15, 20],
+  songs: [10],
+  blue: [16],
+  ninjutsu: [13],
+};
 
 export const DEFAULT_SPELL_MODES: Record<SpellGroupKey, string> = Object.fromEntries(
   SPELL_GROUPS.map((group) => [group.key, group.defaultMode]),
 ) as Record<SpellGroupKey, string>;
 
 export type PhaseConfig = {
+  /** The config layout version, so a changed default can migrate a saved config once. */
+  configVersion: number;
   engaged: string;
   idleTown: string;
   idleField: string;
@@ -355,6 +589,7 @@ export const FOCUS_MODES: { value: FocusMode; label: string }[] = [
 ];
 
 export const DEFAULT_PHASE_CONFIG: PhaseConfig = {
+  configVersion: PHASE_CONFIG_VERSION,
   engaged: "engaged.tp",
   idleTown: "idle.town",
   idleField: "idle.field",
@@ -405,8 +640,23 @@ function objectMap(value: unknown): Record<string, string> {
 
 /** Conventional library paths for each spell category, in preference order. */
 const SPELL_CATEGORY_FALLBACKS: Record<SpellCategoryKey, string[]> = {
-  enfeebles_macc: ["midcast.Enfeebling Magic"],
-  enfeebles_duration: ["midcast.Enfeebling Magic"],
+  // Enfeebles: one path per kind.  A library that has only the plain enfeebling set
+  // still binds every kind to it, so the behaviour is unchanged there; RDM.lua carries
+  // the BG Wiki builds and each kind lands on its own set.
+  enfeebles_skill: ["midcast.Enfeebling Magic Skill", "midcast.Enfeebling Magic"],
+  enfeebles_macc: ["midcast.Enfeebling Magic Macc", "midcast.Enfeebling Magic"],
+  enfeebles_duration: [
+    "midcast.Enfeebling Magic Duration",
+    "midcast.Enfeebling Magic Macc",
+    "midcast.Enfeebling Magic",
+  ],
+  enfeebles_hybrid: ["midcast.Enfeebling Magic Hybrid", "midcast.Enfeebling Magic"],
+  enfeebles_mnd: ["midcast.Enfeebling Magic MND", "midcast.Enfeebling Magic"],
+  enfeebles_int: ["midcast.Enfeebling Magic INT", "midcast.Enfeebling Magic"],
+  enfeebles_general: ["midcast.Enfeebling Magic General", "midcast.Enfeebling Magic"],
+  // The Saboteur row is an overlay, not a replacement, so it only binds to the one-piece
+  // overlay set; a library without one simply has no hands swap.
+  enfeebles_saboteur: ["midcast.Enfeebling Magic Saboteur"],
   buff_potency: ["midcast.Enhancing Magic"],
   buff_duration: ["midcast.EnhancingDuration", "midcast.Enhancing Magic"],
   cure_potency: ["midcast.Cure", "midcast.Healing Magic"],
@@ -414,7 +664,13 @@ const SPELL_CATEGORY_FALLBACKS: Record<SpellCategoryKey, string[]> = {
   nuke_mab: ["midcast.Elemental Magic"],
   nuke_mdmg: ["midcast.Elemental Magic"],
   nuke_mb: ["midcast.Elemental Magic MB"],
+  nuke_immanence: [],
   helix_magic: ["midcast.Elemental Magic"],
+  helix_immanence: [],
+  blue_mab: ["midcast.BlueMagic"],
+  blue_macc: ["midcast.BlueMagic"],
+  ninjutsu_macc: ["midcast.Ninjutsu"],
+  ninjutsu_damage: ["midcast.Ninjutsu"],
   helix_duration: [],
   dark_potency: ["midcast.Dark Magic"],
   dark_macc: ["midcast.Dark Magic"],
@@ -472,8 +728,11 @@ export function normalizeSpellModes(
       continue;
     }
     // Old configs only had the category picks. Preserve the old effective choice when
-    // exactly one face of the pair was configured.
-    const configured = group.modes.filter((mode) => overrides[mode.category]);
+    // exactly one face of the pair was configured.  A mode without a category (Enfeebles'
+    // Auto, which follows each spell's own kind) never counts as a configured pick.
+    const configured = group.modes.filter(
+      (mode) => mode.category && overrides[mode.category],
+    );
     if (configured.length === 1) out[group.key] = configured[0].key;
   }
   return out;
@@ -497,7 +756,13 @@ export function loadPhaseConfig(): PhaseConfig {
   const focus = (saved.focus ?? {}) as Record<string, unknown>;
   const mode = text(saved.focusMode, "auto");
   const spellCategoryOverrides = objectMap(saved.spellCategoryOverrides);
+  const savedModes = objectMap(saved.spellModes);
+  // Version 2 split Enfeebles into per-spell kinds.  A saved "macc" was the old default, not a
+  // deliberate force, so move it to Auto once; a deliberate "duration" choice is kept.
+  const configVersion = typeof saved.configVersion === "number" ? saved.configVersion : 1;
+  if (configVersion < 2 && savedModes.enfeebles === "macc") savedModes.enfeebles = "auto";
   return {
+    configVersion: PHASE_CONFIG_VERSION,
     engaged: text(saved.engaged, localStorage.getItem("fanxi.phase.engaged") ?? "engaged.tp"),
     idleTown: text(saved.idleTown, legacyIdle ?? "idle.town"),
     idleField: text(saved.idleField, localStorage.getItem("fanxi.phase.idleField") ?? "idle.field"),
@@ -525,7 +790,7 @@ export function loadPhaseConfig(): PhaseConfig {
     spellOverrides: objectMap(saved.spellOverrides),
     songOverrides: songOverrideMap(saved.songOverrides),
     spellCategoryOverrides,
-    spellModes: normalizeSpellModes(objectMap(saved.spellModes), spellCategoryOverrides),
+    spellModes: normalizeSpellModes(savedModes, spellCategoryOverrides),
   };
 }
 

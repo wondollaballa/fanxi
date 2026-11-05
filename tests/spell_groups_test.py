@@ -3,9 +3,16 @@
 
 `host/addons/lua/control.lua` keeps its group table and classifier in the marked region
 (`BEGIN/END spell mode groups`) so this test can run the real Lua code without loading the
-game host.  `launcher-rs/src/lib/phase.ts` repeats the same group, mode and category keys for
-the Spells panel, so the test compares the two lists and fails if either side grows a group
-the other lacks.
+game host.  `launcher-rs/src/lib/phase.ts` repeats the same group, mode, kind and category
+keys for the Spells panel, so the test compares the two lists and fails if either side grows
+a group, mode or kind the other lacks.
+
+Enfeebling Magic is split by what each spell actually reads (BG Wiki's Community Red Mage
+Guide): Skill (Frazzle III, Distract III, Poison), Macc (Frazzle II, Dia, Sleep, Bind...),
+Duration (Sleep, Bind, Break, Silence), MND (Slow II, Paralyze II, Addle II), INT (Blind II),
+Macc + potency (Gravity) and non-scaling (Dispel, Inundation).  The test pins that split, the
+Auto plan rule (a spell's own kind, a forced mode wins, Duration falls back to Macc) and the
+`gearswap/RDM.lua` sets each kind binds to by name.
 
 The group classifier also has to stay faithful to the spell table: every skill-37 spell in
 `database/migrations/0058_spells.sql` is Dark Magic and must land in the `dark` group, and
@@ -30,6 +37,7 @@ ROOT = Path(__file__).resolve().parent.parent
 CONTROL = ROOT / 'host' / 'addons' / 'lua' / 'control.lua'
 PHASE = ROOT / 'launcher-rs' / 'src' / 'lib' / 'phase.ts'
 SPELLS = ROOT / 'database' / 'migrations' / '0058_spells.sql'
+RDM = ROOT / 'gearswap' / 'RDM.lua'
 BEGIN = '-- BEGIN spell mode groups'
 END = '-- END spell mode groups'
 LUAJIT = ROOT / 'build' / 'third_party' / 'luajit-src' / 'src' / 'luajit'
@@ -39,13 +47,49 @@ SKILL_GROUPS = {
     37: ('dark', {'endark', 'endark ii'}),
     32: ('divine', {'enlight', 'enlight ii'}),
 }
-# group key -> (default mode, the group's categories in card order).
+# group key -> (default mode, mode categories in card order, kind categories in card order).
 EXPECTED_GROUPS = {
-    'dark': ('potency', ['dark_potency', 'dark_macc', 'dark_duration']),
-    'divine': ('mab', ['divine_mab', 'divine_macc']),
+    'enfeebles': (
+        'auto',
+        ['enfeebles_skill', 'enfeebles_macc', 'enfeebles_duration', 'enfeebles_hybrid',
+         'enfeebles_mnd', 'enfeebles_int', 'enfeebles_general'],
+        ['enfeebles_skill', 'enfeebles_macc', 'enfeebles_duration', 'enfeebles_hybrid',
+         'enfeebles_mnd', 'enfeebles_int', 'enfeebles_general'],
+    ),
+    'dark': ('potency', ['dark_potency', 'dark_macc', 'dark_duration'], []),
+    'divine': ('mab', ['divine_mab', 'divine_macc'], []),
 }
-# category prefix -> the conventional library set the launcher fills it from.
-FALLBACKS = {'dark_': 'midcast.Dark Magic', 'divine_': 'midcast.Divine Magic'}
+# group key -> the automatic (buff-conditional) rows, in table order.
+EXPECTED_AUTOS = {
+    'enfeebles': ['enfeebles_saboteur'],
+    'nuking': ['nuke_mb', 'nuke_immanence'],
+    'helix': ['helix_immanence'],
+}
+# category (or category prefix) -> the conventional library set the launcher fills it from.
+FALLBACKS = {
+    'enfeebles_skill': 'midcast.Enfeebling Magic Skill',
+    'enfeebles_macc': 'midcast.Enfeebling Magic Macc',
+    'enfeebles_duration': 'midcast.Enfeebling Magic Duration',
+    'enfeebles_hybrid': 'midcast.Enfeebling Magic Hybrid',
+    'enfeebles_mnd': 'midcast.Enfeebling Magic MND',
+    'enfeebles_int': 'midcast.Enfeebling Magic INT',
+    'enfeebles_general': 'midcast.Enfeebling Magic General',
+    'enfeebles_saboteur': 'midcast.Enfeebling Magic Saboteur',
+    'dark_': 'midcast.Dark Magic',
+    'divine_': 'midcast.Divine Magic',
+}
+# The enfeebling kind sets in gearswap/RDM.lua, and one piece that pins each build.
+KIND_SETS = {
+    'midcast.Enfeebling Magic Skill': 'Contemplator +1',
+    'midcast.Enfeebling Magic Macc': 'Luminary Sash',
+    'midcast.Enfeebling Magic Duration': 'Atrophy Tabard +4',
+    'midcast.Enfeebling Magic Hybrid': 'Regal Gem',
+    'midcast.Enfeebling Magic MND': 'Chironic Hose',
+    'midcast.Enfeebling Magic INT': 'Marin Staff +1',
+    'midcast.Enfeebling Magic General': 'Per. Lucky Egg',
+}
+EXTRA_SETS = ('midcast.EnhancingDurationOthers', 'midcast.Enhancing Magic Stoneskin',
+              'midcast.Enhancing Magic SIRD')
 
 
 def groups_block() -> str:
@@ -71,18 +115,51 @@ def spells_with_skill(skill: int) -> list[str]:
     return names
 
 
-def launcher_groups() -> tuple[list[str], list[str]]:
-    """The group keys and the flattened mode/category keys `phase.ts` declares, in order."""
+def launcher_groups() -> list[dict]:
+    """The group keys, defaults, mode categories and kind categories `phase.ts` declares.
+
+    Each group object is `    key: "..."`, then `    defaultMode: "..."`, then the
+    `    modes: [` array and, for Enfeebles, a `    kinds: [` array.  The arrays hold
+    `category: "..."` lines in card order; a mode without a category (Auto) is skipped.
+    The automatic rows (`autoMode`/`autoModes`, the Nuking Magic Burst and Immanence) are
+    collected separately so the host's `group.auto`/`group.autos` can be compared too.
+    """
     source = PHASE.read_text(encoding='utf-8')
     try:
         start = source.index('export const SPELL_GROUPS')
         end = source.index('\n];', start)
     except ValueError as error:
         raise SystemExit(f'{PHASE}: cannot find SPELL_GROUPS: {error}')
-    block = source[start:end]
-    keys = re.findall(r'^    key: "([^"]+)"', block, re.MULTILINE)
-    categories = re.findall(r'category: "([^"]+)"', block)
-    return keys, categories
+    out: list[dict] = []
+    current: dict | None = None
+    section = 'modes'
+    for line in source[start:end].splitlines():
+        key = re.match(r'^    key: "([^"]+)"', line)
+        if key:
+            current = {'key': key.group(1), 'default': '', 'modes': [], 'kinds': [],
+                       'autos': []}
+            out.append(current)
+            section = 'modes'
+            continue
+        if current is None:
+            continue
+        if re.match(r'^    modes: \[', line):
+            section = 'modes'
+            continue
+        if re.match(r'^    kinds: \[', line):
+            section = 'kinds'
+            continue
+        if re.match(r'^    autoModes?: ', line):
+            section = 'autos'
+            continue
+        default = re.match(r'^    defaultMode: "([^"]+)"', line)
+        if default:
+            current['default'] = default.group(1)
+            continue
+        category = re.search(r'category: "([^"]+)"', line)
+        if category:
+            current[section].append(category.group(1))
+    return out
 
 
 def lua_quote(text: str) -> str:
@@ -108,33 +185,67 @@ local cases = {{
 {case_table}
 }}
 
+local function find_mode(group, mode_key)
+  for _, mode in ipairs(group.modes) do
+    if mode.key == mode_key then return mode end
+  end
+  return nil
+end
+
 -- The armed mode of every group must exist, the group key must match its slot, and no two
--- groups may claim the same category: the plan gives a spell exactly one rule.
-local seen = {{}}
+-- groups may claim the same category: the plan gives a spell exactly one rule.  A mode and a
+-- kind may share a category inside one group on purpose (the Mode dropdown forces the set the
+-- kind row already owns for Enfeebles).
+local owner = {{}}
 for _, group_key in ipairs(SPELL_GROUP_ORDER) do
   local group = SPELL_GROUPS[group_key]
   if not group then error('missing group ' .. group_key, 0) end
   if group.key ~= group_key then
     error('group slot ' .. group_key .. ' holds ' .. tostring(group.key), 0)
   end
-  local default = false
   if #group.modes == 0 then error('group ' .. group_key .. ' has no modes', 0) end
-  for _, mode in ipairs(group.modes) do
-    if mode.key == group.default then default = true end
-    if seen[mode.category] then
-      error('category ' .. mode.category .. ' claimed twice', 0)
-    end
-    seen[mode.category] = group_key
+  if not find_mode(group, group.default) then
+    error('group ' .. group_key .. ' default is not one of its modes', 0)
   end
-  -- The Nuking card's Magic Burst row is not an armed mode but it owns a category too.
+  local seen_mode = {{}}
+  for _, mode in ipairs(group.modes) do
+    if mode.category then
+      if seen_mode[mode.category] then
+        error('mode category ' .. mode.category .. ' claimed twice in ' .. group_key, 0)
+      end
+      seen_mode[mode.category] = true
+      if owner[mode.category] and owner[mode.category] ~= group_key then
+        error('category ' .. mode.category .. ' claimed by ' .. owner[mode.category] ..
+          ' and ' .. group_key, 0)
+      end
+      owner[mode.category] = group_key
+    end
+  end
+  local seen_kind = {{}}
+  for _, kind in ipairs(group.kinds or {{}}) do
+    if seen_kind[kind.category] then
+      error('kind category ' .. kind.category .. ' claimed twice in ' .. group_key, 0)
+    end
+    seen_kind[kind.category] = true
+    if owner[kind.category] and owner[kind.category] ~= group_key then
+      error('category ' .. kind.category .. ' claimed by ' .. owner[kind.category] ..
+        ' and ' .. group_key, 0)
+    end
+    owner[kind.category] = group_key
+  end
+  -- Automatic rows own a category too: the Nuking card's Magic Burst window and every
+  -- buff-conditional row (Immanence, Saboteur).
   if group.auto then
-    if seen[group.auto.category] then
+    if owner[group.auto.category] and owner[group.auto.category] ~= group_key then
       error('category ' .. group.auto.category .. ' claimed twice', 0)
     end
-    seen[group.auto.category] = group_key
+    owner[group.auto.category] = group_key
   end
-  if not default then
-    error('group ' .. group_key .. ' default is not one of its modes', 0)
+  for _, auto in ipairs(group.autos or {{}}) do
+    if owner[auto.category] and owner[auto.category] ~= group_key then
+      error('category ' .. auto.category .. ' claimed twice', 0)
+    end
+    owner[auto.category] = group_key
   end
 end
 
@@ -174,17 +285,117 @@ if spell_group({{ name = 'Summoner Spell', skill = 38 }}) ~= nil then
 end
 if spell_group(nil) ~= nil then error('a nil spell gained a group', 0) end
 
+-- Enfeebling kinds: the BG Wiki Community Red Mage Guide split.
+local kind_cases = {{
+  {{ 'Frazzle III', 'skill' }}, {{ 'Distract III', 'skill' }},
+  {{ 'Poison', 'skill' }}, {{ 'Poison II', 'skill' }},
+  {{ 'Frazzle', 'macc' }}, {{ 'Frazzle II', 'macc' }},
+  {{ 'Distract II', 'macc' }}, {{ 'Dia III', 'macc' }},
+  {{ 'Sleep', 'duration' }}, {{ 'Sleep II', 'duration' }},
+  {{ 'Bind', 'duration' }}, {{ 'Break', 'duration' }}, {{ 'Silence', 'duration' }},
+  {{ 'Gravity', 'hybrid' }}, {{ 'Gravity II', 'hybrid' }},
+  {{ 'Slow II', 'mnd' }}, {{ 'Paralyze II', 'mnd' }}, {{ 'Addle II', 'mnd' }},
+  {{ 'Blind II', 'int' }},
+  {{ 'Dispel', 'general' }}, {{ 'Inundation', 'general' }},
+}}
+for _, row in ipairs(kind_cases) do
+  local got = spell_enfeebling_kind({{ name = row[1], skill = 35 }})
+  if got ~= row[2] then
+    error(string.format('%s kind -> %s, want %s', row[1], tostring(got), row[2]), 0)
+  end
+end
+if spell_enfeebling_kind({{ name = 'Virus', skill = 35 }}) ~= 'macc' then
+  error('an unlisted enfeebling spell did not fall back to macc', 0)
+end
+if spell_enfeebling_kind({{ name = 'Cure IV', skill = 33 }}) ~= nil then
+  error('a healing spell gained an enfeebling kind', 0)
+end
+if spell_enfeebling_kind(nil) ~= nil then
+  error('a nil spell gained an enfeebling kind', 0)
+end
+
+-- Saboteur is a live status (454), not an armed mode, and its set is a merge overlay.
+local saboteur = nil
+for _, auto in ipairs(SPELL_GROUPS.enfeebles.autos or {{}}) do
+  if auto.key == 'saboteur' then saboteur = auto end
+end
+if not saboteur then error('Enfeebles has no Saboteur auto row', 0) end
+if saboteur.category ~= 'enfeebles_saboteur' then
+  error('Saboteur category is ' .. tostring(saboteur.category), 0)
+end
+if tonumber(saboteur.buff) ~= 454 then
+  error('Saboteur status id is ' .. tostring(saboteur.buff) .. ', want 454', 0)
+end
+if not saboteur.merge then error('Saboteur does not merge over the kind set', 0) end
+
+-- job_spells hands the page both the group and the kind category.
+local cats = spell_categories({{ name = 'Blind II', skill = 35 }})
+if #cats ~= 2 or cats[1] ~= 'enfeebles' or cats[2] ~= 'enfeebles_int' then
+  error('Blind II categories: ' .. table.concat(cats, ','), 0)
+end
+local cure_cats = spell_categories({{ name = 'Cure', skill = 33 }})
+if #cure_cats ~= 1 or cure_cats[1] ~= 'curing' then
+  error('Cure categories: ' .. table.concat(cure_cats, ','), 0)
+end
+
+-- Auto follows the spell's own kind; a forced mode wins; Duration falls back to Macc.
+local auto = find_mode(SPELL_GROUPS.enfeebles, 'auto')
+local forced = find_mode(SPELL_GROUPS.enfeebles, 'mnd')
+local all = {{
+  enfeebles_skill = 'Skill', enfeebles_macc = 'Macc', enfeebles_duration = 'Duration',
+  enfeebles_hybrid = 'Hybrid', enfeebles_mnd = 'MND', enfeebles_int = 'INT',
+  enfeebles_general = 'General',
+}}
+local want = {{
+  {{ 'Frazzle III', 'enfeebles_skill' }}, {{ 'Frazzle II', 'enfeebles_macc' }},
+  {{ 'Slow II', 'enfeebles_mnd' }}, {{ 'Blind II', 'enfeebles_int' }},
+  {{ 'Gravity', 'enfeebles_hybrid' }}, {{ 'Dispel', 'enfeebles_general' }},
+  {{ 'Sleep', 'enfeebles_duration' }},
+}}
+for _, row in ipairs(want) do
+  local got = spell_cast_category('enfeebles', {{ name = row[1], skill = 35 }}, auto, all)
+  if got ~= row[2] then
+    error(string.format('%s auto category -> %s, want %s',
+      row[1], tostring(got), row[2]), 0)
+  end
+end
+if spell_cast_category('enfeebles', {{ name = 'Sleep', skill = 35 }}, auto,
+    {{ enfeebles_macc = 'Macc' }}) ~= 'enfeebles_macc' then
+  error('a duration spell did not fall back to the macc set', 0)
+end
+if spell_cast_category('enfeebles', {{ name = 'Sleep', skill = 35 }}, auto, {{}}) ~= nil then
+  error('an unconfigured enfeebling kind did not fall through to the library set', 0)
+end
+if spell_cast_category('enfeebles', {{ name = 'Blind II', skill = 35 }}, forced, all)
+    ~= 'enfeebles_mnd' then
+  error('a forced enfeebling mode did not win', 0)
+end
+local dark_mode = find_mode(SPELL_GROUPS.dark, 'macc')
+if spell_cast_category('dark', {{ name = 'Stun', skill = 37 }}, dark_mode,
+    {{ dark_macc = 'Dark Magic' }}) ~= 'dark_macc' then
+  error('an ordinary group lost its armed mode', 0)
+end
+
 local lines = {{}}
 for _, group_key in ipairs(SPELL_GROUP_ORDER) do
   local group = SPELL_GROUPS[group_key]
-  local modes = {{}}
+  local modes, kinds = {{}}, {{}}
   for _, mode in ipairs(group.modes) do
-    modes[#modes + 1] = mode.key .. ':' .. mode.category
+    modes[#modes + 1] = mode.key .. ':' .. tostring(mode.category or '')
   end
-  if group.auto then modes[#modes + 1] = group.auto.key .. ':' .. group.auto.category end
-  lines[#lines + 1] = group_key .. '|' .. group.default .. '|' .. table.concat(modes, ',')
+  for _, kind in ipairs(group.kinds or {{}}) do
+    kinds[#kinds + 1] = kind.key .. ':' .. kind.category
+  end
+  local autos = {{}}
+  if group.auto then autos[#autos + 1] = group.auto.key .. ':' .. group.auto.category end
+  for _, auto in ipairs(group.autos or {{}}) do
+    autos[#autos + 1] = auto.key .. ':' .. auto.category
+  end
+  lines[#lines + 1] = group_key .. '|' .. group.default .. '|' ..
+    table.concat(modes, ';') .. '|' .. table.concat(kinds, ';') .. '|' ..
+    table.concat(autos, ';')
 end
-return table.concat(lines, ';')
+return table.concat(lines, '\\n')
 '''
 
 
@@ -210,6 +421,86 @@ def run_lua(script: str) -> str:
     return 'SKIP: install lupa or build the vendored LuaJIT to run this test'
 
 
+def parse_host_layout(lua: str) -> tuple[list[str], dict[str, dict]]:
+    host_groups: list[str] = []
+    layout: dict[str, dict] = {}
+    for line in lua.splitlines():
+        line = line.strip()
+        if not line or '|' not in line:
+            continue
+        key, default, modes, kinds, autos = line.split('|')
+        mode_categories = [entry.split(':', 1)[1] for entry in modes.split(';')
+                           if entry and entry.split(':', 1)[1]]
+        kind_categories = [entry.split(':', 1)[1] for entry in kinds.split(';')
+                           if entry and entry.split(':', 1)[1]]
+        auto_categories = [entry.split(':', 1)[1] for entry in autos.split(';')
+                           if entry and entry.split(':', 1)[1]]
+        host_groups.append(key)
+        layout[key] = {
+            'default': default,
+            'modes': mode_categories,
+            'kinds': kind_categories,
+            'autos': auto_categories,
+        }
+    return host_groups, layout
+
+
+def check_phase_fallbacks(host_categories: list[str]) -> None:
+    source = PHASE.read_text(encoding='utf-8')
+    for target, path in FALLBACKS.items():
+        if target in host_categories:
+            categories = [target]
+        else:
+            categories = [category for category in host_categories
+                          if category.startswith(target)]
+        for category in categories:
+            pattern = rf'{re.escape(category)}: \[\s*"{re.escape(path)}"'
+            if not re.search(pattern, source):
+                raise SystemExit(f'{PHASE}: {category} has no {path} fallback')
+
+
+def lua_set_block(source: str, path: str) -> str:
+    """The `sets.<group>["<name>"] = { ... }` block for one dotted library path."""
+    group, _, name = path.partition('.')
+    header = f'sets.{group}["{name}"] = {{'
+    start = source.find(header)
+    if start < 0:
+        raise SystemExit(f'{RDM}: missing {path}')
+    open_at = source.index('{', start)
+    depth = 0
+    for index in range(open_at, len(source)):
+        char = source[index]
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return source[open_at:index + 1]
+    raise SystemExit(f'{RDM}: unterminated {path}')
+
+
+def check_rdm_library() -> None:
+    """Every enfeebling kind has its guide build, and the enhancing splits exist."""
+    source = RDM.read_text(encoding='utf-8')
+    # The host categories map to the library paths the launcher fills them from.
+    for path, piece in KIND_SETS.items():
+        block = lua_set_block(source, path)
+        if piece not in block:
+            raise SystemExit(f'{RDM}: {path} is missing {piece}')
+        if 'back = capes.' not in block and path != 'midcast.Enfeebling Magic General':
+            raise SystemExit(f'{RDM}: {path} has no augmented cape build')
+    for path in EXTRA_SETS:
+        group, _, name = path.partition('.')
+        bracket = f'sets.{group}["{name}"]'
+        dotted = f'sets.{path} ='
+        if bracket not in source and dotted not in source:
+            raise SystemExit(f'{RDM}: missing {path}')
+    # The Saboteur auto row binds this one-piece overlay; the plan merges it over the kind set.
+    overlay = lua_set_block(source, 'midcast.Enfeebling Magic Saboteur')
+    if 'hands = "Lethargy Gantherots +3"' not in overlay:
+        raise SystemExit(f'{RDM}: the Saboteur overlay must be the hands only')
+
+
 def main() -> int:
     cases = []
     for skill, (group, enspells) in SKILL_GROUPS.items():
@@ -221,36 +512,43 @@ def main() -> int:
     if lua.startswith('SKIP:'):
         print(lua)
         return 0
-    host_groups, host_categories = [], []
-    host_layout: dict[str, tuple[str, list[str]]] = {}
-    for line in lua.split(';'):
-        key, default, modes = line.split('|')
-        categories = [entry.split(':')[1] for entry in modes.split(',')]
-        host_groups.append(key)
-        host_categories.extend(categories)
-        host_layout[key] = (default, categories)
-    launcher_keys, launcher_categories = launcher_groups()
-    if host_groups != launcher_keys:
+    host_groups, host_layout = parse_host_layout(lua)
+    launcher = launcher_groups()
+    if host_groups != [group['key'] for group in launcher]:
         raise SystemExit(f'group order differs:\n  host:     {host_groups}\n'
-                         f'  launcher: {launcher_keys}')
-    if host_categories != launcher_categories:
-        raise SystemExit(f'categories differ:\n  host:     {host_categories}\n'
-                         f'  launcher: {launcher_categories}')
-    for group, expected in EXPECTED_GROUPS.items():
-        if host_layout.get(group) != expected:
-            raise SystemExit(f'{group} layout is {host_layout.get(group)}, want {expected}')
-    source = PHASE.read_text(encoding='utf-8')
-    for prefix, path in FALLBACKS.items():
-        for category in host_categories:
-            if not category.startswith(prefix):
-                continue
-            if not re.search(rf'{category}: \["{re.escape(path)}"\]', source):
-                raise SystemExit(f'{PHASE}: {category} has no {path} fallback')
+                         f'  launcher: {[group["key"] for group in launcher]}')
+    for group in launcher:
+        host = host_layout[group['key']]
+        if host['default'] != group['default']:
+            raise SystemExit(f'{group["key"]} default is {host["default"]}, '
+                             f'want {group["default"]}')
+        if host['modes'] != group['modes']:
+            raise SystemExit(f'{group["key"]} mode categories differ:\n'
+                             f'  host:     {host["modes"]}\n  launcher: {group["modes"]}')
+        if host['kinds'] != group['kinds']:
+            raise SystemExit(f'{group["key"]} kind categories differ:\n'
+                             f'  host:     {host["kinds"]}\n  launcher: {group["kinds"]}')
+        if host['autos'] != group['autos']:
+            raise SystemExit(f'{group["key"]} automatic categories differ:\n'
+                             f'  host:     {host["autos"]}\n  launcher: {group["autos"]}')
+    for group_key, expected in EXPECTED_GROUPS.items():
+        got = host_layout.get(group_key) or {}
+        if (got.get('default'), got.get('modes'), got.get('kinds')) != expected:
+            raise SystemExit(f'{group_key} layout is {got}, want {expected}')
+    for group_key, expected in EXPECTED_AUTOS.items():
+        got = host_layout.get(group_key, {}).get('autos')
+        if got != expected:
+            raise SystemExit(f'{group_key} automatic categories are {got}, want {expected}')
+    host_categories = [category for entry in host_layout.values()
+                       for category in entry['modes'] + entry['kinds']]
+    check_phase_fallbacks(host_categories)
+    check_rdm_library()
     counts = []
     for _skill, group, enspells, names in cases:
         classified = sum(1 for name in names if name.casefold() not in enspells)
         counts.append(f'{group} {classified}')
-    print(f"OK: {len(host_groups)} spell mode groups; classified {', '.join(counts)} "
+    print(f"OK: {len(host_groups)} spell mode groups; {len(host_layout['enfeebles']['kinds'])} "
+          f"enfeebling kinds; classified {', '.join(counts)} "
           f'(self-enspells stay in Enspells)')
     return 0
 

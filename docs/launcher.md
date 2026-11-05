@@ -93,7 +93,7 @@ main display.
 | **Team** | The main account and its boxes: create, suspend, delete, launch one box or the whole team, and the whole-party **Team jobs** roster of main and support jobs. |
 | **Control** | The party roster with each account's job pair, Launch / Launch all, the live KPI table (including a **Job** column) and its **Party jobs** roster, Stop, the command console, and **Invite** to party the whole sub team or one running character. A client whose zone session died shows **orphaned** (the server has no session although the client still answers) or **logged out**, with **Reconcile** / **Relaunch**; **Reconcile N** restarts every stale box, and a relogged or relaunched box is pulled to the leader automatically. |
 | **Warps** | Saved `//warp` places for the selected tenant: mark the live position, rename aliases, delete rows, warp just that character or every online box in the account family, and **Warp team to me** to call the team to the live character. Works for main and sub-account characters. Even when the team is already in that zone the server hands each box a short `0x00B` re-zone: the client ignores its own position update, so this is what actually moves it to the leader. |
-| **Data** | The assignment page, split into **Overview** (merits, job points, Mastery Rank, gil, Home Points, currencies, key items and mounts), **Merits** (the six general menus and every job's Group 1/2 as editable form groups), **Progression** (mission/fame/Mog Garden ranks, jobs and Master Levels, Exemplar Points, crafts, Trusts with their max-all alter-ego upgrade, augment RP paths over Odyssey, Limbus, Temenos and Unity gear — the five Limbus suits and all sixteen Telopanos weapons included — and Oboro weapon paths), **Augments** (the Ambuscade cape augment editor, Nolan mezzotints, Oseem Arcane Glyptics, Skirmish, Sinister Reign, Moonshade, Magian trials and Shantotto's Ascension gear), **Armory** (gear search and purchase history) and **Items** (ninja tools, jug pets, consumables, ingredients and the rest of the general-item store), applied to the selected tenant. The tab you were last on is remembered. |
+| **Data** | The assignment page, split into **Overview** (merits, job points, Mastery Rank, gil, Home Points, currencies, key items and mounts), **Merits** (the six general menus and every job's Group 1/2 as editable form groups), **Progression** (mission/fame/Mog Garden ranks, jobs and Master Levels, Exemplar Points, crafts, Trusts with their max-all alter-ego upgrade, augment RP paths over Odyssey, Limbus, Temenos and Unity gear — the five Limbus suits and all sixteen Telopanos weapons included — plus Oboro's JSE weapon paths and all 22 JSE necks), **Augments** (the Ambuscade and Reive/Incursion cape augment editors, Nolan mezzotints, Oseem Arcane Glyptics, Skirmish, Sinister Reign, Moonshade, Magian trials and Shantotto's Ascension gear), **Armory** (gear search and purchase history) and **Items** (ninja tools, jug pets, consumables, ingredients and the rest of the general-item store), applied to the selected tenant. The tab you were last on is remembered. |
 | **Gear / GearSwap** | The selected tenant's live gear and GearSwap library, plus job defaults, imports and versioned set libraries. The **Live job** card shows the main and support job pair. The tab and the last set browsed are remembered per account and job. |
 | **Battle** | The selected tenant's Battle profile: roster roles, camp/engage, formation, pull/sleep, healing, buffs, enfeebles, dispel, death/kiting/loot rules and saved profiles. Save/Apply live/Start/Stop/Show hub talk to the same in-game `battle` module as `//battle`. |
 | **News** | Posts from `news` in the database. |
@@ -213,6 +213,16 @@ augments** writes the empty block. A material left untouched keeps the word alre
 that copy, so the pet-focused preset builds are not truncated by a partial edit. The
 catalogue and caps live in `server/fanxi_server/game/capes.py`; [docs/capes.md](capes.md)
 lists the 198 preset builds.
+
+The **Reive & Incursion capes** card covers Detrovio's Refractive Crystal augments on the
+22 level-99 job capes from Reives and Incursion. Detrovio can roll several of a cape's
+four rows at once, so the card gives each row its own potency select (with **— none —**
+to leave it empty). **Apply augments** writes the chosen rows in BG Wiki's order,
+**Max all** restores every row to its strongest value, and **Clear augments** empties the
+block the same way Makel-Pakel does. A clean cape starts with all four rows at their
+maxima; a partially augmented cape keeps the rows it recognises and leaves the others
+empty. The catalogue and ranges live in `server/fanxi_server/game/reive.py`;
+[docs/reive-capes.md](reive-capes.md) lists every row.
 
 The **Nolan · Escha mezzotint** card covers the 183 Escha - Zi'Tah, Escha -
 Ru'Aun and abjuration pieces from BG Wiki's Nolan page. Pick an owned piece and
@@ -644,14 +654,22 @@ On the Sets tab, the phase engine is split into the groups the player thinks in:
 - **Resting** — a manual resting set and toggle.
 - **Spells** — a precast set, a midcast default for every spell, category override cards, and
   per-spell override cards picked from the current job's spell list (macc/mab/magic-skill sets
-  included). A category card gives one set to every spell in its host-classified group — enfeebles
-  macc or duration (Enfeebling Magic), buff potency or duration (Enhancing Magic), enspell damage
+  included). A category card gives one set to every spell in its host-classified group — buff
+  potency or duration (Enhancing Magic), enspell damage
   (Enfire/Enblizzard/Enaero/Enstone/Enthunder/Enwater and their IIs), curing potency or cast,
   nuking magic attack or magic damage and helix magic — and a per-spell card still wins over its
-  category. The Nuking card's third, automatic **Magic Burst** row is worn for Elemental Magic while a
-  Magic Burst window is open on the target and falls back to the armed mode otherwise; the row
-  lights an `open` badge while the client reports the window, and the same flag is
-  `phase_status().burst`.
+  category. **Enfeebles has one row per spell kind** instead of one blanket set: Skill, Macc,
+  Duration, MND, INT, Macc + potency and General. The host puts every Enfeebling Magic spell in
+  one kind, the row picks that kind's set, and clicking a kind's name shows the set's 4×4 gear
+  grid and item list. The card's **Mode** reads `Auto — by spell type` by default; selecting a
+  kind forces every enfeebling spell through that one set (the same list as
+  `//modes enfeebles …`). An automatic **Saboteur** row (`Sab on buff`) swaps the hands to the
+  overlay set while status 454 is live and leaves the kind set under it; the kind's gear
+  preview lists that piece too. The guide's builds live in `gearswap/RDM.lua`; the mapping is
+  in [rdm.md](rdm.md). The Nuking card's third, automatic **Magic Burst** row is worn for Elemental
+  Magic while a Magic Burst window is open on the target and falls back to the armed mode
+  otherwise; the row lights an `open` badge while the client reports the window, and the same
+  flag is `phase_status().burst`.
 - **Idle** — field, town, movement, DT/PDT/MDT/Eva/Meva sets and a manual idle focus.
 
 Phase settings are stored in the game database, not only in the WebView's localStorage. The

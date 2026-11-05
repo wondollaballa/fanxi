@@ -9,9 +9,10 @@ combat path already reads.
 
 Two block families exist:
 
-* **bundled augments** (``kind 0x03, subkind 0x83``), used by Odyssey, Limbus and
-  Unity.  The block names a bundle index and the piece's rows live in
-  ``data/odyssey_r30.json``, ``data/limbus_r30.json`` and :mod:`unity`.  Rows are
+* **bundled augments** (``kind 0x03, subkind 0x83``), used by Odyssey, Limbus,
+  Unity and Oboro (JSE weapons and JSE necks).  The block names a bundle index
+  and the piece's rows live in ``data/odyssey_r30.json``,
+  ``data/limbus_r30.json``, :mod:`unity` and ``data/oboro_r25.json``.  Rows are
   applied only when the block's rank reaches the row's rank, so an unranked copy
   adds nothing.
 * **standard augments** (``kind 0x02, subkind 0x03``), used by the Ambuscade job
@@ -114,8 +115,15 @@ _PERCENT = {
     "skillchaindmg": mod.SKILLCHAIN_BONUS,
     "skillchaindamage": mod.SKILLCHAIN_BONUS,
     "tripleatk": mod.TRIPLE_ATTACK,
+    # JSE necks spell the same row "Trip. Atk.".
+    "tripatk": mod.TRIPLE_ATTACK,
     "potencyofcurereceived": mod.CURE_POTENCY_RCVD,
     "enhancingmagicduration": mod.ENH_MAGIC_DURATION_AUGMENT,
+    # JSE neck rows: "Enh. Mag. eff. dur." is the enhancing-duration augment and
+    # "Enf. Mag. eff. dur." is the enfeebling-duration percent the debuff timer
+    # reads.  The wording is BG Wiki's; the client prints the same row.
+    "enfmageffdur": mod.ENF_MAG_DURATION,
+    "enfeeblingmagicduration": mod.ENF_MAG_DURATION,
     # Oboro path C: the magical weapon-skill base multiplier on Crocea Mors,
     # Vitiation Sword and Duelist's Sword.  Applied by the magical WS path.
     "elementalweaponskilldamage": mod.ELEMENTAL_WS_DAMAGE,
@@ -146,6 +154,8 @@ _HUNDREDTHS = {
     "magicdamagetaken": mod.DMGMAGIC,
     "crithitrate": mod.CRIT_HIT_RATE,
     "criticalhitrate": mod.CRIT_HIT_RATE,
+    # The BLU JSE neck (Mirage Stole) spells the same row "Crit Rate".
+    "critrate": mod.CRIT_HIT_RATE,
     # Equipment haste is stored in hundredths, so "Haste+3%" is 300.
     "haste": mod.HASTE_GEAR,
     "breathdmgtaken": mod.DMGBREATH,
@@ -220,6 +230,14 @@ UNMODELLED = {
     "vivaciouspulsepotency",
     "wyverndamagetaken",
     "wyvernhp",
+    # Oboro JSE necks (bundles 199-220).  Their player-stat rows (attributes,
+    # Store TP, Fast Cast, Enmity, Evasion, Damage taken, physical damage limit,
+    # critical rate, enhancing/enfeebling duration) parse above; these are the
+    # job-system rows the engine has no pool for yet.
+    "helixeffduration",
+    "magicburstacc",
+    "luopanduration",
+    "luopanabsorbsdamage",
     # Oseem Arcane Glyptics rows the engine has no pool for yet.
     "additionaleffectstun",
     "avatarperpetuationcost",
@@ -273,6 +291,14 @@ UNMODELLED = {
     "shieldskill",
     # Sinister Reign rows the engine has no pool for yet.
     "treasurehunter",
+    # Detrovio Reive/Incursion cape rows with no engine pool yet: Blood Pact
+    # recast, Helix/Meditate effect duration, Reverse Flourish TP and Embolden's
+    # enhancing-magic bonus.  The client still prints them from the block.
+    "bloodpactrecasttimeii",
+    "embolden",
+    "helixeffectduration",
+    "meditateeffectduration",
+    "reverseflourish",
 }
 
 # Lines with no signed value at all cannot be tokenised; they are listed verbatim.

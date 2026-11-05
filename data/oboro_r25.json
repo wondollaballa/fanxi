@@ -1,7 +1,7 @@
 {
-  "source": "https://www.bg-wiki.com/ffxi/Dynamis_Divergence_Weapon_Augments",
+  "source": "https://www.bg-wiki.com/ffxi/Dynamis_Divergence_Weapon_Augments + https://www.bg-wiki.com/ffxi/Category:JSE_Necks",
   "rp_curve": 0,
-  "note": "Oboro (Port Jeuno E-6) augments Dynamis-Divergence crafted JSE weapons. NQ caps at R15, HQ1 at R20 and HQ2 at R25; path choice is permanent in retail.",
+  "note": "Oboro (Port Jeuno E-6) augments Dynamis-Divergence crafted JSE weapons and all 22 JSE necks. NQ caps at R15, HQ1 at R20 and HQ2 at R25; a weapon's path choice is permanent in retail, and a neck has one path.",
   "qualities": {
     "nq": {
       "label": "NQ",
@@ -1126,6 +1126,734 @@
             "Additional ammo damage: +300%",
             "Additional ammo accuracy +150",
             "DMG:+6"
+          ]
+        }
+      }
+    }
+  ],
+  "necks": [
+    {
+      "job": "WAR",
+      "bundle": 199,
+      "tiers": {
+        "nq": {
+          "item_id": 25417,
+          "name": "Warrior's Beads",
+          "augments": [
+            "HP+50",
+            "STR/DEX +10",
+            "\"Dbl. Atk.\"+5%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25418,
+          "name": "War. Beads +1",
+          "augments": [
+            "HP+75",
+            "STR/DEX +12",
+            "\"Dbl. Atk.\"+6%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25419,
+          "name": "Warrior's Bead Necklace +2",
+          "augments": [
+            "HP+100",
+            "STR/DEX +15",
+            "\"Dbl. Atk.\"+7%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "MNK",
+      "bundle": 200,
+      "tiers": {
+        "nq": {
+          "item_id": 25423,
+          "name": "Monk's Nodowa",
+          "augments": [
+            "DEX/MND +10",
+            "Kick Attacks+15",
+            "Physical Damage Limit+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25424,
+          "name": "Mnk. Nodowa +1",
+          "augments": [
+            "DEX/MND +12",
+            "Kick Attacks+20",
+            "Physical Damage Limit+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25425,
+          "name": "Monk's Nodowa +2",
+          "augments": [
+            "DEX/MND +15",
+            "Kick Attacks+25",
+            "Physical Damage Limit+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "WHM",
+      "bundle": 201,
+      "tiers": {
+        "nq": {
+          "item_id": 25429,
+          "name": "Cleric's Torque",
+          "augments": [
+            "INT/MND +10",
+            "Enmity-15",
+            "\"Fast Cast\"+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25430,
+          "name": "Clr. Torque +1",
+          "augments": [
+            "INT/MND +12",
+            "Enmity-20",
+            "\"Fast Cast\"+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25431,
+          "name": "Cleric's Torque +2",
+          "augments": [
+            "INT/MND +15",
+            "Enmity-25",
+            "\"Fast Cast\"+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "BLM",
+      "bundle": 202,
+      "tiers": {
+        "nq": {
+          "item_id": 25435,
+          "name": "Sorcerer's Stole",
+          "augments": [
+            "INT/MND +10",
+            "Magic Burst DMG+6%",
+            "Magic Burst ACC+15"
+          ]
+        },
+        "hq1": {
+          "item_id": 25436,
+          "name": "Src. Stole +1",
+          "augments": [
+            "INT/MND +12",
+            "Magic Burst DMG+8%",
+            "Magic Burst ACC+20"
+          ]
+        },
+        "hq2": {
+          "item_id": 25437,
+          "name": "Sorcerer's Stole +2",
+          "augments": [
+            "INT/MND +15",
+            "Magic Burst DMG+10%",
+            "Magic Burst ACC+25"
+          ]
+        }
+      }
+    },
+    {
+      "job": "RDM",
+      "bundle": 203,
+      "tiers": {
+        "nq": {
+          "item_id": 25441,
+          "name": "Duelist's Torque",
+          "augments": [
+            "INT/MND +10",
+            "Enh. Mag. eff. dur.+15%",
+            "Enf. Mag. eff. dur.+15%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25442,
+          "name": "Dls. Torque +1",
+          "augments": [
+            "INT/MND +12",
+            "Enh. Mag. eff. dur.+20%",
+            "Enf. Mag. eff. dur.+20%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25443,
+          "name": "Duelist's Torque +2",
+          "augments": [
+            "INT/MND +15",
+            "Enh. Mag. eff. dur.+25%",
+            "Enf. Mag. eff. dur.+25%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "THF",
+      "bundle": 204,
+      "tiers": {
+        "nq": {
+          "item_id": 25447,
+          "name": "Assassin's Gorget",
+          "augments": [
+            "DEX/AGI +10",
+            "Evasion+15",
+            "\"Trip. Atk.\"+2%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25448,
+          "name": "Asn. Gorget +1",
+          "augments": [
+            "DEX/AGI +12",
+            "Evasion+20",
+            "\"Trip. Atk.\"+3%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25449,
+          "name": "Assassin's Gorget +2",
+          "augments": [
+            "DEX/AGI +15",
+            "Evasion+25",
+            "\"Trip. Atk.\"+4%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "PLD",
+      "bundle": 205,
+      "tiers": {
+        "nq": {
+          "item_id": 25453,
+          "name": "Knight's Beads",
+          "augments": [
+            "HP+30",
+            "VIT/MND +10",
+            "Damage taken-5%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25454,
+          "name": "Kgt. Beads +1",
+          "augments": [
+            "HP+45",
+            "VIT/MND +12",
+            "Damage taken-6%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25455,
+          "name": "Knight's Bead Necklace +2",
+          "augments": [
+            "HP+60",
+            "VIT/MND +15",
+            "Damage taken-7%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "DRK",
+      "bundle": 206,
+      "tiers": {
+        "nq": {
+          "item_id": 25459,
+          "name": "Abyssal Beads",
+          "augments": [
+            "STR+15",
+            "\"Store TP\"+5",
+            "Physical Damage Limit+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25460,
+          "name": "Abyssal Beads +1",
+          "augments": [
+            "STR+20",
+            "\"Store TP\"+6",
+            "Physical Damage Limit+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25461,
+          "name": "Abyssal Bead Necklace +2",
+          "augments": [
+            "STR+25",
+            "\"Store TP\"+7",
+            "Physical Damage Limit+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "BST",
+      "bundle": 207,
+      "tiers": {
+        "nq": {
+          "item_id": 25465,
+          "name": "Beastmaster Collar",
+          "augments": [
+            "STR/DEX +10",
+            "Physical Damage Limit+6%",
+            "Pet: \"Double Attack\"+15%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25466,
+          "name": "Bst. Collar +1",
+          "augments": [
+            "STR/DEX +12",
+            "Physical Damage Limit+8%",
+            "Pet: \"Double Attack\"+20%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25467,
+          "name": "Beastmaster Collar +2",
+          "augments": [
+            "STR/DEX +15",
+            "Physical Damage Limit+10%",
+            "Pet: \"Double Attack\"+25%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "BRD",
+      "bundle": 208,
+      "tiers": {
+        "nq": {
+          "item_id": 25471,
+          "name": "Bard's Charm",
+          "augments": [
+            "DEX/CHR +15",
+            "\"Store TP\"+5",
+            "Physical Damage Limit+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25472,
+          "name": "Bard's Charm +1",
+          "augments": [
+            "DEX/CHR +20",
+            "\"Store TP\"+6",
+            "Physical Damage Limit+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25473,
+          "name": "Bard's Charm +2",
+          "augments": [
+            "DEX/CHR +25",
+            "\"Store TP\"+7",
+            "Physical Damage Limit+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "RNG",
+      "bundle": 209,
+      "tiers": {
+        "nq": {
+          "item_id": 25477,
+          "name": "Scout's Gorget",
+          "augments": [
+            "AGI+15",
+            "\"Store TP\"+5",
+            "Physical Damage Limit+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25478,
+          "name": "Scout's Gorget +1",
+          "augments": [
+            "AGI+20",
+            "\"Store TP\"+6",
+            "Physical Damage Limit+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25479,
+          "name": "Scout's Gorget +2",
+          "augments": [
+            "AGI+25",
+            "\"Store TP\"+7",
+            "Physical Damage Limit+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "SAM",
+      "bundle": 210,
+      "tiers": {
+        "nq": {
+          "item_id": 25483,
+          "name": "Samurai's Nodowa",
+          "augments": [
+            "STR+15",
+            "\"Store TP\"+5",
+            "Physical Damage Limit+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25484,
+          "name": "Sam. Nodowa +1",
+          "augments": [
+            "STR+20",
+            "\"Store TP\"+6",
+            "Physical Damage Limit+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25485,
+          "name": "Samurai's Nodowa +2",
+          "augments": [
+            "STR+25",
+            "\"Store TP\"+7",
+            "Physical Damage Limit+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "NIN",
+      "bundle": 211,
+      "tiers": {
+        "nq": {
+          "item_id": 25489,
+          "name": "Ninja Nodowa",
+          "augments": [
+            "DEX/AGI +10",
+            "Daken+15",
+            "Physical Damage Limit+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25490,
+          "name": "Ninja Nodowa +1",
+          "augments": [
+            "DEX/AGI +12",
+            "Daken+20",
+            "Physical Damage Limit+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25491,
+          "name": "Ninja Nodowa +2",
+          "augments": [
+            "DEX/AGI +15",
+            "Daken+25",
+            "Physical Damage Limit+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "DRG",
+      "bundle": 212,
+      "tiers": {
+        "nq": {
+          "item_id": 25495,
+          "name": "Dragoon's Collar",
+          "augments": [
+            "STR/VIT +10",
+            "Physical Damage Limit+6%",
+            "Wyvern: Damage Taken-15%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25496,
+          "name": "Dgn. Collar +1",
+          "augments": [
+            "STR/VIT +12",
+            "Physical Damage Limit+8%",
+            "Wyvern: Damage Taken-20%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25497,
+          "name": "Dragoon's Collar +2",
+          "augments": [
+            "STR/VIT +15",
+            "Physical Damage Limit+10%",
+            "Wyvern: Damage Taken-25%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "SMN",
+      "bundle": 213,
+      "tiers": {
+        "nq": {
+          "item_id": 25501,
+          "name": "Summoner's Collar",
+          "augments": [
+            "MP+30",
+            "Avatar: All Base Stats+15",
+            "Blood Pact Damage+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25502,
+          "name": "Smn. Collar +1",
+          "augments": [
+            "MP+40",
+            "Avatar: All Base Stats+20",
+            "Blood Pact Damage+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25503,
+          "name": "Summoner's Collar +2",
+          "augments": [
+            "MP+50",
+            "Avatar: All Base Stats+25",
+            "Blood Pact Damage+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "BLU",
+      "bundle": 214,
+      "tiers": {
+        "nq": {
+          "item_id": 25507,
+          "name": "Mirage Stole",
+          "augments": [
+            "STR/DEX +15",
+            "\"Store TP\"+5",
+            "Crit Rate+3%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25508,
+          "name": "Mirage Stole +1",
+          "augments": [
+            "STR/DEX +20",
+            "\"Store TP\"+6",
+            "Crit Rate+4%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25509,
+          "name": "Mirage Stole +2",
+          "augments": [
+            "STR/DEX +25",
+            "\"Store TP\"+7",
+            "Crit Rate+5%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "COR",
+      "bundle": 215,
+      "tiers": {
+        "nq": {
+          "item_id": 25513,
+          "name": "Commodore Charm",
+          "augments": [
+            "STR/AGI +10",
+            "Magic Damage+15",
+            "\"Magic Attack Bonus\"+5"
+          ]
+        },
+        "hq1": {
+          "item_id": 25514,
+          "name": "Comm. Charm +1",
+          "augments": [
+            "STR/AGI +12",
+            "Magic Damage+20",
+            "\"Magic Attack Bonus\"+6"
+          ]
+        },
+        "hq2": {
+          "item_id": 25515,
+          "name": "Commodore Charm +2",
+          "augments": [
+            "STR/AGI +15",
+            "Magic Damage+25",
+            "\"Magic Attack Bonus\"+7"
+          ]
+        }
+      }
+    },
+    {
+      "job": "PUP",
+      "bundle": 216,
+      "tiers": {
+        "nq": {
+          "item_id": 25519,
+          "name": "Pup. Collar",
+          "augments": [
+            "DEX/AGI +10",
+            "Physical Damage Limit+6%",
+            "Automaton: \"Mag. Atk. Bns.\"+15"
+          ]
+        },
+        "hq1": {
+          "item_id": 25520,
+          "name": "Pup. Collar +1",
+          "augments": [
+            "DEX/AGI +12",
+            "Physical Damage Limit+8%",
+            "Automaton: \"Mag. Atk. Bns.\"+20"
+          ]
+        },
+        "hq2": {
+          "item_id": 25521,
+          "name": "Puppetmaster's Collar +2",
+          "augments": [
+            "DEX/AGI +15",
+            "Physical Damage Limit+10%",
+            "Automaton: \"Mag. Atk. Bns.\"+25"
+          ]
+        }
+      }
+    },
+    {
+      "job": "DNC",
+      "bundle": 217,
+      "tiers": {
+        "nq": {
+          "item_id": 25525,
+          "name": "Etoile Gorget",
+          "augments": [
+            "DEX/CHR +15",
+            "\"Store TP\"+5",
+            "Physical Damage Limit+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25526,
+          "name": "Etoile Gorget +1",
+          "augments": [
+            "DEX/CHR +20",
+            "\"Store TP\"+6",
+            "Physical Damage Limit+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25527,
+          "name": "Etoile Gorget +2",
+          "augments": [
+            "DEX/CHR +25",
+            "\"Store TP\"+7",
+            "Physical Damage Limit+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "SCH",
+      "bundle": 218,
+      "tiers": {
+        "nq": {
+          "item_id": 25531,
+          "name": "Argute Stole",
+          "augments": [
+            "INT/MND +10",
+            "Magic Damage+15",
+            "Helix eff. Duration+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25532,
+          "name": "Argute Stole +1",
+          "augments": [
+            "INT/MND +12",
+            "Magic Damage+20",
+            "Helix eff. Duration+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25533,
+          "name": "Argute Stole +2",
+          "augments": [
+            "INT/MND +15",
+            "Magic Damage+25",
+            "Helix eff. Duration+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "GEO",
+      "bundle": 219,
+      "tiers": {
+        "nq": {
+          "item_id": 25537,
+          "name": "Bagua Charm",
+          "augments": [
+            "MP+30",
+            "Luopan Duration+15%",
+            "Luopan: Absorbs Damage+6%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25538,
+          "name": "Bagua Charm +1",
+          "augments": [
+            "MP+40",
+            "Luopan Duration+20%",
+            "Luopan: Absorbs Damage+8%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25539,
+          "name": "Bagua Charm +2",
+          "augments": [
+            "MP+50",
+            "Luopan Duration+25%",
+            "Luopan: Absorbs Damage+10%"
+          ]
+        }
+      }
+    },
+    {
+      "job": "RUN",
+      "bundle": 220,
+      "tiers": {
+        "nq": {
+          "item_id": 25543,
+          "name": "Futhark Torque",
+          "augments": [
+            "HP+30",
+            "STR/MND +10",
+            "Damage taken-5%"
+          ]
+        },
+        "hq1": {
+          "item_id": 25544,
+          "name": "Futhark Torque +1",
+          "augments": [
+            "HP+45",
+            "STR/MND +12",
+            "Damage taken-6%"
+          ]
+        },
+        "hq2": {
+          "item_id": 25545,
+          "name": "Futhark Torque +2",
+          "augments": [
+            "HP+60",
+            "STR/MND +15",
+            "Damage taken-7%"
           ]
         }
       }

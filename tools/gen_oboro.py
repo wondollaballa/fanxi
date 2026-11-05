@@ -38,7 +38,8 @@ DATA = ROOT / "data" / "oboro_r25.json"
 DOCS = ROOT / "docs" / "oboro-r25.md"
 SQL = ROOT / "database" / "migrations" / "0120_oboro_augments.sql"
 
-SOURCE = "https://www.bg-wiki.com/ffxi/Dynamis_Divergence_Weapon_Augments"
+SOURCE = ("https://www.bg-wiki.com/ffxi/Dynamis_Divergence_Weapon_Augments "
+          "+ https://www.bg-wiki.com/ffxi/Category:JSE_Necks")
 RP_CURVE = 0  # curve A
 
 QUALITIES = {
@@ -260,6 +261,107 @@ WEAPONS = [
      6, True),
 ]
 
+# JSE necks.  One bundle per job (client bundles 199-220, the block right after
+# the weapon families), shared by all three qualities; the block's rank/tier
+# picks the row values, so NQ, +1 and +2 differ only by item id and rank.  Each
+# row is (template, R15, R20, R25); the wiki is
+# https://www.bg-wiki.com/ffxi/Category:JSE_Necks and each item page repeats
+# its own tier's values.
+#
+# The bundle order is FFXI's job order, which is also the client's:
+# 199 WAR ... 220 RUN.  Assassin's Gorget +2 (bundle 204) is the copy the
+# block layout was verified against.
+NECKS = [
+    ("WAR", 199, 25417, "Warrior's Beads", 25418, "War. Beads +1",
+     25419, "Warrior's Bead Necklace +2",
+     [("HP+%d", 50, 75, 100), ("STR/DEX +%d", 10, 12, 15),
+      ('"Dbl. Atk."+%d%%', 5, 6, 7)]),
+    ("MNK", 200, 25423, "Monk's Nodowa", 25424, "Mnk. Nodowa +1",
+     25425, "Monk's Nodowa +2",
+     [("DEX/MND +%d", 10, 12, 15), ("Kick Attacks+%d", 15, 20, 25),
+      ("Physical Damage Limit+%d%%", 6, 8, 10)]),
+    ("WHM", 201, 25429, "Cleric's Torque", 25430, "Clr. Torque +1",
+     25431, "Cleric's Torque +2",
+     [("INT/MND +%d", 10, 12, 15), ("Enmity-%d", 15, 20, 25),
+      ('"Fast Cast"+%d%%', 6, 8, 10)]),
+    ("BLM", 202, 25435, "Sorcerer's Stole", 25436, "Src. Stole +1",
+     25437, "Sorcerer's Stole +2",
+     [("INT/MND +%d", 10, 12, 15), ("Magic Burst DMG+%d%%", 6, 8, 10),
+      ("Magic Burst ACC+%d", 15, 20, 25)]),
+    ("RDM", 203, 25441, "Duelist's Torque", 25442, "Dls. Torque +1",
+     25443, "Duelist's Torque +2",
+     [("INT/MND +%d", 10, 12, 15), ("Enh. Mag. eff. dur.+%d%%", 15, 20, 25),
+      ("Enf. Mag. eff. dur.+%d%%", 15, 20, 25)]),
+    ("THF", 204, 25447, "Assassin's Gorget", 25448, "Asn. Gorget +1",
+     25449, "Assassin's Gorget +2",
+     [("DEX/AGI +%d", 10, 12, 15), ("Evasion+%d", 15, 20, 25),
+      ('"Trip. Atk."+%d%%', 2, 3, 4)]),
+    ("PLD", 205, 25453, "Knight's Beads", 25454, "Kgt. Beads +1",
+     25455, "Knight's Bead Necklace +2",
+     [("HP+%d", 30, 45, 60), ("VIT/MND +%d", 10, 12, 15),
+      ("Damage taken-%d%%", 5, 6, 7)]),
+    ("DRK", 206, 25459, "Abyssal Beads", 25460, "Abyssal Beads +1",
+     25461, "Abyssal Bead Necklace +2",
+     [("STR+%d", 15, 20, 25), ('"Store TP"+%d', 5, 6, 7),
+      ("Physical Damage Limit+%d%%", 6, 8, 10)]),
+    ("BST", 207, 25465, "Beastmaster Collar", 25466, "Bst. Collar +1",
+     25467, "Beastmaster Collar +2",
+     [("STR/DEX +%d", 10, 12, 15), ("Physical Damage Limit+%d%%", 6, 8, 10),
+      ('Pet: "Double Attack"+%d%%', 15, 20, 25)]),
+    ("BRD", 208, 25471, "Bard's Charm", 25472, "Bard's Charm +1",
+     25473, "Bard's Charm +2",
+     [("DEX/CHR +%d", 15, 20, 25), ('"Store TP"+%d', 5, 6, 7),
+      ("Physical Damage Limit+%d%%", 6, 8, 10)]),
+    ("RNG", 209, 25477, "Scout's Gorget", 25478, "Scout's Gorget +1",
+     25479, "Scout's Gorget +2",
+     [("AGI+%d", 15, 20, 25), ('"Store TP"+%d', 5, 6, 7),
+      ("Physical Damage Limit+%d%%", 6, 8, 10)]),
+    ("SAM", 210, 25483, "Samurai's Nodowa", 25484, "Sam. Nodowa +1",
+     25485, "Samurai's Nodowa +2",
+     [("STR+%d", 15, 20, 25), ('"Store TP"+%d', 5, 6, 7),
+      ("Physical Damage Limit+%d%%", 6, 8, 10)]),
+    ("NIN", 211, 25489, "Ninja Nodowa", 25490, "Ninja Nodowa +1",
+     25491, "Ninja Nodowa +2",
+     [("DEX/AGI +%d", 10, 12, 15), ("Daken+%d", 15, 20, 25),
+      ("Physical Damage Limit+%d%%", 6, 8, 10)]),
+    ("DRG", 212, 25495, "Dragoon's Collar", 25496, "Dgn. Collar +1",
+     25497, "Dragoon's Collar +2",
+     [("STR/VIT +%d", 10, 12, 15), ("Physical Damage Limit+%d%%", 6, 8, 10),
+      ("Wyvern: Damage Taken-%d%%", 15, 20, 25)]),
+    ("SMN", 213, 25501, "Summoner's Collar", 25502, "Smn. Collar +1",
+     25503, "Summoner's Collar +2",
+     [("MP+%d", 30, 40, 50), ("Avatar: All Base Stats+%d", 15, 20, 25),
+      ("Blood Pact Damage+%d%%", 6, 8, 10)]),
+    ("BLU", 214, 25507, "Mirage Stole", 25508, "Mirage Stole +1",
+     25509, "Mirage Stole +2",
+     [("STR/DEX +%d", 15, 20, 25), ('"Store TP"+%d', 5, 6, 7),
+      ("Crit Rate+%d%%", 3, 4, 5)]),
+    ("COR", 215, 25513, "Commodore Charm", 25514, "Comm. Charm +1",
+     25515, "Commodore Charm +2",
+     [("STR/AGI +%d", 10, 12, 15), ("Magic Damage+%d", 15, 20, 25),
+      ('"Magic Attack Bonus"+%d', 5, 6, 7)]),
+    ("PUP", 216, 25519, "Pup. Collar", 25520, "Pup. Collar +1",
+     25521, "Puppetmaster's Collar +2",
+     [("DEX/AGI +%d", 10, 12, 15), ("Physical Damage Limit+%d%%", 6, 8, 10),
+      ('Automaton: "Mag. Atk. Bns."+%d', 15, 20, 25)]),
+    ("DNC", 217, 25525, "Etoile Gorget", 25526, "Etoile Gorget +1",
+     25527, "Etoile Gorget +2",
+     [("DEX/CHR +%d", 15, 20, 25), ('"Store TP"+%d', 5, 6, 7),
+      ("Physical Damage Limit+%d%%", 6, 8, 10)]),
+    ("SCH", 218, 25531, "Argute Stole", 25532, "Argute Stole +1",
+     25533, "Argute Stole +2",
+     [("INT/MND +%d", 10, 12, 15), ("Magic Damage+%d", 15, 20, 25),
+      ("Helix eff. Duration+%d%%", 6, 8, 10)]),
+    ("GEO", 219, 25537, "Bagua Charm", 25538, "Bagua Charm +1",
+     25539, "Bagua Charm +2",
+     [("MP+%d", 30, 40, 50), ("Luopan Duration+%d%%", 15, 20, 25),
+      ("Luopan: Absorbs Damage+%d%%", 6, 8, 10)]),
+    ("RUN", 220, 25543, "Futhark Torque", 25544, "Futhark Torque +1",
+     25545, "Futhark Torque +2",
+     [("HP+%d", 30, 45, 60), ("STR/MND +%d", 10, 12, 15),
+      ("Damage taken-%d%%", 5, 6, 7)]),
+]
+
 
 def payload() -> dict:
     """The compact dataset the server expands into one entry per item."""
@@ -288,15 +390,36 @@ def payload() -> dict:
             "dmg": dmg,
             "tiers": tiers,
         })
+    necks = []
+    for (job, bundle, nq_id, nq_name, hq1_id, hq1_name, hq2_id, hq2_name,
+         rows) in NECKS:
+        tiers = {}
+        for offset, (key, item_id, name) in enumerate((
+                ("nq", nq_id, nq_name),
+                ("hq1", hq1_id, hq1_name),
+                ("hq2", hq2_id, hq2_name))):
+            tiers[key] = {
+                "item_id": item_id,
+                "name": name,
+                "augments": [template % values[offset]
+                             for template, *values in rows],
+            }
+        necks.append({
+            "job": job,
+            "bundle": bundle,
+            "tiers": tiers,
+        })
     return {
         "source": SOURCE,
         "rp_curve": RP_CURVE,
         "note": (
-            "Oboro (Port Jeuno E-6) augments Dynamis-Divergence crafted JSE weapons. "
-            "NQ caps at R15, HQ1 at R20 and HQ2 at R25; path choice is permanent in retail."
+            "Oboro (Port Jeuno E-6) augments Dynamis-Divergence crafted JSE weapons "
+            "and all 22 JSE necks. NQ caps at R15, HQ1 at R20 and HQ2 at R25; a "
+            "weapon's path choice is permanent in retail, and a neck has one path."
         ),
         "qualities": QUALITIES,
         "weapons": weapons,
+        "necks": necks,
     }
 
 
@@ -339,10 +462,11 @@ def entry_paths(weapon: dict, quality_key: str) -> list[dict]:
 
 def doc() -> str:
     out = [
-        "# Oboro Dynamis-Divergence weapon augments",
+        "# Oboro Dynamis-Divergence weapon and JSE neck augments",
         "",
         "Oboro, at Port Jeuno (E-6), augments the crafted JSE weapons that drop",
-        "from Dynamis - Divergence.  The client stores the result in the same",
+        "from Dynamis - Divergence and all 22 **JSE necks**.  The client stores",
+        "the result in the same",
         "24-byte `AugmentBundle` block Odyssey and Limbus use:",
         "",
         "```",
@@ -356,9 +480,13 @@ def doc() -> str:
         "the lifetime total separately (R15 5,950; R20 13,060; R25 25,150).",
         "",
         "The bundle indices come from the client's augment table (LandSandBoat's",
-        "`xi.data.augments.bundles`, parsed from the MNC2 data).  The 22 families",
-        "are listed in the table's own order, nine bundles per family: NQ A/B/C,",
-        "HQ1 A/B/C, HQ2 A/B/C.",
+        "`xi.data.augments.bundles`, parsed from the MNC2 data).  The 22 weapon",
+        "families are listed in the table's own order, nine bundles per family:",
+        "NQ A/B/C, HQ1 A/B/C, HQ2 A/B/C.  The 22 JSE necks follow them as",
+        "bundles 199-220, one bundle per job in the same order; all three",
+        "qualities share the job's bundle and the block's rank/tier selects the",
+        "row values.  Assassin's Gorget +2 (bundle 204) is the copy the block",
+        "layout was verified against.",
         "",
         "## Path A and B",
         "",
@@ -406,14 +534,47 @@ def doc() -> str:
         "bundle 198.  BG Wiki's table lists +250%, which is Arke Crossbow's HQ1",
         "value; the R15/R20/R25 bundle progression is 200/250/300.",
         "",
+        "## JSE necks",
+        "",
+        "A JSE neck has one path (Path A) and three qualities, and its bundle is",
+        "shared by NQ, +1 and +2.  Capping writes rank 15/20/25 with the item's",
+        "tier, so the same bundle prints the R15, R20 or R25 row.  The reward is",
+        "the neck's three augment lines in `data/oboro_r25.json`; the launcher's",
+        "Oboro card lists all 66 copies.",
+        "",
+        "| Job | NQ | +1 | +2 | Bundle | Augments (R15 / R20 / R25) |",
+        "| --- | --- | --- | --- | ---: | --- |",
+    ]
+    for neck in payload()["necks"]:
+        def item(key: str) -> str:
+            tier = neck["tiers"][key]
+            return "**%s**<br>#%d" % (tier["name"], tier["item_id"])
+        augments = "<br>".join(
+            "%s: %s" % (QUALITIES[key]["label"], ", ".join(
+                neck["tiers"][key]["augments"]))
+            for key in ("nq", "hq1", "hq2"))
+        out.append("| %s | %s | %s | %s | %d | %s |" % (
+            neck["job"], item("nq"), item("hq1"), item("hq2"),
+            neck["bundle"], augments))
+    out += [
+        "",
+        "The RDM neck (Duelist's Torque) is the one the enfeebling sets use:",
+        "R25 is INT/MND +15, enhancing magic duration +25% and enfeebling magic",
+        "duration +25%.  `augment_stats` maps those rows to INT, MND,",
+        "`ENH_MAGIC_DURATION_AUGMENT` and `ENF_MAG_DURATION`, so both timers move",
+        "on the server as well as on the client tooltip.",
+        "",
         "## In the launcher",
         "",
-        "The Data page has a dedicated **Oboro** card.  It lists every family and",
-        "quality, shows whether a copy is in a bag and which path/rank it carries,",
-        "and caps the chosen path in one click.  An item that is not in a bag can",
-        "be bought from the same card into the first free inventory slot (the",
-        "Armory path, 141,610 gil), then capped.  Capping sends `//reload` when the",
-        "client is running, so the tooltip and the stat sheet update immediately.",
+        "The Data page has a dedicated **Oboro** card.  It lists every weapon",
+        "family and quality plus all 22 JSE necks, shows whether a copy is in a",
+        "bag and which path/rank it carries, and caps the chosen path in one",
+        "click.  Necks have one path, so their card shows a single Cap button",
+        "instead of the three-path row.  An item that is not in a bag can be",
+        "bought from the same card into the first free inventory slot (the",
+        "Armory path; weapons are 141,610 gil and necks 98,010 gil), then",
+        "capped.  Capping sends `//reload` when the client is running, so the",
+        "tooltip and the stat sheet update immediately.",
         "",
         "`FanxiService.equipped_mods()` reads the block back through",
         "`augment_stats`: Musa Path C is `\"Regen\" potency +25`, `\"Cure\"`",

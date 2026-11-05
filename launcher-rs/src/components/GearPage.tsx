@@ -189,6 +189,8 @@ type ItemPickerState = {
 };
 
 type JobPair = {
+  mainJob: number;
+  subJob: number;
   mainBit: number;
   subBit: number;
   mainLevel: number;
@@ -377,17 +379,16 @@ export function GearPage({
   // job change in the Mog House must not leave the list filtered by the old jobs.
   const jobPair = useMemo<JobPair>(() => {
     const live = instance?.state?.player;
-    const mainJob = Number(job?.jobId || live?.job || instance?.character?.main_job || 0);
-    const subJob = Number(
-      job?.subJobId || live?.sub_job || instance?.character?.sub_job || 0,
-    );
-    const mainLevel = Number(
-      job?.level || live?.level || instance?.character?.main_level || 0,
-    );
-    const subLevel = Number(
-      job?.subLevel || live?.sub_level || instance?.character?.sub_level || 0,
-    );
+    // The live client wins over the saved character row and over the job the launcher had
+    // selected: after a Mog House job change the library, spell list and group cards must
+    // all follow the job the character is actually on now.
+    const mainJob = Number(live?.job || job?.jobId || instance?.character?.main_job || 0);
+    const subJob = Number(live?.sub_job || job?.subJobId || instance?.character?.sub_job || 0);
+    const mainLevel = Number(live?.level || job?.level || instance?.character?.main_level || 0);
+    const subLevel = Number(live?.sub_level || job?.subLevel || instance?.character?.sub_level || 0);
     return {
+      mainJob,
+      subJob,
       mainBit: jobBit(mainJob),
       subBit: jobBit(subJob),
       mainLevel,
@@ -740,11 +741,14 @@ export function GearPage({
   // change follows the live job to the same account's next job library; an import only
   // ever replaces the current job's account copy.
   useEffect(() => {
-    if (!instance || !job) return;
-    if (loadedJob.current === job.abbr) return;
-    loadedJob.current = job.abbr;
-    void loadJobLibrary(job.abbr);
-  }, [instance?.port, job?.abbr]);
+    // Follow the live job, not the saved character row: a Mog House job change must load
+    // the new job's account library instead of leaving the previous job's sets on screen.
+    if (!instance || !jobPair.mainJob) return;
+    const abbr = jobAbbr(jobPair.mainJob);
+    if (!abbr || loadedJob.current === abbr) return;
+    loadedJob.current = abbr;
+    void loadJobLibrary(abbr);
+  }, [instance?.port, jobPair.mainJob]);
 
   // A new library may not carry the previous job's set names; point the state choices at sets
   // it does have, without discarding a custom path the plan builder can fall back from.
@@ -821,7 +825,7 @@ export function GearPage({
       cancelled = true;
       if (timer) window.clearTimeout(timer);
     };
-  }, [instance?.port, instance?.startedAt, job?.jobId]);
+  }, [instance?.port, instance?.startedAt, job?.jobId, jobPair.mainJob, jobPair.subJob]);
 
   const returnPaths = useMemo(() => {
     const paths = library
@@ -1970,6 +1974,10 @@ export function GearPage({
           <PhasePanel
             config={config}
             sets={returnPaths}
+            job={{ main: jobPair.mainJob, sub: jobPair.subJob }}
+            port={instance?.port ?? null}
+            setItems={library?.sets}
+            setDetails={library?.detailed}
             phase={phase}
             status={phaseLive}
             phaseOn={phaseOn}

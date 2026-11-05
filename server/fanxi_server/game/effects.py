@@ -159,6 +159,9 @@ class SpellEffect:
     # Dia and Diaga do their small opening hit *and* land their debuff.  The damage comes
     # from the spell's own base (2/6/10/16/23), not the elemental nuke formula.
     damage: bool = False
+    # Impact is a full elemental nuke *and* a stat-down debuff; ``damage`` above is the
+    # Dia-sized opening hit, not this.
+    nuke: bool = False
     # A Helix is a nuke whose opening damage lands again every HELIX_TICK_SECONDS.  The
     # cast stores the rolled hit as the effect's tick, so the table's ``tick`` stays 0.
     helix: bool = False
@@ -246,6 +249,7 @@ def _black_magic() -> dict[str, SpellEffect]:
         "silence": SpellEffect(SILENCE, "debuff", 120),
         "silencega": SpellEffect(SILENCE, "debuff", 120),
         "stun": SpellEffect(STUN, "debuff", 5),
+        "impact": SpellEffect(INT_DOWN, "debuff", 180, potency=20, nuke=True),
         "repose": SpellEffect(SLEEP, "debuff", 90),
         "bio": SpellEffect(BIO, "debuff", 60, tick=2),
         "bio ii": SpellEffect(BIO, "debuff", 120, tick=4),

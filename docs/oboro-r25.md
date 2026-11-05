@@ -1,7 +1,8 @@
-# Oboro Dynamis-Divergence weapon augments
+# Oboro Dynamis-Divergence weapon and JSE neck augments
 
 Oboro, at Port Jeuno (E-6), augments the crafted JSE weapons that drop
-from Dynamis - Divergence.  The client stores the result in the same
+from Dynamis - Divergence and all 22 **JSE necks**.  The client stores
+the result in the same
 24-byte `AugmentBundle` block Odyssey and Limbus use:
 
 ```
@@ -15,9 +16,13 @@ field uses curve A; the launcher writes the rank-bar maximum and shows
 the lifetime total separately (R15 5,950; R20 13,060; R25 25,150).
 
 The bundle indices come from the client's augment table (LandSandBoat's
-`xi.data.augments.bundles`, parsed from the MNC2 data).  The 22 families
-are listed in the table's own order, nine bundles per family: NQ A/B/C,
-HQ1 A/B/C, HQ2 A/B/C.
+`xi.data.augments.bundles`, parsed from the MNC2 data).  The 22 weapon
+families are listed in the table's own order, nine bundles per family:
+NQ A/B/C, HQ1 A/B/C, HQ2 A/B/C.  The 22 JSE necks follow them as
+bundles 199-220, one bundle per job in the same order; all three
+qualities share the job's bundle and the block's rank/tier selects the
+row values.  Assassin's Gorget +2 (bundle 204) is the copy the block
+layout was verified against.
 
 ## Path A and B
 
@@ -66,25 +71,62 @@ Sharanga's HQ2 path C starts at **Additional ammo damage +300%** in
 bundle 198.  BG Wiki's table lists +250%, which is Arke Crossbow's HQ1
 value; the R15/R20/R25 bundle progression is 200/250/300.
 
+## JSE necks
+
+A JSE neck has one path (Path A) and three qualities, and its bundle is
+shared by NQ, +1 and +2.  Capping writes rank 15/20/25 with the item's
+tier, so the same bundle prints the R15, R20 or R25 row.  The reward is
+the neck's three augment lines in `data/oboro_r25.json`; the launcher's
+Oboro card lists all 66 copies.
+
+| Job | NQ | +1 | +2 | Bundle | Augments (R15 / R20 / R25) |
+| --- | --- | --- | --- | ---: | --- |
+| WAR | **Warrior's Beads**<br>#25417 | **War. Beads +1**<br>#25418 | **Warrior's Bead Necklace +2**<br>#25419 | 199 | NQ: HP+50, STR/DEX +10, "Dbl. Atk."+5%<br>HQ1: HP+75, STR/DEX +12, "Dbl. Atk."+6%<br>HQ2: HP+100, STR/DEX +15, "Dbl. Atk."+7% |
+| MNK | **Monk's Nodowa**<br>#25423 | **Mnk. Nodowa +1**<br>#25424 | **Monk's Nodowa +2**<br>#25425 | 200 | NQ: DEX/MND +10, Kick Attacks+15, Physical Damage Limit+6%<br>HQ1: DEX/MND +12, Kick Attacks+20, Physical Damage Limit+8%<br>HQ2: DEX/MND +15, Kick Attacks+25, Physical Damage Limit+10% |
+| WHM | **Cleric's Torque**<br>#25429 | **Clr. Torque +1**<br>#25430 | **Cleric's Torque +2**<br>#25431 | 201 | NQ: INT/MND +10, Enmity-15, "Fast Cast"+6%<br>HQ1: INT/MND +12, Enmity-20, "Fast Cast"+8%<br>HQ2: INT/MND +15, Enmity-25, "Fast Cast"+10% |
+| BLM | **Sorcerer's Stole**<br>#25435 | **Src. Stole +1**<br>#25436 | **Sorcerer's Stole +2**<br>#25437 | 202 | NQ: INT/MND +10, Magic Burst DMG+6%, Magic Burst ACC+15<br>HQ1: INT/MND +12, Magic Burst DMG+8%, Magic Burst ACC+20<br>HQ2: INT/MND +15, Magic Burst DMG+10%, Magic Burst ACC+25 |
+| RDM | **Duelist's Torque**<br>#25441 | **Dls. Torque +1**<br>#25442 | **Duelist's Torque +2**<br>#25443 | 203 | NQ: INT/MND +10, Enh. Mag. eff. dur.+15%, Enf. Mag. eff. dur.+15%<br>HQ1: INT/MND +12, Enh. Mag. eff. dur.+20%, Enf. Mag. eff. dur.+20%<br>HQ2: INT/MND +15, Enh. Mag. eff. dur.+25%, Enf. Mag. eff. dur.+25% |
+| THF | **Assassin's Gorget**<br>#25447 | **Asn. Gorget +1**<br>#25448 | **Assassin's Gorget +2**<br>#25449 | 204 | NQ: DEX/AGI +10, Evasion+15, "Trip. Atk."+2%<br>HQ1: DEX/AGI +12, Evasion+20, "Trip. Atk."+3%<br>HQ2: DEX/AGI +15, Evasion+25, "Trip. Atk."+4% |
+| PLD | **Knight's Beads**<br>#25453 | **Kgt. Beads +1**<br>#25454 | **Knight's Bead Necklace +2**<br>#25455 | 205 | NQ: HP+30, VIT/MND +10, Damage taken-5%<br>HQ1: HP+45, VIT/MND +12, Damage taken-6%<br>HQ2: HP+60, VIT/MND +15, Damage taken-7% |
+| DRK | **Abyssal Beads**<br>#25459 | **Abyssal Beads +1**<br>#25460 | **Abyssal Bead Necklace +2**<br>#25461 | 206 | NQ: STR+15, "Store TP"+5, Physical Damage Limit+6%<br>HQ1: STR+20, "Store TP"+6, Physical Damage Limit+8%<br>HQ2: STR+25, "Store TP"+7, Physical Damage Limit+10% |
+| BST | **Beastmaster Collar**<br>#25465 | **Bst. Collar +1**<br>#25466 | **Beastmaster Collar +2**<br>#25467 | 207 | NQ: STR/DEX +10, Physical Damage Limit+6%, Pet: "Double Attack"+15%<br>HQ1: STR/DEX +12, Physical Damage Limit+8%, Pet: "Double Attack"+20%<br>HQ2: STR/DEX +15, Physical Damage Limit+10%, Pet: "Double Attack"+25% |
+| BRD | **Bard's Charm**<br>#25471 | **Bard's Charm +1**<br>#25472 | **Bard's Charm +2**<br>#25473 | 208 | NQ: DEX/CHR +15, "Store TP"+5, Physical Damage Limit+6%<br>HQ1: DEX/CHR +20, "Store TP"+6, Physical Damage Limit+8%<br>HQ2: DEX/CHR +25, "Store TP"+7, Physical Damage Limit+10% |
+| RNG | **Scout's Gorget**<br>#25477 | **Scout's Gorget +1**<br>#25478 | **Scout's Gorget +2**<br>#25479 | 209 | NQ: AGI+15, "Store TP"+5, Physical Damage Limit+6%<br>HQ1: AGI+20, "Store TP"+6, Physical Damage Limit+8%<br>HQ2: AGI+25, "Store TP"+7, Physical Damage Limit+10% |
+| SAM | **Samurai's Nodowa**<br>#25483 | **Sam. Nodowa +1**<br>#25484 | **Samurai's Nodowa +2**<br>#25485 | 210 | NQ: STR+15, "Store TP"+5, Physical Damage Limit+6%<br>HQ1: STR+20, "Store TP"+6, Physical Damage Limit+8%<br>HQ2: STR+25, "Store TP"+7, Physical Damage Limit+10% |
+| NIN | **Ninja Nodowa**<br>#25489 | **Ninja Nodowa +1**<br>#25490 | **Ninja Nodowa +2**<br>#25491 | 211 | NQ: DEX/AGI +10, Daken+15, Physical Damage Limit+6%<br>HQ1: DEX/AGI +12, Daken+20, Physical Damage Limit+8%<br>HQ2: DEX/AGI +15, Daken+25, Physical Damage Limit+10% |
+| DRG | **Dragoon's Collar**<br>#25495 | **Dgn. Collar +1**<br>#25496 | **Dragoon's Collar +2**<br>#25497 | 212 | NQ: STR/VIT +10, Physical Damage Limit+6%, Wyvern: Damage Taken-15%<br>HQ1: STR/VIT +12, Physical Damage Limit+8%, Wyvern: Damage Taken-20%<br>HQ2: STR/VIT +15, Physical Damage Limit+10%, Wyvern: Damage Taken-25% |
+| SMN | **Summoner's Collar**<br>#25501 | **Smn. Collar +1**<br>#25502 | **Summoner's Collar +2**<br>#25503 | 213 | NQ: MP+30, Avatar: All Base Stats+15, Blood Pact Damage+6%<br>HQ1: MP+40, Avatar: All Base Stats+20, Blood Pact Damage+8%<br>HQ2: MP+50, Avatar: All Base Stats+25, Blood Pact Damage+10% |
+| BLU | **Mirage Stole**<br>#25507 | **Mirage Stole +1**<br>#25508 | **Mirage Stole +2**<br>#25509 | 214 | NQ: STR/DEX +15, "Store TP"+5, Crit Rate+3%<br>HQ1: STR/DEX +20, "Store TP"+6, Crit Rate+4%<br>HQ2: STR/DEX +25, "Store TP"+7, Crit Rate+5% |
+| COR | **Commodore Charm**<br>#25513 | **Comm. Charm +1**<br>#25514 | **Commodore Charm +2**<br>#25515 | 215 | NQ: STR/AGI +10, Magic Damage+15, "Magic Attack Bonus"+5<br>HQ1: STR/AGI +12, Magic Damage+20, "Magic Attack Bonus"+6<br>HQ2: STR/AGI +15, Magic Damage+25, "Magic Attack Bonus"+7 |
+| PUP | **Pup. Collar**<br>#25519 | **Pup. Collar +1**<br>#25520 | **Puppetmaster's Collar +2**<br>#25521 | 216 | NQ: DEX/AGI +10, Physical Damage Limit+6%, Automaton: "Mag. Atk. Bns."+15<br>HQ1: DEX/AGI +12, Physical Damage Limit+8%, Automaton: "Mag. Atk. Bns."+20<br>HQ2: DEX/AGI +15, Physical Damage Limit+10%, Automaton: "Mag. Atk. Bns."+25 |
+| DNC | **Etoile Gorget**<br>#25525 | **Etoile Gorget +1**<br>#25526 | **Etoile Gorget +2**<br>#25527 | 217 | NQ: DEX/CHR +15, "Store TP"+5, Physical Damage Limit+6%<br>HQ1: DEX/CHR +20, "Store TP"+6, Physical Damage Limit+8%<br>HQ2: DEX/CHR +25, "Store TP"+7, Physical Damage Limit+10% |
+| SCH | **Argute Stole**<br>#25531 | **Argute Stole +1**<br>#25532 | **Argute Stole +2**<br>#25533 | 218 | NQ: INT/MND +10, Magic Damage+15, Helix eff. Duration+6%<br>HQ1: INT/MND +12, Magic Damage+20, Helix eff. Duration+8%<br>HQ2: INT/MND +15, Magic Damage+25, Helix eff. Duration+10% |
+| GEO | **Bagua Charm**<br>#25537 | **Bagua Charm +1**<br>#25538 | **Bagua Charm +2**<br>#25539 | 219 | NQ: MP+30, Luopan Duration+15%, Luopan: Absorbs Damage+6%<br>HQ1: MP+40, Luopan Duration+20%, Luopan: Absorbs Damage+8%<br>HQ2: MP+50, Luopan Duration+25%, Luopan: Absorbs Damage+10% |
+| RUN | **Futhark Torque**<br>#25543 | **Futhark Torque +1**<br>#25544 | **Futhark Torque +2**<br>#25545 | 220 | NQ: HP+30, STR/MND +10, Damage taken-5%<br>HQ1: HP+45, STR/MND +12, Damage taken-6%<br>HQ2: HP+60, STR/MND +15, Damage taken-7% |
+
+The RDM neck (Duelist's Torque) is the one the enfeebling sets use:
+R25 is INT/MND +15, enhancing magic duration +25% and enfeebling magic
+duration +25%.  `augment_stats` maps those rows to INT, MND,
+`ENH_MAGIC_DURATION_AUGMENT` and `ENF_MAG_DURATION`, so both timers move
+on the server as well as on the client tooltip.
+
 ## In the launcher
 
-The Data page has a dedicated **Oboro** card.  It lists every family and
-quality, shows whether a copy is in a bag and which path/rank it carries,
-and caps the chosen path in one click.  An item that is not in a bag can
-be bought from the same card into the first free inventory slot (the
-Armory path, 141,610 gil), then capped.  Capping sends `//reload` when the
-client is running, so the tooltip and the stat sheet update immediately.
+The Data page has a dedicated **Oboro** card.  It lists every weapon
+family and quality plus all 22 JSE necks, shows whether a copy is in a
+bag and which path/rank it carries, and caps the chosen path in one
+click.  Necks have one path, so their card shows a single Cap button
+instead of the three-path row.  An item that is not in a bag can be
+bought from the same card into the first free inventory slot (the
+Armory path; weapons are 141,610 gil and necks 98,010 gil), then
+capped.  Capping sends `//reload` when the client is running, so the
+tooltip and the stat sheet update immediately.
 
 `FanxiService.equipped_mods()` reads the block back through
 `augment_stats`: Musa Path C is `"Regen" potency +25`, `"Cure"`
 potency +25% and `"Fast Cast"+10%`, and Path A/B turn on Store TP or
-Subtle Blow II.  Bard's Knife Path C's `Song spellcasting time -15/-20/-25%`
-now feeds `SONG_SPELLCASTING_TIME` too.  The RDM sword Path C line
-`Elemental weapon skill damage +50/75/100%` feeds `ELEMENTAL_WS_DAMAGE`; it is a
-multiplier on the fTP part of a magical weapon skill (Seraph Blade, Sanguine Blade),
-so a Rank 25 Crocea Mors doubles those skills.  The `"Song effects: Double Attack"`
-row and the chance-based rows (double damage, follow-up attack) are in the
-client table but not modelled by the server yet.
+Subtle Blow II.  The chance-based rows (double damage, follow-up attack)
+are in the client table but not modelled by the server yet.
 
 Migration `0120_oboro_augments.sql` removes the old static Musa Path C
 `item_mods` rows and writes the real R25 Path C block onto every Musa

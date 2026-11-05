@@ -7792,7 +7792,14 @@ class ZoneSession:
             target_int = int(target_sheet.attributes.get("int", 0))
             int_down = target.effect_state.get(effects.INT_DOWN)
             if int_down is not None:
-                target_int = max(0, target_int - int(int_down.get("power", 0)))
+                # Impact stores a percentage (20% of the target's INT at cast); Absorb-INT
+                # stores a flat power.  Read whichever the effect actually carries.
+                potency = int(int_down.get("potency") or 0)
+                if potency:
+                    target_int = max(0, target_int
+                                     - int(target_int * min(100, potency) / 100.0))
+                else:
+                    target_int = max(0, target_int - int(int_down.get("power", 0)))
         else:
             # A Cure's received-potency line belongs to the player being healed.
             target_mods = (target.combat_mods()
@@ -7843,6 +7850,16 @@ class ZoneSession:
             # A Helix's opening hit is a nuke with its own dINT curve; the same number
             # comes back every ten seconds while the effect lasts (see resolve_casting).
             amount = combat.helix_damage(
+                base=base, multiplier=float(spell["multiplier"]),
+                caster_int=caster_int,
+                target_int=target_int,
+                skill=spell_skill, mods=spell_mods,
+                target_mods=target_mods,
+                target_level=int(target_sheet.fighter.level))
+        elif spec is not None and spec.nuke and base > 0 and target_sheet is not None:
+            # Impact: a full dark nuke that also lands its all-stat down.  The generic
+            # nuke formula, not the Dia opening-hit path.
+            amount = combat.magic_damage(
                 base=base, multiplier=float(spell["multiplier"]),
                 caster_int=caster_int,
                 target_int=target_int,
@@ -8216,7 +8233,8 @@ class ZoneSession:
         if effects.is_debuff(spec):
             duration_scale = (1.0 if not spec.resistible
                               else float(cast.get("resist", 1.0)))
-            damage = int(cast.get("amount") or 0) if (spec.damage or spec.helix) else 0
+            damage = (int(cast.get("amount") or 0)
+                      if (spec.damage or spec.helix or spec.nuke) else 0)
             remaining = False
             if not spec.helix or damage > 0:
                 # A Helix stores its opening hit as the DoT's power, so the monster takes

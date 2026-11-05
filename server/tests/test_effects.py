@@ -425,6 +425,18 @@ class EffectTest(unittest.TestCase):
         self.assertEqual(effect["name"], "Frazzle")
         self.assertEqual(effect["potency"], 35)
 
+    def test_impact_nukes_and_leaves_its_stat_down(self):
+        self.enter(100)
+        mob = self.at_mob()
+        mob.hp = mob.hp_max = 100_000
+        before = mob.hp
+        self.cast(503, mob.targid, wait=22)
+        self.assertGreater(before - mob.hp, 0)
+        state = mob.effect_state.get(effects.INT_DOWN)
+        self.assertIsNotNone(state)
+        self.assertEqual(str(state["name"]), "Impact")
+        self.assertEqual(int(state["potency"]), 20)
+
     def test_target_report_lists_dia_and_the_evasion_debuff(self):
         self.enter(100)
         mob = self.at_mob()

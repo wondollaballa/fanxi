@@ -12,8 +12,8 @@ sys.path.insert(0, str(ROOT / "server"))
 from support import make_service  # noqa: E402
 
 from fanxi_server.game import (  # noqa: E402
-    augment_stats, augments, capes, limbus, modifiers as mod, oboro, odyssey, sinister,
-    unity,
+    augment_stats, augments, capes, limbus, modifiers as mod, oboro, odyssey, reive,
+    sinister, unity,
 )
 
 REVELATION = (24122, 24125, 24128, 24131, 24134)  # head, body, hands, legs, feet
@@ -149,6 +149,10 @@ class AugmentParserTest(unittest.TestCase):
         for entry in sinister.entries():
             for row in entry["rows"]:
                 rows.add(sinister.row_text(row))
+        for entry in reive.JOBS.values():
+            for row in entry["rows"]:
+                for value in reive.row_values(row):
+                    rows.add(reive.row_text(row, value))
         rows.update(augment_stats.UNMODELLED_LINES)
         for line in rows:
             if line in augment_stats.UNMODELLED_LINES:

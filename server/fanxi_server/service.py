@@ -22,8 +22,8 @@ from .config import Config
 from .db import Database
 from .game import (ascension, augment_gear, augment_stats, capes, design as character_design,
                    effects, glyptics, item_effects, job_points, magian, merit_menus,
-                   merits as merit_table, mezzotint, moonshade, oboro, set_bonuses,
-                   sinister, skirmish)
+                   merits as merit_table, mezzotint, moonshade, oboro, reive,
+                   set_bonuses, sinister, skirmish)
 from .game import modifiers as mod, prime_weapons, rema_weapons
 
 SPELL_LEVELS_PATH = Path(__file__).resolve().parents[2] / "data" / "spell_levels.json"
@@ -968,6 +968,7 @@ class FanxiService:
             "augments": augment_gear.inventory_items(self, int(character_id)),
             "oboro": oboro.catalog(self, int(character_id)),
             "capes": capes.catalog(self, int(character_id)),
+            "reive": reive.catalog(self, int(character_id)),
             "nolan": mezzotint.catalog(self, int(character_id)),
             "glyptics": glyptics.catalog(self, int(character_id)),
             "skirmish": skirmish.catalog(self, int(character_id)),

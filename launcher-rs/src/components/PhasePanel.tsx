@@ -1,14 +1,18 @@
 import { useMemo, useState } from "react";
 import { Lock, LockOpen, Pencil, Plus, Shield, Sparkles, Trash2, Wind, Zap } from "lucide-react";
-import type { JobAbility, JobSpell, PhaseStatus } from "../types";
+import type { GearItem, JobAbility, JobSpell, PhaseStatus } from "../types";
 import {
   FOCUS_MODES,
   SPELL_GROUPS,
+  SPELL_GROUP_JOBS,
   groupWsNames,
   phaseStateLabel,
   slotLabelOf,
   type PhaseConfig,
+  type SpellGroupKey,
 } from "../lib/phase";
+import { SLOT_KEYS } from "../lib/format";
+import { SetEquipmentPreview } from "./SetEquipmentPreview";
 import { Badge, Button, Card, Field, Select, cn } from "./ui";
 
 type PhasePanelProps = {
@@ -22,6 +26,14 @@ type PhasePanelProps = {
   wsNames: string[];
   spells: JobSpell[];
   abilities: JobAbility[];
+  /** The live main/sub job ids; drives which spell groups the page shows. */
+  job?: { main: number; sub: number };
+  /** The live client, for the gear preview's item icons. */
+  port?: number | null;
+  /** The loaded library's slot -> item names, keyed by set path ("sets.midcast..."). */
+  setItems?: Record<string, Record<string, string>>;
+  /** The loaded library's parsed items (augments included), keyed by set path. */
+  setDetails?: Record<string, Record<string, GearItem>>;
   lockedSlots: Set<string>;
   onConfig: (patch: Partial<PhaseConfig>) => void;
   onTogglePhase: () => void;
@@ -145,6 +157,10 @@ export function PhasePanel({
   wsNames,
   spells,
   abilities,
+  job,
+  port,
+  setItems,
+  setDetails,
   lockedSlots,
   onConfig,
   onTogglePhase,
@@ -159,6 +175,19 @@ export function PhasePanel({
 }: PhasePanelProps) {
   const [addSpell, setAddSpell] = useState("");
   const [addSong, setAddSong] = useState("");
+  /** The enfeebling kind whose gear preview is open, by group and kind key. */
+  const [kindView, setKindView] = useState<string>("enfeebles:skill");
+  const itemsFor = (path?: string) =>
+    (path && (setItems?.[`sets.${path}`] ?? setItems?.[path])) || {};
+  const augmentsFor = (path?: string) => {
+    const entry = path && (setDetails?.[`sets.${path}`] ?? setDetails?.[path]);
+    if (!entry) return undefined;
+    const out: Record<string, string[]> = {};
+    for (const [slot, item] of Object.entries(entry)) {
+      if (item?.augments?.length) out[slot] = item.augments;
+    }
+    return Object.keys(out).length ? out : undefined;
+  };
   const weaponSets = useMemo(
     () => sets.filter((path) => path.startsWith("weaponset.")),
     [sets],
@@ -172,28 +201,59 @@ export function PhasePanel({
     () => spells.filter((spell) => !(String(spell.id) in config.spellOverrides)),
     [spells, config.spellOverrides],
   );
+  const jobGroups = useMemo(() => {
+    const ids = [job?.main ?? 0, job?.sub ?? 0];
+    const out = new Set<SpellGroupKey>();
+    for (const [key, jobs] of Object.entries(SPELL_GROUP_JOBS) as [
+      SpellGroupKey,
+      number[],
+    ][]) {
+      if (jobs.some((id) => ids.includes(id))) out.add(key);
+    }
+    return out;
+  }, [job?.main, job?.sub]);
   const spellGroups = useMemo(
     () =>
-      SPELL_GROUPS.map((group) => ({
-        ...group,
-        spells: spells.filter((spell) => spell.categories?.includes(group.key)),
-      })).filter((group) => group.spells.length > 0),
-    [spells],
+      SPELL_GROUPS.filter((group) => !job || jobGroups.has(group.key))
+        .map((group) => ({
+          ...group,
+          spells: spells.filter((spell) => spell.categories?.includes(group.key)),
+        }))
+        // With no spell list we still show the job's groups so their sets can be picked;
+        // once the list loads, an empty group (a sub job that cannot cast it, Helix on a
+        // Red Mage, songs off a Bard) is not a field this job uses.
+        .filter((group) => spells.length === 0 || group.spells.length > 0),
+    [spells, job, jobGroups],
   );
-  const overrides = Object.entries(config.spellOverrides);
+  const overrides = Object.entries(config.spellOverrides).filter(([id]) =>
+    spellById.has(Number(id)),
+  );
   const songSpells = useMemo(
     () => spells.filter((spell) => spell.categories?.includes("songs")),
     [spells],
   );
-  const songOverrideEntries = Object.entries(config.songOverrides);
+  // A non-Bard has no song card at all; a Bard (or a Bard sub job) keeps it.
+  const songOverrideEntries = job && !jobGroups.has("songs")
+    ? []
+    : Object.entries(config.songOverrides);
   const songChoices = songSpells.filter(
     (spell) => !(String(spell.id) in config.songOverrides),
   );
-  const categoryOverrideCount = spellGroups.reduce(
-    (count, group) =>
-      count + group.modes.filter((mode) => config.spellCategoryOverrides[mode.category]).length,
-    0,
-  );
+  const categoryOverrideCount = spellGroups.reduce((count, group) => {
+    // Enfeebles arms the same category from a mode and its kind row; count each category once.
+    const categories = new Set<string>();
+    for (const mode of group.modes) if (mode.category) categories.add(mode.category);
+    for (const kind of group.kinds ?? []) categories.add(kind.category);
+    if (group.autoMode?.category) categories.add(group.autoMode.category);
+    for (const mode of group.autoModes ?? []) {
+      if (mode.category) categories.add(mode.category);
+    }
+    let configured = 0;
+    for (const category of categories) {
+      if (config.spellCategoryOverrides[category]) configured += 1;
+    }
+    return count + configured;
+  }, 0);
   const jaOverrideCount = Object.keys(config.jaOverrides).length;
   const wsGroups = useMemo(() => groupWsNames(wsNames), [wsNames]);
   const wsConditionCount = wsGroups.reduce(
@@ -565,7 +625,7 @@ export function PhasePanel({
             {categoryOverrideCount ? ` · ${categoryOverrideCount} modes` : ""}
           </Badge>
         }
-        hint="Spell precast is worn before any spell; song precast is worn only for Bard songs. The midcast default is worn for every spell. A group card can hold a set for every mode; the Mode dropdown chooses which one is worn for that group's spells. The Nuking card's Magic Burst row is automatic: it is worn while a Magic Burst window is open, and the armed mode otherwise. A per-spell card wins over its group. Switching modes is also available in the in-game spell HUD and with //modes."
+        hint="Spell precast is worn before any spell; song precast is worn only for Bard songs. The midcast default is worn for every spell. A group card can hold a set for every mode; the Mode dropdown chooses which one is worn for that group's spells. Enfeebles is the exception: Auto wears the set for each spell's own kind — Skill (Frazzle III), Macc (Sleep), Duration, MND (Slow II), INT (Blind II), Macc + potency (Gravity) or General (Dispel) — and picking a Mode forces every enfeebling spell through that one set. Click a kind's name to see its gear. The Nuking card's Magic Burst row is automatic: it is worn while a Magic Burst window is open, and the armed mode otherwise. A per-spell card wins over its group. Switching modes is also available in the in-game spell HUD and with //modes."
       >
         <div className="phase-row">
           <SetSelect
@@ -600,13 +660,38 @@ export function PhasePanel({
         <div className="phase-category-cards">
           {spellGroups.map((group) => {
             const activeMode = config.spellModes[group.key] ?? group.defaultMode;
-            const autoMode = group.autoMode;
-            const autoConfigured = Boolean(
-              autoMode && config.spellCategoryOverrides[autoMode.category],
+            const autoModes = [
+              ...(group.autoMode ? [group.autoMode] : []),
+              ...(group.autoModes ?? []),
+            ];
+            const kinds = group.kinds ?? [];
+            const autoConfigured = autoModes.some(
+              (mode) => mode.category && Boolean(config.spellCategoryOverrides[mode.category]),
             );
             const configured =
-              group.modes.some((mode) => config.spellCategoryOverrides[mode.category]) ||
+              group.modes.some(
+                (mode) => mode.category && Boolean(config.spellCategoryOverrides[mode.category]),
+              ) ||
+              kinds.some((kind) => Boolean(config.spellCategoryOverrides[kind.category])) ||
               autoConfigured;
+            const forcedMode = group.modes.find((mode) => mode.key === activeMode);
+            // A buff-conditional overlay (Enfeebles' Saboteur hands): shown under the kind
+            // preview so the swap is visible next to the set it modifies.
+            const overlayMode = autoModes.find((mode) => mode.merge && mode.category);
+            const overlayPath = overlayMode?.category
+              ? config.spellCategoryOverrides[overlayMode.category] ?? ""
+              : "";
+            const overlayItems = itemsFor(overlayPath);
+            // The kind whose gear preview is open. The first kind is the default.
+            const shownKind =
+              kinds.find((kind) => `${group.key}:${kind.key}` === kindView) ?? kinds[0];
+            const shownPath = shownKind
+              ? config.spellCategoryOverrides[shownKind.category] ?? ""
+              : "";
+            const shownItems = itemsFor(shownPath);
+            const shownSpells = shownKind
+              ? group.spells.filter((spell) => spell.categories?.includes(shownKind.category))
+              : [];
             return (
               <div key={group.key} className={cn("phase-category", configured && "configured")}>
                 <div className="phase-category-head">
@@ -632,60 +717,160 @@ export function PhasePanel({
                       </option>
                     ))}
                   </Select>
-                </div>
-                {group.modes.map((mode) => (
-                  <div key={mode.key} className="phase-mode-set">
-                    <span className="phase-mode-name">{mode.short}</span>
-                    <InlineSetSelect
-                      value={config.spellCategoryOverrides[mode.category] ?? ""}
-                      sets={sets}
-                      prefixes={["midcast.", "precast."]}
-                      empty="— use the default —"
-                      onChange={(nextPath) => {
-                        const next = { ...config.spellCategoryOverrides };
-                        if (nextPath) next[mode.category] = nextPath;
-                        else delete next[mode.category];
-                        onConfig({ spellCategoryOverrides: next });
-                      }}
-                    />
-                  </div>
-                ))}
-                {autoMode ? (
-                  <div
-                    className={cn(
-                      "phase-mode-set",
-                      "phase-mode-auto",
-                      autoConfigured && status?.burst && "live",
-                    )}
-                    title={autoMode.detail}
-                  >
-                    <span className="phase-mode-name">
-                      {autoMode.short}
-                      <em>auto</em>
+                  {kinds.length > 0 && activeMode !== "auto" ? (
+                    <span className="phase-mode-forced">
+                      forced: every spell wears the {forcedMode?.label ?? activeMode} set
                     </span>
-                    <InlineSetSelect
-                      value={config.spellCategoryOverrides[autoMode.category] ?? ""}
-                      sets={sets}
-                      prefixes={["midcast.", "precast."]}
-                      empty="— use the armed mode —"
-                      onChange={(nextPath) => {
-                        if (!autoMode) return;
-                        const next = { ...config.spellCategoryOverrides };
-                        if (nextPath) next[autoMode.category] = nextPath;
-                        else delete next[autoMode.category];
-                        onConfig({ spellCategoryOverrides: next });
-                      }}
-                    />
-                    {autoConfigured && status?.burst ? (
-                      <span className="phase-mode-live">open</span>
+                  ) : null}
+                </div>
+                {kinds.map((kind) => {
+                  const kindSpells = group.spells.filter((spell) =>
+                    spell.categories?.includes(kind.category),
+                  );
+                  const selected = shownKind?.key === kind.key;
+                  return (
+                    <div
+                      key={kind.key}
+                      className={cn("phase-kind-row", selected && "selected")}
+                      title={kind.detail}
+                    >
+                      <button
+                        type="button"
+                        className="phase-kind-label"
+                        onClick={() => setKindView(`${group.key}:${kind.key}`)}
+                      >
+                        {kind.label}
+                        <em>{kindSpells.length}</em>
+                      </button>
+                      <InlineSetSelect
+                        value={config.spellCategoryOverrides[kind.category] ?? ""}
+                        sets={sets}
+                        prefixes={["midcast.", "precast."]}
+                        empty="— use the default —"
+                        onChange={(nextPath) => {
+                          const next = { ...config.spellCategoryOverrides };
+                          if (nextPath) next[kind.category] = nextPath;
+                          else delete next[kind.category];
+                          onConfig({ spellCategoryOverrides: next });
+                        }}
+                      />
+                    </div>
+                  );
+                })}
+                {autoModes.map((autoMode) => {
+                  const category = autoMode.category;
+                  if (!category) return null;
+                  return (
+                    <div
+                      key={autoMode.key}
+                      className={cn(
+                        "phase-mode-set",
+                        "phase-mode-auto",
+                        autoMode.key === "magic_burst" && status?.burst && "live",
+                      )}
+                      title={autoMode.detail}
+                    >
+                      <span className="phase-mode-name">
+                        {autoMode.short}
+                        <em>{autoMode.merge ? "on buff" : "auto"}</em>
+                      </span>
+                      <InlineSetSelect
+                        value={config.spellCategoryOverrides[category] ?? ""}
+                        sets={sets}
+                        prefixes={["midcast.", "precast."]}
+                        empty={autoMode.merge ? "— no overlay —" : "— use the armed mode —"}
+                        onChange={(nextPath) => {
+                          const next = { ...config.spellCategoryOverrides };
+                          if (nextPath) next[category] = nextPath;
+                          else delete next[category];
+                          onConfig({ spellCategoryOverrides: next });
+                        }}
+                      />
+                      {autoMode.key === "magic_burst" && status?.burst &&
+                      config.spellCategoryOverrides[category] ? (
+                        <span className="phase-mode-live">open</span>
+                      ) : null}
+                    </div>
+                  );
+                })}
+                {kinds.length > 0 && shownKind ? (
+                  <div className="phase-kind-gear">
+                    <div className="phase-kind-gear-head">
+                      <span className="eyebrow">{shownKind.label} gear</span>
+                      <code>
+                        {shownPath || "— no set; the library's midcast.Enfeebling Magic applies —"}
+                      </code>
+                    </div>
+                    <div className="phase-kind-gear-body">
+                      <SetEquipmentPreview
+                        port={port ?? null}
+                        items={shownItems}
+                        augments={augmentsFor(shownPath)}
+                        compact
+                        emptyLabel="Pick a set for this kind to see its pieces."
+                      />
+                      <div className="phase-kind-pieces">
+                        {SLOT_KEYS.filter((slot) => shownItems[slot]).map((slot) => (
+                          <span key={slot}>
+                            <b>{slotLabelOf(slot)}</b>
+                            {shownItems[slot]}
+                          </span>
+                        ))}
+                        {!SLOT_KEYS.some((slot) => shownItems[slot]) && (
+                          <span className="muted">No pieces loaded for this set.</span>
+                        )}
+                      </div>
+                    </div>
+                    {overlayMode && SLOT_KEYS.some((slot) => overlayItems[slot]) ? (
+                      <div className="phase-kind-overlay" title={overlayMode.detail}>
+                        <span className="eyebrow">{overlayMode.label}</span>
+                        {SLOT_KEYS.filter((slot) => overlayItems[slot]).map((slot) => (
+                          <span key={slot}>
+                            {slotLabelOf(slot)} → {overlayItems[slot]}
+                          </span>
+                        ))}
+                      </div>
                     ) : null}
+                    <p className="phase-kind-spells">
+                      {shownSpells.length
+                        ? shownSpells.map((spell) => (
+                            <span key={spell.id} title={`${spell.skill} · Lv ${spell.level}`}>
+                              {spell.name}
+                            </span>
+                          ))
+                        : <em>No spell of this type is on the current job pair.</em>}
+                    </p>
+                    <p className="gear-hint">{shownKind.detail}</p>
                   </div>
                 ) : null}
+                {kinds.length === 0 &&
+                  group.modes.filter((mode) => mode.category).map((mode) => {
+                    const category = mode.category;
+                    if (!category) return null;
+                    return (
+                      <div key={mode.key} className="phase-mode-set">
+                        <span className="phase-mode-name">{mode.short}</span>
+                        <InlineSetSelect
+                          value={config.spellCategoryOverrides[category] ?? ""}
+                          sets={sets}
+                          prefixes={["midcast.", "precast."]}
+                          empty="— use the default —"
+                          onChange={(nextPath) => {
+                            const next = { ...config.spellCategoryOverrides };
+                            if (nextPath) next[category] = nextPath;
+                            else delete next[category];
+                            onConfig({ spellCategoryOverrides: next });
+                          }}
+                        />
+                      </div>
+                    );
+                  })}
                 <details className="phase-category-spells">
                   <summary>
-                    {[...group.modes, ...(autoMode ? [autoMode] : [])]
+                    {[...group.modes, ...autoModes]
                       .map((mode) => `${mode.label}: ${mode.detail}`)
                       .join(" ")}
+                    {kinds.map((kind) => ` ${kind.label}: ${kind.detail}`).join("")}
                   </summary>
                   <div className="phase-category-names">
                     {group.spells.map((spell) => (
@@ -768,6 +953,7 @@ export function PhasePanel({
         </div>
       </Group>
 
+      {(!job || jobGroups.has("songs")) ? (
       <Group
         title="Song overrides"
         wide
@@ -847,6 +1033,7 @@ export function PhasePanel({
           </Button>
         </div>
       </Group>
+      ) : null}
 
       <Group
         title="Idle"

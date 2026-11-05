@@ -42,15 +42,19 @@ key holds, frame captures, waits). Commands:
                              precast / midcast / state engine: the host holds the action packet,
                              wears the precast set, sends it, then wears the midcast set behind
                              it, and returns to the state set. spell_category_overrides holds one
-                             set per mode (enfeebles_macc, enfeebles_duration, buff_potency,
-                             buff_duration, cure_potency, cure_cast, nuke_mab, nuke_mdmg, nuke_mb,
-                             helix_magic, helix_duration, dark_potency, dark_macc, dark_duration,
-                             divine_mab, divine_macc, enspells); spell_modes arms one mode per
-                             group (enfeebles, enhancing, enspells, curing, nuking, helix, dark,
-                             divine, songs).
+                             set per mode (enfeebles_skill, enfeebles_macc, enfeebles_duration,
+                             enfeebles_hybrid, enfeebles_mnd, enfeebles_int, enfeebles_general,
+                             buff_potency, buff_duration, cure_potency, cure_cast, nuke_mab,
+                             nuke_mdmg, nuke_mb, helix_magic, helix_duration, dark_potency,
+                             dark_macc, dark_duration, divine_mab, divine_macc, enspells);
+                             spell_modes arms one mode per group (enfeebles, enhancing, enspells,
+                             curing, nuking, helix, dark, divine, songs).
                              A spell uses its group's armed set unless a per-spell override names
-                             one.  nuke_mb is not armed: a nuke wears it while a magic burst
-                             window is open on the player's target
+                             one.  Enfeebles defaults to auto and uses the set for the spell's own
+                             kind (skill / macc / duration / hybrid / mnd / int / general); arming
+                             one of its other modes forces that one set instead.  nuke_mb is not
+                             armed: a nuke wears it while a magic burst window is open on the
+                             player's target
   phase_status               the engine's rules, counters, state, the action set that is on and
                              the recent windows (actionSet/history), armed modes, slot pins and
                              whether a magic burst window is open (burst)
@@ -974,15 +978,136 @@ local MIDCAST_SKILL = {
     [44] = 'Geomancy', [45] = 'Handbell',
 }
 
+-- Enfeebling Magic is not one build.  BG Wiki's Community Red Mage Guide splits the spells
+-- by what decides their value: Enfeebling Magic Skill (Frazzle III, Distract III, Poison),
+-- landing / Magic Accuracy (Frazzle II, Distract II, Dia, Sleep, Bind, Break, Silence),
+-- dMND (Slow II, Paralyze II, Addle II), dINT (Blind II), Macc + potency (Gravity) and the
+-- non-scaling spells that cannot be resisted at all (Dispel, Inundation).  Each kind owns a
+-- category, so the Gear page can bind one set per kind and the plan can wear the right one
+-- for the spell being cast instead of one blanket "enfeebling" set.
+local ENFEEBLE_KINDS = {
+    skill = {
+        key = 'skill', label = 'Skill', short = 'Skill', category = 'enfeebles_skill',
+        detail = 'Enfeebling Magic Skill carries the potency: Frazzle III, Distract III, Poison, Poison II.',
+    },
+    macc = {
+        key = 'macc', label = 'Macc / landing', short = 'Macc', category = 'enfeebles_macc',
+        detail = 'All-or-nothing landing: Frazzle II, Distract II, Dia, Sleep, Bind, Break, Silence.',
+    },
+    duration = {
+        key = 'duration', label = 'Duration', short = 'Dur', category = 'enfeebles_duration',
+        detail = 'Crowd control where the timer matters: Sleep, Sleep II, Bind, Break, Silence.',
+    },
+    hybrid = {
+        key = 'hybrid', label = 'Macc + potency', short = 'Hybrid', category = 'enfeebles_hybrid',
+        detail = 'Magic Accuracy and Enfeebling potency together: Gravity and Gravity II.',
+    },
+    mnd = {
+        key = 'mnd', label = 'MND', short = 'MND', category = 'enfeebles_mnd',
+        detail = 'dMND sets the potency: Slow II, Paralyze II, Addle II.',
+    },
+    int = {
+        key = 'int', label = 'INT', short = 'INT', category = 'enfeebles_int',
+        detail = 'dINT sets the potency: Blind II.',
+    },
+    general = {
+        key = 'general', label = 'General', short = 'Gen', category = 'enfeebles_general',
+        detail = 'Nothing to scale and nothing to resist: Dispel, Dispelga, Inundation.',
+    },
+}
+local ENFEEBLE_KIND_ORDER = {
+    'skill', 'macc', 'duration', 'hybrid', 'mnd', 'int', 'general',
+}
+-- A duration spell still needs to land, so it uses the Macc set until a Duration set is
+-- picked.  The guide's "MAcc. & Duration" build is exactly that: one set for both.
+local ENFEEBLE_KIND_FALLBACK = { duration = 'macc' }
+
+-- Spell name (lowercase) -> kind.  Spells not named here but in Enfeebling Magic fall back
+-- to macc: landing is the one thing every debuff needs, and the guide publishes no other
+-- build for them (Virus, for example).
+local ENFEEBLE_KIND_SPELLS = {
+    ['frazzle iii'] = 'skill', ['distract iii'] = 'skill',
+    ['poison'] = 'skill', ['poison ii'] = 'skill', ['poison iii'] = 'skill',
+    ['poison iv'] = 'skill', ['poison v'] = 'skill',
+    ['poisonga'] = 'skill', ['poisonga ii'] = 'skill', ['poisonga iii'] = 'skill',
+    ['poisonga iv'] = 'skill', ['poisonga v'] = 'skill',
+    ['frazzle'] = 'macc', ['frazzle ii'] = 'macc',
+    ['distract'] = 'macc', ['distract ii'] = 'macc',
+    ['dia'] = 'macc', ['dia ii'] = 'macc', ['dia iii'] = 'macc',
+    ['dia iv'] = 'macc', ['dia v'] = 'macc',
+    ['diaga'] = 'macc', ['diaga ii'] = 'macc', ['diaga iii'] = 'macc',
+    ['diaga iv'] = 'macc', ['diaga v'] = 'macc',
+    ['virus'] = 'macc',
+    ['sleep'] = 'duration', ['sleep ii'] = 'duration',
+    ['sleepga'] = 'duration', ['sleepga ii'] = 'duration',
+    ['bind'] = 'duration', ['bindga'] = 'duration',
+    ['break'] = 'duration', ['breakga'] = 'duration',
+    ['silence'] = 'duration', ['silencega'] = 'duration',
+    ['gravity'] = 'hybrid', ['gravity ii'] = 'hybrid', ['graviga'] = 'hybrid',
+    ['slow'] = 'mnd', ['slow ii'] = 'mnd', ['slowga'] = 'mnd',
+    ['paralyze'] = 'mnd', ['paralyze ii'] = 'mnd', ['paralyga'] = 'mnd',
+    ['addle'] = 'mnd', ['addle ii'] = 'mnd',
+    ['blind'] = 'int', ['blind ii'] = 'int', ['blindga'] = 'int',
+    ['dispel'] = 'general', ['dispelga'] = 'general', ['inundation'] = 'general',
+}
+
 -- The Gear page's spell groups and the modes each can be in.  The launcher configures one
 -- set per mode; the armed mode decides which one the plan wears.  A spell belongs to one
 -- group, so the same category rule cannot be claimed twice.
 local SPELL_GROUPS = {
     enfeebles = {
-        key = 'enfeebles', label = 'Enfeebles', short = 'Enf', default = 'macc',
+        key = 'enfeebles', label = 'Enfeebles', short = 'Enf', default = 'auto',
+        -- Auto wears the set for the spell's own kind.  Arming another mode forces every
+        -- Enfeebling Magic spell through that one set (the old macc / duration behaviour);
+        -- //modes swaps the same list at the in-game HUD.
         modes = {
-            { key = 'macc', label = 'Macc / landing', short = 'Macc', category = 'enfeebles_macc' },
-            { key = 'duration', label = 'Duration', short = 'Dur', category = 'enfeebles_duration' },
+            {
+                key = 'auto', label = 'Auto — by spell type', short = 'Auto',
+                detail = 'Wear the kind row for each spell (Skill, Macc, MND, INT, Hybrid, General).',
+            },
+            {
+                key = 'skill', label = 'Skill', short = 'Skill', category = 'enfeebles_skill',
+                detail = 'Force every enfeebling spell through the Skill build.',
+            },
+            {
+                key = 'macc', label = 'Macc / landing', short = 'Macc', category = 'enfeebles_macc',
+                detail = 'Force every enfeebling spell through the Macc build.',
+            },
+            {
+                key = 'duration', label = 'Duration', short = 'Dur', category = 'enfeebles_duration',
+                detail = 'Force every enfeebling spell through the Duration build.',
+            },
+            {
+                key = 'hybrid', label = 'Macc + potency', short = 'Hybrid', category = 'enfeebles_hybrid',
+                detail = 'Force every enfeebling spell through the Macc + potency build.',
+            },
+            {
+                key = 'mnd', label = 'MND', short = 'MND', category = 'enfeebles_mnd',
+                detail = 'Force every enfeebling spell through the MND build.',
+            },
+            {
+                key = 'int', label = 'INT', short = 'INT', category = 'enfeebles_int',
+                detail = 'Force every enfeebling spell through the INT build.',
+            },
+            {
+                key = 'general', label = 'General', short = 'Gen', category = 'enfeebles_general',
+                detail = 'Force every enfeebling spell through the non-scaling build.',
+            },
+        },
+        kinds = {
+            ENFEEBLE_KINDS.skill, ENFEEBLE_KINDS.macc, ENFEEBLE_KINDS.duration,
+            ENFEEBLE_KINDS.hybrid, ENFEEBLE_KINDS.mnd, ENFEEBLE_KINDS.int,
+            ENFEEBLE_KINDS.general,
+        },
+        -- A live status, not an armed mode: while Saboteur is up the plan adds a conditional
+        -- rule for every enfeebling spell.  merge = true keeps the spell's kind set and lays
+        -- the overlay set (the hands) on top, so one small set covers all seven kinds.
+        autos = {
+            {
+                key = 'saboteur', label = 'Saboteur', short = 'Sab',
+                category = 'enfeebles_saboteur', buff = 454, merge = true,
+                detail = 'While Saboteur is up, every enfeebling cast swaps the hands to Lethargy Gantherots.',
+            },
         },
     },
     enhancing = {
@@ -1017,12 +1142,26 @@ local SPELL_GROUPS = {
             key = 'magic_burst', label = 'Magic Burst', short = 'Magic Burst', category = 'nuke_mb',
             detail = 'Worn for Elemental Magic while a Magic Burst window is open.',
         },
+        autos = {
+            {
+                key = 'immanence', label = 'Immanence', short = 'Immanence',
+                category = 'nuke_immanence', buff = 470,
+                detail = 'Worn for Elemental Magic while Immanence is active.',
+            },
+        },
     },
     helix = {
         key = 'helix', label = 'Helixes', short = 'Helix', default = 'mab',
         modes = {
             { key = 'mab', label = 'Magic Attack', short = 'MAB', category = 'helix_magic' },
             { key = 'duration', label = 'Duration', short = 'Dur', category = 'helix_duration' },
+        },
+        autos = {
+            {
+                key = 'immanence', label = 'Immanence', short = 'Immanence',
+                category = 'helix_immanence', buff = 470,
+                detail = 'Worn for helix spells while Immanence is active.',
+            },
         },
     },
     dark = {
@@ -1047,10 +1186,24 @@ local SPELL_GROUPS = {
             { key = 'potency', label = 'Song potency', short = 'Pot', category = 'song_potency' },
         },
     },
+    blue = {
+        key = 'blue', label = 'Blue Magic', short = 'Blue', default = 'mab',
+        modes = {
+            { key = 'mab', label = 'Magic Attack', short = 'MAB', category = 'blue_mab' },
+            { key = 'macc', label = 'Magic Accuracy', short = 'Macc', category = 'blue_macc' },
+        },
+    },
+    ninjutsu = {
+        key = 'ninjutsu', label = 'Ninjutsu', short = 'Nin', default = 'macc',
+        modes = {
+            { key = 'macc', label = 'Magic Accuracy', short = 'Macc', category = 'ninjutsu_macc' },
+            { key = 'damage', label = 'Ninjutsu damage', short = 'Dmg', category = 'ninjutsu_damage' },
+        },
+    },
 }
 local SPELL_GROUP_ORDER = {
     'enfeebles', 'enhancing', 'enspells', 'curing', 'nuking', 'helix', 'dark', 'divine',
-    'songs',
+    'songs', 'blue', 'ninjutsu',
 }
 local function spell_name(spell)
     local name = spell and spell.name
@@ -1083,7 +1236,57 @@ local function spell_group(spell)
     if skill == 'Elemental Magic' then return 'nuking' end
     if skill == 'Dark Magic' then return 'dark' end
     if skill == 'Divine Magic' then return 'divine' end
+    if skill == 'Blue Magic' then return 'blue' end
+    if skill == 'Ninjutsu' then return 'ninjutsu' end
     return nil
+end
+
+-- The enfeebling kind a spell belongs to, or nil when it is not Enfeebling Magic.  Unknown
+-- enfeebles land on macc, the one build every debuff can use.
+local function spell_enfeebling_kind(spell)
+    if not spell or tonumber(spell.skill) ~= 35 then return nil end
+    local name = spell_name(spell):lower()
+    return ENFEEBLE_KIND_SPELLS[name] or 'macc'
+end
+
+-- The category whose set should be worn for one spell's kind, walking the fallback chain
+-- (Duration -> Macc) until a category has a set in the plan.  Returns nil when no kind set
+-- is configured, which lets the library's plain midcast.Enfeebling Magic apply instead.
+local function spell_enfeebling_category(spell, category_override)
+    local kind = spell_enfeebling_kind(spell)
+    local seen = {}
+    while kind and not seen[kind] do
+        seen[kind] = true
+        local entry = ENFEEBLE_KINDS[kind]
+        if entry and category_override[entry.category] then return entry.category end
+        kind = ENFEEBLE_KIND_FALLBACK[kind]
+    end
+    return nil
+end
+
+-- The category the plan uses for a spell.  Enfeebles in Auto follow the spell's kind;
+-- arming one of the group's modes forces that mode's set instead.  Every other group keeps
+-- its single armed mode.
+local function spell_cast_category(group_key, spell, mode, category_override)
+    if group_key == 'enfeebles' then
+        if mode and mode.key ~= 'auto' then return mode.category end
+        return spell_enfeebling_category(spell, category_override)
+    end
+    return mode and mode.category or nil
+end
+
+-- Every category a spell claims, for job_spells and the Gear page's spell cards: the group
+-- first, then the enfeebling kind (`enfeebles_mnd`, ...) when it has one.
+local function spell_categories(spell)
+    local group = spell_group(spell)
+    local out = {}
+    if group then out[#out + 1] = group end
+    if group == 'enfeebles' then
+        local kind = spell_enfeebling_kind(spell)
+        local entry = kind and ENFEEBLE_KINDS[kind]
+        if entry then out[#out + 1] = entry.category end
+    end
+    return out
 end
 -- END spell mode groups
 
@@ -1458,7 +1661,7 @@ phase = function(a)
     end
     local sets = a.sets
     if type(sets) ~= 'table' then sets = gearswap_sets(a) end
-    local by_id, set_list, set_names, rules = bag_index(), {}, {}, {}
+    local by_id, set_list, set_names, set_tables, rules = bag_index(), {}, {}, {}, {}
     if next(by_id) == nil then
         -- Pushed the moment the character reaches the world, the bags can still be empty; a
         -- plan built then would have nothing to wear. The launcher retries.
@@ -1493,6 +1696,7 @@ phase = function(a)
         if #equips == 0 then return nil end
         set_list[#set_list + 1] = equips
         set_names[#set_names + 1] = name or ''
+        set_tables[#set_tables + 1] = t
         return #set_list
     end
     local function path_set(path, label)
@@ -1500,6 +1704,26 @@ phase = function(a)
         local t = set_at(sets, path)
         if type(t) ~= 'table' then return nil end
         return add_set(t, label or path)
+    end
+
+    -- A buff-conditional overlay: the overlay set's slots win, the base set fills the rest.
+    -- "Enfeebling Magic Saboteur" is only the hands, so one set covers every kind.  Identical
+    -- (base, overlay) pairs share a plan set instead of one per spell.
+    local merged_sets = {}
+    local function merged_set(base_index, overlay_index, label)
+        if not base_index or not overlay_index then return nil end
+        local key = tostring(base_index) .. '|' .. tostring(overlay_index)
+        if merged_sets[key] then return merged_sets[key] end
+        local base, overlay = set_tables[base_index], set_tables[overlay_index]
+        if type(overlay) ~= 'table' then return nil end
+        local out = {}
+        for slot, item in pairs(base or {}) do out[slot] = item end
+        for slot, item in pairs(overlay) do out[slot] = item end
+        local name = set_names[base_index] or 'set'
+        if type(label) == 'string' and label ~= '' then name = name .. ' (' .. label .. ')' end
+        local index = add_set(out, name)
+        if index then merged_sets[key] = index end
+        return index
     end
 
     -- Weaponskills: a per-WS override wins over the library's sets.WS.<name>; the default set
@@ -1689,9 +1913,41 @@ phase = function(a)
     -- midcast set only while the addon's burst window is open (watch_phase below).
     local auto_override = {}
     for group_key, group in pairs(SPELL_GROUPS) do
+        local entry = {}
         local auto = group.auto
-        local index = auto and category_override[auto.category]
-        if index then auto_override[group_key] = index end
+        if auto then
+            local index = category_override[auto.category]
+            if index then entry.burst = index end
+        end
+        local autos = {}
+        for _, extra in ipairs(group.autos or {}) do
+            local index = category_override[extra.category]
+            local buff = tonumber(extra.buff) or 0
+            if index and buff > 0 then
+                autos[#autos + 1] = {
+                    index = index, buff = buff, merge = extra.merge,
+                    label = extra.label or extra.key,
+                }
+            end
+        end
+        if #autos > 0 then entry.autos = autos end
+        if next(entry) then auto_override[group_key] = entry end
+    end
+    -- Add the live-status rules for one action.  The engine prefers a rule that names more
+    -- buffs, so these win while the status is up and the plain rule (no buffs) is the
+    -- fallback; a merge overlay keeps the action's own set and swaps only the pieces it names.
+    local function add_auto_rules(group_key, action, mid, pre, is_song)
+        local auto = group_key and auto_override[group_key]
+        for _, extra in ipairs(auto and auto.autos or {}) do
+            local cond_mid = extra.index
+            if extra.merge then
+                cond_mid = merged_set(mid, extra.index, extra.label) or cond_mid
+            end
+            rules[#rules + 1] = {
+                category = PHASE_MAGIC, action = action, pre = pre, mid = cond_mid,
+                song = is_song, buffs = { extra.buff },
+            }
+        end
     end
     local claimed = {}
     for id in pairs(spell_override) do claimed[id] = true end
@@ -1722,9 +1978,13 @@ phase = function(a)
                 local family_path = group_key == 'songs' and song_family_set(name)
                 local family_mid = family_path and path_set(
                     family_path, 'song.family.' .. family_path)
+                -- Enfeebles in Auto pick the category from the spell's own kind, so Frazzle
+                -- III wears the Skill set and Slow II the MND set.
+                local cast_category = spell_cast_category(
+                    group_key, spell, mode, category_override)
                 local mid = family_mid
                     or (special and category_override[special])
-                    or (mode and category_override[mode.category])
+                    or (cast_category and category_override[cast_category])
                     -- A configured midcast default covers songs too; tagging the rule song
                     -- keeps the Bard's Nitro instrument swap available for it.
                     or (group_key == 'songs' and mid_default)
@@ -1741,9 +2001,12 @@ phase = function(a)
                         -- under Nitro; the host keys that exception off this flag.
                         song = group_key == 'songs',
                     }
-                    local burst = group_key and auto_override[group_key]
-                    if burst then rule.burst = burst end
+                    local auto = group_key and auto_override[group_key]
+                    if auto and auto.burst then rule.burst = auto.burst end
                     rules[#rules + 1] = rule
+                    add_auto_rules(group_key, index, mid,
+                        (group_key == 'songs' and song_precast) or precast,
+                        group_key == 'songs')
                     claimed[index] = true
                 end
             end
@@ -1751,10 +2014,14 @@ phase = function(a)
     end
     for id, mid in pairs(spell_override) do
         local spell = res.spell(id)
+        local group_key = spell_group(spell)
         rules[#rules + 1] = {
             category = PHASE_MAGIC, action = id, pre = precast, mid = mid,
-            song = spell_group(spell) == 'songs',
+            song = group_key == 'songs',
         }
+        -- A per-spell card still gets the live-status overlay (Saboteur hands): its set is
+        -- the base the overlay merges over.
+        add_auto_rules(group_key, id, mid, precast, group_key == 'songs')
     end
     for id, entry in pairs(song_override) do
         local spell = res.spell(id)
@@ -2317,7 +2584,6 @@ local function job_spells()
                     -- in quarter seconds; the HUD learns the live value from game.spell_recast.
                     local icon = tonumber(spell.icon_hq) or 0
                     if icon <= 0 or icon == 65535 then icon = tonumber(spell.icon_nq) or 0 end
-                    local group = spell_group(spell)
                     out[#out + 1] = {
                         id = id, name = type(name) == 'string' and name or tostring(id),
                         skill = skill or '', skill_id = tonumber(spell.skill) or 0,
@@ -2325,7 +2591,9 @@ local function job_spells()
                         level = normal and level or job.level,
                         icon = icon, recast = (tonumber(spell.recast_delay) or 0) / 4,
                         targets = tonumber(spell.targets) or 0,
-                        categories = group and { group } or {},
+                        -- The group plus the enfeebling kind (`enfeebles_mnd`, ...), so the
+                        -- Spells panel can list each kind's spells under its own set row.
+                        categories = spell_categories(spell),
                         job_point = job_point or nil,
                     }
                 end

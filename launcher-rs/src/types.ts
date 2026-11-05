@@ -828,13 +828,16 @@ export interface OboroCopy {
   current: AugmentCurrent | null;
 }
 
-/** One Oboro weapon at one quality (NQ R15, HQ1 R20 or HQ2 R25). */
+/** One Oboro item at one quality (NQ R15, HQ1 R20 or HQ2 R25). */
 export interface OboroItem {
   item_id: number;
   name: string;
   slot: string;
   set: string;
   kind: "oboro";
+  /** "weapon" has paths A/B/C; a "neck" has the single Path A. Older servers
+   * omit it, so treat a missing value as a weapon. */
+  category?: "weapon" | "neck";
   job: string;
   weapon: string;
   quality: string;
@@ -935,6 +938,68 @@ export interface AmbuscadeCatalog {
   slots: number;
   materials: CapeAugmentMaterial[];
   capes: AmbuscadeCape[];
+}
+
+/** One value in a Detrovio augment's range, with the client tooltip text. */
+export interface ReiveOptionValue {
+  value: number;
+  text: string;
+}
+
+/** One of the four augment rows a Reive/Incursion cape can carry. */
+export interface ReiveRow {
+  /** The client block slot this row writes (0-3). */
+  slot: number;
+  key: string;
+  label: string;
+  minimum: number;
+  maximum: number;
+  step: number;
+  /** The strongest value: the top of a bonus or the bottom of a reduction. */
+  best: number;
+  best_text: string;
+  values: ReiveOptionValue[];
+}
+
+/** One decoded word of a cape's four-row standard block. */
+export interface ReiveSlot {
+  id: number;
+  value: number;
+  text: string;
+}
+
+/** The augments currently written on one owned cape copy. */
+export interface ReiveCurrent {
+  text: string;
+  /** Row key -> the value found in that row, or null when the row is empty. */
+  selection: Record<string, number | null>;
+  slots: ReiveSlot[];
+}
+
+/** One bag/wardrobe copy of a Reive or Incursion job cape. */
+export interface ReiveCopy {
+  container: number;
+  slot: number;
+  container_name: string;
+  current: ReiveCurrent;
+}
+
+/** One of the 22 Reive/Incursion job capes. */
+export interface ReiveCape {
+  job: string;
+  job_number: number;
+  item_id: number;
+  name: string;
+  owned: number;
+  copies: ReiveCopy[];
+  rows: ReiveRow[];
+}
+
+/** The Data page's Reive and Incursion cape card (Detrovio). */
+export interface ReiveCatalog {
+  source: string;
+  note: string;
+  capes: ReiveCape[];
 }
 
 /** One stat row of a Nolan mezzotint path (already at its Rank 15 value). */
@@ -1322,6 +1387,7 @@ export interface CharacterData {
   augments: AugmentItem[];
   oboro: OboroCatalog;
   capes: AmbuscadeCatalog;
+  reive: ReiveCatalog;
   nolan: NolanCatalog;
   glyptics: GlypticCatalog;
   skirmish: SkirmishCatalog;

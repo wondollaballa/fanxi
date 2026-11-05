@@ -63,7 +63,7 @@ Commands the launcher uses:
 | `phase_resting {on}` | manual resting state (this server has no rest packet to follow) |
 | `phase_focus {mode}` | idle focus: `auto`, `dt`, `pdt`, `mdt`, `eva` or `meva` |
 | `phase_lock_slots {mask}` | pin equipment slots (bit 0 main … bit 15 back) out of every automatic set |
-| `job_spells` | the current main/sub job's spell list for the override form, with the spell-override `categories` the host will use; a level-99 main job also includes its job-point spells |
+| `job_spells` | the current main/sub job's spell list for the override form, with the spell-override `categories` the host will use (the group plus the Enfeebling kind, e.g. `enfeebles_mnd`); a level-99 main job also includes its job-point spells |
 | `job_abilities` | the main/sub job abilities the client's 0x0AC command list advertises, with action ids and types |
 | `weapons` | main/sub/ranged/ammo items in all 18 client bags (slots 1-80) that the main job meets the level and job requirements for, with copy and stack counts |
 | `bag_items {container}` | every item in one client container (diagnostic; scans slots 1-80, including slots past `container_max`) |
@@ -942,19 +942,49 @@ default JA set, then the library's `precast.JA`. The per-WS, per-JA and
 per-spell choices ride in the `phase` command's options object (`ws_overrides`, `ja_overrides`,
 `spell_overrides`, `spell_category_overrides`), so the host builds exactly what the page shows.
 
-A mode group holds one set per mode (`spell_category_overrides`, keyed `enfeebles_macc`,
-`enfeebles_duration`, `buff_potency`, `buff_duration`, `cure_potency`, `cure_cast`, `nuke_mab`,
-`nuke_mdmg`, `nuke_mb`, `helix_magic`, `helix_duration`, `dark_potency`, `dark_macc`,
-`dark_duration`, `divine_mab`, `divine_macc` or `enspells`) and an armed mode
-(`spell_modes`). The host puts each spell in exactly one group: Enfeebling Magic -> enfeebles,
-Enhancing Magic -> enhancing, Healing Magic -> curing, Elemental Magic -> nuking, Dark Magic ->
-dark, Divine Magic -> divine, a spell whose name contains `helix` -> helix (checked before
-Elemental), and Enfire / Enblizzard / Enaero / Enstone / Enthunder / Enwater (and their IIs, plus
-Enlight / Endark) -> enspells (checked before the skill fallback). The plan resolves a spell in
-this order: per-spell override, the armed mode's set for its group, the midcast default, then the
-library's `sets.midcast.<skill>`. Both modes of a group stay configured when the other is edited;
-the mode dropdown only changes which one is armed. A missing set for the armed mode falls through
-to the default rather than borrowing the other mode.
+A mode group holds one set per mode (`spell_category_overrides`, keyed `enfeebles_skill`,
+`enfeebles_macc`, `enfeebles_duration`, `enfeebles_hybrid`, `enfeebles_mnd`,
+`enfeebles_int`, `enfeebles_general`, `enfeebles_saboteur`, `buff_potency`, `buff_duration`,
+`cure_potency`, `cure_cast`, `nuke_mab`, `nuke_mdmg`, `nuke_mb`, `helix_magic`,
+`helix_duration`, `dark_potency`, `dark_macc`, `dark_duration`, `divine_mab`, `divine_macc`
+or `enspells`) and an armed mode (`spell_modes`). The host puts each spell in exactly one
+group: Enfeebling Magic -> enfeebles, Enhancing Magic -> enhancing, Healing Magic -> curing,
+Elemental Magic -> nuking, Dark Magic -> dark, Divine Magic -> divine, a spell whose name
+contains `helix` -> helix (checked before Elemental), and Enfire / Enblizzard / Enaero /
+Enstone / Enthunder / Enwater (and their IIs, plus Enlight / Endark) -> enspells (checked
+before the skill fallback). The plan resolves a spell in this order: per-spell override, the
+spell's enfeebling kind when the group is in Auto (otherwise the armed mode's set), the
+midcast default, then the library's `sets.midcast.<skill>`. Both modes of a group stay
+configured when the other is edited; the mode dropdown only changes which one is armed. A
+missing set for the armed mode falls through to the default rather than borrowing the other
+mode.
+
+**Enfeebles is split by spell kind** (`enfeebles`), after the community Red Mage guide. The
+group's default mode is **Auto** (it has no category of its own): each Enfeebling Magic spell
+wears the set for its own kind — `enfeebles_skill` for Frazzle III / Distract III / Poison,
+`enfeebles_macc` for Frazzle II / Distract II / Dia / Sleep / Bind / Break / Silence,
+`enfeebles_duration` for the Sleep / Bind / Break / Silence timers, `enfeebles_mnd` for
+Slow II / Paralyze II / Addle II, `enfeebles_int` for Blind II, `enfeebles_hybrid` for
+Gravity, and `enfeebles_general` for Dispel / Dispelga / Inundation. Arming any of the other
+modes forces every enfeebling spell through that one set, which keeps the old
+macc-everything and duration-everything behaviour. Duration falls back to Macc when no
+Duration set is configured (a slept target that was never slept has no timer to extend), and a
+kind with no set at all falls through to the midcast default and then
+`midcast.Enfeebling Magic`. `job_spells` reports the kind as a second category
+(`enfeebles_mnd`, ...) so the Spells panel can list each kind's spells under its own row.
+Switch with `//modes enfeebles auto|skill|macc|duration|hybrid|mnd|int|general`; the in-game
+spell HUD's mode strip shows `Enf: Auto` (or the forced mode).
+
+**Saboteur is an automatic overlay, the way Immanence is an automatic set.** The Enfeebles
+group also has an `autos` entry (`enfeebles_saboteur`, status **454**, `merge = true`). The
+host adds a second rule for every enfeebling spell carrying `buffs = {454}`; because the engine
+prefers a rule that names more buffs, that rule wins while Saboteur is up. Its set is the
+spell's own set merged with the one-piece overlay `midcast.Enfeebling Magic Saboteur` (the
+hands), so the kind's body/legs/cape stay put and the state set restores the hands when the
+cast resolves. `merge` is what keeps seven kind sets from needing seven Saboteur variants; a
+character who does not own the overlay piece binds no rule and keeps the plain kind set. The
+Gear page renders it as a `Sab on buff` row and lists the overlay piece under the kind's gear
+preview.
 
 **Dark Magic has its own group** (`dark`) with three modes. **Potency** (`dark_potency`, the
 default) is the Drain / Aspir potency set and carries the Magic Attack a Kaustra or Death cast
