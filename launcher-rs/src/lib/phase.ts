@@ -7,8 +7,8 @@ export const PHASE_CONFIG_KEY = "fanxi.phase.config";
  * profile) means off. The launcher owns the setting, not an individual client. */
 export const PHASE_ON_KEY = "fanxi.phase.on";
 /** Bumped when a default mode changes in a way a saved config should follow. 2 split
- * Enfeebles into per-spell kinds and made Auto the default. */
-export const PHASE_CONFIG_VERSION = 2;
+ * Enfeebles into per-spell kinds and made Auto the default; 3 did the same for Enhancing. */
+export const PHASE_CONFIG_VERSION = 3;
 
 export function loadPhaseEnabled(): boolean {
   return localStorage.getItem(PHASE_ON_KEY) === "1";
@@ -57,6 +57,11 @@ export type SpellCategoryKey =
   | "enfeebles_int"
   | "enfeebles_general"
   | "enfeebles_saboteur"
+  | "enhancing_skill"
+  | "enhancing_stoneskin"
+  | "enhancing_duration"
+  | "enhancing_duration_self"
+  | "enhancing_general"
   | "buff_potency"
   | "buff_duration"
   | "cure_potency"
@@ -78,6 +83,7 @@ export type SpellCategoryKey =
   | "divine_mab"
   | "divine_macc"
   | "enspells"
+  | "enspells_no_damage"
   | "song_duration"
   | "song_potency"
   | "song_aeonic"
@@ -111,6 +117,13 @@ export type SpellMode = {
    * Enfeebles Saboteur row is only the hands, so one set covers every kind.
    */
   merge?: boolean;
+  /**
+   * Scope an automatic row to one kind of its group.  The Enhancing Composure row only
+   * applies to the duration spells, not to Aquaveil or Stoneskin.
+   */
+  onlyKind?: string;
+  /** Empty-option wording for the row (the automatic rows are not armed modes). */
+  emptyLabel?: string;
 };
 
 /** One enfeebling kind: a spell group inside Enfeebles with its own set row. */
@@ -277,21 +290,90 @@ export const SPELL_GROUPS: SpellGroup[] = [
     key: "enhancing",
     label: "Enhancing / buffs",
     short: "Enh",
-    defaultMode: "potency",
+    defaultMode: "auto",
+    // The guide splits the enhancing spells the same way it splits the enfeebles: Aquaveil
+    // wants SIRD, Stoneskin wants potency, the Bar-/Haste/Flurry/Blink line wants duration,
+    // and the rest use the generic enhancing set.  Auto follows the spell; arming a kind
+    // forces every enhancing spell through that set.
     modes: [
       {
-        key: "potency",
-        label: "Potency",
-        short: "Pot",
-        category: "buff_potency",
-        detail: "Potency set for every Enhancing Magic spell.",
+        key: "auto",
+        label: "Auto — by spell type",
+        short: "Auto",
+        detail: "Wear the kind row for each spell (Skill, Stoneskin, Duration, General).",
+      },
+      {
+        key: "skill",
+        label: "Skill (Aquaveil)",
+        short: "SIRD",
+        category: "enhancing_skill",
+        detail: "Force every enhancing spell through the Aquaveil SIRD build.",
+      },
+      {
+        key: "stoneskin",
+        label: "Stoneskin",
+        short: "Stone",
+        category: "enhancing_stoneskin",
+        detail: "Force every enhancing spell through the Stoneskin build.",
       },
       {
         key: "duration",
         label: "Duration",
         short: "Dur",
-        category: "buff_duration",
-        detail: "Duration set for every Enhancing Magic spell.",
+        category: "enhancing_duration",
+        detail: "Force every enhancing spell through the duration build.",
+      },
+      {
+        key: "general",
+        label: "General",
+        short: "Gen",
+        category: "enhancing_general",
+        detail: "Force every enhancing spell through the generic enhancing set.",
+      },
+    ],
+    kinds: [
+      {
+        key: "skill",
+        label: "Skill (Aquaveil)",
+        short: "SIRD",
+        category: "enhancing_skill",
+        detail: "Aquaveil: spell interruption rate down, so the cast survives under fire.",
+      },
+      {
+        key: "stoneskin",
+        label: "Stoneskin",
+        short: "Stone",
+        category: "enhancing_stoneskin",
+        detail: "Stoneskin: Enhancing skill and MND push the absorb past its base cap.",
+      },
+      {
+        key: "duration",
+        label: "Duration",
+        short: "Dur",
+        category: "enhancing_duration",
+        detail: "Barspell, Blink, Haste, Haste II, Flurry and Flurry II: duration first.",
+      },
+      {
+        key: "general",
+        label: "General",
+        short: "Gen",
+        category: "enhancing_general",
+        detail: "Protect, Shell, Regen, Refresh, Temper and the rest: the generic enhancing set.",
+      },
+    ],
+    // A live status, not an armed mode: Composure triples enhancing duration on self, so
+    // the duration spells wear the self build while it is up and the party build otherwise.
+    // onlyKind keeps the row off Aquaveil, Stoneskin and the general spells.
+    autoModes: [
+      {
+        key: "composure",
+        label: "Composure",
+        short: "Comp",
+        category: "enhancing_duration_self",
+        buff: 419,
+        onlyKind: "duration",
+        emptyLabel: "— no self set —",
+        detail: "While Composure is up, the duration spells wear the self duration set.",
       },
     ],
   },
@@ -308,6 +390,14 @@ export const SPELL_GROUPS: SpellGroup[] = [
         category: "enspells",
         detail:
           "Enhancing Magic Skill / MND set for casting Enfire, Enblizzard, Enaero, Enstone, Enthunder and Enwater.",
+      },
+      {
+        key: "nodamage",
+        label: "Enspell no dmg",
+        short: "NoDmg",
+        category: "enspells_no_damage",
+        detail:
+          "The enspell set to wear when the damage build is not wanted (defense, SIRD, a skill-up set, ...).",
       },
     ],
   },
@@ -657,6 +747,24 @@ const SPELL_CATEGORY_FALLBACKS: Record<SpellCategoryKey, string[]> = {
   // The Saboteur row is an overlay, not a replacement, so it only binds to the one-piece
   // overlay set; a library without one simply has no hands swap.
   enfeebles_saboteur: ["midcast.Enfeebling Magic Saboteur"],
+  // Enhancing kinds.  The SIRD/Stoneskin sets are RDM's; other jobs fall through to the
+  // generic enhancing set, so their behaviour is unchanged.  The duration kind prefers the
+  // party build and Composure swaps in the self build while it is up.
+  enhancing_skill: [
+    "midcast.Enhancing Magic SIRD",
+    "midcast.EnhancingSkill",
+    "midcast.Enhancing Magic",
+  ],
+  enhancing_stoneskin: ["midcast.Enhancing Magic Stoneskin", "midcast.Enhancing Magic"],
+  enhancing_duration: [
+    "midcast.EnhancingDurationOthers",
+    "midcast.EnhancingDuration",
+    "midcast.Enhancing Magic",
+  ],
+  enhancing_duration_self: ["midcast.EnhancingDuration"],
+  enhancing_general: ["midcast.Enhancing Magic"],
+  // The pre-kind categories stay mapped so an old saved config still resolves; the modes
+  // no longer use them.
   buff_potency: ["midcast.Enhancing Magic"],
   buff_duration: ["midcast.EnhancingDuration", "midcast.Enhancing Magic"],
   cure_potency: ["midcast.Cure", "midcast.Healing Magic"],
@@ -678,6 +786,9 @@ const SPELL_CATEGORY_FALLBACKS: Record<SpellCategoryKey, string[]> = {
   divine_mab: ["midcast.Divine Magic"],
   divine_macc: ["midcast.Divine Magic"],
   enspells: ["midcast.Enspell", "midcast.EnhancingSkill"],
+  // A library without a dedicated no-damage enspell set keeps the damage build until the
+  // player picks their own set in the row.
+  enspells_no_damage: ["midcast.EnspellNoDmg", "midcast.Enspell", "midcast.EnhancingSkill"],
   song_duration: ["midcast.SongDuration", "midcast.Song", "midcast.Singing"],
   song_potency: ["midcast.SongPotency", "midcast.Song", "midcast.Singing"],
   song_aeonic: ["midcast.SongHonor", "midcast.SongDuration", "midcast.Song"],
@@ -761,6 +872,10 @@ export function loadPhaseConfig(): PhaseConfig {
   // deliberate force, so move it to Auto once; a deliberate "duration" choice is kept.
   const configVersion = typeof saved.configVersion === "number" ? saved.configVersion : 1;
   if (configVersion < 2 && savedModes.enfeebles === "macc") savedModes.enfeebles = "auto";
+  // Version 3 split Enhancing into per-spell kinds: the old potency/duration modes are gone,
+  // so a saved one would otherwise be dropped by normalizeSpellModes anyway.  Move it to
+  // Auto explicitly (including the old default "potency") so the kind rows take over.
+  if (configVersion < 3) savedModes.enhancing = "auto";
   return {
     configVersion: PHASE_CONFIG_VERSION,
     engaged: text(saved.engaged, localStorage.getItem("fanxi.phase.engaged") ?? "engaged.tp"),

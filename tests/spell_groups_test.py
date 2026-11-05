@@ -12,7 +12,10 @@ Guide): Skill (Frazzle III, Distract III, Poison), Macc (Frazzle II, Dia, Sleep,
 Duration (Sleep, Bind, Break, Silence), MND (Slow II, Paralyze II, Addle II), INT (Blind II),
 Macc + potency (Gravity) and non-scaling (Dispel, Inundation).  The test pins that split, the
 Auto plan rule (a spell's own kind, a forced mode wins, Duration falls back to Macc) and the
-`gearswap/RDM.lua` sets each kind binds to by name.
+`gearswap/RDM.lua` sets each kind binds to by name.  Enhancing Magic has the same
+per-spell split now: Skill (Aquaveil), Stoneskin, Duration (Barspell, Blink, Haste,
+Haste II, Flurry, Flurry II) and General, with Composure selecting the self duration
+set while it is up.
 
 The group classifier also has to stay faithful to the spell table: every skill-37 spell in
 `database/migrations/0058_spells.sql` is Dark Magic and must land in the `dark` group, and
@@ -56,12 +59,21 @@ EXPECTED_GROUPS = {
         ['enfeebles_skill', 'enfeebles_macc', 'enfeebles_duration', 'enfeebles_hybrid',
          'enfeebles_mnd', 'enfeebles_int', 'enfeebles_general'],
     ),
+    'enhancing': (
+        'auto',
+        ['enhancing_skill', 'enhancing_stoneskin', 'enhancing_duration',
+         'enhancing_general'],
+        ['enhancing_skill', 'enhancing_stoneskin', 'enhancing_duration',
+         'enhancing_general'],
+    ),
+    'enspells': ('damage', ['enspells', 'enspells_no_damage'], []),
     'dark': ('potency', ['dark_potency', 'dark_macc', 'dark_duration'], []),
     'divine': ('mab', ['divine_mab', 'divine_macc'], []),
 }
 # group key -> the automatic (buff-conditional) rows, in table order.
 EXPECTED_AUTOS = {
     'enfeebles': ['enfeebles_saboteur'],
+    'enhancing': ['enhancing_duration_self'],
     'nuking': ['nuke_mb', 'nuke_immanence'],
     'helix': ['helix_immanence'],
 }
@@ -75,6 +87,12 @@ FALLBACKS = {
     'enfeebles_int': 'midcast.Enfeebling Magic INT',
     'enfeebles_general': 'midcast.Enfeebling Magic General',
     'enfeebles_saboteur': 'midcast.Enfeebling Magic Saboteur',
+    'enhancing_skill': 'midcast.Enhancing Magic SIRD',
+    'enhancing_stoneskin': 'midcast.Enhancing Magic Stoneskin',
+    'enhancing_duration': 'midcast.EnhancingDurationOthers',
+    'enhancing_duration_self': 'midcast.EnhancingDuration',
+    'enhancing_general': 'midcast.Enhancing Magic',
+    'enspells_no_damage': 'midcast.EnspellNoDmg',
     'dark_': 'midcast.Dark Magic',
     'divine_': 'midcast.Divine Magic',
 }
@@ -88,8 +106,8 @@ KIND_SETS = {
     'midcast.Enfeebling Magic INT': 'Marin Staff +1',
     'midcast.Enfeebling Magic General': 'Per. Lucky Egg',
 }
-EXTRA_SETS = ('midcast.EnhancingDurationOthers', 'midcast.Enhancing Magic Stoneskin',
-              'midcast.Enhancing Magic SIRD')
+EXTRA_SETS = ('midcast.EnhancingDuration', 'midcast.EnhancingDurationOthers',
+              'midcast.Enhancing Magic Stoneskin', 'midcast.Enhancing Magic SIRD')
 
 
 def groups_block() -> str:
@@ -338,6 +356,104 @@ if #cure_cats ~= 1 or cure_cats[1] ~= 'curing' then
   error('Cure categories: ' .. table.concat(cure_cats, ','), 0)
 end
 
+-- Enhancing kinds: the guide's per-spell split.
+local enhancing_cases = {{
+  {{ 'Aquaveil', 'skill' }},
+  {{ 'Stoneskin', 'stoneskin' }},
+  {{ 'Barfire', 'duration' }}, {{ 'Barsleepra', 'duration' }},
+  {{ 'Haste', 'duration' }}, {{ 'Haste II', 'duration' }},
+  {{ 'Hastega', 'duration' }}, {{ 'Flurry', 'duration' }},
+  {{ 'Flurry II', 'duration' }}, {{ 'Blink', 'duration' }},
+  {{ 'Protect V', 'general' }}, {{ 'Shell V', 'general' }},
+  {{ 'Regen', 'general' }}, {{ 'Refresh', 'general' }},
+  {{ 'Temper', 'general' }}, {{ 'Blaze Spikes', 'general' }},
+  {{ 'Aurorastorm', 'general' }},
+}}
+for _, row in ipairs(enhancing_cases) do
+  local got = spell_enhancing_kind({{ name = row[1], skill = 34 }})
+  if got ~= row[2] then
+    error(string.format('%s enhancing kind -> %s, want %s',
+      row[1], tostring(got), row[2]), 0)
+  end
+end
+if spell_enhancing_kind({{ name = 'Cure IV', skill = 33 }}) ~= nil then
+  error('a healing spell gained an enhancing kind', 0)
+end
+if spell_enhancing_kind(nil) ~= nil then
+  error('a nil spell gained an enhancing kind', 0)
+end
+
+-- Composure is a live status (419), scoped to the duration kind.
+local composure = nil
+for _, auto in ipairs(SPELL_GROUPS.enhancing.autos or {{}}) do
+  if auto.key == 'composure' then composure = auto end
+end
+if not composure then error('Enhancing has no Composure auto row', 0) end
+if composure.category ~= 'enhancing_duration_self' then
+  error('Composure category is ' .. tostring(composure.category), 0)
+end
+if tonumber(composure.buff) ~= 419 then
+  error('Composure status id is ' .. tostring(composure.buff) .. ', want 419', 0)
+end
+if composure.only_kind ~= 'duration' then
+  error('Composure is not scoped to the duration kind', 0)
+end
+
+local enhance_cats = spell_categories({{ name = 'Haste', skill = 34 }})
+if #enhance_cats ~= 2 or enhance_cats[1] ~= 'enhancing'
+    or enhance_cats[2] ~= 'enhancing_duration' then
+  error('Haste categories: ' .. table.concat(enhance_cats, ','), 0)
+end
+local enhance_all = {{
+  enhancing_skill = 'SIRD', enhancing_stoneskin = 'Stone',
+  enhancing_duration = 'Duration', enhancing_general = 'General',
+}}
+local enhance_auto = find_mode(SPELL_GROUPS.enhancing, 'auto')
+local enhance_forced = find_mode(SPELL_GROUPS.enhancing, 'stoneskin')
+if spell_cast_category('enhancing', {{ name = 'Haste', skill = 34 }},
+    enhance_auto, enhance_all) ~= 'enhancing_duration' then
+  error('Haste did not pick the duration set', 0)
+end
+if spell_cast_category('enhancing', {{ name = 'Aquaveil', skill = 34 }},
+    enhance_auto, enhance_all) ~= 'enhancing_skill' then
+  error('Aquaveil did not pick the SIRD set', 0)
+end
+if spell_cast_category('enhancing', {{ name = 'Protect V', skill = 34 }},
+    enhance_auto, enhance_all) ~= 'enhancing_general' then
+  error('Protect did not pick the general set', 0)
+end
+if spell_cast_category('enhancing', {{ name = 'Aquaveil', skill = 34 }},
+    enhance_forced, enhance_all) ~= 'enhancing_stoneskin' then
+  error('a forced enhancing mode did not win', 0)
+end
+if spell_cast_category('enhancing', {{ name = 'Haste', skill = 34 }},
+    enhance_auto, {{}}) ~= nil then
+  error('an unconfigured enhancing kind did not fall through to the library set', 0)
+end
+
+-- Enspells has a second armed mode for a no-damage set, and the damage mode stays the
+-- default so a saved config without a mode keeps the old build.
+local enspell_damage = find_mode(SPELL_GROUPS.enspells, 'damage')
+local enspell_none = find_mode(SPELL_GROUPS.enspells, 'nodamage')
+if not enspell_damage or not enspell_none then
+  error('Enspells is missing one of its two modes', 0)
+end
+if SPELL_GROUPS.enspells.default ~= 'damage' then
+  error('Enspells default is ' .. tostring(SPELL_GROUPS.enspells.default), 0)
+end
+if enspell_none.category ~= 'enspells_no_damage' then
+  error('Enspell no dmg category is ' .. tostring(enspell_none.category), 0)
+end
+local enspell_override = {{ enspells = 'Dmg', enspells_no_damage = 'NoDmg' }}
+if spell_cast_category('enspells', {{ name = 'Enfire', skill = 34 }},
+    enspell_none, enspell_override) ~= 'enspells_no_damage' then
+  error('the no-damage enspell mode did not pick its own set', 0)
+end
+if spell_cast_category('enspells', {{ name = 'Enfire', skill = 34 }},
+    enspell_damage, enspell_override) ~= 'enspells' then
+  error('the damage enspell mode did not pick the damage set', 0)
+end
+
 -- Auto follows the spell's own kind; a forced mode wins; Duration falls back to Macc.
 local auto = find_mode(SPELL_GROUPS.enfeebles, 'auto')
 local forced = find_mode(SPELL_GROUPS.enfeebles, 'mnd')
@@ -548,8 +664,8 @@ def main() -> int:
         classified = sum(1 for name in names if name.casefold() not in enspells)
         counts.append(f'{group} {classified}')
     print(f"OK: {len(host_groups)} spell mode groups; {len(host_layout['enfeebles']['kinds'])} "
-          f"enfeebling kinds; classified {', '.join(counts)} "
-          f'(self-enspells stay in Enspells)')
+          f"enfeebling kinds; {len(host_layout['enhancing']['kinds'])} enhancing kinds; "
+          f"classified {', '.join(counts)} (self-enspells stay in Enspells)")
     return 0
 
 

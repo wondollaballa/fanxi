@@ -682,6 +682,10 @@ export function PhasePanel({
               ? config.spellCategoryOverrides[overlayMode.category] ?? ""
               : "";
             const overlayItems = itemsFor(overlayPath);
+            const fallbackSet =
+              group.key === "enhancing"
+                ? "midcast.Enhancing Magic"
+                : "midcast.Enfeebling Magic";
             // The kind whose gear preview is open. The first kind is the default.
             const shownKind =
               kinds.find((kind) => `${group.key}:${kind.key}` === kindView) ?? kinds[0];
@@ -692,6 +696,14 @@ export function PhasePanel({
             const shownSpells = shownKind
               ? group.spells.filter((spell) => spell.categories?.includes(shownKind.category))
               : [];
+            // An automatic row scoped to the kind being previewed (Composure -> the
+            // self duration set under Duration).  It is listed under that kind's gear.
+            const kindAuto = shownKind
+              ? autoModes.find((mode) => mode.onlyKind === shownKind.key && mode.category)
+              : undefined;
+            const kindAutoPath = kindAuto?.category
+              ? config.spellCategoryOverrides[kindAuto.category] ?? ""
+              : "";
             return (
               <div key={group.key} className={cn("phase-category", configured && "configured")}>
                 <div className="phase-category-head">
@@ -772,13 +784,16 @@ export function PhasePanel({
                     >
                       <span className="phase-mode-name">
                         {autoMode.short}
-                        <em>{autoMode.merge ? "on buff" : "auto"}</em>
+                        <em>{autoMode.merge || autoMode.onlyKind ? "on buff" : "auto"}</em>
                       </span>
                       <InlineSetSelect
                         value={config.spellCategoryOverrides[category] ?? ""}
                         sets={sets}
                         prefixes={["midcast.", "precast."]}
-                        empty={autoMode.merge ? "— no overlay —" : "— use the armed mode —"}
+                        empty={
+                          autoMode.emptyLabel ??
+                          (autoMode.merge ? "— no overlay —" : "— use the armed mode —")
+                        }
                         onChange={(nextPath) => {
                           const next = { ...config.spellCategoryOverrides };
                           if (nextPath) next[category] = nextPath;
@@ -798,7 +813,7 @@ export function PhasePanel({
                     <div className="phase-kind-gear-head">
                       <span className="eyebrow">{shownKind.label} gear</span>
                       <code>
-                        {shownPath || "— no set; the library's midcast.Enfeebling Magic applies —"}
+                        {shownPath || `— no set; the library's ${fallbackSet} applies —`}
                       </code>
                     </div>
                     <div className="phase-kind-gear-body">
@@ -829,6 +844,12 @@ export function PhasePanel({
                             {slotLabelOf(slot)} → {overlayItems[slot]}
                           </span>
                         ))}
+                      </div>
+                    ) : null}
+                    {kindAuto && kindAutoPath ? (
+                      <div className="phase-kind-overlay" title={kindAuto.detail}>
+                        <span className="eyebrow">{kindAuto.label}</span>
+                        <span>→ {kindAutoPath}</span>
                       </div>
                     ) : null}
                     <p className="phase-kind-spells">

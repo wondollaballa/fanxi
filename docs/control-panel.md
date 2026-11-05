@@ -926,7 +926,7 @@ The Gear page groups the plan the way the player thinks about it:
 | **Weaponskills** | a full-width card with a default and one group per WS action; a `(Buff, Buff)` suffix adds a conditional row, each row has its own set picker, and empty uses the library's set, then the default |
 | **Job abilities** | a full-width card with a default JA set and one row per main/sub ability; empty uses the default, then the library's `precast.JA` |
 | **Resting** | a manual resting set; this server has no rest packet, so it is a toggle |
-| **Spells** | a precast set, a midcast default for every spell, mode groups (enfeebles macc/duration, enhancing potency/duration, enspell damage, curing potency/cast, nuking MAB/magic damage, helix MAB/duration) and per-spell overrides (picked from the current job's spell list) |
+| **Spells** | a precast set, a midcast default for every spell, mode groups (enfeebles and enhancing per-spell kinds, enspell damage/no-dmg, curing potency/cast, nuking MAB/magic damage, helix MAB/duration) and per-spell overrides (picked from the current job's spell list) |
 | **Idle** | town, field and movement sets, the DT/PDT/MDT/Eva/Meva sets, and a manual focus selector |
 
 A weaponskill's or job ability's gear is worn before the action, and the state set returns on
@@ -944,17 +944,18 @@ per-spell choices ride in the `phase` command's options object (`ws_overrides`, 
 
 A mode group holds one set per mode (`spell_category_overrides`, keyed `enfeebles_skill`,
 `enfeebles_macc`, `enfeebles_duration`, `enfeebles_hybrid`, `enfeebles_mnd`,
-`enfeebles_int`, `enfeebles_general`, `enfeebles_saboteur`, `buff_potency`, `buff_duration`,
-`cure_potency`, `cure_cast`, `nuke_mab`, `nuke_mdmg`, `nuke_mb`, `helix_magic`,
-`helix_duration`, `dark_potency`, `dark_macc`, `dark_duration`, `divine_mab`, `divine_macc`
-or `enspells`) and an armed mode (`spell_modes`). The host puts each spell in exactly one
+`enfeebles_int`, `enfeebles_general`, `enfeebles_saboteur`, `enhancing_skill`,
+`enhancing_stoneskin`, `enhancing_duration`, `enhancing_duration_self`, `enhancing_general`,
+`buff_potency`, `buff_duration`, `enspells_no_damage`, `cure_potency`, `cure_cast`, `nuke_mab`, `nuke_mdmg`,
+`nuke_mb`, `helix_magic`, `helix_duration`, `dark_potency`, `dark_macc`, `dark_duration`,
+`divine_mab`, `divine_macc` or `enspells`) and an armed mode (`spell_modes`). The host puts each spell in exactly one
 group: Enfeebling Magic -> enfeebles, Enhancing Magic -> enhancing, Healing Magic -> curing,
 Elemental Magic -> nuking, Dark Magic -> dark, Divine Magic -> divine, a spell whose name
 contains `helix` -> helix (checked before Elemental), and Enfire / Enblizzard / Enaero /
 Enstone / Enthunder / Enwater (and their IIs, plus Enlight / Endark) -> enspells (checked
 before the skill fallback). The plan resolves a spell in this order: per-spell override, the
-spell's enfeebling kind when the group is in Auto (otherwise the armed mode's set), the
-midcast default, then the library's `sets.midcast.<skill>`. Both modes of a group stay
+spell's kind when its group is in Auto (Enfeebles or Enhancing; otherwise the armed mode's
+set), the midcast default, then the library's `sets.midcast.<skill>`. Both modes of a group stay
 configured when the other is edited; the mode dropdown only changes which one is armed. A
 missing set for the armed mode falls through to the default rather than borrowing the other
 mode.
@@ -985,6 +986,20 @@ cast resolves. `merge` is what keeps seven kind sets from needing seven Saboteur
 character who does not own the overlay piece binds no rule and keeps the plain kind set. The
 Gear page renders it as a `Sab on buff` row and lists the overlay piece under the kind's gear
 preview.
+
+**Enhancing Magic is split by spell kind too** (`enhancing`), matching the guide's Skill Based
+and Duration sets. Auto (the default) picks `enhancing_skill` for Aquaveil
+(`midcast.Enhancing Magic SIRD`), `enhancing_stoneskin` for Stoneskin, `enhancing_duration` for
+Barspell / Blink / Haste / Hastega / Haste II / Flurry / Flurry II (`midcast.EnhancingDurationOthers`)
+and `enhancing_general` for everything else (Protect, Shell, Regen, Refresh, Temper, the
+storms, spikes and travel spells; `midcast.Enhancing Magic`). Forcing a kind
+(`//modes enhancing auto|skill|stoneskin|duration|general`) throws the whole group through that
+set. The group also has an `autos` entry scoped to the duration kind: while **Composure**
+(status **419**) is up, the duration spells wear `enhancing_duration_self`
+(`midcast.EnhancingDuration`, the Composure self build) instead of the party build, and the
+plain duration rule returns when it drops. `only_kind` is what keeps the Comp row off
+Aquaveil/Stoneskin. The old `buff_potency`/`buff_duration` keys stay mapped so a saved config
+from before the split still resolves, but no mode arms them.
 
 **Dark Magic has its own group** (`dark`) with three modes. **Potency** (`dark_potency`, the
 default) is the Drain / Aspir potency set and carries the Magic Attack a Kaustra or Death cast
@@ -1032,7 +1047,8 @@ clear it.
 The same switch is available in game. The spells HUD has one button per group showing the armed
 mode; click it to cycle. `//modes` lists the armed modes, `//modes enhancing` lists that group's
 modes, and `//modes enhancing duration` arms one. `//modes enfeebles macc` and the labels/short
-names also work for the other groups, including `//modes enspells damage`.
+names also work for the other groups, including `//modes enspells damage` and
+`//modes enspells nodamage` for the two enspell builds.
 
 **Weapon pins.** The host filters pinned slots out of every automatic state set it sends —
 engaged, idle, kiting, resting, focus and the other transitions. A pin on the main hand, sub hand or ranged slot is

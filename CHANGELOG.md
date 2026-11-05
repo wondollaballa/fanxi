@@ -1,5 +1,46 @@
 # Changelog
 
+## Unreleased — Enspells gains a no-damage mode
+
+- **The Enspells card has a second mode for a no-damage set.** `Enspell damage` (the default,
+  `enspells` / `midcast.Enspell`) keeps its existing row, and the new **Enspell no dmg**
+  (`nodamage`, category `enspells_no_damage`) gets its own row so a separate build can be
+  picked without touching the damage set. The fallback order is `midcast.EnspellNoDmg`,
+  `midcast.Enspell`, `midcast.EnhancingSkill`, so a library without the new set behaves
+  exactly as before until the set is selected.
+- The mode is switchable from the card's Mode dropdown and in game with
+  `//modes enspells damage` / `//modes enspells nodamage`; both are listed by `//modes enspells`.
+- Tests: `tests/spell_groups_test.py` pins the two modes, the `damage` default and the
+  category/fallback. Docs: `docs/control-panel.md`, `docs/launcher.md`, `gearswap/README.md`.
+
+## Unreleased — Enhancing Magic picks its set from the spell, and Composure picks the self build
+
+- **The Enhancing section now splits the spells the way the enfeebles already did.** After the
+  community Red Mage guide, Auto (the new default) assigns each Enhancing Magic spell a kind:
+  Skill (Aquaveil → `midcast.Enhancing Magic SIRD`), Stoneskin (`midcast.Enhancing Magic
+  Stoneskin`), Duration (Barspell — every Bar- and Bar-ra spell — Blink, Haste, Hastega,
+  Haste II, Flurry, Flurry II → `midcast.EnhancingDurationOthers`) and General (Protect, Shell,
+  Regen, Refresh, Temper, storms, spikes, travel → `midcast.Enhancing Magic`). Forcing a kind
+  still throws the whole group through that set (`//modes enhancing auto|skill|stoneskin|
+  duration|general`). `job_spells` reports the kind as a second category
+  (`enhancing_duration`, ...), so the Spells card lists each kind's spells under its own row.
+- **Composure switches the duration spells to the Self build, the way Saboteur swaps the
+  enfeebling hands.** While status **419** is up the host adds a higher-priority rule for the
+  duration kind with `midcast.EnhancingDuration` (the guide's Duration (Self) table: Telchine
+  Cap/Braconi, Vitiation Tabard +4, Colada, Embla Sash); otherwise the party build
+  (`EnhancingDurationOthers`: Lethargy Chappel/Sayon/Fuseau) stays. The automatic row is scoped
+  with `only_kind`, so Aquaveil, Stoneskin and the general spells keep their own sets.
+- **The Gear page shows the enhancing kinds.** One row per kind with its set picker, spell
+  count and a click-through 4×4 gear preview, plus the `Comp on buff` automatic row and a
+  `Composure → midcast.EnhancingDuration` line under the Duration gear. The mode migration is
+  version 3: a saved `potency`/`duration` enhancing mode moves to Auto once, so the kind rows
+  take over. The old `buff_potency`/`buff_duration` categories stay mapped for saved configs.
+- Tests: `tests/spell_groups_test.py` pins the host/launcher mode, kind and automatic lists for
+  Enhancing, the seventeen kind cases (Aquaveil, Stoneskin, every duration family, Protect/
+  Shell/Regen/Refresh/Temper/Spikes/storms), the Auto/forced plan rules and the Composure
+  status/scope. Docs: `docs/rdm.md` (the enhancing section and both duration builds),
+  `docs/control-panel.md`, `docs/launcher.md`, `gearswap/README.md`.
+
 ## Unreleased — all 22 JSE necks augment at Oboro
 
 - **Oboro now augments the JSE necks, not just the Dynamis-Divergence weapons.** All 22 necks

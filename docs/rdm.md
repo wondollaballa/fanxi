@@ -1,7 +1,7 @@
-# Red Mage enfeebles and the gear sets behind them
+# Red Mage enfeebles, enhancing and the gear sets behind them
 
-This page records why `gearswap/RDM.lua` carries several Enfeebling Magic sets instead of
-one, and how the Gear page and the phase engine pick between them. The source is the
+This page records why `gearswap/RDM.lua` carries several Enfeebling and Enhancing Magic sets
+instead of one each, and how the Gear page and the phase engine pick between them. The source is the
 [Community Red Mage Guide](https://www.bg-wiki.com/ffxi/Community_Red_Mage_Guide) on BG
 Wiki, section **Gear Sets → Enfeebling Magic Sets**, plus the guide's Enhancing Magic sets.
 
@@ -89,9 +89,42 @@ R25 is INT/MND +15 plus enhancing and enfeebling magic duration +25% (see
 [oboro-r25.md](oboro-r25.md)). The launcher's set preview falls back to the bag
 copy's decoded augments, so the torque shows its real rows in the Gear page.
 
-`gearswap/RDM.lua` also keeps the guide's Enhancing splits — `midcast.Enhancing Magic SIRD`
-(Aquaveil), `midcast.Enhancing Magic Stoneskin`, `midcast.EnhancingDuration` (self) and
-`midcast.EnhancingDurationOthers` — plus the guide's TP, enspell-damage and magic-WS builds.
+## Enhancing Magic is split by spell too
+
+The guide's **Skill Based Enhancing Sets** and **Enhancing Duration Sets** give the
+enhancing spells the same treatment as the enfeebles:
+
+| Kind | Spells | Set |
+|---|---|---|
+| **Skill (Aquaveil)** | Aquaveil | `midcast.Enhancing Magic SIRD` (spell-interruption rate down, so the cast survives) |
+| **Stoneskin** | Stoneskin | `midcast.Enhancing Magic Stoneskin` (Enhancing skill + MND push the absorb past its base cap) |
+| **Duration** | Barspell (every Bar- and Bar-ra spell), Blink, Haste, Hastega, Haste II, Flurry, Flurry II | `midcast.EnhancingDurationOthers` for party casts; `midcast.EnhancingDuration` while Composure is up |
+| **General** | Protect, Shell, Regen, Refresh, Temper, the storms/spikes/travel spells and the rest | `midcast.Enhancing Magic` |
+
+The guide's **Duration (Self)** and **Duration (Others)** tables are the two duration
+builds; the self build is the one that leans on Composure's triple-duration bonus:
+
+| | Duration (Self) | Duration (Others) |
+|---|---|---|
+| Main / sub | Colada (Enhancing Duration +4%), Ammurapi Shield | same |
+| Head | Telchine Cap (+10% enhancing duration) | Lethargy Chappel +3 |
+| Body | Vitiation Tabard +4 | Lethargy Sayon +3 |
+| Hands / legs | Atrophy Gloves +4 / Telchine Braconi (+10%) | Atrophy Gloves +4 / Lethargy Fuseau +3 |
+| Feet | Lethargy Houseaux +3 | Lethargy Houseaux +3 |
+| Neck / ear | Duelist's Torque +2 / Leth. Earring +2 | same |
+| Waist / back | Embla Sash / Sucellos's Cape | same |
+
+**Composure** (status 419) is the switch between them, the same live-status mechanism
+Saboteur uses for the enfeebles: while it is up the duration spells wear the self build,
+otherwise the party build. `spell_modes` keeps the old forced choices as modes (`Skill`,
+`Stoneskin`, `Duration`, `General`), so `//modes enhancing duration` still forces one set
+for every enhancing spell. Protect V, Shell V and Reraise scale with nothing once capped
+(the guide suggests Conserve MP for them); Fanxi leaves them on the General set.
+
+`gearswap/RDM.lua` keeps `midcast.Enhancing Magic SIRD`, `midcast.Enhancing Magic
+Stoneskin`, `midcast.EnhancingDuration`, `midcast.EnhancingDurationOthers` and the plain
+`midcast.Enhancing Magic` for these rows, plus the guide's TP, enspell-damage and magic-WS
+builds.
 
 The guide prints Oseem augments as `Type:A/Rank:15` and similar. The library names those
 pieces without their rolled augment lines; the Gear page's hover card falls back to the bag

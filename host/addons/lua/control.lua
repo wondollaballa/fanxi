@@ -1051,6 +1051,31 @@ local ENFEEBLE_KIND_SPELLS = {
     ['dispel'] = 'general', ['dispelga'] = 'general', ['inundation'] = 'general',
 }
 
+-- Enhancing Magic kinds.  The guide splits the buffs by what the set is for: Aquaveil
+-- wants spell-interruption gear, Stoneskin wants potency, the Bar- / Haste / Flurry /
+-- Blink line wants duration (the party build, or the self build while Composure triples
+-- self-cast duration), and the rest - Protect, Shell, Regen, Refresh, Temper, the storms,
+-- the spikes, the travel spells - just needs the generic enhancing pieces.
+local ENHANCING_KINDS = {
+    skill = {
+        key = 'skill', label = 'Skill (Aquaveil)', short = 'SIRD', category = 'enhancing_skill',
+        detail = 'Aquaveil: spell interruption rate down, so the cast survives under fire.',
+    },
+    stoneskin = {
+        key = 'stoneskin', label = 'Stoneskin', short = 'Stone', category = 'enhancing_stoneskin',
+        detail = 'Stoneskin: Enhancing skill and MND push the absorb past its base cap.',
+    },
+    duration = {
+        key = 'duration', label = 'Duration', short = 'Dur', category = 'enhancing_duration',
+        detail = 'Barspell, Blink, Haste, Haste II, Flurry and Flurry II: duration first.',
+    },
+    general = {
+        key = 'general', label = 'General', short = 'Gen', category = 'enhancing_general',
+        detail = 'Protect, Shell, Regen, Refresh, Temper and the rest: the generic enhancing set.',
+    },
+}
+local ENHANCING_KIND_ORDER = { 'skill', 'stoneskin', 'duration', 'general' }
+
 -- The Gear page's spell groups and the modes each can be in.  The launcher configures one
 -- set per mode; the armed mode decides which one the plan wears.  A spell belongs to one
 -- group, so the same category rule cannot be claimed twice.
@@ -1111,16 +1136,62 @@ local SPELL_GROUPS = {
         },
     },
     enhancing = {
-        key = 'enhancing', label = 'Enhancing / buffs', short = 'Enh', default = 'potency',
+        key = 'enhancing', label = 'Enhancing / buffs', short = 'Enh', default = 'auto',
+        -- Auto wears the set for the spell's own kind.  Arming a kind forces every
+        -- Enhancing Magic spell through that set, and //modes swaps the same list.
         modes = {
-            { key = 'potency', label = 'Potency', short = 'Pot', category = 'buff_potency' },
-            { key = 'duration', label = 'Duration', short = 'Dur', category = 'buff_duration' },
+            {
+                key = 'auto', label = 'Auto — by spell type', short = 'Auto',
+                detail = 'Wear the kind row for each spell (Skill, Stoneskin, Duration, General).',
+            },
+            {
+                key = 'skill', label = 'Skill (Aquaveil)', short = 'SIRD',
+                category = 'enhancing_skill',
+                detail = 'Force every enhancing spell through the Aquaveil SIRD build.',
+            },
+            {
+                key = 'stoneskin', label = 'Stoneskin', short = 'Stone',
+                category = 'enhancing_stoneskin',
+                detail = 'Force every enhancing spell through the Stoneskin build.',
+            },
+            {
+                key = 'duration', label = 'Duration', short = 'Dur',
+                category = 'enhancing_duration',
+                detail = 'Force every enhancing spell through the duration build.',
+            },
+            {
+                key = 'general', label = 'General', short = 'Gen',
+                category = 'enhancing_general',
+                detail = 'Force every enhancing spell through the generic enhancing set.',
+            },
+        },
+        kinds = {
+            ENHANCING_KINDS.skill, ENHANCING_KINDS.stoneskin,
+            ENHANCING_KINDS.duration, ENHANCING_KINDS.general,
+        },
+        -- A live status, not an armed mode: while Composure is up the duration spells wear
+        -- the self build (Composure triples enhancing duration on self); the party build is
+        -- the fallback.  only_kind keeps the rule off Aquaveil/Stoneskin/General.
+        autos = {
+            {
+                key = 'composure', label = 'Composure', short = 'Comp',
+                category = 'enhancing_duration_self', buff = 419, only_kind = 'duration',
+                detail = 'While Composure is up, the duration spells wear the self duration set.',
+            },
         },
     },
     enspells = {
         key = 'enspells', label = 'Enspells', short = 'Ensp', default = 'damage',
         modes = {
-            { key = 'damage', label = 'Enspell damage', short = 'Dmg', category = 'enspells' },
+            {
+                key = 'damage', label = 'Enspell damage', short = 'Dmg', category = 'enspells',
+                detail = 'Enhancing Magic Skill / MND set for casting the six enspells.',
+            },
+            {
+                key = 'nodamage', label = 'Enspell no dmg', short = 'NoDmg',
+                category = 'enspells_no_damage',
+                detail = 'The enspell set to wear when the damage build is not wanted.',
+            },
         },
     },
     curing = {
@@ -1249,6 +1320,23 @@ local function spell_enfeebling_kind(spell)
     return ENFEEBLE_KIND_SPELLS[name] or 'macc'
 end
 
+-- The Enhancing Magic spell's kind.  Every skill-34 spell gets one; unknown ones are
+-- General, which falls back to midcast.Enhancing Magic.
+local function spell_enhancing_kind(spell)
+    if not spell or tonumber(spell.skill) ~= 34 then return nil end
+    local name = spell_name(spell):lower()
+    if name:find('^aquaveil') then return 'skill' end
+    if name:find('^stoneskin') then return 'stoneskin' end
+    -- The guide's "Enhancing Duration Sets" line: Barspell (every Bar- and Bar-ra spell),
+    -- Blink, Haste/Hastega and Flurry.  Protect/Shell/Reraise are not in it; they need
+    -- neither duration nor the enhancing skill once capped.
+    if name == 'blink' or name:find('^bar') or name:find('^haste')
+        or name:find('^flurry') then
+        return 'duration'
+    end
+    return 'general'
+end
+
 -- The category whose set should be worn for one spell's kind, walking the fallback chain
 -- (Duration -> Macc) until a category has a set in the plan.  Returns nil when no kind set
 -- is configured, which lets the library's plain midcast.Enfeebling Magic apply instead.
@@ -1264,26 +1352,47 @@ local function spell_enfeebling_category(spell, category_override)
     return nil
 end
 
--- The category the plan uses for a spell.  Enfeebles in Auto follow the spell's kind;
--- arming one of the group's modes forces that mode's set instead.  Every other group keeps
--- its single armed mode.
+-- The kind key a spell has in its group, for the mode/auto rules and the Gear page.
+local function spell_kind_key(group_key, spell)
+    if group_key == 'enfeebles' then return spell_enfeebling_kind(spell) end
+    if group_key == 'enhancing' then return spell_enhancing_kind(spell) end
+    return nil
+end
+
+-- The set for one enhancing spell's kind, or nil when the kind has no set in the plan
+-- (the library's midcast.Enhancing Magic then applies through the skill fallback).
+local function spell_enhancing_category(spell, category_override)
+    local kind = spell_enhancing_kind(spell)
+    local entry = kind and ENHANCING_KINDS[kind]
+    if entry and category_override[entry.category] then return entry.category end
+    return nil
+end
+
+-- The category the plan uses for a spell.  Enfeebles and Enhancing in Auto follow the
+-- spell's kind; arming one of the group's modes forces that mode's set instead.  Every other
+-- group keeps its single armed mode.
 local function spell_cast_category(group_key, spell, mode, category_override)
     if group_key == 'enfeebles' then
         if mode and mode.key ~= 'auto' then return mode.category end
         return spell_enfeebling_category(spell, category_override)
     end
+    if group_key == 'enhancing' then
+        if mode and mode.key ~= 'auto' then return mode.category end
+        return spell_enhancing_category(spell, category_override)
+    end
     return mode and mode.category or nil
 end
 
 -- Every category a spell claims, for job_spells and the Gear page's spell cards: the group
--- first, then the enfeebling kind (`enfeebles_mnd`, ...) when it has one.
+-- first, then the kind (`enfeebles_mnd`, `enhancing_duration`, ...) when it has one.
 local function spell_categories(spell)
     local group = spell_group(spell)
     local out = {}
     if group then out[#out + 1] = group end
-    if group == 'enfeebles' then
-        local kind = spell_enfeebling_kind(spell)
-        local entry = kind and ENFEEBLE_KINDS[kind]
+    local kind = spell_kind_key(group, spell)
+    if kind then
+        local entry = group == 'enfeebles' and ENFEEBLE_KINDS[kind]
+            or group == 'enhancing' and ENHANCING_KINDS[kind]
         if entry then out[#out + 1] = entry.category end
     end
     return out
@@ -1926,7 +2035,7 @@ phase = function(a)
             if index and buff > 0 then
                 autos[#autos + 1] = {
                     index = index, buff = buff, merge = extra.merge,
-                    label = extra.label or extra.key,
+                    label = extra.label or extra.key, only_kind = extra.only_kind,
                 }
             end
         end
@@ -1936,17 +2045,20 @@ phase = function(a)
     -- Add the live-status rules for one action.  The engine prefers a rule that names more
     -- buffs, so these win while the status is up and the plain rule (no buffs) is the
     -- fallback; a merge overlay keeps the action's own set and swaps only the pieces it names.
-    local function add_auto_rules(group_key, action, mid, pre, is_song)
+    -- only_kind scopes an entry to one kind (Composure is only for the duration spells).
+    local function add_auto_rules(group_key, kind_key, action, mid, pre, is_song)
         local auto = group_key and auto_override[group_key]
         for _, extra in ipairs(auto and auto.autos or {}) do
-            local cond_mid = extra.index
-            if extra.merge then
-                cond_mid = merged_set(mid, extra.index, extra.label) or cond_mid
+            if not extra.only_kind or extra.only_kind == kind_key then
+                local cond_mid = extra.index
+                if extra.merge then
+                    cond_mid = merged_set(mid, extra.index, extra.label) or cond_mid
+                end
+                rules[#rules + 1] = {
+                    category = PHASE_MAGIC, action = action, pre = pre, mid = cond_mid,
+                    song = is_song, buffs = { extra.buff },
+                }
             end
-            rules[#rules + 1] = {
-                category = PHASE_MAGIC, action = action, pre = pre, mid = cond_mid,
-                song = is_song, buffs = { extra.buff },
-            }
         end
     end
     local claimed = {}
@@ -1978,8 +2090,10 @@ phase = function(a)
                 local family_path = group_key == 'songs' and song_family_set(name)
                 local family_mid = family_path and path_set(
                     family_path, 'song.family.' .. family_path)
-                -- Enfeebles in Auto pick the category from the spell's own kind, so Frazzle
-                -- III wears the Skill set and Slow II the MND set.
+                -- Enfeebles and Enhancing in Auto pick the category from the spell's own
+                -- kind, so Frazzle III wears the Skill set, Slow II the MND set and Haste
+                -- the duration set.
+                local kind_key = spell_kind_key(group_key, spell)
                 local cast_category = spell_cast_category(
                     group_key, spell, mode, category_override)
                 local mid = family_mid
@@ -2004,7 +2118,7 @@ phase = function(a)
                     local auto = group_key and auto_override[group_key]
                     if auto and auto.burst then rule.burst = auto.burst end
                     rules[#rules + 1] = rule
-                    add_auto_rules(group_key, index, mid,
+                    add_auto_rules(group_key, kind_key, index, mid,
                         (group_key == 'songs' and song_precast) or precast,
                         group_key == 'songs')
                     claimed[index] = true
@@ -2019,9 +2133,10 @@ phase = function(a)
             category = PHASE_MAGIC, action = id, pre = precast, mid = mid,
             song = group_key == 'songs',
         }
-        -- A per-spell card still gets the live-status overlay (Saboteur hands): its set is
-        -- the base the overlay merges over.
-        add_auto_rules(group_key, id, mid, precast, group_key == 'songs')
+        -- A per-spell card still gets the live-status sets (the Saboteur hands overlay and
+        -- the Composure self build): its set is the base they apply to.
+        add_auto_rules(group_key, spell_kind_key(group_key, spell), id, mid, precast,
+            group_key == 'songs')
     end
     for id, entry in pairs(song_override) do
         local spell = res.spell(id)
@@ -2292,6 +2407,7 @@ local MODE_ALIASES = {
     mab = 'mab', magicattack = 'mab', attack = 'mab',
     mdmg = 'mdmg', magicdamage = 'mdmg', damage = 'mdmg', dmg = 'mdmg',
     enspell = 'damage', enspelldamage = 'damage',
+    nodmg = 'nodamage', nodamage = 'nodamage',
 }
 
 local function current_spell_modes()

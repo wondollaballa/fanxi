@@ -115,12 +115,11 @@ roll reads the SIRD pieces worn at each hit. Paths it reads:
 | `idle.movement` | disengaged and moving (**Movement set**) |
 
 The Spells panel also offers category overrides. The host groups the current job pair's spells
-the same way it sends them to the page: Enfeebling Magic fills **Enfeebles**, Enhancing Magic
-fills **Buff potency** and **Buff duration**, and a spell whose name contains `helix` fills
-**Helix magic**. A category set applies to every spell in the group; a per-spell card wins over
-it, and the midcast default and `sets.midcast.<skill>` are only used when neither names a set.
-The two faces of a pair are alternatives (one set is worn per cast), so picking one on the page
-releases the other.
+the same way it sends them to the page: Enfeebling Magic fills **Enfeebles** (one row per spell
+kind), Enhancing Magic fills **Enhancing** (also one row per spell kind), and a spell whose
+name contains `helix` fills **Helix magic**. A category set applies to every spell in the
+group; a per-spell card wins over it, and the midcast default and `sets.midcast.<skill>` are
+only used when neither names a set.
 
 **Enfeebles is split by spell kind.** BG Wiki's Community Red Mage Guide groups every
 Enfeebling Magic spell by what its power or landing reads, and the Enfeebles card has one row
@@ -135,6 +134,16 @@ row: while status 454 is up the plan merges the one-piece overlay
 restores the kind set's hands. `RDM.lua` carries the guide's seven builds and the overlay;
 a library with only `sets.midcast.Enfeebling Magic` (every other job) binds all kinds to it, so
 nothing changes there. The mapping is in [../docs/rdm.md](../docs/rdm.md).
+
+**Enhancing is split by spell kind too.** Skill (Aquaveil) uses
+`sets.midcast["Enhancing Magic SIRD"]`; Stoneskin uses `sets.midcast["Enhancing Magic
+Stoneskin"]`; Duration (Barspell, Blink, Haste, Hastega, Haste II, Flurry, Flurry II) uses
+`sets.midcast.EnhancingDurationOthers`, and while **Composure** (status 419) is up the duration
+spells wear `sets.midcast.EnhancingDuration` (the self build) instead; everything else
+(Protect, Shell, Regen, Refresh, Temper, storms, spikes, travel) uses the generic
+`sets.midcast["Enhancing Magic"]`. Auto is the default mode, and the four kinds are also the
+forced modes. A library without the specific sets falls back to `midcast.Enhancing Magic`, so
+the other casters behave as before.
 
 The plan is built from static set tables; user functions (`precast`, `midcast`, `aftercast`,
 `rule`) are still not run — see the note below.

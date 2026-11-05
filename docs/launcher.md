@@ -654,19 +654,23 @@ On the Sets tab, the phase engine is split into the groups the player thinks in:
 - **Resting** — a manual resting set and toggle.
 - **Spells** — a precast set, a midcast default for every spell, category override cards, and
   per-spell override cards picked from the current job's spell list (macc/mab/magic-skill sets
-  included). A category card gives one set to every spell in its host-classified group — buff
-  potency or duration (Enhancing Magic), enspell damage
-  (Enfire/Enblizzard/Enaero/Enstone/Enthunder/Enwater and their IIs), curing potency or cast,
-  nuking magic attack or magic damage and helix magic — and a per-spell card still wins over its
-  category. **Enfeebles has one row per spell kind** instead of one blanket set: Skill, Macc,
-  Duration, MND, INT, Macc + potency and General. The host puts every Enfeebling Magic spell in
+  included). A category card gives one set to every spell in its host-classified group —
+  enspell damage or **Enspell no dmg** (Enfire/Enblizzard/Enaero/Enstone/Enthunder/Enwater
+  and their IIs; pick a second set for the no-damage build in the card), curing
+  potency or cast, nuking magic attack or magic damage and helix magic — and a per-spell card
+  still wins over its category. **Enfeebles has one row per spell kind** instead of one blanket
+  set: Skill, Macc, Duration, MND, INT, Macc + potency and General. The host puts every Enfeebling Magic spell in
   one kind, the row picks that kind's set, and clicking a kind's name shows the set's 4×4 gear
   grid and item list. The card's **Mode** reads `Auto — by spell type` by default; selecting a
   kind forces every enfeebling spell through that one set (the same list as
   `//modes enfeebles …`). An automatic **Saboteur** row (`Sab on buff`) swaps the hands to the
   overlay set while status 454 is live and leaves the kind set under it; the kind's gear
-  preview lists that piece too. The guide's builds live in `gearswap/RDM.lua`; the mapping is
-  in [rdm.md](rdm.md). The Nuking card's third, automatic **Magic Burst** row is worn for Elemental
+  preview lists that piece too. **Enhancing has one row per spell kind as well**: Skill
+  (Aquaveil), Stoneskin, Duration and General, with the Barspell/Blink/Haste/Flurry line on
+  the duration row. An automatic **Composure** row (`Comp on buff`) swaps the duration spells
+  to the self build while status 419 is live and is listed under the Duration gear; the same
+  `Auto — by spell type` mode handles the forced case (`//modes enhancing …`). The guide's
+  builds live in `gearswap/RDM.lua`; the mapping is in [rdm.md](rdm.md). The Nuking card's third, automatic **Magic Burst** row is worn for Elemental
   Magic while a Magic Burst window is open on the target and falls back to the armed mode
   otherwise; the row lights an `open` badge while the client reports the window, and the same
   flag is `phase_status().burst`.
