@@ -291,7 +291,8 @@ export interface HudState {
   /** The Battle automation HUD (the stop/start/follow window). */
   show_battle_hud: boolean;
   /** The Scholar HUD (strategems, skillchain macros and magic bursts).  The control addon
-   * reports the effective state, which follows the main job until the player switches it. */
+   * reports the effective state: shown on a Scholar main or support job (a support Scholar
+   * is scaled to its 49 cap), hidden on every other job pair. */
   show_sch?: boolean;
   edit: boolean;
   opacity: number;

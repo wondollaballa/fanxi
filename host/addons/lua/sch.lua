@@ -65,6 +65,8 @@ local MAX_BURSTS = 6
 local SAVE_EVERY = 0.75
 
 local JOB_SCHOLAR = 20
+-- A support Scholar stops at 49: two charges and no job points, so no JP recharge gift.
+local SUBJOB_CAP = 49
 
 -- Scholar's stratagems.  Every one spends a charge; Tabula Rasa does not and is absent.
 -- The ids are the ability ids the action packet carries (category 9, uuid at 0x0C).
@@ -276,6 +278,21 @@ local function jobs()
         return ok and tonumber(value) or 0
     end
     return get('MainJob'), get('MainJobLevel'), get('SubJob'), get('SubJobLevel')
+end
+
+-- The Scholar a player is currently playing, as a main or a support job, or nil when the
+-- job pair has no Scholar at all.  A support Scholar's effective level is the subjob cap
+-- (49 at 99): two strategems, no job points and no JP recharge gift.  Both the HUD's
+-- visibility and the charge pool key off this.
+local function scholar_context()
+    local main, main_level, sub, sub_level = jobs()
+    if main == JOB_SCHOLAR then
+        return { main = true, level = tonumber(main_level) or 0 }
+    end
+    if sub == JOB_SCHOLAR then
+        return { main = false, level = math.min(tonumber(sub_level) or 0, SUBJOB_CAP) }
+    end
+    return nil
 end
 
 local function data_dir()
@@ -620,19 +637,40 @@ end
 local function charge_level(charges)
     local level = tonumber(charges and charges.level)
     if level and level > 0 then return level end
-    return select(2, jobs())
+    local context = scholar_context()
+    return context and context.level or 0
+end
+
+-- The pool the HUD is showing.  A Scholar main keeps the persisted pool.  A support
+-- Scholar gets a session pool at the 49 cap, so playing RDM/SCH never rewrites the
+-- charge clock the player left on their Scholar main (the old code refused to touch it
+-- on any non-main job for the same reason).  The sub pool starts full and then recharges
+-- with the real 120 s interval; only the main pool is written to the save file.
+local function active_charges()
+    local context = scholar_context()
+    if not context then return nil, nil end
+    if context.main then
+        return S.state and S.state.charges or nil, context
+    end
+    if not S.sub_charges then
+        S.sub_charges = { count = nil, next_at = nil, level = context.level,
+                          max = nil, timers = nil }
+    end
+    return S.sub_charges, context
+end
+
+-- One charge's interval for the pool being shown: the JP recharge gift only applies to
+-- a Scholar main, never a support Scholar.
+local function pool_recharge(charges)
+    local context = scholar_context()
+    return recharge_seconds(charge_level(charges), context and context.main)
 end
 
 local function refresh_charges()
-    local state = S.state
-    if not state then return end
-    local main, level = jobs()
-    -- The HUD belongs to a Scholar main.  On another job leave the saved clock alone:
-    -- its level has a different charge count, and charging it would either drop or
-    -- invent charges for the Scholar the player comes back to.
-    if main ~= JOB_SCHOLAR then return end
+    local charges, context = active_charges()
+    if not charges or not context then return end
+    local level = context.level
     local cap = max_charges(level)
-    local charges = state.charges
     if charges.level ~= level or charges.max ~= cap then
         charges.level, charges.max = level, cap
         if charges.count == nil then charges.count = cap end
@@ -642,7 +680,7 @@ local function refresh_charges()
         return
     end
     local now = now_epoch()
-    local recharge = recharge_seconds(level)
+    local recharge = recharge_seconds(level, context.main)
     local before_count = charges.count
     local before_next = charges.next_at
     local before_n = type(charges.timers) == 'table' and #charges.timers or -1
@@ -672,11 +710,10 @@ local function refresh_charges()
 end
 
 local function spend_charge(count)
-    local state = S.state
-    if not state then return end
-    local charges = state.charges
+    local charges, context = active_charges()
+    if not charges or not context then return end
     local level = charge_level(charges)
-    local recharge = recharge_seconds(level)
+    local recharge = recharge_seconds(level, context.main)
     if recharge <= 0 then return end
     local cap = tonumber(charges.max) or max_charges(level)
     local now = now_epoch()
@@ -715,13 +752,13 @@ end
 -- needed-th missing charge is its own timer, so two charges spent a second apart are
 -- one second apart, not a full recharge interval.
 local function ready_at(needed)
-    local charges = S.state and S.state.charges or {}
+    local charges = active_charges() or {}
     local count = tonumber(charges.count) or 0
     if count >= needed then return 0 end
     local index = needed - count
     local timer = type(charges.timers) == 'table' and tonumber(charges.timers[index]) or nil
     if timer then return timer end
-    local recharge = recharge_seconds(charge_level(charges))
+    local recharge = pool_recharge(charges)
     if recharge <= 0 then return 0 end
     return now_epoch() + recharge + (index - 1) * recharge
 end
@@ -870,9 +907,17 @@ local function run_macro(group, macro)
         notify('Scholar: a skillchain is already running; stop it first.')
         return
     end
+    -- The self-skillchain is built on Immanence (level 87) and Ebullience (55), neither of
+    -- which a 49-cap support Scholar has.  Say so instead of sending a command the client
+    -- refuses; the support HUD keeps the charge and arts display.
+    local context = scholar_context()
+    if not context or not context.main then
+        notify('Scholar: the self-skillchain needs Scholar main (Immanence is level 87).')
+        return
+    end
     refresh_charges()
     local needed = charges_needed(macro)
-    local charges = S.state.charges
+    local charges = active_charges() or {}
     if (charges.count or 0) < needed then
         local wait = ready_at(needed) - now_epoch()
         notify(string.format(
@@ -880,9 +925,8 @@ local function run_macro(group, macro)
             macro.title, needed, charges.count or 0, clock_text(wait)))
         return
     end
-    local _, level = jobs()
-    if max_charges(level) <= 0 then
-        notify('Scholar: a Scholar main job is needed to use Immanence.')
+    if max_charges(context.level) <= 0 then
+        notify('Scholar: no strategem charges at level ' .. tostring(context.level) .. '.')
         return
     end
     local run = {
@@ -1286,7 +1330,7 @@ local function pips(api, count, cap, next_at, max_width)
     end
     -- The next charge fills a dot in the first empty pip as its interval runs down.
     if count < cap and next_at then
-        local recharge = recharge_seconds(charge_level(S.state and S.state.charges))
+        local recharge = pool_recharge(active_charges() or {})
         local fraction = recharge > 0
             and (1 - math.max(0, next_at - now_epoch()) / recharge) or 0
         fraction = clamp(fraction, 0, 1, 0)
@@ -1312,7 +1356,7 @@ end
 -- the main window
 
 function W.header(api, charges)
-    local main = jobs()
+    local context = scholar_context()
     text(api, COLORS.gold, 'STRATAGEMS')
     api.SameLine(0, 8)
     pips(api, charges.count or 0, charges.max or 0, charges.next_at)
@@ -1325,14 +1369,15 @@ function W.header(api, charges)
         api.SameLine(0, 10)
         text(api, COLORS.green, 'FULL')
     end
-    if main ~= JOB_SCHOLAR then
+    if context and not context.main then
         api.SameLine(0, 14)
-        text(api, COLORS.gold, 'main SCH required')
+        text(api, COLORS.gold, string.format(
+            'sub SCH · L%d — Immanence needs Scholar main', context.level))
     end
     local arts, dark = arts_line()
     api.SameLine(0, 16)
     text(api, dark and COLORS.violet or COLORS.dim, arts)
-    if not dark then
+    if not dark and (not context or context.main) then
         text(api, COLORS.gold, 'Immanence wants Dark Arts (Addendum: Black works too)')
     end
     if S.run then
@@ -1370,7 +1415,7 @@ function W.tabs(api, width)
 end
 
 function W.macro_card(api, group, macro, width)
-    local charges = S.state.charges
+    local charges = active_charges() or {}
     local needed = charges_needed(macro)
     local have = charges.count or 0
     local ready = have >= needed
@@ -1461,8 +1506,8 @@ end
 
 function W.footer(api)
     api.Separator()
-    local charges = S.state.charges
-    local recharge = recharge_seconds(charge_level(charges))
+    local charges = active_charges() or {}
+    local recharge = pool_recharge(charges)
     text(api, COLORS.faint, string.format(
         'Charges: %d/%d  ·  %s  ·  1 every %s', charges.count or 0, charges.max or 0,
         charges.next_at and ('next ' .. clock_text(charges.next_at - now_epoch())) or 'full',
@@ -1512,14 +1557,15 @@ function W.window(api)
     api.SetNextWindowBgAlpha(0.95)
     S.window_force = false
     local close = { true }
+    local charges = active_charges() or {}
     local open = api.Begin(string.format('Scholar %d/%d###fanxi_sch_hud',
-        S.state.charges.count or 0, S.state.charges.max or 0), close, 0)
+        charges.count or 0, charges.max or 0), close, 0)
     if not close[1] then
         if S.standalone then S.standalone_show = false end
         if S.on_hide then S.on_hide(false) end
     end
     if open then
-        W.header(api, S.state.charges)
+        W.header(api, charges)
         api.Separator()
         local nav_width = 176
         if api.BeginChild('sch_tabs', { nav_width, -26 }, true) then
@@ -1999,13 +2045,12 @@ function M.draw(api)
 end
 
 function M.active()
-    local main = jobs()
-    return main == JOB_SCHOLAR
+    return scholar_context() ~= nil
 end
 
 function M.charges()
     refresh_charges()
-    local charges = S.state and S.state.charges or {}
+    local charges = active_charges() or {}
     return {
         count = charges.count or 0,
         max = charges.max or 0,
@@ -2067,23 +2112,24 @@ function M.command(rest)
         notify('Scholar: the twelve default tabs are back.')
     elseif rest:match('^charges') then
         local value = tonumber(rest:match('^charges%s+(%d+)$'))
-        if value then
-            local _, level = jobs()
+        local context = scholar_context()
+        local charges = active_charges()
+        if value and context and charges then
+            local level = context.level
             local cap = max_charges(level)
             local count = clamp(value, 0, cap, 0)
             local now = now_epoch()
-            local recharge = recharge_seconds(level)
+            local recharge = recharge_seconds(level, context.main)
             -- A manual correction has no real spend times; give each missing charge its
             -- own slot one interval apart from now.
             local timers = {}
             for index = 1, cap - count do timers[index] = now + index * recharge end
-            S.state.charges.count = count
-            S.state.charges.level = level
-            S.state.charges.max = cap
-            S.state.charges.timers = timers
-            S.state.charges.next_at = timers[1]
-            mark_dirty()
-            save_state()
+            charges.count = count
+            charges.level = level
+            charges.max = cap
+            charges.timers = timers
+            charges.next_at = timers[1]
+            if context.main then mark_dirty(); save_state() end
         end
         local charges = M.charges()
         notify(string.format('Scholar: %d/%d strategems, next in %s.',

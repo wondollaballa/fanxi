@@ -5687,14 +5687,17 @@ local function hud_snapshot_items(list)
     return out
 end
 
--- The Scholar HUD is the one window whose default follows the job: with no saved choice it
--- is shown for a Scholar main job and hidden on every other job.  An explicit true/false
--- from the launcher or //hud sch wins, so a player can keep it open while changing gear.
--- On the hud table rather than a local: hud_init() is at Lua's 200-local limit.
+-- The Scholar HUD is the one window whose default follows the job: shown for a Scholar
+-- main or support job, absent on every other pair.  A plain "show" must not survive a job
+-- change any more - the old rule kept the window on a RDM after a Scholar main - so the
+-- job test comes first and only then the saved true/false.  The module scales a support
+-- Scholar to level 49.  On the hud table rather than a local: hud_init() is at Lua's
+-- 200-local limit.
 hud.sch_visible = function()
+    if not (hud.sch and hud.sch.active() == true) then return false end
     if hud.state.show_sch == true then return true end
     if hud.state.show_sch == false then return false end
-    return hud.sch ~= nil and hud.sch.active() == true
+    return true
 end
 
 function hud.snapshot()
@@ -11192,11 +11195,24 @@ xi.events.on('command', function(e)
             local shown
             if rest == 'sch on' then shown = true
             elseif rest == 'sch off' then shown = false
-            else shown = not hud.sch_visible() end
+            elseif hud.sch and hud.sch.active() then
+                shown = not hud.sch_visible()
+            else
+                -- No Scholar job: the window cannot show, so toggle the stored preference
+                -- rather than always computing "on" from an always-hidden window.
+                shown = hud.state.show_sch ~= true
+            end
             hud.state.show_sch = shown
             if shown then hud.state.show_hud = true end
             hud_save(hud.state, hud.path)
-            xi.chat.write('Scholar HUD: ' .. (shown and 'shown' or 'hidden'), 1)
+            if hud.sch and hud.sch.active() then
+                xi.chat.write('Scholar HUD: ' .. (shown and 'shown' or 'hidden'), 1)
+            elseif shown then
+                xi.chat.write('Scholar HUD: on, but it only shows on a Scholar main or '
+                    .. 'sub job; a support Scholar is scaled to 49.', 1)
+            else
+                xi.chat.write('Scholar HUD: off', 1)
+            end
             return
         elseif rest == 'target' or rest == 'target on' or rest == 'target off'
             or rest == 'debuffs' then

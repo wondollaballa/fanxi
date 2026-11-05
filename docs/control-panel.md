@@ -223,12 +223,17 @@ menu. A rebuild that only changes the weapon (a gear swap on the same job) keeps
 bars of abilities that survive it. The same snapshot is refreshed on every launcher poll, so the
 Control room's counts follow the change even while the windows are hidden.
 
-**The Scholar HUD is the job's own window.** It opens by itself for a Scholar main job and steps
-aside on every other job until the player makes a choice: the Control room's **Scholar** switch,
-`//hud sch` and the window's title-bar X store that choice in the character's HUD file. The
-header is **strategems**: one pip per charge the job has (five at 99, one more every twenty
-levels from 10), the count left, and the clock to the next charge, with the next pip filling as
-its interval runs down. The interval is retail's: the pool's four minutes are split across the
+**The Scholar HUD is the job's own window.** It opens by itself when the job pair has a Scholar
+main **or support** job and does not appear at all on any other pair — a saved "show" from an
+earlier Scholar main no longer keeps it on a RDM. The Control room's **Scholar** switch, `//hud
+sch` and the window's title-bar X store the choice in the character's HUD file (the job pair still
+gates it). A support Scholar is scaled to its 49 cap: **two** charges instead of five, no job
+points and therefore no 550-JP recharge gift, so a charge takes **120 s**; the header says `sub
+SCH · L49` and the self-skillchain run buttons explain that Immanence needs Scholar main. A
+Scholar main keeps its own persisted charge clock — playing /SCH on another job uses a session
+pool and never rewrites it. The header is **strategems**: one pip per charge the job has (five
+at 99, one more every twenty levels from 10), the count left, and the clock to the next charge,
+with the next pip filling as its interval runs down. The interval is retail's: the pool's four minutes are split across the
 level's charges (48 s a charge at 99, 60 s at 70, 80 s at 50, 120 s at 30, 240 s at 10), and the
 550-JP **Stratagem Recast Time** gift — which every Fanxi job has at its 2,100 JP — takes 15 s off
 each one, so a level-99 Scholar recharges a charge every **33 s**. The footer prints that rate
@@ -242,8 +247,10 @@ Perpetuance, say) brings them back about a second apart after one 33-second inte
 after 33 seconds and the other after 66. The HUD keeps one return time per missing charge, shows
 the earliest as the next-charge clock and uses the needed-th timer when it decides whether a
 whole macro is affordable. A version-1 save only stored the first timer; those missing charges
-are treated as back-to-back with it. The charge state is persisted with the sets (the timer list
-is the sixth `charges` field), so a logout does not give them back. A **Dark Arts** chip warns when the active art is Light or none, because
+are treated as back-to-back with it. The main Scholar's charge state is persisted with the sets
+(the timer list is the sixth `charges` field), so a logout does not give them back; the support
+Scholar's session pool is not written, which is what keeps a /SCH session from resetting the
+Scholar main's pool. A **Dark Arts** chip warns when the active art is Light or none, because
 retail's Immanence wants Dark Arts; **Addendum: Black** is accepted too.
 
 The body is a left-hand list of **tabs**, one per skillchain, each holding the player's own named

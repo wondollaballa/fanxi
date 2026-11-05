@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — the Scholar HUD only appears on a Scholar job, scaled to the support cap
+
+- **The Scholar HUD no longer lingers on a non-Scholar job.** `hud.sch_visible()` used to let a
+  saved "on" win over the job check, so a RDM with no SCH main or sub kept the window from an
+  earlier Scholar session. The job pair now gates it first: no SCH main and no SCH sub means no
+  Scholar HUD at all, whatever the saved switch or `//hud sch` says. The reason the check sits
+  before the preference is that the preference is what leaked across the job change.
+- **A support Scholar gets its own 49-cap HUD.** `M.active()` now accepts SCH main **or sub**, and
+  the charge pool follows the effective level: a sub-SCH is two charges (49), not the five a
+  99 Scholar main has, and the 550-JP **Stratagem Recast Time** gift does not apply because sub
+  jobs have no job points, so a charge takes **120 s** instead of 33 s. The header says
+  `sub SCH · L49 — Immanence needs Scholar main`, and the self-skillchain run buttons explain the
+  same instead of sending an Immanence the client refuses. `//sch charges` and the pips use the
+  support pool while subbed.
+- **The Scholar main's charge clock is untouched by a /SCH session.** The support pool is a
+  session pool (`S.sub_charges`); only the main pool is written to the saved file, so switching to
+  RDM/SCH and back does not drop or invent charges on the Scholar main. The HUD title shows the
+  scaled count (`Scholar 2/2`).
+- Tests: `tests/addons/schtest/schtest.lua` now swaps the mock job pair and checks a support
+  Scholar is active with two level-49 charges, a 120 s interval, the main pool untouched, and an
+  inactive pair with no Scholar; `tests/sch_hud_test.sh` passes. Launcher copy for the Scholar
+  switch and the `HudState` comment describe the new rule.
+
 ## Unreleased — Enspells gains a no-damage mode
 
 - **The Enspells card has a second mode for a no-damage set.** `Enspell damage` (the default,

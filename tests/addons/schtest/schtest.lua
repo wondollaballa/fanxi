@@ -280,4 +280,38 @@ check('charges command gives the missing charges timers',
 sch.command('reset')
 check('reset restores the default tabs', #T.state.groups == 12, #T.state.groups)
 
+-- Job pair.  A support Scholar keeps the HUD but scales to the 49 cap (two charges, no JP
+-- recharge gift); a pair without Scholar hides it entirely; the main Scholar's own pool
+-- must survive a /SCH session untouched.
+local function set_jobs(main, main_level, sub, sub_level)
+    xi.game.party_member = function(_, field)
+        if field == 'MainJob' then return main end
+        if field == 'MainJobLevel' then return main_level end
+        if field == 'SubJob' then return sub end
+        if field == 'SubJobLevel' then return sub_level end
+        return 0
+    end
+end
+set_jobs(5, 99, 20, 49)
+check('support Scholar is active', sch.active() == true)
+T.state.charges = { count = 5, max = 5, level = 99, timers = {} }
+S.sub_charges = nil
+internal.refresh_charges()
+check('support Scholar shows two charges', S.sub_charges and S.sub_charges.count == 2
+      and S.sub_charges.max == 2 and S.sub_charges.level == 49,
+      S.sub_charges and (tostring(S.sub_charges.count) .. '/' .. tostring(S.sub_charges.max)
+      .. ' L' .. tostring(S.sub_charges.level)))
+check('support Scholar leaves the main pool alone', T.state.charges.count == 5
+      and T.state.charges.max == 5, tostring(T.state.charges.count))
+check('support recharge has no JP gift', internal.recharge_seconds(49, false) == 120,
+      internal.recharge_seconds(49, false))
+check('support recharge with the gift is shorter', internal.recharge_seconds(49) == 105,
+      internal.recharge_seconds(49))
+check('two support charges are in hand', internal.ready_at(2) == 0, internal.ready_at(2))
+set_jobs(5, 99, 1, 49)
+check('no Scholar is inactive', sch.active() == false)
+set_jobs(20, 99, 5, 49)
+S.sub_charges = nil
+check('main Scholar is active again', sch.active() == true)
+
 print('failures=' .. failed)

@@ -273,14 +273,23 @@ function HudToggle({
   );
 }
 
+/** The Scholar HUD is gated on the job pair by the host; mirror that on the switch so it
+ * is visibly unavailable on a job pair with no SCH main or sub. */
+function hasScholarJob(instance?: InstanceView | null) {
+  const pair = instanceJobPair(instance);
+  return pair.main === 20 || pair.sub === 20;
+}
+
 function HudControls({
   hud,
   busy,
+  scholar,
   onChange,
   onLayout,
 }: {
   hud: HudState;
   busy: boolean;
+  scholar: boolean;
   onChange: (patch: HudPatch) => void;
   onLayout: () => void;
 }) {
@@ -367,7 +376,12 @@ function HudControls({
         icon={<BookOpen size={12} />}
         on={hud.show_sch === true}
         busy={busy}
-        title="Show the Scholar HUD: strategem charges, self-skillchain macros and magic bursts. It follows the main job until you switch it."
+        disabled={!scholar}
+        title={
+          scholar
+            ? "Show the Scholar HUD: strategem charges, self-skillchain macros and magic bursts. A support Scholar is scaled to level 49."
+            : "The Scholar HUD appears on a Scholar main or support job only."
+        }
         onClick={() => onChange({ show_sch: hud.show_sch !== true })}
       />
       <HudToggle
@@ -1049,6 +1063,7 @@ export function ControlPage({
                     <HudControls
                       hud={hud}
                       busy={hudBusy === instance.port}
+                      scholar={hasScholarJob(instance)}
                       onChange={(patch) => void applyHud(instance, patch)}
                       onLayout={() => openHud(account.username)}
                     />
@@ -1096,6 +1111,7 @@ export function ControlPage({
                     <HudControls
                       hud={hud}
                       busy={hudBusy === instance.port}
+                      scholar={hasScholarJob(instance)}
                       onChange={(patch) => void applyHud(instance, patch)}
                       onLayout={() => openHud(instance.account)}
                     />
