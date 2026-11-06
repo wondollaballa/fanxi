@@ -32,7 +32,7 @@ Nyame paths, Sakpata's, Gleti's and Agwu's armour and the seven Odyssey weapons,
 | `BLM.lua` | Black Mage | elemental nuker | 32 |
 | `RDM.lua` | Red Mage | enfeebler/enspell hybrid | 65 |
 | `THF.lua` | Thief | dual-wield dagger, TH | 34 |
-| `PLD.lua` | Paladin | sword-and-shield tank | 47 |
+| `PLD.lua` | Paladin | sword-and-shield tank | 61 |
 | `DRK.lua` | Dark Knight | scythe, drain/aspir | 48 |
 | `BST.lua` | Beastmaster | pet melee, axe | 39 |
 | `BRD.lua` | Bard | songs, Macc support | 60 |
@@ -50,7 +50,7 @@ Nyame paths, Sakpata's, Gleti's and Agwu's armour and the seven Odyssey weapons,
 | `RUN.lua` | Rune Fencer | great-sword tank, runes | 42 |
 
 "Sets" is what the launcher lists after import (empty group tables are not
-counted). Together the folder defines **850 importable sets**, counted with the
+counted). Together the folder defines **864 importable sets**, counted with the
 launcher's own flatten pass.
 
 The same files also carry the five **Limbus** top-tier suits: a `local limbus`
@@ -137,13 +137,25 @@ nothing changes there. The mapping is in [../docs/rdm.md](../docs/rdm.md).
 
 **Enhancing is split by spell kind too.** Skill (Aquaveil) uses
 `sets.midcast["Enhancing Magic SIRD"]`; Stoneskin uses `sets.midcast["Enhancing Magic
-Stoneskin"]`; Duration (Barspell, Blink, Haste, Hastega, Haste II, Flurry, Flurry II) uses
+Stoneskin"]`; Phalanx uses `sets.midcast.Phalanx` and Reprisal `sets.midcast.Reprisal` (the
+Community Paladin Guide's builds, with the SIRD variants as separate leaves); Duration
+(Barspell, Blink, Haste, Hastega, Haste II, Flurry, Flurry II) uses
 `sets.midcast.EnhancingDurationOthers`, and while **Composure** (status 419) is up the duration
 spells wear `sets.midcast.EnhancingDuration` (the self build) instead; everything else
 (Protect, Shell, Regen, Refresh, Temper, storms, spikes, travel) uses the generic
 `sets.midcast["Enhancing Magic"]`. Auto is the default mode, and the four kinds are also the
 forced modes. A library without the specific sets falls back to `midcast.Enhancing Magic`, so
 the other casters behave as before.
+
+**Divine Magic is split by spell kind.** Banish and Holy read Magic Attack and use
+`sets.midcast["Divine Magic"]`; Flash reads enmity and uses `sets.midcast.Flash` (repoint the
+row at `sets.midcast["Flash SIRD"]` when the cast has to finish under fire); Repose lands with
+the same `midcast.Divine Magic` set. Auto is the default and the kinds are also the forced
+modes. `PLD.lua` carries the guide's Flash, Flash SIRD, Max Self Phalanx, Phalanx SIRD,
+Reprisal, Reprisal SIRD, Cure, Cure SIRD, Stoneskin + SIRD, Aquaveil/SIRD, Enlight and the
+Enhancing duration build; [../docs/pld.md](../docs/pld.md) has the table and the reasoning.
+Enlight stays in **Enspells** even though its skill is Divine Magic, and adding Paladin to
+that card is what binds `sets.midcast.Enspell`.
 
 The plan is built from static set tables; user functions (`precast`, `midcast`, `aftercast`,
 `rule`) are still not run — see the note below.
@@ -176,12 +188,17 @@ not `sets.midcast["Enfeebling Magic"]`).
 | MAB (elemental) | `sets.midcast.Elemental Magic` | SCH free nuke: Indomitable head/body/legs + Arbatel Loafers +3; Nyame MAB + Eschan Stone + Friomisi/Crematio + Metamorph/Mujin elsewhere |
 | Magic burst (elemental) | `sets.midcast.Elemental Magic MB` | SCH only: Nyame C keeps Magic Burst Damage II +5–7 |
 | Helix | `sets.midcast.Helix` | SCH only: Indomitable head/body/legs, Arbatel Bracers +3 and Loafers +3 |
-| Cure | `sets.midcast.Healing Magic`; RDM also has `sets.midcast.Cure` / `CureHP` | WHM, RDM, PLD, SCH, RUN |
+| Cure | `sets.midcast.Healing Magic`; RDM also has `sets.midcast.Cure` / `CureHP`, PLD `sets.midcast["Cure SIRD"]` | WHM, RDM, PLD, SCH, RUN |
+| Flash (divine enmity) | `sets.midcast.Flash`, `sets.midcast["Flash SIRD"]` | PLD carries the Community Paladin Guide's Flash build; the row can be repointed at the SIRD variant (see [../docs/pld.md](../docs/pld.md)) |
+| Phalanx | `sets.midcast.Phalanx`, `sets.midcast["Phalanx SIRD"]` | PLD, RDM, RUN; the Paladin guide's Max Self Phalanx is the default row |
+| Reprisal | `sets.midcast.Reprisal`, `sets.midcast["Reprisal SIRD"]` | PLD only |
+| Stoneskin / Aquaveil (ench. kinds) | `sets.midcast["Enhancing Magic Stoneskin"]`, `sets.midcast["Enhancing Magic SIRD"]` | PLD/SCH, RDM and RUN; the kind rows bind them automatically |
+| Enlight (enspell) | `sets.midcast.Enspell` | PLD: Brilliance + Divine Magic skill |
 | Regen | `sets.midcast.Regen_Potency`, `sets.midcast.Regen_Duration` | SCH only: Telchine carries both `"Regen" potency +10` and `Enh. Mag. eff. dur. +10`; Bookworm's both; duration adds Arbatel Bracers +3 and Lugh's Cape |
 | Enmity+ | `sets.enmity.up` | PLD, RUN, WAR, DRK |
 | Enmity− | `sets.enmity.down` | WHM, BRD, RNG, COR |
 | Weaponskills | `sets.WS.<name>` | 3–6 per job, physical/hybrid/MAB variants |
-| Job abilities | `sets.JA.<name>` | 4–11 per job, with AF/relic/empyrean piece swaps |
+| Job abilities | `sets.JA.<name>` | 4–14 per job, with AF/relic/empyrean piece swaps; PLD also carries `sets.precast.JA` (enmity) as the fallback |
 | Pets | `sets.pet.*`, `sets.avatar.*`, `sets.automaton.*`, `sets.wyvern.*` | BST, SMN, PUP, DRG |
 | Ranged | `sets.ranged.tp`/`.acc`/`.snapshot` (RNG), `.tp`/`.acc`/`.mab` (COR) | RNG, COR |
 | Treasure Hunter | `sets.TH` | THF |
@@ -306,6 +323,19 @@ max-rank Odyssey augments:
 Six Reive/Incursion capes that a few sets already used (`Weard Mantle`,
 `Mending Cape`, `Rhapsode's Cape`, `Lutian Cape`, `Gunslinger's Cape`,
 `Evasionist's Cape`) also carry their max Refractive Crystal augments.
+
+### Oseem Arcane Glyptics (Reisenjima armour)
+
+`PLD.lua` carries a local `oseem` table with the Community Paladin Guide's
+**augmented Odyssean builds**: Odyssean Helm and Odyss. Chestplate with
+`"Phalanx"+5`, and four different Odyssean Greaves rolls (Phalanx+5, Cure
+Potency+5, Fast Cast+6, and the Stoneskin build's MND+3 / Accuracy+2 / Attack+2 /
+Spell interruption rate down-11%). The same base piece is reused with different
+augment arrays, exactly like the cape builds. Phalanx and SIRD are Dark Matter
+("technique") rolls, so the launcher's **Oseem · Arcane Glyptics** card can
+inscribe only the standard-stone rows (Cure Potency, Fast Cast, MND/Acc/Attack);
+the stat sheet still decodes a Phalanx or SIRD block when an item carries one.
+See [../docs/pld.md](../docs/pld.md) and [../docs/oseem-glyptics.md](../docs/oseem-glyptics.md).
 
 ### Odyssey Rank 30 armor
 

@@ -622,7 +622,21 @@ Bin, the Storage Slips, the 9,999 locker, and the Armory purchase history as Cla
 Equipping a two-handed main weapon (`skill` 4, 6, 7, 8, 10 or 12) clears any shield or off-hand
 weapon in the sub slot; after that only a grip fits there. A grip is refused while the main
 weapon is one-handed or empty. Hand-to-hand is neither one- nor two-handed for this rule, so a
-shield can still share it.
+shield can still share it; an off-hand weapon cannot. A two-handed, hand-to-hand, ranged or ammo
+item is never legal in the sub slot, even when its catalogue slot mask is missing.
+
+A ranged weapon and the ammo slot have to agree. A bow (`skill` 25) takes arrows, a crossbow
+(`skill` 26, subtype 0) takes bolts, a gun (26, subtype 1) takes bullets and a culverin (26,
+subtype 2) takes shells; an ammo-slot item outside those three families (a Tathlum, orb, jug or
+bait) is always legal. Throwing
+ammunition (skill 27) is thrown by hand and is refused while any ranged weapon is equipped. The
+subtype lives in `items.subskill` (migration 191). A ranged weapon change clears ammo it cannot
+fire. A gear burst whose ammo slot arrives before its ranged slot is held until the ranged slot
+settles; if the burst ends without a matching ranged weapon, the ammo pick snaps back.
+
+Changing the **main weapon** or a **sub weapon** empties the TP bar. Swapping a grip, shield,
+ranged weapon or ammo keeps TP, as does re-sending the same bag copy (the phase engine's gear
+burst): those are off-hand or non-weapon pieces, not a different TP-bearing weapon.
 
 A job change checks gear in **every** bag, not only the normal inventory, so a piece worn out of
 a Mog Wardrobe is unequipped when the new job cannot use it. A weapon with no grap model clears
@@ -1156,7 +1170,11 @@ its duration and the numbers the engine reads:
   `status_icons` bundle a mount swap sends), so the look changes at once instead of
   waiting for the next HP heartbeat; a job change or a Mog House trip that drops the
   effect clears the flag the same way.  Sneak sets neither flag — it changes aggro, not
-  the model.
+  the model.  **Invisible drops when the player acts:** a Magic Start, a job ability,
+  weapon skill or ranged attack, an item use, and any incoming damage all remove it
+  (`ZoneSession._break_invisible`), because retail's Invisible wears off on "most other
+  actions".  Sneak is deliberately left alone on those actions; the attack swing still
+  takes Sneak with it, and using items or non-enemy abilities does not.
 - **Geomancy** is two bubbles: the Indi- aura around the Geomancer and the Geo- one around
   the Luopan (a Geo- cast also drops the Luopan and sets its drain, potency and MP cost).
   A cast replaces that bubble's previous aura — Indi-haste and Geo-frailty are up together,

@@ -54,7 +54,7 @@ The current schema is migrations `0001_initial.sql`, `0002_world_content.sql` an
 | `trusts` | Factual alter-ego data behind the 122 Trust spells (migrations 115 and 151) | `spell_id` (primary key), `name`, `job`/`sub_job`, `species` (LandSandBoat id; migration 151), `look_hex`, `model`, `delay`, `damage_mult`, `passive` |
 | `trust_spells` | Spells each alter ego can cast, joined from its `mob_spell_lists` row (migration 117) | `trust_spell_id`, `spell_id`, `min_level`, `max_level` |
 | `trust_gear` | The weapons a Trust is designed with (migration 159; Joachim's horn became the Prime Loughnashade in 167); their `item_mods` row produces the numbers the AI reads | `trust_spell_id`, `item_id` |
-| `items` | Item catalogue | `item_id`, `name`, `stack`, `usable`, `equip_slot`, `level`, `item_level`, `rare`, `ex`, `price`, `base_sell`, `category` (empty for equipment; migration 0156 fills it for general items) |
+| `items` | Item catalogue | `item_id`, `name`, `stack`, `usable`, `equip_slot`, `level`, `item_level`, `rare`, `ex`, `price`, `base_sell`, `category` (empty for equipment; migration 0156 fills it for general items), `skill`/`subskill` (combat family and ranged/ammo subtype, migrations 170 and 191) |
 | `char_purchases` | Armory and Items purchase history | `character_id`, `item_id`, `quantity`, `price`, `created_at` |
 | `item_models` | Grap model per visible item (migration 95) | `item_id`, `model`; triggers on `items`/`char_inventory`/`char_equip` keep it applied |
 | `char_inventory` | Character slots | `character_id`, `container`, `slot`, `item_id`, `quantity`; slot 0 / item 65535 is gil |
@@ -97,6 +97,11 @@ retargets earlier-stage copies in the bags, storage, locker, equipped set and pu
 The weapons are Rare, so a family is one item: the migration keeps the equipped bag row, else an
 existing final, else the highest stage, and drops the other copies. The id table lives in
 `server/fanxi_server/game/prime_weapons.py` and mirrors migration 125's afterglow model list.
+
+Migration 0191 adds `items.subskill`, the subtype inside a ranged weapon-skill family
+(crossbow/bolt 0, gun/bullet 1, culverin/shell 2, shuriken 3, bow 4). It is copied from
+LandSandBoat's `item_weapon.subskill`; the ammo rules in `docs/world.md` use it to keep a gun
+from wearing bolts and a crossbow from wearing bullets.
 
 Migration 0156 adds `items.category` and imports the general-item store: ninja tools, Call Beast
 jugs, pet food, consumables, ingredients, crafting materials, food, crystals, scrolls,

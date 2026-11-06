@@ -295,9 +295,10 @@ For a finished spell the sub-kind is the spell animation id and the value is the
 healed, or the status effect id the spell lands; the message chooses the line
 (`MAGIC_DMG` 2, `MAGIC_RECOVERS_HP` 7, `MAGIC_GAIN_EFFECT` 230, `MAGIC_ENFEEB` 237,
 `MAGIC_TELEPORT` 93).  A Magic Start uses the school's four-character code as its action
-id (`canj` for ninjutsu, `cawh`, `cabk`, ...) and the spell id as its value; its result
-animation is the same spell animation id, so the cast begins with the spell's own motion
-rather than the client's default (Cure's) one.  The result message is the client's start
+id (`canj` for ninjutsu, `cawh`, `cabk`, ...) and the spell id as its value.  Its result
+animation is **0**: retail leaves the start's sub-kind unused, and the client picks the
+casting motion from the value.  Writing the finish animation there made Refresh (109)
+play a summon/trust pose for the whole cast; the finish still carries the spell animation.  The result message is the client's start
 line: 327 for a player (`<caster> starts casting <spell> on <target>.`) and 3 for a
 monster or Trust (`<caster> starts casting <spell>.`).  Sending the message and a line of
 our own printed it twice, so the server no longer writes that chat line itself.

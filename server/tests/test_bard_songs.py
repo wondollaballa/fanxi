@@ -390,7 +390,9 @@ class BardSongTest(unittest.TestCase):
 
     def test_soul_voice_has_a_recast(self):
         self.ability(25)
-        self.assertGreater(self.session.ability_recasts.get(111, 0.0), time.time() + 3500)
+        # The Master job-point gift takes 15 minutes off every one-hour ability, so the
+        # 3600 s recast lands at 2700 s for a character with the 2,100 JP.
+        self.assertGreater(self.session.ability_recasts.get(111, 0.0), time.time() + 2600)
 
     def test_reforged_song_stats_are_in_the_database(self):
         """The +3/+4 pieces the library swaps in carry their song lines."""

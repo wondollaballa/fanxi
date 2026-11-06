@@ -15,7 +15,11 @@ Auto plan rule (a spell's own kind, a forced mode wins, Duration falls back to M
 `gearswap/RDM.lua` sets each kind binds to by name.  Enhancing Magic has the same
 per-spell split now: Skill (Aquaveil), Stoneskin, Duration (Barspell, Blink, Haste,
 Haste II, Flurry, Flurry II) and General, with Composure selecting the self duration
-set while it is up.
+set while it is up; the Community Paladin Guide adds Phalanx and Reprisal as their own
+kinds.  Divine Magic splits as well: Banish and Holy read Magic Attack, Flash reads
+enmity (the Paladin guide's Flash build) and Repose reads landing, so Auto is the
+default there and `gearswap/PLD.lua` carries one set per kind.  Enlight / Enlight II
+stay in Enspells even though their skill is Divine Magic.
 
 The group classifier also has to stay faithful to the spell table: every skill-37 spell in
 `database/migrations/0058_spells.sql` is Dark Magic and must land in the `dark` group, and
@@ -63,12 +67,13 @@ EXPECTED_GROUPS = {
         'auto',
         ['enhancing_skill', 'enhancing_stoneskin', 'enhancing_duration',
          'enhancing_general'],
-        ['enhancing_skill', 'enhancing_stoneskin', 'enhancing_duration',
-         'enhancing_general'],
+        ['enhancing_skill', 'enhancing_stoneskin', 'enhancing_phalanx',
+         'enhancing_reprisal', 'enhancing_duration', 'enhancing_general'],
     ),
     'enspells': ('damage', ['enspells', 'enspells_no_damage'], []),
     'dark': ('potency', ['dark_potency', 'dark_macc', 'dark_duration'], []),
-    'divine': ('mab', ['divine_mab', 'divine_macc'], []),
+    'divine': ('auto', ['divine_mab', 'divine_flash', 'divine_macc'],
+               ['divine_mab', 'divine_flash', 'divine_macc']),
 }
 # group key -> the automatic (buff-conditional) rows, in table order.
 EXPECTED_AUTOS = {
@@ -89,11 +94,14 @@ FALLBACKS = {
     'enfeebles_saboteur': 'midcast.Enfeebling Magic Saboteur',
     'enhancing_skill': 'midcast.Enhancing Magic SIRD',
     'enhancing_stoneskin': 'midcast.Enhancing Magic Stoneskin',
+    'enhancing_phalanx': 'midcast.Phalanx',
+    'enhancing_reprisal': 'midcast.Reprisal',
     'enhancing_duration': 'midcast.EnhancingDurationOthers',
     'enhancing_duration_self': 'midcast.EnhancingDuration',
     'enhancing_general': 'midcast.Enhancing Magic',
     'enspells_no_damage': 'midcast.EnspellNoDmg',
     'dark_': 'midcast.Dark Magic',
+    'divine_flash': 'midcast.Flash',
     'divine_': 'midcast.Divine Magic',
 }
 # The enfeebling kind sets in gearswap/RDM.lua, and one piece that pins each build.
@@ -108,6 +116,45 @@ KIND_SETS = {
 }
 EXTRA_SETS = ('midcast.EnhancingDuration', 'midcast.EnhancingDurationOthers',
               'midcast.Enhancing Magic Stoneskin', 'midcast.Enhancing Magic SIRD')
+# The Paladin spell sets in gearswap/PLD.lua, and one piece that pins each build.  The
+# divine/enhancing kinds above bind these by name; the SIRD variants are extra leaves the
+# same row can be repointed at.
+PLD = ROOT / 'gearswap' / 'PLD.lua'
+PLD_SETS = {
+    'midcast.Divine Magic': 'Pemphredo Tathlum',
+    'midcast.Flash': "Loess Barbuta +1",
+    'midcast.Flash SIRD': 'Souv. Schaller +1',
+    'midcast.Enspell': 'Brilliance',
+    'midcast.Healing Magic': "Egoist's Tathlum",
+    'midcast.Cure SIRD': 'Macabre Gaunt. +1',
+    'midcast.Enhancing Magic': 'Ajax +1',
+    'midcast.Enhancing Magic SIRD': 'Eschite Breast.',
+    'midcast.Enhancing Magic Stoneskin': 'Stone Gorget',
+    'midcast.Phalanx': 'Hoxne Torque',
+    'midcast.Phalanx SIRD': 'Founder\'s Hose',
+    'midcast.Reprisal': 'Regal Gauntlets',
+    'midcast.Reprisal SIRD': 'Shab. Cuirass +1',
+}
+# The Oseem-augmented Odyssean builds the sets reference, and one augment line that pins
+# each roll (the guide's Phalanx / SIRD rolls are Dark Matter technique augments, the
+# Cure Potency / Fast Cast rows are the standard stone ones).
+OSEEM_SETS = {
+    'helm_phalanx': ('Odyssean Helm', '"Phalanx"+5'),
+    'chest_phalanx': ('Odyss. Chestplate', '"Phalanx"+5'),
+    'feet_phalanx': ('Odyssean Greaves', '"Phalanx"+5'),
+    'feet_cure': ('Odyssean Greaves', '"Cure Potency"+5%'),
+    'feet_fastcast': ('Odyssean Greaves', '"Fast Cast"+6'),
+    'feet_stoneskin': ('Odyssean Greaves', 'Spell interruption rate down-11%'),
+}
+# The set slots that must point at the oseem table instead of a bare item name.
+OSEEM_REFS = {
+    'midcast.Phalanx': {'head': 'oseem.helm_phalanx'},
+    'midcast.Phalanx SIRD': {
+        'body': 'oseem.chest_phalanx', 'feet': 'oseem.feet_phalanx'},
+    'midcast.Enhancing Magic Stoneskin': {'feet': 'oseem.feet_stoneskin'},
+    'midcast.Cure SIRD': {'feet': 'oseem.feet_cure'},
+    'midcast.Reprisal SIRD': {'feet': 'oseem.feet_fastcast'},
+}
 
 
 def groups_block() -> str:
@@ -431,6 +478,63 @@ if spell_cast_category('enhancing', {{ name = 'Haste', skill = 34 }},
   error('an unconfigured enhancing kind did not fall through to the library set', 0)
 end
 
+-- Phalanx and Reprisal own Enhancing Magic kinds now (the Paladin guide sets).
+local phalanx_cats = spell_categories({{ name = 'Phalanx', skill = 34 }})
+if #phalanx_cats ~= 2 or phalanx_cats[2] ~= 'enhancing_phalanx' then
+  error('Phalanx categories: ' .. table.concat(phalanx_cats, ','), 0)
+end
+local phalanx_two = spell_categories({{ name = 'Phalanx II', skill = 34 }})
+if #phalanx_two ~= 2 or phalanx_two[2] ~= 'enhancing_phalanx' then
+  error('Phalanx II categories: ' .. table.concat(phalanx_two, ','), 0)
+end
+local reprisal_cats = spell_categories({{ name = 'Reprisal', skill = 34 }})
+if #reprisal_cats ~= 2 or reprisal_cats[2] ~= 'enhancing_reprisal' then
+  error('Reprisal categories: ' .. table.concat(reprisal_cats, ','), 0)
+end
+local enhance_pld = {{ enhancing_phalanx = 'Phalanx', enhancing_reprisal = 'Reprisal' }}
+if spell_cast_category('enhancing', {{ name = 'Phalanx', skill = 34 }},
+    enhance_auto, enhance_pld) ~= 'enhancing_phalanx' then
+  error('Phalanx did not pick its own set', 0)
+end
+if spell_cast_category('enhancing', {{ name = 'Reprisal', skill = 34 }},
+    enhance_auto, enhance_pld) ~= 'enhancing_reprisal' then
+  error('Reprisal did not pick its own set', 0)
+end
+
+-- Divine Magic kinds: Banish/Holy read Magic Attack, Flash enmity, Repose landing.  The
+-- self-enspell Enlight stays in Enspells even though its skill is Divine Magic.
+local divine_auto = find_mode(SPELL_GROUPS.divine, 'auto')
+local divine_all = {{
+  divine_mab = 'MAB', divine_flash = 'Flash', divine_macc = 'Macc',
+}}
+for _, row in ipairs({{
+  {{ 'Banish', 'divine_mab' }}, {{ 'Banishga', 'divine_mab' }}, {{ 'Holy', 'divine_mab' }},
+  {{ 'Holy II', 'divine_mab' }}, {{ 'Flash', 'divine_flash' }}, {{ 'Repose', 'divine_macc' }},
+}}) do
+  local got = spell_cast_category('divine', {{ name = row[1], skill = 32 }}, divine_auto,
+      divine_all)
+  if got ~= row[2] then
+    error(string.format('%s auto category -> %s, want %s',
+      row[1], tostring(got), row[2]), 0)
+  end
+  local cats = spell_categories({{ name = row[1], skill = 32 }})
+  if #cats ~= 2 or cats[2] ~= row[2] then
+    error(row[1] .. ' categories: ' .. table.concat(cats, ','), 0)
+  end
+end
+if spell_cast_category('divine', {{ name = 'Flash', skill = 32 }},
+    find_mode(SPELL_GROUPS.divine, 'mab'), divine_all) ~= 'divine_mab' then
+  error('a forced divine mode did not win', 0)
+end
+if spell_cast_category('divine', {{ name = 'Flash', skill = 32 }},
+    divine_auto, {{}}) ~= nil then
+  error('an unconfigured divine kind did not fall through to the library set', 0)
+end
+local enlight_cats = spell_categories({{ name = 'Enlight', skill = 32 }})
+if #enlight_cats ~= 1 or enlight_cats[1] ~= 'enspells' then
+  error('Enlight left Enspells: ' .. table.concat(enlight_cats, ','), 0)
+end
+
 -- Enspells has a second armed mode for a no-damage set, and the damage mode stays the
 -- default so a saved config without a mode keeps the old build.
 local enspell_damage = find_mode(SPELL_GROUPS.enspells, 'damage')
@@ -567,21 +671,42 @@ def check_phase_fallbacks(host_categories: list[str]) -> None:
         if target in host_categories:
             categories = [target]
         else:
+            # A prefix sweep skips the categories that have their own exact entry:
+            # `divine_` must not re-check `divine_flash` against midcast.Divine Magic.
             categories = [category for category in host_categories
-                          if category.startswith(target)]
+                          if category.startswith(target) and category not in FALLBACKS]
         for category in categories:
             pattern = rf'{re.escape(category)}: \[\s*"{re.escape(path)}"'
             if not re.search(pattern, source):
                 raise SystemExit(f'{PHASE}: {category} has no {path} fallback')
 
 
-def lua_set_block(source: str, path: str) -> str:
-    """The `sets.<group>["<name>"] = { ... }` block for one dotted library path."""
+def check_group_jobs() -> None:
+    """The Paladin's spell groups must be on the Spells panel for a PLD main job."""
+    source = PHASE.read_text(encoding='utf-8')
+    for group in ('enhancing', 'enspells', 'curing', 'divine'):
+        match = re.search(rf'^  {group}: \[([^\]]*)\]', source, re.M)
+        if not match:
+            raise SystemExit(f'{PHASE}: no SPELL_GROUP_JOBS entry for {group}')
+        jobs = {int(value) for value in match.group(1).replace(' ', '').split(',') if value}
+        if 7 not in jobs:
+            raise SystemExit(f'{PHASE}: PLD (7) is missing from the {group} spell group')
+
+
+def lua_set_block(source: str, path: str, label: Path = RDM) -> str:
+    """The `sets.<group>["<name>"] = { ... }` block for one dotted library path.
+
+    The bracket form is the convention for names with spaces; a dotted `sets.group.name`
+    is accepted too (GearSwap reads both, and the launcher flattens them the same way).
+    """
     group, _, name = path.partition('.')
-    header = f'sets.{group}["{name}"] = {{'
-    start = source.find(header)
+    start = -1
+    for header in (f'sets.{group}["{name}"] = {{', f'sets.{path} = {{'):
+        start = source.find(header)
+        if start >= 0:
+            break
     if start < 0:
-        raise SystemExit(f'{RDM}: missing {path}')
+        raise SystemExit(f'{label}: missing {path}')
     open_at = source.index('{', start)
     depth = 0
     for index in range(open_at, len(source)):
@@ -592,7 +717,7 @@ def lua_set_block(source: str, path: str) -> str:
             depth -= 1
             if depth == 0:
                 return source[open_at:index + 1]
-    raise SystemExit(f'{RDM}: unterminated {path}')
+    raise SystemExit(f'{label}: unterminated {path}')
 
 
 def check_rdm_library() -> None:
@@ -615,6 +740,44 @@ def check_rdm_library() -> None:
     overlay = lua_set_block(source, 'midcast.Enfeebling Magic Saboteur')
     if 'hands = "Lethargy Gantherots +3"' not in overlay:
         raise SystemExit(f'{RDM}: the Saboteur overlay must be the hands only')
+
+
+def lua_braces(source: str, header: str, label: Path = PLD) -> str:
+    """The `{ ... }` table that follows one text `header` (e.g. an oseem entry)."""
+    start = source.find(header)
+    if start < 0:
+        raise SystemExit(f'{label}: missing {header.strip()}')
+    open_at = source.index('{', start + len(header) - 1)
+    depth = 0
+    for index in range(open_at, len(source)):
+        char = source[index]
+        if char == '{':
+            depth += 1
+        elif char == '}':
+            depth -= 1
+            if depth == 0:
+                return source[open_at:index + 1]
+    raise SystemExit(f'{label}: unterminated {header.strip()}')
+
+
+def check_pld_library() -> None:
+    """The Paladin library carries one guide build per divine/enhancing kind."""
+    source = PLD.read_text(encoding='utf-8')
+    for path, piece in PLD_SETS.items():
+        block = lua_set_block(source, path, PLD)
+        if piece not in block:
+            raise SystemExit(f'{PLD}: {path} is missing {piece}')
+    # The Odyssean pieces are Oseem's Arcane Glyptics work: the local table carries the
+    # guide's roll line and the set slot points at that entry, not at a bare item name.
+    for key, (item, augment) in OSEEM_SETS.items():
+        entry = lua_braces(source, f'{key} = ')
+        if item not in entry or augment not in entry:
+            raise SystemExit(f'{PLD}: oseem.{key} is not {item} with {augment}')
+    for path, slots in OSEEM_REFS.items():
+        block = lua_set_block(source, path, PLD)
+        for slot, reference in slots.items():
+            if not re.search(rf'^\s*{slot} = {re.escape(reference)},', block, re.M):
+                raise SystemExit(f'{PLD}: {path} {slot} is not {reference}')
 
 
 def main() -> int:
@@ -658,13 +821,16 @@ def main() -> int:
     host_categories = [category for entry in host_layout.values()
                        for category in entry['modes'] + entry['kinds']]
     check_phase_fallbacks(host_categories)
+    check_group_jobs()
     check_rdm_library()
+    check_pld_library()
     counts = []
     for _skill, group, enspells, names in cases:
         classified = sum(1 for name in names if name.casefold() not in enspells)
         counts.append(f'{group} {classified}')
     print(f"OK: {len(host_groups)} spell mode groups; {len(host_layout['enfeebles']['kinds'])} "
           f"enfeebling kinds; {len(host_layout['enhancing']['kinds'])} enhancing kinds; "
+          f"{len(host_layout['divine']['kinds'])} divine kinds; "
           f"classified {', '.join(counts)} (self-enspells stay in Enspells)")
     return 0
 

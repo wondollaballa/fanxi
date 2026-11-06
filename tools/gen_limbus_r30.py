@@ -100,7 +100,14 @@ PLACEMENT = {
     "NIN": {"sets.engaged.tp": {slot: ("hope", "tp") for slot in SLOTS},
             "sets.engaged.hybrid": {slot: ("hope", "tp") for slot in SLOTS}},
     "BRD": {"sets.engaged.tp": {slot: ("hope", "tp") for slot in ("body", "legs", "feet")}},
-    "PLD": {"sets.precast.FC": {slot: ("trust", "phalanx") for slot in SLOTS}},
+    # Paladin wears Sworn in its spell sets since the Community Paladin Guide split them:
+    # the body in Max Self Phalanx (and its SIRD variant) for the *Phalanx received +6*,
+    # the legs in the capped fast-cast set.
+    "PLD": {
+        "sets.precast.FC": {"legs": ("trust", "phalanx")},
+        "sets.midcast.Phalanx": {"body": ("trust", "phalanx")},
+        "sets.midcast.Phalanx SIRD": {"body": ("trust", "phalanx")},
+    },
     "RUN": {"sets.precast.FC": {slot: ("trust", "phalanx") for slot in SLOTS}},
     "RDM": {"sets.precast.FC": {slot: ("trust", "ta") for slot in SLOTS}},
     "SCH": {

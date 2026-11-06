@@ -375,6 +375,11 @@ EQUIP_SLOTS = {
 # the game treats it as neither one- nor two-handed, so a shield may share it.
 BOTH_HANDS_SKILLS = combat.TWO_HANDED_SKILLS
 
+# Ranged weapon skills: archery, marksmanship and throwing.  The ranged and ammo slots
+# share a family (25/26/27) and, for marksmanship, a subtype (crossbow 0, gun 1,
+# culverin 2).  ``items.subskill`` carries that subtype (migration 191).
+RANGED_WEAPON_SKILLS = frozenset({25, 26, 27})
+
 # Bags auto-equip may read for a job change.  The client can wear gear straight out of
 # the inventory or a Mog Wardrobe; the Safe/Satchel/Sack/Case are storage, not equipment.
 AUTO_EQUIP_BAGS = (0, 8, 10, 11, 12, 13, 14, 15, 16)
@@ -640,6 +645,12 @@ class ZoneSession:
         # The outfit whose save and vitals are current, so settle_equipment() is safe to
         # call once per datagram and again from the deferred flush.
         self._settled_outfit: dict[int, tuple[int, int, int]] = {}
+        # Ammo the client asked for while the ranged slot was still the old weapon.
+        # A Wear set reaches the server as one frame whose slots are not guaranteed to
+        # arrive main/sub/range/ammo in order, so an ammo pick that does not fit the
+        # current ranged weapon waits for the rest of the burst: a later ranged pick
+        # can make it legal, and the flush rejects it if the burst ends without one.
+        self._pending_ammo: tuple[int, int, int] | None = None
         # ptype -> payload of the last copy of each derived packet the client has, so a
         # burst that changes nothing in one of them does not send it again.
         self._sync_sent: dict[int, bytes] = {}
@@ -2684,16 +2695,29 @@ class ZoneSession:
                     self.say("That item has no equipment slot.")
                     return
                 problem = (self._equip_blocked_reason(match, kind)
-                           or self._weapon_pair_error(match, kind))
+                           or self._weapon_pair_error(match, kind)
+                           or self._ammo_pair_error(match, kind))
                 if problem:
                     self.say(problem)
                     return
                 slot = int(match["slot"])
                 item_id = int(match["item_id"])
+                previous = self.equipped.get(kind)
+                previous_item = self._equipped_item(kind) if kind in (0, 1) else None
+                same_copy = (previous is not None
+                             and tuple(int(value) for value in previous) == (0, slot, item_id))
                 self.equipped[kind] = (0, slot, item_id)
+                if kind == 3:
+                    self._pending_ammo = None
                 self._apply_equip_model(kind, match)
+                # //equip follows the same TP rule as the client's 0x050 path.
+                if not same_copy and self._change_resets_tp(kind, previous_item, match):
+                    self._reset_tp()
                 if kind == 0:
                     self._enforce_weapon_pair()
+                elif kind == 2:
+                    self._enforce_ranged_ammo()
+                    self._resolve_pending_ammo()
                 self.store_equipment()
                 self.queue += [
                     sub(0x050, struct.pack("<BBBx", slot, kind, 0)),
@@ -2712,10 +2736,17 @@ class ZoneSession:
                 if kind is None or kind not in self.equipped:
                     self.say("Nothing is equipped in that slot.")
                     return
+                removed = self._equipped_item(kind) if kind in (0, 1) else None
                 self.equipped.pop(kind, None)
+                if kind == 3:
+                    self._pending_ammo = None
                 self._clear_equip_model(kind)
+                if self._change_resets_tp(kind, removed, None):
+                    self._reset_tp()
                 if kind == 0:
                     self._enforce_weapon_pair()
+                elif kind == 2:
+                    self._resolve_pending_ammo()
                 self.refresh_vitals()
                 self.store_equipment()
                 self.queue += [
@@ -4835,10 +4866,15 @@ class ZoneSession:
         limits the search; a job change passes ``AUTO_EQUIP_BAGS`` so wardrobe sets count.
         """
         items = self.world.service.inventory(self.char["id"])
+        self._pending_ammo = None
         if not self.equipped and self.restore_equipment():
             # An outfit saved by an older build can hold a 2H main and an off-hand
-            # weapon.  Fix it on the way in, before the grap list is built.
-            if self._enforce_weapon_pair(items):
+            # weapon, or a ranged weapon and ammo from the wrong family.  Fix it on
+            # the way in, before the grap list is built.
+            changed = self._enforce_weapon_pair(items)
+            if self._enforce_ranged_ammo(items):
+                changed = True
+            if changed:
                 self.store_equipment()
             return
         by_kind: dict[int, list[dict]] = {}
@@ -4903,8 +4939,10 @@ class ZoneSession:
             log.info("%s auto-equip kind=%d item=%d (%s) model=%s bag=%d", self.addr, kind,
                      int(chosen["item_id"]), chosen.get("name"), chosen.get("model"),
                      int(chosen["container"]))
-        # A main picked just now can make an already-equipped sub slot illegal.
+        # A main picked just now can make an already-equipped sub slot illegal, and
+        # a ranged weapon picked just now can make the ammo slot illegal.
         self._enforce_weapon_pair(items)
+        self._enforce_ranged_ammo(items)
         self.persist_equipment()
 
     @staticmethod
@@ -4947,8 +4985,8 @@ class ZoneSession:
             return False
         if not rows:
             return False
-        bag = {(int(item["container"]), int(item["slot"])): item
-               for item in self.world.service.inventory(self.char["id"])}
+        items = self.world.service.inventory(self.char["id"])
+        bag = {(int(item["container"]), int(item["slot"])): item for item in items}
         restored = 0
         for row in rows:
             kind = int(row["kind"])
@@ -4957,6 +4995,8 @@ class ZoneSession:
             if item is None or int(item["item_id"]) != int(row["item_id"]):
                 continue
             if self._equip_blocked_reason(item, kind) is not None:
+                continue
+            if self._ammo_pair_error(item, kind, items) is not None:
                 continue
             self.equipped[kind] = (container, slot, int(row["item_id"]))
             self._apply_equip_model(kind, item)
@@ -5126,21 +5166,157 @@ class ZoneSession:
 
     def _weapon_pair_error(self, item: dict, kind: int,
                            items: list[dict] | None = None) -> str | None:
-        """Why a sub item cannot share the hands with the main weapon, or None."""
+        """Why a sub item cannot share the hands with the main weapon, or None.
+
+        A sub slot is never a second main hand: two-handed and hand-to-hand weapons,
+        ranged weapons and ammunition are main/range-only, so they are refused even
+        when the item's slot mask is missing.  The remaining rules are the retail hand
+        rules: a two-handed main leaves a grip as the only legal sub item, and a grip
+        needs a two-handed main.
+        """
         if kind != 1:
             return None
+        name = str(item.get("name") or "That item")
+        skill = int(item.get("skill") or 0)
+        if self._two_handed(item):
+            return "%s is a two-handed weapon and cannot be used in the off hand." % name
+        if skill == combat.H2H_SKILL:
+            return "%s is a hand-to-hand weapon and cannot be used in the off hand." % name
+        if (skill in RANGED_WEAPON_SKILLS
+                or str(item.get("equip_slot") or "") in ("range", "ammo")):
+            return "%s cannot be equipped in the off hand." % name
         main = self._equipped_item(0, items)
         if self._is_grip(item) and not self._two_handed(main):
             return "A grip can only be used with a two-handed weapon."
         if not self._is_grip(item) and self._two_handed(main):
             return "You cannot use an off-hand item with a two-handed weapon."
+        # A hand-to-hand main is one weapon for both fists; only a shield may share it.
+        if self._is_h2h(main) and skill:
+            return "You cannot use an off-hand weapon with a hand-to-hand weapon."
         return None
+
+    @staticmethod
+    def _ranged_ammo_compatible(ranged: dict, ammo: dict) -> bool:
+        """Can this ammunition be fired by the ranged weapon in the range slot?
+
+        An ammo-slot item outside the three ranged families (a Tathlum, jug, tool or
+        fishing bait) is always legal.  Throwing ammunition (skill 27) is thrown by
+        hand and never loaded into a bow, gun or crossbow, so it is refused whenever a
+        ranged weapon is out.
+        Marksmanship ammo also has to match the weapon's subtype: bolts (0) with a
+        crossbow, bullets (1) with a gun, shells (2) with a culverin.  The subtype comes
+        from ``items.subskill`` (migration 191); a missing column would fail the inventory
+        query, so every deployed database has it.
+        """
+        ammo_skill = int(ammo.get("skill") or 0)
+        # Skill 0 is a Tathlum, jug, tool or other ammo-slot item; fishing bait is
+        # skill 48 and is legal too.  Only the three ranged ammo families are gated.
+        if ammo_skill not in RANGED_WEAPON_SKILLS:
+            return True
+        ranged_skill = int(ranged.get("skill") or 0)
+        if ranged_skill not in RANGED_WEAPON_SKILLS:
+            return True
+        if ammo_skill == 27 or ammo_skill != ranged_skill:
+            return False
+        if ranged_skill == 26:
+            # Crossbow 0, gun 1, culverin 2.  A crossbow's 0 is a real subtype, not
+            # "missing", so compare the two values directly.
+            if int(ranged.get("subskill") or 0) != int(ammo.get("subskill") or 0):
+                return False
+        return True
+
+    def _ammo_pair_error(self, item: dict, kind: int,
+                         items: list[dict] | None = None) -> str | None:
+        """Why this ammunition cannot be worn with the ranged weapon, or None."""
+        if kind != 3:
+            return None
+        ranged = self._equipped_item(2, items)
+        if ranged is None or self._ranged_ammo_compatible(ranged, item):
+            return None
+        if int(item.get("skill") or 0) == 27:
+            return "You cannot use throwing ammunition with a ranged weapon equipped."
+        return "%s is not compatible with %s." % (
+            item.get("name") or "That ammunition", ranged.get("name") or "your ranged weapon")
+
+    def _enforce_ranged_ammo(self, items: list[dict] | None = None) -> bool:
+        """Clear ammo that the equipped ranged weapon cannot fire."""
+        rows = items if items is not None else self.world.service.inventory(self.char["id"])
+        ammo = self._equipped_item(3, rows)
+        if ammo is None:
+            if 3 in self.equipped:
+                self._clear_slot(3, "its item is no longer in a bag")
+                return True
+            return False
+        ranged = self._equipped_item(2, rows)
+        if ranged is not None and not self._ranged_ammo_compatible(ranged, ammo):
+            self._clear_slot(3, "it does not match the ranged weapon")
+            return True
+        return False
+
+    def _pending_ammo_row(self, items: list[dict]) -> dict | None:
+        """The bag copy a pending ammo pick named, if it is still there."""
+        if self._pending_ammo is None:
+            return None
+        container, slot, item_id = (int(value) for value in self._pending_ammo)
+        return next((item for item in items
+                     if int(item["container"]) == container and int(item["slot"]) == slot
+                     and int(item["item_id"]) == item_id), None)
+
+    def _resolve_pending_ammo(self, items: list[dict] | None = None) -> bool:
+        """Wear a deferred ammo pick once the ranged slot makes it legal.
+
+        Called after every ranged change.  While the pick is still incompatible it
+        stays pending, because a later packet in the same burst may still name the
+        ranged weapon it belongs to.
+        """
+        if self._pending_ammo is None:
+            return False
+        rows = items if items is not None else self.world.service.inventory(self.char["id"])
+        item = self._pending_ammo_row(rows)
+        if item is None:
+            self._pending_ammo = None
+            return False
+        if self._ammo_pair_error(item, 3, rows) is not None:
+            return False
+        entry = self._pending_ammo
+        self._pending_ammo = None
+        self.equipped[3] = entry
+        self._apply_equip_model(3, item)
+        self.queue += [
+            sub(0x050, struct.pack("<BBBx", entry[1], 3, entry[0])),
+            self.item_packet(item, container=entry[0], slot=entry[1]),
+        ]
+        self.note_equipment_change()
+        log.info("%s accepted deferred ammo kind=3 item=%d (%s)", self.addr,
+                 int(entry[2]), item.get("name"))
+        return True
+
+    def _settle_pending_ammo(self, items: list[dict] | None = None) -> bool:
+        """At the end of a burst, reject a deferred ammo pick that never became legal."""
+        if self._pending_ammo is None:
+            return False
+        rows = items if items is not None else self.world.service.inventory(self.char["id"])
+        if self._resolve_pending_ammo(rows):
+            return True
+        item = self._pending_ammo_row(rows)
+        self._pending_ammo = None
+        problem = None
+        if item is not None:
+            problem = self._ammo_pair_error(item, 3, rows)
+        if problem:
+            self.say(problem)
+        log.info("%s refused deferred ammo: %s", self.addr, problem or "item left the bags")
+        self._resend_slot(3)
+        return False
 
     def _clear_slot(self, kind: int, reason: str) -> None:
         """Take one slot off and tell the client to forget its model."""
+        removed = self._equipped_item(kind) if kind in (0, 1) else None
         self.equipped.pop(kind, None)
         self._clear_equip_model(kind)
         self.queue.append(sub(0x050, struct.pack("<BBBx", 0, kind, 0)))
+        if self._change_resets_tp(kind, removed, None):
+            self._reset_tp()
         self.note_equipment_change()
         if kind in (0, 1, 2):
             self._drop_aftermath()
@@ -5155,12 +5331,9 @@ class ZoneSession:
                 self._clear_slot(1, "its item is no longer in a bag")
                 return True
             return False
-        main = self._equipped_item(0, rows)
-        if self._is_grip(sub_item) and not self._two_handed(main):
-            self._clear_slot(1, "a grip needs a two-handed main")
-            return True
-        if not self._is_grip(sub_item) and self._two_handed(main):
-            self._clear_slot(1, "the main weapon fills both hands")
+        problem = self._weapon_pair_error(sub_item, 1, rows)
+        if problem:
+            self._clear_slot(1, problem.rstrip("."))
             return True
         return False
 
@@ -5181,6 +5354,7 @@ class ZoneSession:
     def _unequip_all(self, reason: str) -> int:
         """Take every slot off so the job's worn gear can go onto its storage slips."""
         count = len(self.equipped)
+        self._pending_ammo = None
         for kind in sorted(self.equipped):
             self.equipped.pop(kind, None)
             self._clear_equip_model(kind)
@@ -5227,6 +5401,8 @@ class ZoneSession:
                      item.get("name"), kind)
             changed = True
         if self._enforce_weapon_pair(items):
+            changed = True
+        if self._enforce_ranged_ammo(items):
             changed = True
         if changed:
             self.store_equipment()
@@ -5303,6 +5479,7 @@ class ZoneSession:
         """Send the follow-up now: the burst settled, or an action needs it first."""
         if not self.equipment_changed:
             return
+        self._settle_pending_ammo()
         self.settle_equipment()
         self.equipment_changed = False
         self.queue += self.equipment_sync()
@@ -5494,32 +5671,52 @@ class ZoneSession:
             self.say("Take that item out of the Recycle Bin before wearing it.")
             return
         if slot == 0:  # the client's "remove from this slot" form
+            had = kind in self.equipped
+            removed = self._equipped_item(kind) if kind in (0, 1) else None
             self.equipped.pop(kind, None)
+            if kind == 3:
+                self._pending_ammo = None
             self._clear_equip_model(kind)
             # The grap list has to lose the model too: a reply that still says the old
             # weapon is in the slot makes the client treat the unequip as failed and it
             # never sends the follow-up 0x050 that puts the new item on.
             self.queue.append(sub(0x050, struct.pack("<BBBx", 0, kind, category)))
+            if had and self._change_resets_tp(kind, removed, None):
+                self._reset_tp()
             self.note_equipment_change()
             if kind in (0, 1, 2):
                 self._drop_aftermath()
             if kind == 0:
                 self._enforce_weapon_pair()
+            elif kind == 2:
+                self._resolve_pending_ammo()
             return
         items = self.world.service.inventory(self.char["id"])
         item = next((i for i in items
                      if int(i["container"]) == category and int(i["slot"]) == slot), None)
         if item is None:  # unequip
+            had = kind in self.equipped
+            removed = self._equipped_item(kind, items) if kind in (0, 1) else None
             self.equipped.pop(kind, None)
+            if kind == 3:
+                self._pending_ammo = None
             self._clear_equip_model(kind)
             self.queue.append(sub(0x050, struct.pack("<BBBx", 0, kind, category)))
+            if had and self._change_resets_tp(kind, removed, None):
+                self._reset_tp()
             self.note_equipment_change()
             if kind in (0, 1, 2):
                 self._drop_aftermath()
             if kind == 0:
                 self._enforce_weapon_pair(items)
+            elif kind == 2:
+                self._resolve_pending_ammo(items)
             return
         item_id, quantity = int(item["item_id"]), int(item["quantity"])
+        if kind == 3:
+            # This packet is the client's latest ammo intent; a pending pick from
+            # earlier in the burst is superseded even if this one is then refused.
+            self._pending_ammo = None
         # One inventory copy can only occupy one slot, and a Rare item cannot be
         # worn twice even if a database somehow holds two copies.  Without this the
         # client could put the same Carnwenhan in main and sub and the server would
@@ -5535,9 +5732,21 @@ class ZoneSession:
             if int(item.get("rare") or 0) and int(other_item) == item_id:
                 duplicate = "%s is Rare and is already equipped." % item.get("name", "That item")
                 break
-        problem = (duplicate or self._equip_blocked_reason(item, kind)
-                   or self._weapon_pair_error(item, kind, items))
+        blocked = self._equip_blocked_reason(item, kind)
+        pair_problem = self._weapon_pair_error(item, kind, items)
+        ammo_problem = self._ammo_pair_error(item, kind, items)
+        problem = duplicate or blocked or pair_problem or ammo_problem
         if problem:
+            if ammo_problem and not duplicate and not blocked and not pair_problem:
+                # The launcher sorts a Wear set's slots alphabetically (ammo before
+                # range), so this pick may be waiting for the ranged weapon later in
+                # the same burst.  Hold it instead of snapping the client back; the
+                # ranged handler or the flush decides.
+                self._pending_ammo = (category, slot, item_id)
+                self.note_equipment_change()
+                log.info("%s deferred ammo slot=%d item=%d until the ranged slot settles: %s",
+                         self.addr, slot, item_id, ammo_problem)
+                return
             log.info("%s refused equip slot=%d kind=%d item=%d: %s", self.addr, slot, kind,
                      item_id, problem)
             self.say(problem)
@@ -5551,6 +5760,7 @@ class ZoneSession:
         # than against the packet.  Without this the phase engine's post-WS TP set removed
         # the Prime Aftermath about a second after granting it.
         previous = self.equipped.get(kind)
+        previous_item = self._equipped_item(kind, items) if kind in (0, 1) else None
         same_copy = (previous is not None
                      and tuple(int(value) for value in previous)
                      == (int(category), int(slot), int(item_id)))
@@ -5560,6 +5770,11 @@ class ZoneSession:
             sub(0x050, struct.pack("<BBBx", slot, kind, category)),
             self.item_packet(item, container=category, slot=slot),
         ]
+        # A main-hand change, or a sub-hand change that involves a real weapon, empties
+        # the TP bar.  Grips, shields, ranged weapons and ammo keep TP.  A set that
+        # re-sends the same copy is not a change.
+        if not same_copy and self._change_resets_tp(kind, previous_item, item):
+            self._reset_tp()
         self.note_equipment_change()
         if kind in (0, 1, 2) and not same_copy:
             # A real main/sub/ranged weapon change drops the aftermath.  Armour and ammo
@@ -5569,6 +5784,13 @@ class ZoneSession:
             # A two-handed main makes the old sub item illegal; take it off now so the
             # client and the server agree on the hands.
             self._enforce_weapon_pair(items)
+        elif kind == 2:
+            # A different ranged weapon can make the worn ammo illegal; clear it so the
+            # client cannot fire a bolt out of a gun (or an arrow out of a crossbow).
+            self._enforce_ranged_ammo(items)
+            # The new ranged weapon can also make an ammo pick that arrived earlier in
+            # this burst legal.
+            self._resolve_pending_ammo(items)
 
     def refresh_character(self) -> None:
         row = self.world.service.character(self.char["id"])
@@ -6096,6 +6318,16 @@ class ZoneSession:
         if effect_id == effects.INVISIBLE:
             self._sync_stealth()
         return True
+
+    def _break_invisible(self) -> None:
+        """Drop Invisible for a player action (retail: a cast or most abilities).
+
+        Sneak stays: it is not what an action breaks, only the attack swing in
+        ``_apply_swing`` takes both.  ``remove_effect`` writes the wear-off line but not
+        the status list, so queue that here like the swing path does.
+        """
+        if self.remove_effect(effects.INVISIBLE):
+            self.queue.append(self.char_status())
 
     def drop_shadow(self) -> int:
         """Consume one Utsusemi shadow and return how many are left."""
@@ -6870,11 +7102,17 @@ class ZoneSession:
         if not int(ranged.get("item_id") or 0) or not int(ammo.get("item_id") or 0):
             self.say("You have no ranged weapon and ammunition equipped.")
             return 0
+        if not self._ranged_ammo_compatible(ranged, ammo):
+            self.say("%s is not compatible with %s." % (
+                ammo.get("name") or "That ammunition",
+                ranged.get("name") or "your ranged weapon"))
+            return 0
         sheet = self.stat_sheet()
         attacker = sheet.ranged_fighter
         if attacker is None:
             self.say("You have no usable ranged weapon and ammunition equipped.")
             return 0
+        self._break_invisible()
         target = self.world.debuffed_monster(entity)
         hit = combat.melee(attacker, target, zone=int(self.zone),
                            rng=self.world.rng, ranged=True)
@@ -7074,6 +7312,7 @@ class ZoneSession:
         if consumed is None:
             self.say("You do not have that item.")
             return
+        self._break_invisible()
         quantity = int(consumed["quantity"])
         me = int(self.char["char_id"])
         # 0x028 ItemFinish: the result's sub_kind is the animation id, so this is what
@@ -7230,6 +7469,7 @@ class ZoneSession:
         if int(spell.get("skill") or 0) == 39:  # Ninjutsu
             fast_cast += int(self.combat_mods().get(mod.NINJUTSU_FASTCAST, 0))
         finish = now + combat.cast_time(int(spell["cast_time"]), fast_cast) / 1000.0
+        self._break_invisible()
         self.casting = {
             "spell": spell, "target": 0, "finish": finish,
             "amount": 0, "healing": False, "self": True, "effect": None,
@@ -7239,12 +7479,12 @@ class ZoneSession:
         self.stop_resting()
         self.queue += [self.char_stats(), self.char_status()]
         actor = int(self.char["char_id"])
-        # Retail's Magic Start carries the spell's own animation and the client's
-        # "starts casting" message.  A zero animation made every cast start with the
-        # client's default (Cure's) pose and the correct animation only at the finish.
+        # A Magic Start carries the spell id in the result value and leaves the result
+        # animation at 0 (retail); the client plays the cast pose from the value.  The
+        # finish below still uses the spell's own animation.
         self.queue.append(sub(0x028, packets.battle_action(
             actor, actor, int(spell["id"]),
-            animation=spell_animation(spell),
+            animation=0,
             message=packets.MESSAGE_MAGIC_STARTS_CASTING, kind=0,
             category=packets.ACTION_CATEGORY_MAGIC_START,
             action_id=packets.MAGIC_CAST_TRUST, info=0)))
@@ -7611,6 +7851,7 @@ class ZoneSession:
                 refund = max(0, int(cost)) * min(100, int(percent)) // 100
                 self.char["mp_current"] = min(max_mp, paid + refund)
             self.say("Quick Magic!")
+        self._break_invisible()
         self.casting = {"spell": spell, "target": int(target.id) if target else 0,
                         "party_target": int(party_target.char["char_id"]) if party_target else 0,
                         "finish": cast_finish,
@@ -7634,10 +7875,11 @@ class ZoneSession:
         except Exception:
             pass
         # 0x028 MagicStart: this is what puts the cast bar and the casting animation on the
-        # client.  The value is the spell id; cmd_arg is the school's four-character code
-        # (canj for ninjutsu, cawh for white magic, ...), not the spell id.  The result's
-        # animation is the spell's own client animation, and the message is retail's
-        # "starts casting" line: the client prints it for the caster and everyone nearby.
+        # client.  The result value is the spell id (cmd_arg is the school's four-character
+        # code: canj for ninjutsu, cawh for white magic, ...), and the client picks the
+        # casting pose from that value.  The result animation is *unused* on a start --
+        # retail sends 0 there -- and writing the spell's finish animation into it made
+        # Refresh (109) play a summon/trust pose instead of its own cast motion.
         actor = int(self.char["char_id"])
         if party_target is not None:
             start_target = int(party_target.char["char_id"])
@@ -7645,7 +7887,7 @@ class ZoneSession:
             start_target = int(target.id) if target is not None else actor
         self.queue.append(sub(0x028, packets.battle_action(
             actor, start_target, int(spell["id"]),
-            animation=spell_animation(spell),
+            animation=0,
             message=packets.MESSAGE_MAGIC_STARTS_CASTING, kind=0,
             category=packets.ACTION_CATEGORY_MAGIC_START,
             action_id=packets.magic_cast_arg(int(spell["skill"])), info=0)))
@@ -8506,6 +8748,7 @@ class ZoneSession:
         if meikyo or sekkanoki:
             self._sekkanoki_until = 0.0
         self._warriors_charge_until = 0.0
+        self._break_invisible()
         self.char["tp"] = tp - (1000 if (meikyo or sekkanoki) else min(tp, TP_MAX))
         self.queue.append(self.party_member())
         # Prime Aftermath goes up before the hit loop: retail applies it to the weapon
@@ -10834,6 +11077,7 @@ class ZoneSession:
         if ability_id == 233 and self.effect(effects.SUBLIMATION) is not None:
             state = self.effect(effects.SUBLIMATION)
             stored = max(0, int(state.get("power") or 0))
+            self._break_invisible()
             self.remove_effect(effects.SUBLIMATION, quiet=True)
             mp = int(self.char.get("mp_current", 0))
             self.char["mp_current"] = min(int(self.char.get("mp", 0)), mp + stored)
@@ -10900,6 +11144,7 @@ class ZoneSession:
             if error:
                 self.say(error % name if "%s" in error else error)
                 return
+        self._break_invisible()
         me = int(self.char["char_id"])
         if ally is not None:
             target_id = int(ally.char["char_id"])
@@ -12629,6 +12874,41 @@ class ZoneSession:
         if entity is not None:
             self.queue_spawn(entity)
 
+    @staticmethod
+    def _tp_weapon(item: dict | None) -> bool:
+        """Is this slot item a real weapon that contributes to TP?
+
+        Grips and shields have skill 0: they are off-hand gear, not a second delay.
+        A sub slot only resets TP when the copy going in or out is an actual weapon.
+        """
+        return bool(item) and int(item.get("skill") or 0) > 0
+
+    def _change_resets_tp(self, kind: int, old_item: dict | None,
+                          new_item: dict | None) -> bool:
+        """Does replacing one item in this slot empty the TP bar?
+
+        Main-hand changes always do.  A sub-hand change does only when a weapon is
+        involved; swapping grips or shields keeps TP.  Ranged and ammo changes keep
+        TP as well.
+        """
+        if kind == 0:
+            return True
+        if kind == 1:
+            return self._tp_weapon(old_item) or self._tp_weapon(new_item)
+        return False
+
+    def _reset_tp(self) -> None:
+        """Empty the TP bar after a main/sub weapon change.
+
+        The party row is the packet the client's TP bar reads; a no-op when the bar is
+        already empty keeps a gear burst from queueing one update per slot.
+        """
+        if int(self.char.get("tp", 0)) == 0:
+            return
+        self.char["tp"] = 0
+        self.queue.append(self.party_member())
+        log.info("%s TP reset by a weapon change", self.addr)
+
     def gain_tp(self, tenths: int, *, queue: bool = True) -> None:
         """Add TP and refresh the bar.  TP is kept in tenths, the client's own unit.
 
@@ -12659,6 +12939,10 @@ class ZoneSession:
     def take_damage(self, amount: int, entity, *, blocked: bool = False) -> int:
         self.stop_resting()
         amount = max(0, int(amount))
+        # Retail drops Invisible when the player is attacked, even when Stoneskin
+        # absorbs the hit.  Sneak is not touched by damage.
+        if amount > 0:
+            self._break_invisible()
         # Stoneskin eats a pool of damage, Phalanx takes a flat amount off every hit.
         stoneskin = self.effect_state.get(effects.STONESKIN)
         if stoneskin is not None and int(stoneskin.get("power", 0)) > 0 and amount > 0:
@@ -13281,12 +13565,13 @@ class ZoneSession:
         miss = bool(result["miss"])
         # Swinging is the enmity that makes a mob fight back -- including a miss.
         self.world.add_damage_hate(entity, int(self.char["char_id"]), max(1, damage), now)
-        if miss:
-            return
-        # Attacking breaks Sneak and Invisible, as it does in retail.
+        # Attacking breaks Sneak and Invisible, as it does in retail - a missed swing is
+        # still an attack, so this runs before the miss return.
         for stealth in (effects.SNEAK, effects.INVISIBLE):
             if self.remove_effect(stealth):
                 self.queue.append(self.char_status())
+        if miss:
+            return
         self.world.wake_mob(entity)
         entity.hp = max(0, entity.hp - damage)
         # En-spell damage lands on the same swing, after the physical hit.  It is not a

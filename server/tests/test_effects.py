@@ -472,8 +472,14 @@ class EffectTest(unittest.TestCase):
         self.assertIn(char_id, mob.enmity)
         self.assertGreaterEqual(float(mob.next_attack_at), time.time())
 
-    def test_cast_start_is_the_retail_start_line_and_animation(self):
-        """The client prints the start line from message 327 and plays the spell's motion."""
+    def test_cast_start_is_the_retail_line_with_the_spell_id_and_no_animation(self):
+        """A Magic Start carries the spell id in its value; the result animation is 0.
+
+        Retail leaves sub_kind 0 on a start (LandSandBoat's 0x028 capture test encodes the
+        same), and the client picks the casting pose from the spell id in the value.  The
+        old code wrote the spell's finish animation here, which made Refresh (109) play a
+        summon/trust pose while it cast.
+        """
         self.enter(100)
         mob = self.at_mob()
         packet = bytearray(16)
@@ -485,10 +491,97 @@ class EffectTest(unittest.TestCase):
         start = next(message for message in messages(self.session)
                      if message["category"] == packets.ACTION_CATEGORY_MAGIC_START)
         self.assertEqual(start["message"], packets.MESSAGE_MAGIC_STARTS_CASTING)
-        # Dia's client animation is its spell id (23), so the cast starts with Dia's own
-        # pose rather than the client's default (Cure's) one.
-        self.assertEqual(start["sub"], 23)
+        self.assertEqual(start["value"], 23)
+        self.assertEqual(start["sub"], 0)
         self.assertNotIn("You start casting Dia.", chats(self.session))
+
+    def test_refresh_cast_starts_without_its_finish_animation(self):
+        """Refresh (109) must not play its finish animation on the cast bar.
+
+        The reported regression: writing the finish animation into the Magic Start
+        made Refresh's cast pose look like a trust summon.
+        """
+        self.enter(100)
+        self.session.char["main_job"] = 5
+        self.session.char["main_level"] = 99
+        self.session.char["mp"] = 1000
+        self.session.char["mp_current"] = 1000
+        packet = bytearray(16)
+        struct.pack_into("<IHHI", packet, 4, 0, 0, packets.ACTION_CAST_MAGIC, 109)
+        self.session.queue.clear()
+        self.session.cast_magic(bytes(packet), 0)
+        start = next(message for message in messages(self.session)
+                     if message["category"] == packets.ACTION_CATEGORY_MAGIC_START)
+        self.assertEqual(start["value"], 109)
+        self.assertEqual(start["sub"], 0)
+        self.session.queue.clear()
+        self.session.tick(time.time() + 10)
+        finish = self.last_magic()
+        self.assertEqual(finish["sub"], 109)
+
+    def test_invisible_breaks_when_a_spell_cast_starts(self):
+        """Casting is an action: Invisible drops, Sneak stays (retail)."""
+        self.enter(100)
+        mob = self.at_mob()
+        self.session.add_effect(effects.INVISIBLE, duration=600)
+        self.session.add_effect(effects.SNEAK, duration=600)
+        self.session.queue.clear()
+        self.as_caster(23)
+        packet = bytearray(16)
+        struct.pack_into("<IHHI", packet, 4, 0, mob.targid,
+                         packets.ACTION_CAST_MAGIC, 23)
+        self.session.cast_magic(bytes(packet), mob.targid)
+        self.assertFalse(self.session.has_effect(effects.INVISIBLE))
+        self.assertTrue(self.session.has_effect(effects.SNEAK))
+
+    def test_a_missed_swing_still_breaks_sneak_and_invisible(self):
+        """A miss is still an attack, so both stealth effects drop."""
+        self.session.add_effect(effects.SNEAK, duration=600)
+        self.session.add_effect(effects.INVISIBLE, duration=600)
+        mob = self.claim_mob()
+        self.session.queue.clear()
+        self.session._apply_swing(mob, None, time.time(), {"miss": True, "damage": 0})
+        self.assertFalse(self.session.has_effect(effects.INVISIBLE))
+        self.assertFalse(self.session.has_effect(effects.SNEAK))
+
+    def test_invisible_breaks_when_a_job_ability_is_used(self):
+        """Activating an ability is an action too; Sneak is untouched."""
+        self.enter(100)
+        self.session.char["main_job"] = 5
+        self.session.char["main_level"] = 99
+        self.session.add_effect(effects.INVISIBLE, duration=600)
+        self.session.add_effect(effects.SNEAK, duration=600)
+        self.session.queue.clear()
+        self.ability(247)  # Composure
+        self.assertFalse(self.session.has_effect(effects.INVISIBLE))
+        self.assertTrue(self.session.has_effect(effects.SNEAK))
+
+    def test_invisible_breaks_when_the_player_is_hit(self):
+        """Being attacked also drops Invisible; Sneak is not removed by damage."""
+        self.session.add_effect(effects.INVISIBLE, duration=600)
+        self.session.add_effect(effects.SNEAK, duration=600)
+        self.session.queue.clear()
+        mob = self.claim_mob()
+        self.session.take_damage(10, mob)
+        self.assertFalse(self.session.has_effect(effects.INVISIBLE))
+        self.assertTrue(self.session.has_effect(effects.SNEAK))
+
+    def test_an_interrupted_cast_does_not_break_invisible_before_it_starts(self):
+        """A cast the server refuses (no MP) is not an action, so Invisible survives."""
+        self.enter(100)
+        mob = self.at_mob()
+        self.session.add_effect(effects.INVISIBLE, duration=600)
+        self.session.add_effect(effects.SNEAK, duration=600)
+        self.session.queue.clear()
+        self.as_caster(23)
+        self.session.char["mp_current"] = 0
+        packet = bytearray(16)
+        struct.pack_into("<IHHI", packet, 4, 0, mob.targid,
+                         packets.ACTION_CAST_MAGIC, 23)
+        self.session.cast_magic(bytes(packet), mob.targid)
+        self.assertIsNone(self.session.casting)
+        self.assertTrue(self.session.has_effect(effects.INVISIBLE))
+        self.assertTrue(self.session.has_effect(effects.SNEAK))
 
     def test_cast_finish_keeps_the_spell_animation(self):
         """The stopping motion is still the spell's client animation."""

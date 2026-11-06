@@ -1,5 +1,89 @@
 # Changelog
 
+## Unreleased — weapon changes reset TP, and the hands and ammo follow the weapon
+
+- **Changing a main or sub weapon empties the TP bar; grips, shields, ranged weapons and
+  ammo keep it.** A weapon swap used to leave the TP the previous weapon had built, so a
+  main/sub change could fire a 3,000-TP weapon skill immediately. The server now sends the
+  refreshed party row with TP 0 for a weapon change, while a grip/shield swap, a ranged
+  weapon swap and an ammo swap keep the bar building. Re-sending the same bag copy, which
+  the phase engine's gear burst does, is not a change and also keeps TP.
+- **Two-handed and hand-to-hand weapons cannot be worn in the sub slot.** The catalogue's
+  slot masks already refused normal rows, but a row with a missing mask could still be
+  equipped and drawn. The sub slot now explicitly refuses two-handed, hand-to-hand, ranged
+  and ammo items; a two-handed main still accepts a grip and clears any other sub item, and a
+  hand-to-hand main can share the sub slot with a shield but not another weapon.
+- **Ranged weapons only accept ammunition they can fire.** Bows take arrows, crossbows take
+  bolts, guns take bullets and culverins take shells; a Tathlum or other skill-0 ammo piece
+  stays legal, while throwing ammunition (skill 27) is refused with a ranged weapon. A
+  ranged-weapon change clears ammo from the wrong family, and a Wear-set burst that sends
+  ammo before range defers the ammo until the ranged slot settles.
+- Migration 191 adds `items.subskill` (LandSandBoat's crossbow/bolt 0, gun/bullet 1,
+  culverin/shell 2, shuriken 3, bow 4) so the server can tell a bolt from a bullet.
+- Tests: `test_equipment_rules.py` covers all four TP slots, same-copy re-sends, two-handed
+  and grip hands, the sub-slot refusals, bow/crossbow/gun ammo families, throwing ammo,
+  deferred ammo in a Wear set, and the subtype catalogue.
+
+## Unreleased — Paladin spells get their own sets, and Divine Magic splits by spell
+
+- **`gearswap/PLD.lua` carries the Community Paladin Guide's magic builds.** One set per spell
+  kind instead of one Divine Magic and one Healing Magic set: `midcast.Flash` (Enmity +
+  Fast Cast) and `midcast["Flash SIRD"]`, `midcast["Healing Magic"]` (Cure Potency + Cure
+  Received + DT) and `midcast["Cure SIRD"]`, `midcast.Phalanx` (the guide's Max Self Phalanx)
+  and `midcast["Phalanx SIRD"]`, `midcast.Reprisal` / `midcast["Reprisal SIRD"]`,
+  `midcast["Enhancing Magic"]` (Protect / Shell / Crusade on the guide's duration pieces),
+  `midcast["Enhancing Magic SIRD"]` (Aquaveil) and `midcast["Enhancing Magic Stoneskin"]`
+  (Alimere's capped Stoneskin + gear SIRD), and `midcast.Enspell` (the Enlight build).
+  `midcast["Divine Magic"]` stays the Banish / Holy Magic Attack set.
+- **Job abilities follow the guide's Noteworthy Equipment column and gain the three that had
+  no sets.** `sets.JA.Palisade`, `sets.JA.Intervene` (both the enmity build) and
+  `sets.JA.Sepulcher` (the cure build) join the existing eleven; `sets.precast.JA` is the
+  enmity fallback for any ability without a set of its own. Weapon skills are untouched.
+- **Divine Magic is now a per-spell-kind group.** The Spells panel gains `divine_flash`
+  (Flash, falling back to `midcast.Flash`), keeps `divine_mab` for Banish / Holy and
+  `divine_macc` for Repose, and defaults to **Auto — by spell type**; a saved Divine mode of
+  `mab` migrates to Auto once (`PHASE_CONFIG_VERSION` 4), a deliberate `macc` stays.
+  `//modes divine auto|mab|flash|macc` swaps it in game.
+- **Enhancing Magic gains Phalanx and Reprisal rows** (`enhancing_phalanx`,
+  `enhancing_reprisal`) scoped to the jobs that learn the spell (RDM/PLD/RUN and PLD), with
+  `midcast.Phalanx` / `midcast.Reprisal` then `midcast.Enhancing Magic` as the fallbacks.
+- **Paladin gets the Enhancing and Enspells cards at all.** PLD was missing from both job
+  lists, so Phalanx / Reprisal / Stoneskin / Aquaveil could not be configured and the Enlight
+  set never bound.
+- **The Odyssean pieces are Oseem-augmented builds, not bare items.** `PLD.lua` gained a
+  local `oseem` table with the guide's rolls: Odyssean Helm and Odyss. Chestplate with
+  `"Phalanx"+5`, and the four Odyssean Greaves builds (Phalanx+5, Cure Potency+5,
+  Fast Cast+6, and the Stoneskin build's MND+3 / Accuracy+2 / Attack+2 / SIRD-11). The
+  Phalanx SIRD body is the guide's **Odyss. Chestplate** (the catalogue's abbreviated name
+  for Odyssean Chestplate) instead of the Sworn Platemail substitution, and migration 190
+  now grants that body too. Phalanx and SIRD are Dark Matter ("technique") rolls — the
+  Oseem card writes the standard-stone rows, the stat sheet decodes a Phalanx/SIRD block
+  when one is present.
+- Tests: `tests/spell_groups_test.py` pins the new kinds, the Auto/forced resolution for
+  Divine and Enhancing, the PLD (7) job entries, the `gearswap/PLD.lua` sets each kind
+  binds to, and the `oseem` builds those sets point at. Docs: `docs/pld.md` (new),
+  `docs/control-panel.md`, `gearswap/README.md`.
+
+## Unreleased — Refresh's cast pose and Invisible's action break
+
+- **Refresh no longer casts like a trust summon.** The 0x028 Magic Start was writing the
+  spell's finish animation into the result sub-kind. Retail leaves that field 0 on a start
+  (LandSandBoat's 0x028 capture test and XiPackets both show it unused) and the client takes
+  the casting motion from the spell id in the result value. Normal casts and trust casts now
+  send 0, while the Magic Finish still carries the spell's own animation (Refresh 109), so
+  the cast bar plays Refresh's real motion and the finish keeps its effect animation.
+- **Invisible now wears off when the player acts, as it does in retail; Sneak stays.**
+  A Magic Start, a successful job ability, a weapon skill, a ranged attack, an item use, a
+  Sublimation release and any incoming damage call `ZoneSession._break_invisible`, which
+  removes the status and refreshes the client's Invisible flag. A cast the server refuses
+  (no MP, bad target) is not an action and leaves it up. Sneak is untouched by those
+  actions - only the melee swing still takes it with Invisible - and using an item or a
+  non-enemy ability does not remove Sneak.
+- Tests: `test_effects.py` now asserts the Magic Start carries the spell id and sub-kind 0
+  (including a Refresh-specific start/finish test), and Invisible drops for a cast, a job
+  ability and incoming damage while Sneak stays, with a refused cast leaving both up.
+  Docs: `docs/protocol.md` and `docs/world.md`.
+
 ## Unreleased — the Scholar HUD only appears on a Scholar job, scaled to the support cap
 
 - **The Scholar HUD no longer lingers on a non-Scholar job.** `hud.sch_visible()` used to let a

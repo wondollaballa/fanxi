@@ -666,11 +666,16 @@ On the Sets tab, the phase engine is split into the groups the player thinks in:
   `//modes enfeebles …`). An automatic **Saboteur** row (`Sab on buff`) swaps the hands to the
   overlay set while status 454 is live and leaves the kind set under it; the kind's gear
   preview lists that piece too. **Enhancing has one row per spell kind as well**: Skill
-  (Aquaveil), Stoneskin, Duration and General, with the Barspell/Blink/Haste/Flurry line on
-  the duration row. An automatic **Composure** row (`Comp on buff`) swaps the duration spells
+  (Aquaveil), Stoneskin, Phalanx, Reprisal, Duration and General, with the Barspell/Blink/
+  Haste/Flurry line on the duration row and the Phalanx/Reprisal rows shown only on the jobs
+  that learn the spell. An automatic **Composure** row (`Comp on buff`) swaps the duration spells
   to the self build while status 419 is live and is listed under the Duration gear; the same
-  `Auto — by spell type` mode handles the forced case (`//modes enhancing …`). The guide's
-  builds live in `gearswap/RDM.lua`; the mapping is in [rdm.md](rdm.md). The Nuking card's third, automatic **Magic Burst** row is worn for Elemental
+  `Auto — by spell type` mode handles the forced case (`//modes enhancing …`). **Divine Magic
+  is split the same way**, after the Community Paladin Guide: Banish / Holy (Magic Attack),
+  Flash (enmity) and Macc / landing, with Auto as the default and `//modes divine …` for the
+  forced case; the Flash row can be repointed at a library's `Flash SIRD` set. The RDM
+  builds live in `gearswap/RDM.lua` (mapping in [rdm.md](rdm.md)) and the Paladin builds in
+  `gearswap/PLD.lua` (mapping in [pld.md](pld.md)). The Nuking card's third, automatic **Magic Burst** row is worn for Elemental
   Magic while a Magic Burst window is open on the target and falls back to the armed mode
   otherwise; the row lights an `open` badge while the client reports the window, and the same
   flag is `phase_status().burst`.

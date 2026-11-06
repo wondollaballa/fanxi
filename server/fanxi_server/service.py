@@ -2058,6 +2058,7 @@ class FanxiService:
             "COALESCE(i.equip_slot, '') AS equip_slot, COALESCE(i.level, 1) AS level, "
             "COALESCE(i.model, 0) AS model, COALESCE(i.slot_mask, 0) AS slot_mask, "
             "COALESCE(i.jobs, 0) AS jobs, COALESCE(i.skill, 0) AS skill, "
+            "COALESCE(i.subskill, 0) AS subskill, "
             "COALESCE(i.rare, 0) AS rare, COALESCE(i.ex, 0) AS ex, "
             "COALESCE(st.slip, 0) AS storage_slip, "
             "COALESCE(ci.dropped_at, '') AS dropped_at, "
@@ -2176,6 +2177,7 @@ class FanxiService:
             "COALESCE(i.equip_slot, '') AS equip_slot, "
             "COALESCE(i.slot_mask, 0) AS slot_mask, COALESCE(i.jobs, 0) AS jobs, "
             "COALESCE(i.level, 0) AS level, COALESCE(i.skill, 0) AS skill, "
+            "COALESCE(i.subskill, 0) AS subskill, "
             "COALESCE(i.item_level, 0) AS item_level, "
             "COALESCE(i.rare, 0) AS rare, COALESCE(i.ex, 0) AS ex "
             "FROM char_inventory ci LEFT JOIN items i ON i.item_id = ci.item_id "
@@ -2195,6 +2197,7 @@ class FanxiService:
                 "jobs": int(row["jobs"]),
                 "level": int(row["level"]),
                 "skill": int(row["skill"]),
+                "subskill": int(row["subskill"]),
                 "item_level": int(row["item_level"]),
                 "rare": int(row["rare"]),
                 "ex": int(row["ex"]),
@@ -2432,6 +2435,7 @@ class FanxiService:
         """
         rows = self.db.all(
             "SELECT e.kind, e.item_id, w.skill, w.dmg, w.delay, w.ilvl_skill, "
+            "COALESCE(i.subskill, 0) AS subskill, "
             "i.item_level, s.size AS shield_size, COALESCE(ci.extra, X'') AS extra "
             "FROM char_equip e "
             "LEFT JOIN item_weapon w ON w.item_id = e.item_id "

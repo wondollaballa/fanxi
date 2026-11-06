@@ -625,7 +625,7 @@ export function PhasePanel({
             {categoryOverrideCount ? ` · ${categoryOverrideCount} modes` : ""}
           </Badge>
         }
-        hint="Spell precast is worn before any spell; song precast is worn only for Bard songs. The midcast default is worn for every spell. A group card can hold a set for every mode; the Mode dropdown chooses which one is worn for that group's spells. Enfeebles is the exception: Auto wears the set for each spell's own kind — Skill (Frazzle III), Macc (Sleep), Duration, MND (Slow II), INT (Blind II), Macc + potency (Gravity) or General (Dispel) — and picking a Mode forces every enfeebling spell through that one set. Click a kind's name to see its gear. The Nuking card's Magic Burst row is automatic: it is worn while a Magic Burst window is open, and the armed mode otherwise. A per-spell card wins over its group. Switching modes is also available in the in-game spell HUD and with //modes."
+        hint="Spell precast is worn before any spell; song precast is worn only for Bard songs. The midcast default is worn for every spell. A group card can hold a set for every mode; the Mode dropdown chooses which one is worn for that group's spells. Enfeebles, Enhancing and Divine Magic are the exception: Auto wears the set for each spell's own kind — Skill (Frazzle III), Macc (Sleep), Duration, MND (Slow II), INT (Blind II), Macc + potency (Gravity) or General (Dispel) for enfeebles; Skill/Stoneskin/Phalanx/Reprisal/Duration/General for enhancing; Banish-Holy/Flash/Macc for divine — and picking a Mode forces every spell of the group through that one set. Click a kind's name to see its gear. The Nuking card's Magic Burst row is automatic: it is worn while a Magic Burst window is open, and the armed mode otherwise. A per-spell card wins over its group. Switching modes is also available in the in-game spell HUD and with //modes."
       >
         <div className="phase-row">
           <SetSelect
@@ -664,7 +664,14 @@ export function PhasePanel({
               ...(group.autoMode ? [group.autoMode] : []),
               ...(group.autoModes ?? []),
             ];
-            const kinds = group.kinds ?? [];
+            // A kind can be scoped to the jobs that learn the spell (Phalanx is RDM/PLD/RUN,
+            // Reprisal is PLD); with no live job the whole list stays visible.
+            const kinds = (group.kinds ?? []).filter(
+              (kind) =>
+                !kind.jobs ||
+                !job ||
+                kind.jobs.some((id) => id === job.main || id === job.sub),
+            );
             const autoConfigured = autoModes.some(
               (mode) => mode.category && Boolean(config.spellCategoryOverrides[mode.category]),
             );
@@ -685,7 +692,9 @@ export function PhasePanel({
             const fallbackSet =
               group.key === "enhancing"
                 ? "midcast.Enhancing Magic"
-                : "midcast.Enfeebling Magic";
+                : group.key === "divine"
+                  ? "midcast.Divine Magic"
+                  : "midcast.Enfeebling Magic";
             // The kind whose gear preview is open. The first kind is the default.
             const shownKind =
               kinds.find((kind) => `${group.key}:${kind.key}` === kindView) ?? kinds[0];

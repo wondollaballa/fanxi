@@ -46,14 +46,19 @@ key holds, frame captures, waits). Commands:
                              enfeebles_hybrid, enfeebles_mnd, enfeebles_int, enfeebles_general,
                              buff_potency, buff_duration, cure_potency, cure_cast, nuke_mab,
                              nuke_mdmg, nuke_mb, helix_magic, helix_duration, dark_potency,
-                             dark_macc, dark_duration, divine_mab, divine_macc, enspells);
+                             dark_macc, dark_duration, divine_mab, divine_flash, divine_macc,
+                             enhancing_skill, enhancing_stoneskin, enhancing_phalanx,
+                             enhancing_reprisal, enhancing_duration, enhancing_general,
+                             enspells);
                              spell_modes arms one mode per group (enfeebles, enhancing, enspells,
                              curing, nuking, helix, dark, divine, songs).
                              A spell uses its group's armed set unless a per-spell override names
-                             one.  Enfeebles defaults to auto and uses the set for the spell's own
-                             kind (skill / macc / duration / hybrid / mnd / int / general); arming
-                             one of its other modes forces that one set instead.  nuke_mb is not
-                             armed: a nuke wears it while a magic burst window is open on the
+                             one.  Enfeebles, Enhancing and Divine Magic default to auto and use
+                             the set for the spell's own kind (enfeebles: skill / macc / duration /
+                             hybrid / mnd / int / general; enhancing: skill / stoneskin / phalanx /
+                             reprisal / duration / general; divine: mab / flash / macc); arming one
+                             of the group's other modes forces that one set instead.  nuke_mb is
+                             not armed: a nuke wears it while a magic burst window is open on the
                              player's target
   phase_status               the engine's rules, counters, state, the action set that is on and
                              the recent windows (actionSet/history), armed modes, slot pins and
@@ -1065,6 +1070,18 @@ local ENHANCING_KINDS = {
         key = 'stoneskin', label = 'Stoneskin', short = 'Stone', category = 'enhancing_stoneskin',
         detail = 'Stoneskin: Enhancing skill and MND push the absorb past its base cap.',
     },
+    -- The Community Paladin Guide builds Phalanx and Reprisal as their own sets: Phalanx
+    -- reads Enhancing Magic skill plus the Phalanx+ pieces, Reprisal enmity and duration.
+    phalanx = {
+        key = 'phalanx', label = 'Phalanx', short = 'Phalanx', category = 'enhancing_phalanx',
+        jobs = { 5, 7, 22 },
+        detail = "Phalanx: Enhancing skill and the Phalanx+ pieces, the guide's Max Self build.",
+    },
+    reprisal = {
+        key = 'reprisal', label = 'Reprisal', short = 'Reprisal',
+        category = 'enhancing_reprisal', jobs = { 7 },
+        detail = 'Reprisal: enmity and duration first, with the block rate riding on the shield.',
+    },
     duration = {
         key = 'duration', label = 'Duration', short = 'Dur', category = 'enhancing_duration',
         detail = 'Barspell, Blink, Haste, Haste II, Flurry and Flurry II: duration first.',
@@ -1074,7 +1091,9 @@ local ENHANCING_KINDS = {
         detail = 'Protect, Shell, Regen, Refresh, Temper and the rest: the generic enhancing set.',
     },
 }
-local ENHANCING_KIND_ORDER = { 'skill', 'stoneskin', 'duration', 'general' }
+local ENHANCING_KIND_ORDER = {
+    'skill', 'stoneskin', 'phalanx', 'reprisal', 'duration', 'general',
+}
 
 -- The Gear page's spell groups and the modes each can be in.  The launcher configures one
 -- set per mode; the armed mode decides which one the plan wears.  A spell belongs to one
@@ -1167,6 +1186,7 @@ local SPELL_GROUPS = {
         },
         kinds = {
             ENHANCING_KINDS.skill, ENHANCING_KINDS.stoneskin,
+            ENHANCING_KINDS.phalanx, ENHANCING_KINDS.reprisal,
             ENHANCING_KINDS.duration, ENHANCING_KINDS.general,
         },
         -- A live status, not an armed mode: while Composure is up the duration spells wear
@@ -1244,11 +1264,46 @@ local SPELL_GROUPS = {
         },
     },
     divine = {
-        key = 'divine', label = 'Divine Magic', short = 'Divine', default = 'mab',
+        key = 'divine', label = 'Divine Magic', short = 'Divine', default = 'auto',
+        -- The Community Paladin Guide builds Flash as a magic-enmity set (Enmity and Fast
+        -- Cast), not a nuke, so Divine Magic splits like Enfeebles: Auto follows each
+        -- spell's own kind and arming a mode forces every Divine Magic spell through it.
         modes = {
-            { key = 'mab', label = 'Magic Attack', short = 'MAB', category = 'divine_mab' },
-            { key = 'macc', label = 'Macc / landing', short = 'Macc', category = 'divine_macc' },
+            {
+                key = 'auto', label = 'Auto — by spell type', short = 'Auto',
+                detail = 'Wear the kind row for each spell (Banish/Holy, Flash, Macc).',
+            },
+            {
+                key = 'mab', label = 'Magic Attack', short = 'MAB', category = 'divine_mab',
+                detail = 'Force every Divine Magic spell through the Banish / Holy build.',
+            },
+            {
+                key = 'flash', label = 'Flash (enmity)', short = 'Flash',
+                category = 'divine_flash',
+                detail = 'Force every Divine Magic spell through the Flash enmity build.',
+            },
+            {
+                key = 'macc', label = 'Macc / landing', short = 'Macc', category = 'divine_macc',
+                detail = 'Force every Divine Magic spell through the landing build.',
+            },
         },
+        -- A map so spell_categories can name the kind's category; the ordered kinds list is
+        -- filled from it below and is what the Gear page renders.
+        kind_map = {
+            mab = {
+                key = 'mab', label = 'Banish / Holy', short = 'MAB', category = 'divine_mab',
+                detail = 'The Banish and Holy lines: Magic Attack and MND carry the damage.',
+            },
+            flash = {
+                key = 'flash', label = 'Flash', short = 'Flash', category = 'divine_flash',
+                detail = "Flash reads enmity: the guide's Enmity / Fast Cast build.",
+            },
+            macc = {
+                key = 'macc', label = 'Macc / landing', short = 'Macc', category = 'divine_macc',
+                detail = 'Repose and any Divine Magic spell whose landing has to win.',
+            },
+        },
+        kinds = {},
     },
     songs = {
         key = 'songs', label = 'Bard songs', short = 'Song', default = 'duration',
@@ -1271,6 +1326,12 @@ local SPELL_GROUPS = {
             { key = 'damage', label = 'Ninjutsu damage', short = 'Dmg', category = 'ninjutsu_damage' },
         },
     },
+}
+-- The Divine Magic card's rows, in order.  Filled here instead of in the literal above so
+-- the kind table can stay a keyed map (spell_categories looks a kind up by key).
+SPELL_GROUPS.divine.kinds = {
+    SPELL_GROUPS.divine.kind_map.mab, SPELL_GROUPS.divine.kind_map.flash,
+    SPELL_GROUPS.divine.kind_map.macc,
 }
 local SPELL_GROUP_ORDER = {
     'enfeebles', 'enhancing', 'enspells', 'curing', 'nuking', 'helix', 'dark', 'divine',
@@ -1327,6 +1388,10 @@ local function spell_enhancing_kind(spell)
     local name = spell_name(spell):lower()
     if name:find('^aquaveil') then return 'skill' end
     if name:find('^stoneskin') then return 'stoneskin' end
+    -- Phalanx / Phalanx II and Reprisal: the Community Paladin Guide builds these as their
+    -- own sets; the launcher's rows for them are scoped to the jobs that learn the spell.
+    if name == 'phalanx' or name == 'phalanx ii' then return 'phalanx' end
+    if name:find('^reprisal') then return 'reprisal' end
     -- The guide's "Enhancing Duration Sets" line: Barspell (every Bar- and Bar-ra spell),
     -- Blink, Haste/Hastega and Flurry.  Protect/Shell/Reraise are not in it; they need
     -- neither duration nor the enhancing skill once capped.
@@ -1356,6 +1421,15 @@ end
 local function spell_kind_key(group_key, spell)
     if group_key == 'enfeebles' then return spell_enfeebling_kind(spell) end
     if group_key == 'enhancing' then return spell_enhancing_kind(spell) end
+    -- Divine Magic: Flash owns the enmity set, Repose the landing set, and every damage
+    -- spell (Banish, Banishga, Holy) the Magic Attack set.
+    if group_key == 'divine' then
+        if not spell or tonumber(spell.skill) ~= 32 then return nil end
+        local name = spell_name(spell):lower()
+        if name == 'flash' then return 'flash' end
+        if name == 'repose' then return 'macc' end
+        return 'mab'
+    end
     return nil
 end
 
@@ -1380,6 +1454,13 @@ local function spell_cast_category(group_key, spell, mode, category_override)
         if mode and mode.key ~= 'auto' then return mode.category end
         return spell_enhancing_category(spell, category_override)
     end
+    if group_key == 'divine' then
+        if mode and mode.key ~= 'auto' then return mode.category end
+        local kind = spell_kind_key('divine', spell)
+        local entry = kind and SPELL_GROUPS.divine.kind_map[kind]
+        if entry and category_override[entry.category] then return entry.category end
+        return nil
+    end
     return mode and mode.category or nil
 end
 
@@ -1393,6 +1474,7 @@ local function spell_categories(spell)
     if kind then
         local entry = group == 'enfeebles' and ENFEEBLE_KINDS[kind]
             or group == 'enhancing' and ENHANCING_KINDS[kind]
+            or group == 'divine' and SPELL_GROUPS.divine.kind_map[kind]
         if entry then out[#out + 1] = entry.category end
     end
     return out

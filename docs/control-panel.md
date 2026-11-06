@@ -952,17 +952,18 @@ per-spell choices ride in the `phase` command's options object (`ws_overrides`, 
 A mode group holds one set per mode (`spell_category_overrides`, keyed `enfeebles_skill`,
 `enfeebles_macc`, `enfeebles_duration`, `enfeebles_hybrid`, `enfeebles_mnd`,
 `enfeebles_int`, `enfeebles_general`, `enfeebles_saboteur`, `enhancing_skill`,
-`enhancing_stoneskin`, `enhancing_duration`, `enhancing_duration_self`, `enhancing_general`,
+`enhancing_stoneskin`, `enhancing_phalanx`, `enhancing_reprisal`, `enhancing_duration`,
+`enhancing_duration_self`, `enhancing_general`,
 `buff_potency`, `buff_duration`, `enspells_no_damage`, `cure_potency`, `cure_cast`, `nuke_mab`, `nuke_mdmg`,
 `nuke_mb`, `helix_magic`, `helix_duration`, `dark_potency`, `dark_macc`, `dark_duration`,
-`divine_mab`, `divine_macc` or `enspells`) and an armed mode (`spell_modes`). The host puts each spell in exactly one
+`divine_mab`, `divine_flash`, `divine_macc` or `enspells`) and an armed mode (`spell_modes`). The host puts each spell in exactly one
 group: Enfeebling Magic -> enfeebles, Enhancing Magic -> enhancing, Healing Magic -> curing,
 Elemental Magic -> nuking, Dark Magic -> dark, Divine Magic -> divine, a spell whose name
 contains `helix` -> helix (checked before Elemental), and Enfire / Enblizzard / Enaero /
 Enstone / Enthunder / Enwater (and their IIs, plus Enlight / Endark) -> enspells (checked
 before the skill fallback). The plan resolves a spell in this order: per-spell override, the
-spell's kind when its group is in Auto (Enfeebles or Enhancing; otherwise the armed mode's
-set), the midcast default, then the library's `sets.midcast.<skill>`. Both modes of a group stay
+spell's kind when its group is in Auto (Enfeebles, Enhancing or Divine Magic; otherwise the
+armed mode's set), the midcast default, then the library's `sets.midcast.<skill>`. Both modes of a group stay
 configured when the other is edited; the mode dropdown only changes which one is armed. A
 missing set for the armed mode falls through to the default rather than borrowing the other
 mode.
@@ -996,12 +997,17 @@ preview.
 
 **Enhancing Magic is split by spell kind too** (`enhancing`), matching the guide's Skill Based
 and Duration sets. Auto (the default) picks `enhancing_skill` for Aquaveil
-(`midcast.Enhancing Magic SIRD`), `enhancing_stoneskin` for Stoneskin, `enhancing_duration` for
+(`midcast.Enhancing Magic SIRD`), `enhancing_stoneskin` for Stoneskin, `enhancing_phalanx`
+for Phalanx / Phalanx II (`midcast.Phalanx`, the Paladin guide's Max Self Phalanx),
+`enhancing_reprisal` for Reprisal (`midcast.Reprisal`), `enhancing_duration` for
 Barspell / Blink / Haste / Hastega / Haste II / Flurry / Flurry II (`midcast.EnhancingDurationOthers`)
 and `enhancing_general` for everything else (Protect, Shell, Regen, Refresh, Temper, the
 storms, spikes and travel spells; `midcast.Enhancing Magic`). Forcing a kind
 (`//modes enhancing auto|skill|stoneskin|duration|general`) throws the whole group through that
-set. The group also has an `autos` entry scoped to the duration kind: while **Composure**
+set. The Phalanx and Reprisal rows are scoped to the jobs that learn the spell (RDM / PLD /
+RUN and PLD), so the other casters' cards are unchanged, and a library without the two sets
+falls back to `midcast.Enhancing Magic`. The group also has an `autos` entry scoped to the
+duration kind: while **Composure**
 (status **419**) is up, the duration spells wear `enhancing_duration_self`
 (`midcast.EnhancingDuration`, the Composure self build) instead of the party build, and the
 plain duration rule returns when it drops. `only_kind` is what keeps the Comp row off
@@ -1017,17 +1023,22 @@ conventional fallback for all three, so a library that only carries the skill se
 as it did before the group existed. Endark and Endark II stay in **Enspells** because they are
 self-enspells despite their Dark Magic skill.
 
-**Divine Magic has its own group** (`divine`) with two modes. **Magic Attack** (`divine_mab`, the
-default) is the Magic Attack / MND set for the Banish and Holy lines; **Macc / landing**
-(`divine_macc`) is the Divine Magic Skill / Magic Accuracy set for landing Flash and Repose.
-`midcast.Divine Magic` is the conventional fallback for both, so a PLD or WHM library that only
-carries the skill set behaves exactly as it did before the group existed, and a RUN still wears
-it for Flash. Enlight and Enlight II stay in **Enspells** for the same reason as Endark, and a
-Divine Magic spell never lands in the Nuking group even though Banish and Holy are damage spells.
+**Divine Magic is split by spell kind as well** (`divine`), after the Community Paladin Guide:
+**Banish / Holy** (`divine_mab`) is the Magic Attack / MND set for the Banish and Holy lines,
+**Flash** (`divine_flash`) is the guide's magic-enmity build (`midcast.Flash`, Enmity and Fast
+Cast with HP and DT — the row can be repointed at `midcast["Flash SIRD"]` for a cast that must
+finish under fire), and **Macc / landing** (`divine_macc`) is the Divine Magic Skill / Magic
+Accuracy set for Repose. Auto is the default, so Flash wears its own set without a per-spell
+card; arming a mode forces every Divine Magic spell through that one set
+(`//modes divine auto|mab|flash|macc`). `midcast.Divine Magic` is the conventional fallback for
+all three kinds, so a WHM or RDM library that only carries the skill set behaves exactly as it
+did before the split, and a RUN still wears it for Flash. Enlight and Enlight II stay in
+**Enspells** for the same reason as Endark, and a Divine Magic spell never lands in the Nuking
+group even though Banish and Holy are damage spells.
 
 Switch either group with `//modes dark potency|macc|duration` and
-`//modes divine mab|macc`; the in-game spell HUD's mode strip gains `Dark` and `Divine` buttons
-next to `Helix`.
+`//modes divine auto|mab|flash|macc`; the in-game spell HUD's mode strip gains `Dark` and
+`Divine` buttons next to `Helix`.
 
 `nuke_mb` is the one key that is **not an armed mode**. The Nuking card shows it as a third,
 automatic row (labelled `Magic Burst`, marked `auto`); a nuke wears it in place of the group's armed

@@ -55,6 +55,19 @@ Two rows are capped by the client's five-bit field rather than the wiki:
 `Pet: Magic Attack Bonus` and `Pet: Magic Accuracy` have no offset-33 id, so the
 card offers 32 and marks the truncated value.
 
+## Technique (Dark Matter) rolls
+
+The wiki page also documents **Dark Matter** "technique" augments (the monthly
+campaign grants a handful of free ones per earth day): they draw from every
+path's pool at once and can place rows the standard stones never offer, such as
+`Phalanx +1~5`, Treasure Hunter `+1~2` and `Refresh +1~2`, and can exceed the
+stone caps.  The editor models the standard Pellucid/Fern/Taupe paths only, so
+it does not offer those technique rows; `capes.TABLE` still knows the ids (the
+Paladin guide's `"Phalanx"+5` and the Stoneskin build's SIRD-11 are `0x170` and
+`0x035`), so an item that carries a technique block decodes and shows it in the
+stat sheet.  `gearswap/PLD.lua` names those rolls on its Odyssean pieces — see
+[pld.md](pld.md).
+
 ## The stat sheet
 
 `augment_stats` decodes the standard block through `capes.decode` and the

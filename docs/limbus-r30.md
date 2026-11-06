@@ -186,7 +186,9 @@ below says:
 | NIN | `sets.engaged.tp` | head, body, hands, legs, feet | Revelation tp, R30 [2] |
 | NIN | `sets.engaged.hybrid` | head, body, hands, legs, feet | Revelation tp, R30 [2] |
 | BRD | `sets.engaged.tp` | body, legs, feet | Revelation tp, R30 [2] |
-| PLD | `sets.precast.FC` | head, body, hands, legs, feet | Sworn phalanx, R30 [3] |
+| PLD | `sets.precast.FC` | legs | Sworn phalanx, R30 [3] |
+| PLD | `sets.midcast.Phalanx` | body | Sworn phalanx, R30 [3] |
+| PLD | `sets.midcast.Phalanx SIRD` | body | Sworn phalanx, R30 [3] |
 | RUN | `sets.precast.FC` | head, body, hands, legs, feet | Sworn phalanx, R30 [3] |
 | RDM | `sets.precast.FC` | head, body, hands, legs, feet | Sworn ta, R30 [2] |
 | SCH | `sets.midcast.Elemental Magic` | head, body, legs | Indomitable cast, R30 [2] |

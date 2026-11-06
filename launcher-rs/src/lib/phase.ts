@@ -7,8 +7,9 @@ export const PHASE_CONFIG_KEY = "fanxi.phase.config";
  * profile) means off. The launcher owns the setting, not an individual client. */
 export const PHASE_ON_KEY = "fanxi.phase.on";
 /** Bumped when a default mode changes in a way a saved config should follow. 2 split
- * Enfeebles into per-spell kinds and made Auto the default; 3 did the same for Enhancing. */
-export const PHASE_CONFIG_VERSION = 3;
+ * Enfeebles into per-spell kinds and made Auto the default; 3 did the same for Enhancing;
+ * 4 did it for Divine Magic (Flash now has its own kind, so Auto is the default). */
+export const PHASE_CONFIG_VERSION = 4;
 
 export function loadPhaseEnabled(): boolean {
   return localStorage.getItem(PHASE_ON_KEY) === "1";
@@ -59,6 +60,8 @@ export type SpellCategoryKey =
   | "enfeebles_saboteur"
   | "enhancing_skill"
   | "enhancing_stoneskin"
+  | "enhancing_phalanx"
+  | "enhancing_reprisal"
   | "enhancing_duration"
   | "enhancing_duration_self"
   | "enhancing_general"
@@ -81,6 +84,7 @@ export type SpellCategoryKey =
   | "dark_macc"
   | "dark_duration"
   | "divine_mab"
+  | "divine_flash"
   | "divine_macc"
   | "enspells"
   | "enspells_no_damage"
@@ -134,6 +138,11 @@ export type SpellKind = {
   short: string;
   category: SpellCategoryKey;
   detail: string;
+  /**
+   * Jobs whose page shows this row.  Omit for a kind every job of the group uses; the
+   * Phalanx and Reprisal rows are only meaningful where the spell is learned.
+   */
+  jobs?: number[];
 };
 
 export type SpellGroup = {
@@ -347,6 +356,24 @@ export const SPELL_GROUPS: SpellGroup[] = [
         detail: "Stoneskin: Enhancing skill and MND push the absorb past its base cap.",
       },
       {
+        key: "phalanx",
+        label: "Phalanx",
+        short: "Phalanx",
+        category: "enhancing_phalanx",
+        jobs: [5, 7, 22],
+        detail:
+          "Phalanx: Enhancing Magic skill and the Phalanx+ pieces, the guide's Max Self Phalanx build.",
+      },
+      {
+        key: "reprisal",
+        label: "Reprisal",
+        short: "Reprisal",
+        category: "enhancing_reprisal",
+        jobs: [7],
+        detail:
+          "Reprisal: enmity and duration first, with the block-rate boost riding on the shield.",
+      },
+      {
         key: "duration",
         label: "Duration",
         short: "Dur",
@@ -532,21 +559,61 @@ export const SPELL_GROUPS: SpellGroup[] = [
     key: "divine",
     label: "Divine Magic",
     short: "Divine",
-    defaultMode: "mab",
+    defaultMode: "auto",
+    // The Community Paladin Guide builds Flash as a magic-enmity set (Enmity and Fast Cast),
+    // not as a nuke or a landing set, so the group splits like Enfeebles: Auto follows each
+    // spell's own kind and arming a mode forces every Divine Magic spell through one set.
     modes: [
+      {
+        key: "auto",
+        label: "Auto — by spell type",
+        short: "Auto",
+        detail: "Wear the kind row for each spell (Banish/Holy, Flash, Macc).",
+      },
       {
         key: "mab",
         label: "Magic Attack",
         short: "MAB",
         category: "divine_mab",
-        detail: "Magic Attack / MND set for the Banish and Holy lines.",
+        detail: "Force every Divine Magic spell through the Banish / Holy build.",
+      },
+      {
+        key: "flash",
+        label: "Flash (enmity)",
+        short: "Flash",
+        category: "divine_flash",
+        detail: "Force every Divine Magic spell through the Flash enmity build.",
       },
       {
         key: "macc",
         label: "Macc / landing",
         short: "Macc",
         category: "divine_macc",
-        detail: "Divine Magic Skill / Magic Accuracy set for landing Flash and Repose.",
+        detail: "Force every Divine Magic spell through the landing build.",
+      },
+    ],
+    kinds: [
+      {
+        key: "mab",
+        label: "Banish / Holy",
+        short: "MAB",
+        category: "divine_mab",
+        detail: "The Banish and Holy lines: Magic Attack and MND carry the damage.",
+      },
+      {
+        key: "flash",
+        label: "Flash",
+        short: "Flash",
+        category: "divine_flash",
+        detail:
+          "Flash reads enmity, not damage: the guide's Enmity / Fast Cast build. Repoint the row at the library's Flash SIRD set when the cast has to survive.",
+      },
+      {
+        key: "macc",
+        label: "Macc / landing",
+        short: "Macc",
+        category: "divine_macc",
+        detail: "Repose and any Divine Magic spell whose landing has to win.",
       },
     ],
   },
@@ -622,8 +689,8 @@ export const SPELL_GROUPS: SpellGroup[] = [
  *  table drives main and sub cards; the spell list then trims to what that job can learn. */
 export const SPELL_GROUP_JOBS: Record<SpellGroupKey, number[]> = {
   enfeebles: [3, 4, 5, 8, 16, 20, 21],
-  enhancing: [3, 5, 16, 20, 21],
-  enspells: [5, 8, 20, 21],
+  enhancing: [3, 5, 7, 16, 20, 21],
+  enspells: [5, 7, 8, 20, 21],
   curing: [3, 5, 7, 16, 20, 21],
   nuking: [4, 5, 15, 16, 20, 21],
   helix: [20],
@@ -756,6 +823,10 @@ const SPELL_CATEGORY_FALLBACKS: Record<SpellCategoryKey, string[]> = {
     "midcast.Enhancing Magic",
   ],
   enhancing_stoneskin: ["midcast.Enhancing Magic Stoneskin", "midcast.Enhancing Magic"],
+  // Phalanx and Reprisal are the Community Paladin Guide builds; RDM and RUN carry Phalanx
+  // too, and a library without the specific set keeps the generic enhancing set.
+  enhancing_phalanx: ["midcast.Phalanx", "midcast.Enhancing Magic"],
+  enhancing_reprisal: ["midcast.Reprisal", "midcast.Enhancing Magic"],
   enhancing_duration: [
     "midcast.EnhancingDurationOthers",
     "midcast.EnhancingDuration",
@@ -784,6 +855,7 @@ const SPELL_CATEGORY_FALLBACKS: Record<SpellCategoryKey, string[]> = {
   dark_macc: ["midcast.Dark Magic"],
   dark_duration: ["midcast.Dark Magic"],
   divine_mab: ["midcast.Divine Magic"],
+  divine_flash: ["midcast.Flash", "midcast.Divine Magic"],
   divine_macc: ["midcast.Divine Magic"],
   enspells: ["midcast.Enspell", "midcast.EnhancingSkill"],
   // A library without a dedicated no-damage enspell set keeps the damage build until the
@@ -876,6 +948,11 @@ export function loadPhaseConfig(): PhaseConfig {
   // so a saved one would otherwise be dropped by normalizeSpellModes anyway.  Move it to
   // Auto explicitly (including the old default "potency") so the kind rows take over.
   if (configVersion < 3) savedModes.enhancing = "auto";
+  // Version 4 split Divine Magic into per-spell kinds: the old default "mab" would leave
+  // Flash wearing the Banish / Holy set.  A deliberate "macc" pick is left alone.
+  if (configVersion < 4 && (!savedModes.divine || savedModes.divine === "mab")) {
+    savedModes.divine = "auto";
+  }
   return {
     configVersion: PHASE_CONFIG_VERSION,
     engaged: text(saved.engaged, localStorage.getItem("fanxi.phase.engaged") ?? "engaged.tp"),
