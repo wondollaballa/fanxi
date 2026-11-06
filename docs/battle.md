@@ -65,10 +65,19 @@ the profile but does not count toward the live party; see [Live party, not the w
 account](#live-party-not-the-whole-account). `//battle save` with no name creates a fresh
 `<zone> <YYYY-MM-DD HH:MM:SS>` profile (the spec's default), while the hub's **Save** button keeps
 the current profile's name. `save <name>` writes that name. The launcher's **Battle** page edits
-the same object and can load or delete saved profiles.
+the same object, offers a **Saved profile** picker for hot-swapping without leaving the page, and
+**Save as** writes a copy so the old mode stays in the list. Loading a profile pushes it back to
+the server as the character's active profile, so the six-second team poll cannot undo the swap.
 
-`assign` and the hub buttons only edit the profile. `start` is what runs it. `stop` ends every
-action and releases auto-run; the hub and saved file are untouched.
+`assign` and the hub buttons only edit the profile. `start` is what runs it. On Start every
+client enters a **preparing** phase: it walks to its camp, lets its heal rows, support songs,
+rolls, bubbles and buff rows run, then publishes `engine.ready`. The puller will not pick a mob
+until every assigned character in the live party has the same `engine.run_id` and is ready.
+`stop` ends every action and releases auto-run; the hub and saved file are untouched.
+
+The launcher's **Start team** sends one run id to every assigned running client and starts them
+together; **Stop team** does the same for stop. A single in-game Start still starts only that
+client.
 
 ## How the engine decides
 
@@ -80,12 +89,23 @@ movement during a cast is suppressed.
 - **Claims.** `ClaimStatus` is the claiming character's server id. The tank/puller may engage an
   unclaimed mob; everyone else waits for `engage.when` (tank, puller, a named player, the party
   leader, or any party claim). `wait_claim` prevents stealing another party's mob.
-- **Puller.** Picks an unclaimed mob within `pull.find_distance` of camp, pulls with ranged
-  attack, a spell, a job ability or melee, returns to camp, and looks for the next mob when the
-  current target falls to the switch HP. `pull.mobs` is an optional name whitelist (empty = any
-  mob); the hub and launcher list the live mobs nearby so names can be clicked, and
+- **Ready-up.** Start is staged. The tank, melee, ranged and kiter move to camp; healers cure
+  yellow HP (below 75%) before they mark ready; BRD finishes its song groups, COR its selected
+  rolls, GEO its Indi/Geo bubble (an enemy Geo- hex is deferred until a mob is claimed). A client
+  publishes `engine.ready` through the server profile; the puller waits on the live party's
+  assigned names, not the whole account family.
+- **Puller.** Picks an unclaimed mob within `pull.find_distance` of camp and is free to leave
+  camp to reach it: it walks out, records a waypoint every 2.5 yalms, pulls with ranged attack, a
+  spell, a job ability or melee, and then walks those waypoints back in reverse instead of
+  cutting straight across whatever it walked around. `leash` is the rest of the party's chase
+  limit, not the puller's search bound. It looks for the next mob when the current target falls
+  to the switch HP. `pull.mobs` is an optional name whitelist (empty = any mob); the hub and
+  launcher list the live mobs nearby so names can be clicked, and
   `//battle pull mob add|remove <name>` edits it from chat. `max_mobs` limits claims at camp.
   Sleep/bind are applied only to extra claims that reach camp; the main target is left awake.
+  The launcher's Puller section never asks for a typed spell name: **Pull spell**, **Pull
+  ability**, **Sleep spell** and **Bind spell** open a searchable dialog filled from the live
+  client's main/sub job spells, songs and job abilities, and a row is picked from that list.
 - **Tank and melee.** The tank holds the claimed mob. Melee slots are computed from the line
   mob→tank: behind is the opposite direction, then the configured arc is distributed across the
   melee list in roster order. The tank is the anchor, so a marked tank is enough; no separate
@@ -102,7 +122,15 @@ movement during a cast is suppressed.
   the caster (Protectra, Hastera, songs, …); single-target buffs use `<pN>`/`<aNN>`.
 - **Enfeebles/dispel.** The interval is the re-application clock because the client does not
   expose a monster's active-effect list. A mob we just slept is skipped until the sleep clock
-  expires.
+  expires. A resist policy can either keep applying (limit 0) or stop after a number of resists;
+  the launcher exposes the same **Keep applying** / **Stop after attempts** choice.
+- **Reactive dispel.** The launcher can fetch the selected pull targets' TP moves from
+  `GET /api/v1/battle/mobs` and list the self-buffs the server stores as dispellable. When
+  `dispel.reactive` is on, a chat line such as "Goblin uses Cocoon" sets the watched move and
+  the dispel step fires on the next tick instead of waiting for its interval. On RDM,
+  **Use Stymie first** casts Stymie before the strip when the ability is ready. The server
+  keeps generic self-buffs (Cocoon, Stoneskin, ...) in the mob's effect list, so Dispel removes
+  them before the player's own enfeebles.
 - **Death.** A K.O. waits for a raise: the server keeps the character down until a Raise
   (`Raise`/`Raise II`/`Raise III`/`Arise`) lands or the player returns to the Home Point.
   A living box with `heal.enabled` and a saved raise spell casts it on a fallen party member
@@ -223,7 +251,9 @@ the debuff's name:
   full interval.
 - A resist/no-effect line increments that debuff's resist count.
 - **Stop after N resists** (Pulling-style field on the Debuffs page) stops attempts once the count
-  is reached. **Reset tries** clears the counts.
+  is reached; **0** keeps applying the enfeeble forever. **Reset tries** clears the counts. The
+  launcher's Healing & spells page offers the same **Keep applying** / **Stop after attempts**
+  choice.
 
 ## Server-owned team control
 
@@ -234,6 +264,9 @@ team:
   profile, revision and `online` flag (`online_known` says whether the live roster was available).
 - `PUT /api/v1/battle/team/{character_id}` saves one character's profile. The main account's
   token can write any character in its family; a sub account can write its own.
+- `POST /api/v1/battle/team/{character_id}/state` merges only `engine.running`, `engine.ready`
+  and `engine.run_id` into the saved profile. Start, ready and stop use this so a readiness
+  publish cannot overwrite the rest of the profile or bump its revision.
 - Profiles are stored in `char_settings` (`battle_profile`) and survive relogging/restarts.
 - The launcher passes `FANXI_API_URL` and `FANXI_API_TOKEN` to every local/remote client. A
   development client also falls back to the launcher's `launcher.json`. The client speaks
@@ -241,6 +274,10 @@ team:
   `https://...` endpoint works without a local proxy.
 - Each client polls the team route (every six seconds) and **applies its own server profile**.
   If the profile's `engine.running` changed, the client starts or stops its Battle engine.
+- `GET /api/v1/battle/weapon-skills`, `/spells` and `/mobs?names=...&zone=...` feed the
+  launcher's searchable weapon-skill, Magic Burst and reactive-dispel pickers. `/battle/mobs`
+  returns each selected spawn's TP moves with a target/AoE/status description and a
+  `dispellable` flag for self-buffs.
 - The team response includes each character's main/sub job, levels and job abilities, so the
   selected tenant drives the UI instead of the local character.
 - The hub header has an **EDITING** selector. Selecting another logged-in character pauses this
@@ -282,7 +319,7 @@ When the editor is on Fivedough, the pages are Fivedough's:
 - **Support** shows only the tenant's support job section: GEO for a GEO, Bard for a BRD, and
   a "no support job" message for PLD/RDM/etc.
 - **Debuffs** lists only the tenant's enfeebling spells and suggests from that job.
-- Skillchain actor pickers use the live party names; the weapon-skill text field remains free text.
+- Skillchain actor pickers use the live party names; the weapon skill and Magic Burst spell fields open searchable tables instead of accepting typed names.
 - Long hints are split so they do not run past the hub; the formation preview uses a larger
   font and full melee names, and the skillchain diagram is drawn at 14 px with shorter MB text.
 
@@ -298,8 +335,10 @@ The hub's **Skillchain** page plans a weapon-skill sequence and its Magic Burst 
 - **Focus** — any chain, or a specific one (`Light`, `Darkness`, `Fragmentation`, ...). The
   diagram turns red when the sequence's last formed chain does not match the focus.
 - **Weapon skill order** — the opener and any number of closers (up to 12 rows; **Add step**). Each
-  row names the actor and the client's weapon-skill name (`Tachi: Gekko`, `Tachi: Kasha`,
-  `Tachi: Shoha`, ...).
+  row names the actor and then a weapon skill chosen from a searchable table
+  (`Tachi: Gekko`, `Tachi: Kasha`, `Tachi: Shoha`, ...). The table uses the client's full
+  weapon-skill resource list; the launcher uses the server catalogue so another actor's skill
+  is selectable too.
 - **Diamond Aspis** — a checkbox per closer. It is detected automatically when the row's actor is
   the local character and the shield (item `26488`) is worn. A closer holding it keeps the
   skillchain and Magic Burst window at the full **11 s** instead of the normal level-2/3 10/9/8… s.
@@ -308,7 +347,9 @@ The hub's **Skillchain** page plans a weapon-skill sequence and its Magic Burst 
 - **No skillchain — spam WS** — a style option for Sortie-style fights where a skillchain must be
   avoided. The page then shows only the weapon-skill order, with no focus, MB windows or chain
   validation.
-- **Magic Burst** — the bursters and their spells. They are shown in every MB window.
+- **Magic Burst** — the bursters and their spells, both chosen from searchable tables. The hub
+  lists every non-Trust spell; the launcher uses the server spell catalogue. They are shown in
+  every MB window.
 - **Diagram** — `OPEN → CLOSE SC1 → MB window → CLOSE SC2 → MB window → CLOSE SC3 → MB window`,
   with actor, weapon skill, resulting chain and the window duration at each step. A blank later
   row is optional and is left out of the diagram.
@@ -324,18 +365,28 @@ transition table. The server runtime uses the same state machine (`skillchain.ad
 planner validates the sequence and windows but does not issue the actions itself.
 
 The diagram is drawn at a readable size and can grow; the hub is taller now and the content scrolls
-when a long chain or a full Magic Burst list exceeds the window.
+when a long chain or a full Magic Burst list exceeds the window. The launcher's **Skillchain** tab
+edits the same `skillchain` object with actor selects, weapon-skill/search tables, target chain,
+loop goal and burster rows; the in-game page draws the diagram and validates the links.
 
-## Geomancer and Bard
+## Corsair, Geomancer and Bard
 
-Both jobs run only for a character assigned to the **support** role. Their settings are on the
-hub's **Support** page and the launcher's Battle → Healing & spells page.
+These jobs run only for a character assigned to the **support** role. Their settings are on the
+hub's **Support** page and the launcher's Battle → Support tab.
 
 ### Job support abilities
 
 Every Support page starts with the tenant's **job abilities** (main and sub job). Check
 **Keep <ability>** to have the support loop use it while supporting. RDM starts with **Composure**
 checked by default; GEO can check Bolster and the rest of its ability list.
+
+### Corsair
+
+COR uses a trust-style roll selection: pick up to two of the job's rolls (for example Chaos
+Roll and Fighter's Roll). The support loop rolls them at the support camp and refreshes them on
+`support.cor.interval`, with the roll's own recast still enforced. The start ready-up waits for
+every selected roll to be used at least once; a roll that is still on recast is waited on until
+the preparation timeout.
 
 ### Geomancer
 
@@ -358,6 +409,12 @@ checked by default; GEO can check Bolster and the rest of its ability list.
   every monster inside the Luopan's radius.
 - Common alternatives: `Indi-refresh`/`Indi-acumen` at support; `Geo-malaise` (magic damage),
   `Geo-torpor` (slow), or `Geo-frailty` (defense down) on the monster.
+- **Entrust** places a second Indi- on a chosen party member: the Support page picks the target
+  and the Indi spell, and the loop uses the Entrust ability before that cast on the Indi
+  refresh clock.
+- **Blaze of Glory** and **Bolster** are optional pre-cast abilities. The engine uses them
+  when they are ready and their buff is not already up, so the 1-hour/2-hour are not spent
+  at an arbitrary moment by the generic ability list.
 
 ### Bard
 
@@ -375,13 +432,20 @@ group is a named set of songs to keep.
   the tank or support camp group.
 - **Pianissimo** is a player target, not a camp: choose the player and the song from the
   combos. It is cast as a single-target extra and is independent of the camp groups.
+- **Song slots:** `max_songs` is 4 normally and 5 only while Clarion Call is up. The launcher and
+  the hub show the 5th slot as a Clarion Call option; a group can hold five songs, and the engine
+  uses only the first four when Clarion is down.
+- **Clarion Call / Soul Voice:** optional toggles for the fifth slot and for starting a full set
+  with the Bard 2-hour. **Start a full set only when every song is due** waits for the whole
+  group (up to 30 s for Nitro) so the set is sung under Nightingale + Troubadour.
 - Song durations are not configured. The server computes each song's duration from the BRD's
   equipped gear (the `Song Duration Bonus` lines plus 10% per Song+ point); the hub shows the
-  bonus and each song's computed duration in the Song groups modal. That figure is the gear timer alone: Troubadour, Clarion
-  Call, Tenuto and Marcato are job abilities, so a song can land at more than twice the number
-  the modal shows.
+  bonus and each song's computed duration in the Song groups modal. That figure is the gear timer
+  alone: Troubadour, Clarion Call, Tenuto and Marcato are job abilities, so a song can land at
+  more than twice the number the modal shows.
 - The old free-text song fields and `brd.interval` are gone. The engine refreshes each song when
-  the server-computed duration expires.
+  the server-computed duration expires. The launcher's Support tab edits song groups with a
+  searchable multi-select; the hub uses its Song groups modal.
 
 The Support page shows the BRD as its own section (no empty generic ability list), with the
 **Song groups** button and the group selectors.
@@ -437,7 +501,9 @@ radar. It is a real ImGui window:
 
 Below the map (or the fallback radar) is the battle menu:
 
-- **Start** — starts the Battle engine on this character.
+- **Start** — starts the Battle engine on this character and enters its ready-up. Use the
+  launcher's **Start team** when the whole party should start together on one run id; an
+  in-game Start cannot command the other clients.
 - **Stop** — stops it.
 - **Follow** — stops Battle on this character, asks the launcher to stop Battle on every
   running box, sends `//follow me all`, and makes the team follow this character. With the
@@ -475,8 +541,10 @@ The launcher uses one command:
 | `state` | profile, saved profiles, live status and member list |
 | `update {profile}` | sanitize and apply a whole profile live (not saved) |
 | `save {name, profile}` | save the profile (and apply `profile` first when supplied) |
+| `save_as {name, profile}` | write a copy under a new name and keep the old file |
 | `load {name}` / `delete {name}` / `new {name}` | profile files |
-| `start` / `stop` / `pause {role}` | engine state |
+| `reset_enfeebles` | clear the resist counters after a fight |
+| `start {run_id?}` / `stop` / `pause {role}` | engine state; the launcher passes one run id to every team client |
 | `show` / `hide` / `tab {tab}` | hub window |
 | `camp_here` / `camp_radius {radius}` / `camp_clear` / `place_there` | camp |
 | `camp_hud {show?, move?, reset?}` | movable Battle HUD visibility/layout |

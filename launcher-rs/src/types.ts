@@ -1567,7 +1567,17 @@ export type PhaseStatus = {
 
 /** One Battle hub profile, as the client stores it under <data>/battle/<character>/. */
 export type BattleRole = "tank" | "puller" | "kiter" | "support" | "melee" | "ranged";
-export type BattleSpellRow = { id: number; spell: string; below?: number; interval?: number; target?: "self" | "party" | "alliance" };
+export type BattleSpellRow = {
+  id: number;
+  spell: string;
+  below?: number;
+  interval?: number;
+  target?: "self" | "party" | "alliance";
+  /** True when the row names a job ability instead of a spell. */
+  ability?: boolean;
+  /** Party/alliance members this row skips. */
+  exclude?: string[];
+};
 export type BattleRoster = {
   tank: string;
   puller: string;
@@ -1576,6 +1586,10 @@ export type BattleRoster = {
   melee: string[];
   ranged: string[];
 };
+export type BattleSongGroup = { name: string; songs: string[] };
+export type BattleSupportAbility = { name: string; enabled: boolean; interval: number };
+export type BattleSkillchainStep = { actor: string; ws: string; diamond: boolean };
+export type BattleBurster = { name: string; spell: string };
 export type BattleProfile = {
   version: number;
   name: string;
@@ -1583,18 +1597,76 @@ export type BattleProfile = {
   zone_name: string;
   updated: number;
   roster: BattleRoster;
-  camp: { set: boolean; x: number; y: number; z: number; radius: number; show: boolean };
+  camp: {
+    set: boolean;
+    x: number;
+    y: number;
+    z: number;
+    radius: number;
+    show: boolean;
+    mobile: boolean;
+    tank_enabled: boolean;
+    follow_distance: number;
+  };
   support_camp: { set: boolean; x: number; y: number; z: number; radius: number; show: boolean };
+  camp_hud: {
+    show: boolean;
+    map: boolean;
+    range: number;
+    x: number;
+    y: number;
+    w: number;
+    h: number;
+    collapsed: boolean;
+  };
+  camp_assign: Record<string, "tank" | "support">;
+  combat_style: Record<string, "melee" | "ranged">;
+  engine: { running: boolean; ready?: boolean; run_id?: string };
+  skillchain: {
+    enabled: boolean;
+    target: number;
+    mode: "chain" | "spam";
+    infinite: boolean;
+    goal: number;
+    steps: BattleSkillchainStep[];
+    bursters: BattleBurster[];
+  };
   support: {
-    geo: { enabled: boolean; indi: string; geo: string; indi_interval: number; geo_interval: number };
+    geo: {
+      enabled: boolean;
+      indi: string;
+      geo: string;
+      indi_interval: number;
+      geo_interval: number;
+      anchor: string;
+      range: number;
+      entrust_enabled: boolean;
+      entrust_target: string;
+      entrust_indi: string;
+      blaze_of_glory: boolean;
+      bolster: boolean;
+    };
+    abilities: BattleSupportAbility[];
+    cor: {
+      enabled: boolean;
+      /** Up to two selected Corsair rolls, e.g. "Chaos Roll". */
+      rolls: string[];
+      interval: number;
+    };
     brd: {
       enabled: boolean;
-      tank_songs: string;
-      support_songs: string;
-      piano_tank: string;
-      piano_support: string;
+      song_groups: BattleSongGroup[];
+      tank_group: string;
+      support_group: string;
+      mobile_group: string;
+      pianissimo_target: string;
+      pianissimo_song: string;
       nitro: "both" | "tank" | "support" | "off";
-      interval: number;
+      /** 4 normally; 5 is only possible with Clarion Call. */
+      max_songs: 4 | 5;
+      clarion_call: boolean;
+      soul_voice: boolean;
+      nitro_all_songs: boolean;
     };
   };
   engage: {
@@ -1606,7 +1678,14 @@ export type BattleProfile = {
     switch_at: number;
     weapon_skill: string;
   };
-  formation: { enabled: boolean; style: "tank" | "behind" | "side"; arc: number; spacing: number; side: "auto" | "left" | "right" };
+  formation: {
+    enabled: boolean;
+    style: "tank" | "behind" | "side";
+    arc: number;
+    spacing: number;
+    side: "auto" | "left" | "right";
+    follow_tank: boolean;
+  };
   pull: {
     enabled: boolean;
     method: "ranged" | "spell" | "ability" | "melee";
@@ -1635,10 +1714,26 @@ export type BattleProfile = {
     erase: boolean;
     raise_spell: string;
     avoid: string;
+    exclude: string[];
   };
   buffs: { enabled: boolean; rows: BattleSpellRow[] };
-  enfeebles: { enabled: boolean; rows: BattleSpellRow[] };
-  dispel: { enabled: boolean; spell: string; interval: number };
+  enfeebles: {
+    enabled: boolean;
+    rows: BattleSpellRow[];
+    /** Resists before a row stops until Reset tries; 0 keeps applying forever. */
+    max_tries: number;
+  };
+  dispel: {
+    enabled: boolean;
+    spell: string;
+    interval: number;
+    /** Dispel as soon as a watched mob move lands, not on the interval clock. */
+    reactive: boolean;
+    /** RDM only: cast Stymie before the reactive dispel when it is ready. */
+    stymie: boolean;
+    /** Self-buff moves/spells whose landing triggers the reactive cast. */
+    watch: string[];
+  };
   death: { mode: "raise" | "homepoint"; wait: number; home_point: number };
   kiting: { enabled: boolean; mode: "circle" | "away" | "camp"; radius: number; below: number };
   loot: { mode: "free" | "lot" | "pass" | "leader" };
@@ -1646,6 +1741,37 @@ export type BattleProfile = {
   paused: { melee: boolean; ranged: boolean; tank: boolean; support: boolean };
   ui: { x: number; y: number; opacity: number; show: boolean };
 };
+
+/** A weapon-skill row from the server catalogue. */
+export type BattleWeaponSkill = {
+  id: number;
+  name: string;
+  skill: number;
+  skill_level: number;
+  element: number;
+};
+
+/** One spell row from the server catalogue, for the Magic Burst picker. */
+export type BattleSpellOption = {
+  id: number;
+  name: string;
+  skill: number;
+  element: number;
+};
+
+/** One TP move a selected pull target can use. */
+export type BattleMobMove = {
+  name: string;
+  description: string;
+  target: string;
+  aoe: string;
+  status: string;
+  /** True for a self-buff move the server stores as a dispellable effect. */
+  dispellable: boolean;
+  mobs: string[];
+};
+
+export type BattleMobCatalog = { moves: BattleMobMove[]; unmatched: string[] };
 
 export type BattleProfileSummary = { file: string; name: string; zone: number; zone_name: string; updated: number };
 export type BattleMember = {
@@ -1664,6 +1790,16 @@ export type BattleMob = { name: string; hpp: number; distance: number; claimed: 
 export type BattleNote = { at: number; kind: "info" | "action" | "error"; text: string };
 export type BattleStatus = {
   running: boolean;
+  /** stopped, preparing (camps/buffs/heals) or running. */
+  phase?: "stopped" | "preparing" | "running";
+  /** This client finished its own camp/buff/HP preparation. */
+  ready?: boolean;
+  /** Every assigned character in the live party has published ready. */
+  team_ready?: boolean;
+  /** Assigned party members still preparing. */
+  waiting_on?: string[];
+  /** The readiness epoch shared by the team clients. */
+  run_id?: string;
   visible: boolean;
   role: BattleRole | null;
   role_label: string | null;

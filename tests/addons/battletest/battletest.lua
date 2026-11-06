@@ -193,6 +193,24 @@ for _, tab in ipairs({ 'roster', 'camp', 'engage', 'heal', 'buff' }) do
     check('live party tab ' .. tab, drawn, derr)
 end
 
+-- The shared spell/ability/weapon-skill picker is a separate ImGui window.  Open each
+-- catalogue it can show and draw a frame, so a nil entry field or a bad Selectable
+-- signature fails here instead of in game.
+for _, kind in ipairs({ 'ws', 'spell', 'known_spell', 'ability', 'indi', 'geo' }) do
+    battle.open_picker(kind, 1, nil)
+    local picked, perr = xpcall(function() battle.draw(api) end, function(e)
+        return debug.traceback(tostring(e), 2)
+    end)
+    check('picker ' .. kind, picked, perr)
+    battle.close_picker()
+end
+battle.open_picker('known_spell', nil, 'heal_avoid', true)
+local multishown, multierr = xpcall(function() battle.draw(api) end, function(e)
+    return debug.traceback(tostring(e), 2)
+end)
+check('picker never-cast multi', multishown, multierr)
+battle.close_picker()
+
 -- Nitro timing: the client's 0x119 table stores a timer by recast id.  The hub must read both
 -- abilities, wait while either is down, and only start the pair when both are ready.
 local fake_abilities = {
@@ -245,8 +263,14 @@ if before and before.profile then
     before.profile.support.brd.nitro = 'both'
     request({ action = 'update', profile = before.profile })
 end
-local started = select(1, request({ action = 'start' }))
+local started = select(1, request({ action = 'start', run_id = 'harness-run' }))
 check('nitro engine start', started ~= nil, started)
+check('start enters preparing', started and started.status and started.status.phase == 'preparing',
+    started and started.status and started.status.phase)
+check('start is not ready yet', started and started.status and started.status.ready == false,
+    started and started.status and started.status.ready)
+check('start keeps the run id', started and started.status and started.status.run_id == 'harness-run',
+    started and started.status and started.status.run_id)
 fake_recasts[0], fake_recasts[1] = nil, nil
 check('Nitro starts clean', battle.nitro_state().step == nil, battle.nitro_state().step)
 check('Nitro uses Nightingale first', battle.brd_maybe_nitro('tank') == true

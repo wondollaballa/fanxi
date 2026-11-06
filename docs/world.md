@@ -627,12 +627,13 @@ item is never legal in the sub slot, even when its catalogue slot mask is missin
 
 A ranged weapon and the ammo slot have to agree. A bow (`skill` 25) takes arrows, a crossbow
 (`skill` 26, subtype 0) takes bolts, a gun (26, subtype 1) takes bullets and a culverin (26,
-subtype 2) takes shells; an ammo-slot item outside those three families (a Tathlum, orb, jug or
-bait) is always legal. Throwing
-ammunition (skill 27) is thrown by hand and is refused while any ranged weapon is equipped. The
-subtype lives in `items.subskill` (migration 191). A ranged weapon change clears ammo it cannot
-fire. A gear burst whose ammo slot arrives before its ranged slot is held until the ranged slot
-settles; if the burst ends without a matching ranged weapon, the ammo pick snaps back.
+subtype 2) takes shells. While a ranged weapon is equipped, **only** the matching
+arrow/bolt/bullet family is legal; a Tathlum, orb, bomblet, pebble, jug, tool or bait is a
+throwing/utility item, not ammunition for it. Those items are still legal in the ammo slot when
+no ranged weapon is out. The subtype lives in `items.subskill` (migration 191). A ranged weapon
+change clears ammo it cannot fire. A gear burst whose ammo slot arrives before its ranged slot
+is held until the ranged slot settles; if the burst ends without a matching ranged weapon, the
+ammo pick snaps back.
 
 Changing the **main weapon** or a **sub weapon** empties the TP bar. Swapping a grip, shield,
 ranged weapon or ammo keeps TP, as does re-sending the same bag copy (the phase engine's gear

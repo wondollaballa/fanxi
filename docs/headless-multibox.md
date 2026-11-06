@@ -94,10 +94,13 @@ Rosetta is also on its way out: macOS 27 is the last release with full Rosetta s
 ([Apple, Sept 2026](https://developer.apple.com/news/?id=w5ngl9k2)), so the native build is not
 optional long-term.
 
-**Step zero:** remove `.venv`, rebuild with `/usr/bin/python3` (universal, arm64) or
-`/opt/homebrew/bin/python3`, and confirm `file build/fanxi` says `arm64`. `tools/setup.py` already
-prefers `/usr/bin/python3` when it creates the environment; the launcher does not. Rosetta 2 measured
-78–79 % of native on Geekbench 5 on an M1
+**Step zero:** remove `.venv`, rebuild with `/opt/homebrew/bin/python3` (native, OpenSSL 3) or
+another current Python, and confirm `file build/fanxi` says `arm64`. `/usr/bin/python3` builds a
+native binary too, but it is Python 3.9 on LibreSSL 2.8.3: fine for the recompiler, wrong for
+`scripts/linux_boxes.py`, because that build has no TLS 1.3 and drops the SNI for an HTTPS host
+whose name begins with an IPv4 literal (`…sslip.io`). `tools/setup.py` still prefers
+`/usr/bin/python3` when it creates the environment; the launcher now prefers Homebrew's
+interpreter. Rosetta 2 measured 78–79 % of native on Geekbench 5 on an M1
 ([MacRumors](https://www.macrumors.com/2020/11/15/m1-chip-emulating-x86-benchmark/)), so expect a
 real CPU drop here too; measure it rather than assuming a figure.
 
@@ -322,8 +325,10 @@ needs the spike (P1) rather than a setting to switch on.
 
 ### P0 — native build (half a day)
 
-1. `rm -rf .venv` and rebuild with `/usr/bin/python3` (or set `FANXI_PYTHON=/usr/bin/python3` for
-   the launcher), e.g. `python3 tools/setup.py --game ~/Games/FFXI2026 --no-install`.
+1. `rm -rf .venv` and rebuild with `/opt/homebrew/bin/python3` (or set
+   `FANXI_PYTHON=/opt/homebrew/bin/python3` for the launcher), e.g.
+   `/opt/homebrew/bin/python3 tools/setup.py --game ~/Games/FFXI2026 --no-install`. `/usr/bin/python3`
+   is native but its LibreSSL cannot reach an HTTPS API (see Step zero above).
 2. `file build/fanxi` must say `arm64`; `lipo -info` for confirmation.
 3. Re-measure one client (CPU, RSS, frame time) as the new baseline.
 

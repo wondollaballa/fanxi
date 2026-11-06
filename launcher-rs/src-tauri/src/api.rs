@@ -162,6 +162,44 @@ impl ApiClient {
         .await
     }
 
+    /// Every spell, for the Battle Magic Burst picker.
+    pub async fn battle_spells(&self, token: &str) -> AppResult<Value> {
+        self.request(Method::GET, "/battle/spells", None, Some(token), None)
+            .await
+    }
+
+    /// The full weapon-skill catalogue for the Battle skillchain editor.
+    pub async fn battle_weapon_skills(&self, token: &str) -> AppResult<Value> {
+        self.request(
+            Method::GET,
+            "/battle/weapon-skills",
+            None,
+            Some(token),
+            None,
+        )
+        .await
+    }
+
+    /// TP moves for the selected pull targets, used by the reactive-dispel picker.
+    pub async fn battle_mob_moves(
+        &self,
+        token: &str,
+        zone: u16,
+        names: &[String],
+    ) -> AppResult<Value> {
+        self.request(
+            Method::GET,
+            "/battle/mobs",
+            None,
+            Some(token),
+            Some(vec![
+                ("zone".to_string(), zone.to_string()),
+                ("names".to_string(), names.join(",")),
+            ]),
+        )
+        .await
+    }
+
     pub async fn characters(&self, token: &str) -> AppResult<Vec<Value>> {
         let value = self
             .request(Method::GET, "/characters", None, Some(token), None)

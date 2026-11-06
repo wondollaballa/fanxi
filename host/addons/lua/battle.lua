@@ -37,7 +37,10 @@ local S = {
     profile = nil,
     profiles = {},
     running = false,
+    phase = 'stopped',
+    run_id = '',
     visible = false,
+    ready_dirty = false,
     tab = 'roster',
     notes = {},
     next_tick = 0,
@@ -50,6 +53,9 @@ local S = {
     song_groups_open = false,
     song_group_edit = nil,
     song_new_name = '',
+    sc_picker = nil,
+    ws_choices = nil,
+    spell_choices_cache = nil,
     buffers = {},
     profile_seq = 0,
     place = nil,
@@ -97,6 +103,12 @@ local OBSERVE_MODES = { 'party', 'alliance' }
 local OBSERVE_LABELS = { 'Party only', 'Party + alliance' }
 local DEATH_MODES = { 'raise', 'homepoint' }
 local LOOT_MODES = { 'free', 'lot', 'pass', 'leader' }
+
+-- Client status ids for the support abilities the engine sequences.  The ability's own
+-- effect is what tells the engine the button actually fired, not the command it sent.
+-- One table instead of five locals: the main chunk sits at LuaJIT's 200-local limit.
+local BATTLE_IDS = { stymie = 494, clarion_call = 499, soul_voice = 52,
+    blaze_of_glory = 569, bolster = 513 }
 
 -- Weapon-skill skillchain properties, keyed by weapon-skill id.  Copied from the
 -- client's generated table (data/skillchains.json); battle.lua cannot see control.lua's
@@ -596,7 +608,11 @@ function S.https_json(method, url, body, token)
     -- which is what a player saw as a stutter every couple of seconds.  Inside a coroutine (the
     -- polls and the command handlers all are) the transfer is driven a step a frame instead.
     local rc
-    if coroutine.running() then
+    -- Lua 5.2+ returns the main thread plus `true` from coroutine.running(); checking only the
+    -- first return made this take the coroutine branch in the control handler and then fail in
+    -- coroutine.sleepf with "not inside a coroutine".
+    local co, main = coroutine.running()
+    if co ~= nil and not main then
         local multi = C.curl_multi_init()
         if multi ~= nil then
             C.curl_multi_add_handle(multi, curl)
@@ -711,10 +727,22 @@ function B.team_poll()
                 local applied = C.sanitize(character.profile)
                 if applied and applied.name ~= '' then
                     local wanted_run = applied.engine and applied.engine.running
+                    local applied_run = applied.engine and tostring(applied.engine.run_id or '') or ''
+                    local was_running, was_ready = S.running, S.runtime.ready
+                    local was_run_id = S.run_id
                     S.profile = applied
                     S.dirty = false
+                    -- A profile save/apply does not carry the live run flags.  Keep this
+                    -- client's place in the current run instead of making the rest of the
+                    -- party wait on a reset ready flag.
+                    if was_running and (applied_run == '' or applied_run == was_run_id) then
+                        S.profile.engine.running = true
+                        S.profile.engine.ready = was_ready
+                        S.profile.engine.run_id = was_run_id
+                        S.ready_dirty = true
+                    end
                     if wanted_run ~= nil and wanted_run ~= S.running then
-                        if wanted_run then B.start() else B.stop() end
+                        if wanted_run then B.start(applied_run) else B.stop() end
                     end
                     B.note('info', 'Battle: applied server rules for ' .. me .. '.')
                 end
@@ -724,9 +752,13 @@ function B.team_poll()
             if saved then S.team_seeded = true end
         end
     end
+    if S.ready_dirty and not S.remote_edit then
+        S.ready_dirty = false
+        if not B.publish_state(S.runtime.ready == true) then S.ready_dirty = true end
+    end
 end
 
-function B.team_save_profile(name, shared)
+function B.team_save_profile(name, shared, quiet)
     if not S.profile then return nil, 'no profile' end
     local target_name = text(name, 32)
     if target_name == '' then
@@ -742,8 +774,100 @@ function B.team_save_profile(name, shared)
     if not data then return nil, err end
     if data.profile then S.profile.updated = data.profile.updated end
     S.dirty = false
-    B.note('info', 'Battle: saved server rules for ' .. target_name .. '.')
+    if not quiet then
+        B.note('info', 'Battle: saved server rules for ' .. target_name .. '.')
+    end
     return data
+end
+
+-- Publish this client's run/ready flags.  This is deliberately lightweight: the full
+-- profile is sent only when Start, Stop or the preparation phase changes state, not every
+-- tick.  If the six-second poll has not filled S.team yet, team_poll retries the publish.
+function B.publish_state(ready)
+    if not S.profile or S.remote_edit then return false end
+    S.profile.engine.running = S.running == true
+    S.profile.engine.ready = ready == true
+    S.profile.engine.run_id = S.run_id or ''
+    local me = B.self()
+    local name = me and me.name or ''
+    local id = nil
+    for _, character in ipairs(S.team or {}) do
+        if character.name == name then id = character.character_id break end
+    end
+    if not id then
+        S.ready_dirty = true
+        return false
+    end
+    local data = http_json('POST', '/api/v1/battle/team/' .. tostring(id) .. '/state', {
+        engine = {
+            running = S.profile.engine.running,
+            ready = S.profile.engine.ready,
+            run_id = S.profile.engine.run_id,
+        },
+    })
+    if not data then
+        S.ready_dirty = true
+        return false
+    end
+    S.ready_dirty = false
+    return true
+end
+
+-- The assigned names that are actually in the live party, in roster order.  Characters
+-- saved in a role but logged out or not grouped are deliberately not waited on.
+function B.team_assigned()
+    local out, seen = {}, {}
+    local function add(name)
+        name = text(name, 32)
+        local key = name:lower()
+        if name ~= '' and not seen[key] then
+            seen[key] = true
+            out[#out + 1] = name
+        end
+    end
+    if not S.profile then return out end
+    local roster = S.profile.roster
+    add(roster.tank); add(roster.puller); add(roster.kiter)
+    for _, key in ipairs({ 'support', 'melee', 'ranged' }) do
+        for _, name in ipairs(roster[key] or {}) do add(name) end
+    end
+    return out
+end
+
+-- Names still preparing.  The puller waits until this list is empty.
+function B.team_waiting()
+    local out = {}
+    if not S.profile or not S.profile.roster then return out end
+    local self = B.self()
+    local own_name = self and self.name or ''
+    local me = tostring(own_name):lower()
+    if not S.runtime.ready then out[#out + 1] = own_name ~= '' and own_name or 'this client' end
+    if #(S.team or {}) == 0 then return out end
+    local party = B.party_set('alliance')
+    local team = {}
+    for _, row in ipairs(S.team or {}) do
+        if row and row.name then team[tostring(row.name):lower()] = row end
+    end
+    for _, name in ipairs(B.team_assigned()) do
+        local key = name:lower()
+        if key ~= me and party[key] then
+            local row = team[key]
+            local online = not (S.team_online_known and row and row.online == false)
+            if row and online then
+                local prof = row.profile
+                local run_id = tostring(S.run_id or '')
+                local ready = type(prof) == 'table' and type(prof.engine) == 'table'
+                    and prof.engine.running == true and prof.engine.ready == true
+                    and (run_id == '' or tostring(prof.engine.run_id or '') == run_id)
+                if not ready then out[#out + 1] = name end
+            end
+        end
+    end
+    return out
+end
+
+function B.team_ready()
+    return #B.team_waiting() == 0
 end
 
 function B.team_switch(name)
@@ -920,7 +1044,7 @@ function C.default_profile(name, zone, zone_name)
             collapsed = false },
         camp_assign = {},
         combat_style = {},
-        engine = { running = false },
+        engine = { running = false, ready = false, run_id = '' },
         skillchain = {
             enabled = false, target = 0, mode = 'chain', infinite = false, goal = 0,
             steps = {
@@ -937,8 +1061,11 @@ function C.default_profile(name, zone, zone_name)
             geo = {
                 enabled = true, indi = 'Indi-haste', geo = 'Geo-frailty',
                 indi_interval = 120, geo_interval = 120, anchor = '', range = 12,
+                entrust_enabled = false, entrust_target = '', entrust_indi = '',
+                blaze_of_glory = false, bolster = false,
             },
             abilities = {},
+            cor = { enabled = true, rolls = {}, interval = 300 },
             brd = {
                 enabled = true,
                 song_groups = {
@@ -947,7 +1074,8 @@ function C.default_profile(name, zone, zone_name)
                 },
                 tank_group = 'Melee', support_group = 'Support', mobile_group = 'Melee',
                 pianissimo_target = '', pianissimo_song = '',
-                nitro = 'both',
+                nitro = 'both', max_songs = 4, clarion_call = true,
+                soul_voice = false, nitro_all_songs = false,
             },
         },
         engage = {
@@ -973,7 +1101,8 @@ function C.default_profile(name, zone, zone_name)
         },
         buffs = { enabled = true, rows = {} },
         enfeebles = { enabled = true, rows = {}, max_tries = 3 },
-        dispel = { enabled = false, spell = 'Dispel', interval = 45 },
+        dispel = { enabled = false, spell = 'Dispel', interval = 45,
+            reactive = false, stymie = false, watch = {} },
         death = { mode = 'raise', wait = 30, home_point = 1 },
         kiting = { enabled = false, mode = 'circle', radius = 18, below = 60 },
         loot = { mode = 'free' },
@@ -1117,6 +1246,8 @@ function C.sanitize(raw)
     local skillchain = type(raw.skillchain) == 'table' and raw.skillchain or {}
     local engine = type(raw.engine) == 'table' and raw.engine or {}
     profile.engine.running = truth(engine.running, false)
+    profile.engine.ready = truth(engine.ready, false)
+    profile.engine.run_id = text(engine.run_id, 48)
 
     profile.skillchain.enabled = truth(skillchain.enabled, false)
     profile.skillchain.target = whole(skillchain.target, 0, 16, 0)
@@ -1159,6 +1290,11 @@ function C.sanitize(raw)
     profile.support.geo.geo_interval = whole(geo.geo_interval, 30, 600, 120)
     profile.support.geo.anchor = text(geo.anchor, 32)
     profile.support.geo.range = clamp(geo.range, 5, 40, 12)
+    profile.support.geo.entrust_enabled = truth(geo.entrust_enabled, false)
+    profile.support.geo.entrust_target = text(geo.entrust_target, 32)
+    profile.support.geo.entrust_indi = text(geo.entrust_indi, 40)
+    profile.support.geo.blaze_of_glory = truth(geo.blaze_of_glory, false)
+    profile.support.geo.bolster = truth(geo.bolster, false)
     local brd = type(support.brd) == 'table' and support.brd or {}
     profile.support.brd.enabled = truth(brd.enabled, true)
     profile.support.brd.song_groups = {}
@@ -1174,7 +1310,7 @@ function C.sanitize(raw)
                         seen[song:lower()] = true
                         songs[#songs + 1] = song
                     end
-                    if #songs >= 12 then break end
+                    if #songs >= 5 then break end
                 end
                 profile.support.brd.song_groups[#profile.support.brd.song_groups + 1] = {
                     name = name, songs = songs,
@@ -1203,6 +1339,25 @@ function C.sanitize(raw)
     profile.support.brd.pianissimo_song = text(brd.pianissimo_song, 40)
     if brd.nitro ~= 'tank' and brd.nitro ~= 'support' and brd.nitro ~= 'off' then brd.nitro = 'both' end
     profile.support.brd.nitro = brd.nitro
+    profile.support.brd.max_songs = tonumber(brd.max_songs) == 5 and 5 or 4
+    profile.support.brd.clarion_call = truth(brd.clarion_call, true)
+    profile.support.brd.soul_voice = truth(brd.soul_voice, false)
+    profile.support.brd.nitro_all_songs = truth(brd.nitro_all_songs, false)
+    local cor = type(support.cor) == 'table' and support.cor or {}
+    profile.support.cor.enabled = truth(cor.enabled, true)
+    profile.support.cor.interval = whole(cor.interval, 60, 600, 300)
+    profile.support.cor.rolls = {}
+    if type(cor.rolls) == 'table' then
+        local seen = {}
+        for _, raw in ipairs(cor.rolls) do
+            local name = text(raw, 40)
+            local key = name:lower()
+            if name ~= '' and not seen[key] and #profile.support.cor.rolls < 2 then
+                seen[key] = true
+                profile.support.cor.rolls[#profile.support.cor.rolls + 1] = name
+            end
+        end
+    end
     profile.support.abilities = {}
     if type(support.abilities) == 'table' then
         for _, raw in ipairs(support.abilities) do
@@ -1300,12 +1455,26 @@ function C.sanitize(raw)
     local enfeebles = type(raw.enfeebles) == 'table' and raw.enfeebles or {}
     profile.enfeebles.enabled = truth(enfeebles.enabled, true)
     profile.enfeebles.rows = sanitize_list(enfeebles.rows, { 'spell', 'interval' })
-    profile.enfeebles.max_tries = whole(enfeebles.max_tries, 1, 10, 3)
+    profile.enfeebles.max_tries = whole(enfeebles.max_tries, 0, 10, 3)
 
     local dispel = type(raw.dispel) == 'table' and raw.dispel or {}
     profile.dispel.enabled = truth(dispel.enabled, false)
     profile.dispel.spell = text(dispel.spell, 40)
     profile.dispel.interval = whole(dispel.interval, 1, 3600, 45)
+    profile.dispel.reactive = truth(dispel.reactive, false)
+    profile.dispel.stymie = truth(dispel.stymie, false)
+    profile.dispel.watch = {}
+    if type(dispel.watch) == 'table' then
+        local seen = {}
+        for _, raw in ipairs(dispel.watch) do
+            local name = text(raw, 40)
+            local key = name:lower()
+            if name ~= '' and not seen[key] and #profile.dispel.watch < 24 then
+                seen[key] = true
+                profile.dispel.watch[#profile.dispel.watch + 1] = name
+            end
+        end
+    end
 
     local death = type(raw.death) == 'table' and raw.death or {}
     profile.death.mode = death.mode == 'homepoint' and 'homepoint' or 'raise'
@@ -1433,6 +1602,15 @@ function C.load(name)
     S.ui.x, S.ui.y = S.profile.ui.x, S.profile.ui.y
     S.ui.opacity = S.profile.ui.opacity
     S.dirty = false
+    B.reset_profile_runtime()
+    -- A local profile switch must win over the team poll.  The poll applies a server
+    -- profile only when its `updated` is newer, so push the loaded profile back as the
+    -- active one for this character instead of letting the old server copy undo the swap.
+    if S.team and #S.team > 0 then
+        S.profile.updated = math.floor(os.time())
+        local ok, err = B.team_save_profile(nil, false)
+        if not ok then note('error', 'Battle: loaded profile not saved to server: ' .. tostring(err)) end
+    end
     note('info', 'Loaded battle profile "' .. S.profile.name .. '".')
     return S.profile
 end
@@ -1441,7 +1619,7 @@ function C.shared_tab()
     return S.tab == 'roster' or S.tab == 'camp' or S.tab == 'rules'
 end
 
-function C.save(name)
+function C.save(name, keep_previous)
     C.refresh_character()
     if S.remote_edit then
         local ok, err = B.team_save_profile(S.remote_edit.name, C.shared_tab())
@@ -1457,6 +1635,8 @@ function C.save(name)
     S.profile.zone, S.profile.zone_name = zone, zone_name
     S.profile.updated = math.floor(os.time())
     S.profile.engine.running = S.running
+    S.profile.engine.ready = S.runtime.ready == true
+    S.profile.engine.run_id = S.run_id or ''
     S.profile.ui.x, S.profile.ui.y = S.ui.x, S.ui.y
     S.profile.ui.opacity = S.ui.opacity
     -- Saving is the "done" action: the next login starts with the hub closed.  //battle show is
@@ -1469,7 +1649,9 @@ function C.save(name)
     if not write_file(path, data) then return nil, 'could not write ' .. path end
     local previous = S.file
     S.file = path
-    if previous and previous ~= path then pcall(os.remove, previous) end
+    -- Save As keeps the old file: the current profile moves to the new name and both modes
+    -- stay in the list.  A plain Save renames, which is the old //battle save <name> rule.
+    if not keep_previous and previous and previous ~= path then pcall(os.remove, previous) end
     S.last_save = clock()
     C.list()
     note('info', 'Saved battle profile "' .. S.profile.name .. '".')
@@ -1511,6 +1693,7 @@ function C.new_profile(name)
     S.ui.x, S.ui.y = S.profile.ui.x, S.profile.ui.y
     S.ui.opacity = S.profile.ui.opacity
     S.dirty = false
+    B.reset_profile_runtime()
     note('info', 'New battle profile "' .. wanted .. '".')
     return S.profile
 end
@@ -2191,26 +2374,70 @@ end
 local function reset_runtime()
     S.runtime = {
         dead = false, dead_at = 0, home_sent = false, revived_at = 0,
+        ready = false, prepare_started = 0,
         target_index = nil, target_id = nil, attack_index = nil, attack_at = 0,
         ranged_at = 0, busy_until = 0, last_action = '', last_action_at = 0,
         last_heal = {}, last_status = {}, last_buff = {}, last_enfeeble = {},
         last_waltz = {}, ability_map = nil, ability_map_at = 0,
         ability_state = nil, ability_state_at = 0,
         last_dispel = 0, last_raise = {}, failed = {}, support_last = {},
+        dispel = { watch_at = 0, watch_move = nil, stymie_step = nil, stymie_at = 0 },
         enf_tries = {}, enf_due = {},
-        pull = { state = 'idle', mob = nil, at = 0, tries = 0 },
+        pull = { state = 'idle', mob = nil, at = 0, tries = 0, path = {},
+            return_at = 0, return_dist = 0, return_point = nil },
         kite = { angle = nil, dir = 1, at = 0, center = nil },
         move = { x = nil, y = nil, active = false },
         icons = nil, icons_at = 0, sleep_until = {},
-        geo = { last_indi = 0, last_geo = 0, pet_index = nil, stayed = false },
+        geo = { last_indi = 0, last_geo = 0, last_entrust = 0, pet_index = nil,
+            stayed = false, entrust_pending = nil, bog_at = 0, bolster_at = 0 },
+        cor = { last = {} },
         brd = { phase = 'support', sung = {}, nitro_at = 0, nitro_step = nil,
-            nitro_issued_at = 0, piano_pending = nil },
+            nitro_issued_at = 0, piano_pending = nil, clarion_at = 0, soul_at = 0 },
         loot = { seen = 0, at = 0 },
     }
     R = S.runtime
 end
 
 reset_runtime()
+
+-- A profile switch changes the song set, camp bubbles and watchers.  Keep the target
+-- and movement state (the box is still in the same fight), but reset the clocks that
+-- described the previous profile so the new one starts clean.
+function B.reset_profile_runtime()
+    if not S.runtime then return end
+    R.ready = false
+    R.prepare_started = clock()
+    S.phase = S.running and 'preparing' or 'stopped'
+    R.last_dispel = 0
+    R.dispel = { watch_at = 0, watch_move = nil, stymie_step = nil, stymie_at = 0 }
+    R.last_buff = {}
+    R.last_enfeeble = {}
+    R.last_status = {}
+    R.enf_tries = {}
+    R.enf_due = {}
+    R.support_last = {}
+    R.pull.path = {}
+    R.pull.state = 'idle'
+    R.pull.mob = nil
+    R.pull.tries = 0
+    R.pull.return_point, R.pull.return_dist, R.pull.return_at = nil, 0, 0
+    R.geo.last_indi = 0
+    R.geo.last_geo = 0
+    R.geo.last_entrust = 0
+    R.cor.last = {}
+    R.geo.entrust_pending = nil
+    R.geo.bog_at = 0
+    R.geo.bolster_at = 0
+    R.brd.sung = {}
+    R.brd.phase = 'support'
+    R.brd.nitro_at = 0
+    R.brd.nitro_step = nil
+    R.brd.nitro_issued_at = 0
+    R.brd.piano_pending = nil
+    R.brd.clarion_at = 0
+    R.brd.soul_at = 0
+    R.brd.nitro_wait_at = nil
+end
 
 function B.log_action(message)
     R.last_action = tostring(message or '')
@@ -2309,7 +2536,12 @@ function B.cast_on_enemy(value, index)
     if not spell or not spell_known(spell) then return false end
     if spell_recast(spell) > 0.05 then return false end
     if index and index ~= R.target_index then B.set_target(index) end
-    return issue(string.format('/ma "%s" <t>', spell_name(spell)),
+    -- A Bard song is cast with /song, not /ma.  The puller, sleep/bind and dispel fields
+    -- all accept songs (Carriage Elegy, Lullaby, Magic Finale), so pick the client's own
+    -- command from the spell's skill instead of forcing every pick through /ma.
+    local skill = tonumber(spell.skill) or 0
+    local command = (skill == 40 or skill == 41 or skill == 42) and '/song' or '/ma'
+    return issue(string.format('%s "%s" <t>', command, spell_name(spell)),
         spell_busy(spell), 'cast ' .. spell_name(spell))
 end
 
@@ -2601,7 +2833,113 @@ function B.combat_style_for(role, name)
     return role == 'ranged' and 'ranged' or 'melee'
 end
 
+-- The puller leaves camp with a purpose: record the ground it actually covered on the way
+-- out and walk those points back in reverse.  A direct camp line can cross the same wall or
+-- ridge the approach slid around, and retracing also spends the trip back in the direction
+-- the puller already knows is clear.
+function B.pull_path_reset()
+    R.pull.path = {}
+end
+
+function B.pull_path_record()
+    local pos = B.self_pos()
+    if not pos then return end
+    local path = R.pull.path
+    if type(path) ~= 'table' then path = {}; R.pull.path = path end
+    local last = path[#path]
+    if last and distance(pos, last) < 2.5 then return end
+    path[#path + 1] = { x = pos.x, y = pos.y, z = pos.z }
+    if #path > 180 then table.remove(path, 1) end
+end
+
+-- How close the pull action needs to be.  A spell uses its own client range; a ranged
+-- pull uses the normal ranged distance; an ability falls back to a short support range.
+function B.pull_action_range()
+    local p = S.profile.pull
+    if p.method == 'ranged' then return 20.0 end
+    if p.method == 'spell' then
+        local spell = B.spell(p.spell ~= '' and p.spell or 'Dia')
+        return math.max(6.0, tonumber(spell and spell.range) or 20.0)
+    end
+    if p.method == 'ability' then
+        local ok, ability = pcall(S.res.ability_by_name, p.ability)
+        if ok and type(ability) == 'table' then
+            return math.max(5.0, tonumber(ability.range) or 10.0)
+        end
+        return 10.0
+    end
+    return 2.2
+end
+
+function B.pull_action(index)
+    local p = S.profile.pull
+    B.set_target(index)
+    if p.method == 'ranged' then
+        return issue('/ra <t>', 2.4, 'pull (ranged)')
+    elseif p.method == 'spell' then
+        return B.cast_on_enemy(p.spell ~= '' and p.spell or 'Dia', index)
+    elseif p.method == 'ability' then
+        return B.use_ability(p.ability, index)
+    end
+    return false
+end
+
+-- Walk the recorded approach in reverse, then settle in camp.  Called for every puller
+-- return path (claim, failed action, target lost, max mobs) through return_to_camp.
+function B.pull_return()
+    local pull = R.pull
+    local path = pull.path
+    if type(path) ~= 'table' then path = {}; pull.path = path end
+    local pos = B.self_pos()
+    if pos then
+        while #path > 0 do
+            local point = path[#path]
+            local span = distance(pos, point)
+            if span <= 2.2 then
+                table.remove(path)
+                pull.return_point, pull.return_dist, pull.return_at = nil, 0, 0
+            else
+                -- If auto-run is held on a point behind a wall, drop it after four seconds
+                -- of no progress instead of standing there for the rest of the fight.
+                local now = clock()
+                if pull.return_point == point and span >= (pull.return_dist or 0) - 0.15 then
+                    if now >= (pull.return_at or 0) + 4 then
+                        table.remove(path)
+                        pull.return_point, pull.return_dist, pull.return_at = nil, 0, 0
+                    end
+                else
+                    pull.return_point, pull.return_dist, pull.return_at = point, span, now
+                end
+                if #path == 0 then break end
+                B.move_to(path[#path], 1.2)
+                return true
+            end
+        end
+    end
+    local own_role = B.self_role() or 'puller'
+    local camp_kind = B.camp_for_role(own_role)
+    local camp = B.camp_pos(camp_kind)
+    if not camp then return false end
+    local dx, dy = pos and (pos.x - camp.x) or 0, pos and (pos.y - camp.y) or 0
+    local radius = B.camp_radius(camp_kind) * 0.55
+    if pos and dx * dx + dy * dy <= radius * radius then
+        B.stop_move()
+        pull.path = {}
+        pull.state = 'idle'
+        pull.mob = nil
+        pull.tries = 0
+        pull.return_point, pull.return_dist, pull.return_at = nil, 0, 0
+        return false
+    end
+    B.move_to(camp, math.max(0.8, radius * 0.5))
+    return true
+end
+
 function B.return_to_camp(role)
+    local own_role = role or B.self_role()
+    if own_role == 'puller' and S.profile and S.profile.pull and S.profile.pull.enabled then
+        return B.pull_return()
+    end
     local kind = B.camp_for_role(role)
     local camp = B.camp_pos(kind)
     if not camp then return false end
@@ -3267,7 +3605,8 @@ function B.enfeeble_tick()
         local spell = B.spell(row.spell)
         local key = 'enf:' .. row.spell:lower()
         local tries = tonumber(R.enf_tries[key]) or 0
-        if tries >= (tonumber(p.max_tries) or 3) then
+        local limit = tonumber(p.max_tries) or 3
+        if limit > 0 and tries >= limit then
             -- stopped until the wear-off/landing log or the Reset button clears the count
         elseif spell and spell_known(spell) and spell_recast(spell) <= 0.05 then
             local interval = tonumber(row.interval) or 120
@@ -3290,12 +3629,46 @@ function B.dispel_tick()
     if not p.enabled or not B.target_valid() then return false end
     if not claim_allowed({ claim = B.target_member() }, 'support') then return false end
     local now = clock()
-    if now < (R.last_dispel or 0) + (tonumber(p.interval) or 45) then return false end
+    local reactive = p.reactive == true and R.dispel.watch_at
+        and now - (tonumber(R.dispel.watch_at) or 0) <= 10
+    if not reactive and now < (R.last_dispel or 0) + (tonumber(p.interval) or 45) then
+        return false
+    end
     if p.spell == '' then return false end
     local spell = B.spell(p.spell)
     if not spell or not spell_known(spell) or spell_recast(spell) > 0.05 then return false end
+    -- RDM's Stymie makes the next enfeebling magic unresistable.  It is only worth the
+    -- recast when the player asked for it and the ability is actually on the bar.
+    if p.stymie and R.dispel.stymie_step ~= 'done' then
+        local me = B.self()
+        local job = me and tonumber(me.job) or 0
+        if job == 5 then
+            if R.dispel.stymie_step == 'wait' then
+                if B.has_status(0, { BATTLE_IDS.stymie }) or now - (R.dispel.stymie_at or 0) >= 2.5 then
+                    R.dispel.stymie_step = 'done'
+                else
+                    return true
+                end
+            elseif not B.has_status(0, { BATTLE_IDS.stymie }) and B.ability_ready('Stymie') then
+                if issue('/ja "Stymie" <me>', 1.5, 'Stymie before Dispel') then
+                    R.dispel.stymie_step = 'wait'
+                    R.dispel.stymie_at = now
+                    return true
+                end
+            end
+        else
+            R.dispel.stymie_step = 'done'
+        end
+    end
     if B.cast_on_enemy(p.spell, R.target_index) then
+        local watched_name = R.dispel.watch_move
         R.last_dispel = now
+        R.dispel.watch_at = nil
+        R.dispel.watch_move = nil
+        R.dispel.stymie_step = nil
+        if reactive then
+            note('action', 'Battle: reactive dispel after ' .. tostring(watched_name or 'a watched buff') .. '.')
+        end
         return true
     end
     R.last_dispel = now + 5
@@ -3468,6 +3841,56 @@ function B.geo_cast(cfg, me, anchor, dist, range, now, geo)
     return B.cast_on_member(cfg.geo, anchor.slot)
 end
 
+-- Blaze of Glory and Bolster are worth using just before the bubble they enhance.
+-- Checking the buff id keeps the engine from hammering a button that is already up;
+-- the ability's recast check keeps it from spamming a rejected command.
+function B.geo_support_buff(cfg, now)
+    if cfg.blaze_of_glory and not B.has_status(0, { BATTLE_IDS.blaze_of_glory }) then
+        if B.ability_ready('Blaze of Glory') and now >= (R.geo.bog_at or 0) + 10 then
+            if use_self_ability('Blaze of Glory') then
+                R.geo.bog_at = now
+                return true
+            end
+        end
+    end
+    if cfg.bolster and not B.has_status(0, { BATTLE_IDS.bolster }) then
+        if B.ability_ready('Bolster') and now >= (R.geo.bolster_at or 0) + 10 then
+            if use_self_ability('Bolster') then
+                R.geo.bolster_at = now
+                return true
+            end
+        end
+    end
+    return false
+end
+
+function B.geo_entrust_due(cfg, geo, now)
+    if not cfg.entrust_enabled or cfg.entrust_target == '' or cfg.entrust_indi == '' then
+        return false
+    end
+    return now >= (geo.last_entrust or 0) + (tonumber(cfg.indi_interval) or 120)
+end
+
+function B.geo_entrust_tick(cfg, geo, now)
+    if not B.geo_entrust_due(cfg, geo, now) then return false end
+    local slot = B.member_slot(cfg.entrust_target)
+    if slot == nil then return false end
+    if B.geo_support_buff(cfg, now) then return true end
+    if geo.entrust_pending then
+        if B.cast_on_member(cfg.entrust_indi, slot) then
+            geo.last_entrust = now
+            geo.entrust_pending = nil
+            return true
+        end
+        geo.entrust_pending = nil
+    end
+    if use_self_ability('Entrust') then
+        geo.entrust_pending = true
+        return true
+    end
+    return false
+end
+
 local function geo_tick(me)
     local cfg = S.profile.support.geo
     if not cfg.enabled then return false end
@@ -3479,6 +3902,11 @@ local function geo_tick(me)
     local range = tonumber(cfg.range) or 12
     local need_geo = now >= (geo.last_geo or 0) + (tonumber(cfg.geo_interval) or 120)
     local need_indi = now >= (geo.last_indi or 0) + (tonumber(cfg.indi_interval) or 120)
+    local need_entrust = B.geo_entrust_due(cfg, geo, now)
+    if (need_geo or need_indi or need_entrust) and B.geo_support_buff(cfg, now) then
+        return true
+    end
+    if need_entrust and B.geo_entrust_tick(cfg, geo, now) then return true end
     -- A support camp can be outside the 12-yalm Geocolure range (the live Bibiki
     -- profile is ~40 yalms).  Walk to the anchor for the cast, put the Luopan down,
     -- then let the normal support return take the GEO back to camp.
@@ -3519,9 +3947,63 @@ local function brd_song_due(name, key)
     return not sung or clock() >= sung + B.song_duration(name)
 end
 
-local function brd_camp_due(camp)
+-- The server caps active songs at two, plus Daurdabla/Loughnashade's +2, plus
+-- Clarion Call's fifth.  The engine treats four as the floor and only reaches for the
+-- fifth while Clarion Call's buff is actually up.
+function B.brd_song_limit()
+    local cfg = S.profile.support.brd
+    local wanted = tonumber(cfg.max_songs) or 4
+    if wanted >= 5 and cfg.clarion_call and B.has_status(0, { BATTLE_IDS.clarion_call }) then
+        return 5
+    end
+    return math.min(4, wanted)
+end
+
+function B.brd_songs(camp)
+    local out, limit = {}, B.brd_song_limit()
     for _, song in ipairs(B.brd_group_songs(camp)) do
-        if brd_song_due(song) then return true end
+        if #out >= limit then break end
+        out[#out + 1] = song
+    end
+    return out
+end
+
+local function brd_camp_due(camp)
+    local total, due = 0, 0
+    for _, song in ipairs(B.brd_songs(camp)) do
+        total = total + 1
+        if brd_song_due(song) then due = due + 1 end
+    end
+    if total == 0 then return false end
+    if S.profile.support.brd.nitro_all_songs then return due == total end
+    return due > 0
+end
+
+function B.brd_maybe_clarion(camp)
+    local cfg = S.profile.support.brd
+    if not cfg.clarion_call or (tonumber(cfg.max_songs) or 4) < 5 then return false end
+    if B.has_status(0, { BATTLE_IDS.clarion_call }) then return false end
+    if #B.brd_group_songs(camp) < 5 then return false end
+    if not B.ability_ready('Clarion Call') then return false end
+    local now = clock()
+    if now < (R.brd.clarion_at or 0) + 10 then return false end
+    if use_self_ability('Clarion Call') then
+        R.brd.clarion_at = now
+        return true
+    end
+    return false
+end
+
+function B.brd_maybe_soul_voice()
+    local cfg = S.profile.support.brd
+    if not cfg.soul_voice then return false end
+    if B.has_status(0, { BATTLE_IDS.soul_voice }) then return false end
+    if not B.ability_ready('Soul Voice') then return false end
+    local now = clock()
+    if now < (R.brd.soul_at or 0) + 10 then return false end
+    if use_self_ability('Soul Voice') then
+        R.brd.soul_at = now
+        return true
     end
     return false
 end
@@ -3558,7 +4040,7 @@ function B.brd_cast_piano()
 end
 
 local function brd_cast_camp(camp)
-    for _, song in ipairs(B.brd_group_songs(camp)) do
+    for _, song in ipairs(B.brd_songs(camp)) do
         if brd_song_due(song) then
             if cast_song(song, 0) then
                 R.brd.sung[song] = clock()
@@ -3649,7 +4131,24 @@ local function brd_tick(me)
         return true
     end
     B.stop_move()
-    if (support_due or tank_due) and brd_maybe_nitro(phase) then return true end
+    if support_due or tank_due then
+        if B.brd_maybe_clarion(phase) then return true end
+        if B.brd_maybe_soul_voice() then return true end
+        -- "Every song Nitro'd" waits up to 30 s for the pair before starting the set;
+        -- after that it sings anyway so a down ability cannot freeze the cycle.
+        if cfg.nitro_all_songs and cfg.nitro ~= 'off'
+            and R.brd.nitro_step ~= 'night' and R.brd.nitro_step ~= 'troub' then
+            local night = B.ability_remaining('Nightingale')
+            local troub = B.ability_remaining('Troubadour')
+            if night ~= nil and troub ~= nil and (night > 0.05 or troub > 0.05) then
+                R.brd.nitro_wait_at = R.brd.nitro_wait_at or clock()
+                if clock() < (R.brd.nitro_wait_at or 0) + 30 then return true end
+            else
+                R.brd.nitro_wait_at = nil
+            end
+        end
+        if brd_maybe_nitro(phase) then return true end
+    end
     if brd_cast_camp(phase) then return true end
     if B.brd_cast_piano() then return true end
     if phase == 'support' and tank_due then
@@ -3671,7 +4170,14 @@ function B.support_ability_tick()
             local key = row.name:lower()
             -- Nitro has its own sequence on the Buffs page.  A stale "Keep Nightingale" or
             -- "Keep Troubadour" row from an older profile must not use either half on its own.
-            if key ~= 'nightingale' and key ~= 'troubadour' then
+            -- Clarion Call and Soul Voice belong to the song cycle, and GEO's Entrust/BOG/
+            -- Bolster are sequenced by the bubble loop, not the generic interval list.
+            local sequenced = key == 'nightingale' or key == 'troubadour'
+                or key == 'clarion call' or key == 'soul voice'
+            local job = self_job()
+            if not sequenced and not (job == 21
+                and (key == 'entrust' or key == 'blaze of glory' or key == 'bolster'))
+                and not (job == 17 and key:sub(-5) == ' roll') then
                 local interval = tonumber(row.interval) or 300
                 if now >= (R.support_last[key] or 0) + interval then
                     if use_self_ability(row.name) then
@@ -3685,6 +4191,79 @@ function B.support_ability_tick()
     return false
 end
 
+-- Corsair rolls: the selected set is maintained at the support camp, one roll per tick.
+-- The roll recast is the real gate; the interval only stops an engine from trying a roll
+-- that is already on cooldown every frame.
+function B.cor_tick(me)
+    local cfg = S.profile.support.cor
+    if not cfg or not cfg.enabled then return false end
+    local camp = B.camp_pos('support') or B.camp_pos('tank')
+    if not camp then return false end
+    local radius = math.max(1.0, B.camp_radius('support') * 0.5)
+    if distance(me, camp) > radius then
+        B.move_to(camp, radius * 0.6)
+        return true
+    end
+    B.stop_move()
+    local now = clock()
+    for _, name in ipairs(cfg.rolls or {}) do
+        local key = tostring(name or ''):lower()
+        if key ~= '' and now >= (R.cor.last[key] or 0) + (tonumber(cfg.interval) or 300) then
+            if B.ability_ready(name) and use_self_ability(name) then
+                R.cor.last[key] = now
+                return true
+            end
+        end
+    end
+    return false
+end
+
+-- A support client is ready when its own configured buff set has actually been cast since
+-- this Start.  The puller waits for every assigned party member to publish this state.
+function B.support_prepared()
+    local started = tonumber(R.prepare_started) or 0
+    local job = self_job()
+    if job == 10 then
+        local cfg = S.profile.support.brd
+        if not cfg.enabled then return true end
+        if brd_camp_due('tank') then return false end
+        if B.brd_piano_due() then return false end
+        local tank_camp = B.camp_pos('tank')
+        local support_camp = B.camp_pos('support')
+        local distinct = not S.profile.camp.mobile and tank_camp and support_camp
+            and distance(tank_camp, support_camp) > 2
+            and B.brd_group_name('support') ~= B.brd_group_name('tank')
+        if distinct and brd_camp_due('support') then return false end
+        return true
+    elseif job == 21 then
+        local cfg = S.profile.support.geo
+        if not cfg.enabled then return true end
+        if (tonumber(R.geo.last_indi) or 0) < started then return false end
+        -- A Geo- hex is an enemy debuff, so it cannot be cast before the first pull.
+        -- Readiness waits for a party Geo- bubble but lets the hex wait for a claimed mob.
+        local geo_spell = B.spell(cfg.geo)
+        local enemy_geo = geo_spell == nil
+            or math.floor((tonumber(geo_spell.targets) or 0) / 32) % 2 == 1
+        if not enemy_geo and (tonumber(R.geo.last_geo) or 0) < started then return false end
+        if cfg.entrust_enabled and cfg.entrust_target ~= '' and cfg.entrust_indi ~= ''
+            and (tonumber(R.geo.last_entrust) or 0) < started then
+            return false
+        end
+        if cfg.blaze_of_glory and (tonumber(R.geo.bog_at) or 0) < started then return false end
+        if cfg.bolster and (tonumber(R.geo.bolster_at) or 0) < started then return false end
+        return true
+    elseif job == 17 then
+        local cfg = S.profile.support.cor
+        if not cfg or not cfg.enabled then return true end
+        for _, name in ipairs(cfg.rolls or {}) do
+            local key = tostring(name or ''):lower()
+            if key ~= '' and (tonumber(R.cor.last[key]) or 0) < started then return false end
+        end
+        return true
+    end
+    return true
+end
+
 function B.support_tick(role)
     if role ~= 'support' then return false end
     if B.is_casting() or clock() < (R.busy_until or 0) then return true end
@@ -3694,6 +4273,7 @@ function B.support_tick(role)
     if not me then return false end
     if job == 21 then return geo_tick(me) end
     if job == 10 then return brd_tick(me) end
+    if job == 17 then return B.cor_tick(me) end
     return false
 end
 
@@ -3717,14 +4297,29 @@ function B.pull_tick(role)
     if not p.enabled then return false end
     local now = clock()
     local pull = R.pull
-    local camp = B.camp_pos(B.camp_for_role('puller'))
+    local own_role = B.self_role() or 'puller'
+    local pull_role = B.camp_for_role(own_role)
+    local camp = B.camp_pos(pull_role)
     local me = B.self()
     if not camp or not me then return false end
+    if S.phase ~= 'running' then
+        B.pull_return()
+        return true
+    end
+    local active = pull.mob ~= nil or #(pull.path or {}) > 0
+    if not active and not B.team_ready() then
+        B.pull_return()
+        return true
+    end
 
     if pull.mob then
         local index = pull.mob
         if not entity_live(index) or (tonumber(S.game.entity(index, 'HPPercent')) or 0) <= 0 then
             pull.mob, pull.state, pull.tries = nil, 'idle', 0
+            if #(pull.path or {}) > 0 then
+                B.pull_return()
+                return true
+            end
         else
             local claim = claim_of(index)
             if claim then
@@ -3732,29 +4327,71 @@ function B.pull_tick(role)
                     pull.state = 'returning'
                     B.log_action('pull claimed; returning to camp')
                 end
-                B.return_to_camp()
+                B.pull_return()
                 return true
             end
-            if now - (pull.at or 0) > 8 then
+            local timeout = (pull.state == 'approach' or pull.state == 'melee') and 35 or 12
+            if now - (pull.at or 0) > timeout then
                 R.failed['mob:' .. tostring(tonumber(S.game.entity(index, 'ServerId')) or index)] = now + 12
                 pull.mob, pull.state, pull.tries = nil, 'idle', 0
-            elseif pull.state == 'melee' then
+                B.pull_return()
+                return true
+            end
+            if pull.state == 'melee' then
                 local pos = position(index)
-                if pos and B.self_pos() and distance(pos, B.self_pos()) <= 3.0 then
+                local mine = B.self_pos()
+                if pos and mine and distance(pos, mine) <= 3.0 then
                     B.engage(index, 'puller')
-                else
+                elseif pos then
+                    B.set_target(index)
                     B.move_to(pos, 2.2)
+                    B.pull_path_record()
                 end
                 return true
             end
             if B.is_casting() or clock() < (R.busy_until or 0) then return true end
-            B.return_to_camp()
+            if pull.state == 'approach' then
+                local pos = position(index)
+                local mine = B.self_pos()
+                if pos and mine then
+                    local range = B.pull_action_range()
+                    if distance(pos, mine) > math.max(1.0, range - 1.0) then
+                        B.set_target(index)
+                        B.move_to(pos, math.max(1.0, range - 1.5))
+                        B.pull_path_record()
+                        return true
+                    end
+                    if B.pull_action(index) then
+                        pull.state = 'pulling'
+                        pull.at = now
+                    else
+                        pull.tries = (tonumber(pull.tries) or 0) + 1
+                        if pull.tries < 2 then
+                            -- The client range check is stricter than the resource range;
+                            -- close a few yalms and try once more before giving up.
+                            B.move_to(pos, math.max(0.8, range - 5))
+                            B.pull_path_record()
+                        else
+                            R.failed['mob:' .. tostring(tonumber(S.game.entity(index, 'ServerId')) or index)] = now + 8
+                            pull.mob, pull.state, pull.tries = nil, 'idle', 0
+                            B.pull_return()
+                        end
+                    end
+                    return true
+                end
+            end
+            -- A successful action is in flight.  Wait out the cast, then walk the recorded
+            -- route home; a claim may land while the action resolves.
+            if pull.state == 'pulling' and now - (pull.at or 0) > 5 then
+                pull.mob, pull.state, pull.tries = nil, 'idle', 0
+            end
+            B.pull_return()
             return true
         end
     end
 
-    if claimed_near_camp(nil, B.camp_for_role('puller')) >= (tonumber(p.max_mobs) or 3) then
-        B.return_to_camp()
+    if claimed_near_camp(nil, pull_role) >= (tonumber(p.max_mobs) or 3) then
+        B.pull_return()
         return true
     end
 
@@ -3763,7 +4400,7 @@ function B.pull_tick(role)
     -- clock is our own and is also what keeps enfeebles off the sleeping mob.
     if p.sleep_extras and (p.sleep_spell ~= '' or p.bind_spell ~= '') and B.can_act() then
         local main = R.target_index
-        for _, mob in ipairs(mob_list(B.camp_for_role('puller'))) do
+        for _, mob in ipairs(mob_list(pull_role)) do
             if mob.claim and mob.index ~= main
                 and mob.dist_camp <= (tonumber(S.profile.camp.radius) or 10) + 1
                 and clock() >= (R.sleep_until[mob.name] or 0) then
@@ -3784,42 +4421,48 @@ function B.pull_tick(role)
     local current_hpp = (current and entity_live(current)) and (tonumber(S.game.entity(current, 'HPPercent')) or 0) or 0
     local want_next = current == nil or current_hpp <= 0 or current_hpp <= (tonumber(p.at_hp) or 50)
     if not want_next then
-        B.return_to_camp()
+        B.pull_return()
         return true
     end
     if B.is_casting() or clock() < (R.busy_until or 0) then return true end
 
+    -- The puller owns everything inside find_distance, not just the camp circle.  The name
+    -- whitelist still applies, and claimed mobs stay with their owner.
+    local reach = tonumber(p.find_distance) or 40
+    local wanted = p.mobs
     local best = nil
-    for _, mob in ipairs(mob_list(B.camp_for_role('puller'))) do
-        if not mob.claim and mob.dist_camp <= (tonumber(p.leash) or 28) and mob.dist_camp > 1.5 then
-            if not best or mob.dist_camp < best.dist_camp then best = mob end
+    for _, mob in ipairs(mob_list(pull_role)) do
+        local allowed = not mob.claim and mob.dist_camp <= reach and mob.dist_camp > 1.5
+        if allowed and #wanted > 0 then
+            allowed = false
+            local name = tostring(mob.name or ''):lower()
+            for _, allowed_name in ipairs(wanted) do
+                if allowed_name:lower() == name then allowed = true break end
+            end
         end
+        if allowed and (not best or mob.dist_camp < best.dist_camp) then best = mob end
     end
     if not best then
-        B.return_to_camp()
+        B.pull_return()
         return true
     end
 
-    if p.method == 'melee' then
-        pull.mob, pull.state, pull.at = best.index, 'melee', now
-        B.set_target(best.index)
-        B.move_to(best.pos, 2.2)
-        return true
+    -- New pull: the camp is the first waypoint, and every step of the approach goes on the
+    -- return trail.
+    pull.path = {}
+    if camp then pull.path[1] = { x = camp.x, y = camp.y, z = camp.z } end
+    local start = B.self_pos()
+    if start and (not camp or distance(start, camp) > 2.5) then
+        pull.path[#pull.path + 1] = { x = start.x, y = start.y, z = start.z }
     end
-
+    pull.mob, pull.at, pull.tries = best.index, now, 0
     B.set_target(best.index)
-    local ok = false
-    if p.method == 'ranged' then
-        ok = issue('/ra <t>', 2.4, 'pull (ranged)')
-    elseif p.method == 'spell' then
-        ok = B.cast_on_enemy(p.spell ~= '' and p.spell or 'Dia', best.index)
-    elseif p.method == 'ability' then
-        ok = B.use_ability(p.ability, best.index)
-    end
-    if ok then
-        pull.mob, pull.state, pull.at, pull.tries = best.index, 'pulling', clock(), 0
+    if p.method == 'melee' then
+        pull.state = 'melee'
+        B.move_to(best.pos, 2.2)
+        B.pull_path_record()
     else
-        R.failed['mob:' .. tostring(best.id)] = clock() + 8
+        pull.state = 'approach'
     end
     return true
 end
@@ -4119,6 +4762,65 @@ local function combat_tick(role)
     end
 end
 
+-- Start is a staged ready-up: every client walks to its camp, lets its heal rows and
+-- support cycle run, and only then publishes ready.  The puller waits for the whole
+-- assigned party, so the first pull cannot beat the songs, rolls or bubbles.
+function B.prepare_tick(role)
+    local now = clock()
+    local started = tonumber(R.prepare_started) or now
+    if R.ready then return false end
+    local camp_kind = B.camp_for_role(role)
+    local camp = B.camp_pos(camp_kind)
+    local radius = B.camp_radius(camp_kind)
+    local function at_camp()
+        local pos = B.self_pos()
+        if not camp or not pos then return true end
+        return distance(pos, camp) <= radius * 0.7
+    end
+    if not at_camp() then
+        if role == 'support' then
+            B.support_tick(role)
+            -- BRD/GEO/COR move themselves; a generic support job needs the ordinary walk.
+            local job = self_job()
+            if job ~= 10 and job ~= 17 and job ~= 21 then B.return_to_camp('support') end
+        else
+            B.return_to_camp(role)
+        end
+        return true
+    end
+    B.stop_move()
+    B.clear_target()
+    if B.is_casting() or now < (R.busy_until or 0) then return true end
+    -- Buffs and cures wait until the client is actually in camp, so movement never eats a
+    -- cast and the puller cannot start on a half-finished set.
+    if B.heal_tick() then return true end
+    if B.buff_tick() then return true end
+    if B.is_casting() or now < (R.busy_until or 0) then return true end
+    if role == 'support' then
+        B.support_tick(role)
+        if not at_camp() then return true end
+        if B.is_casting() or now < (R.busy_until or 0) then return true end
+    end
+    local me = B.self()
+    local elapsed = now - started
+    if me and tonumber(me.hpp) and me.hpp > 0 and me.hpp < 75 and elapsed < 45 then
+        return true
+    end
+    if role == 'support' and not B.support_prepared() and elapsed < 75 then
+        return true
+    end
+    if elapsed < 2.5 then return true end
+    R.ready = true
+    S.phase = 'running'
+    B.publish_state(true)
+    local timed_out = (me and me.hpp and me.hpp < 75)
+        or (role == 'support' and not B.support_prepared())
+    note('action', timed_out
+        and 'Battle: ready with unresolved preparation; starting anyway.'
+        or 'Battle: ready.')
+    return true
+end
+
 function B.tick()
     if not S.installed then return end
     local now = clock()
@@ -4175,6 +4877,10 @@ function B.tick()
     end
     if B.raise_tick() then return end
 
+    if S.phase == 'preparing' then
+        if B.prepare_tick(role) then return end
+    end
+
     for _, step in ipairs(S.profile.priority) do
         local done = false
         if step == 'heal' then done = B.heal_tick()
@@ -4187,17 +4893,24 @@ function B.tick()
         end
     end
 
-    if role == 'puller' then B.pull_tick(role) end
+    if role == 'puller' then
+        -- A dedicated puller's pull/return step owns the tick; letting combat_tick run after
+        -- it engaged the pulled mob and cancelled the walk back to camp.
+        if B.pull_tick(role) then return end
+    end
     if role == 'support' and S.profile.roster.puller == self_name()
-        and S.profile.pull.enabled and B.pull_tick('puller') then
-        return
+        and S.profile.pull.enabled then
+        local pulled = B.pull_tick('puller')
+        -- A support member who is also the puller still does their support job between
+        -- pulls; only an active pull, approach or return owns the tick.
+        if pulled and ((R.pull.mob ~= nil) or #(R.pull.path or {}) > 0) then return end
     end
     if role == 'support' and B.support_tick(role) then return end
     if B.is_casting() or now < (R.busy_until or 0) then return end
     combat_tick(role)
 end
 
-function B.start()
+function B.start(run_id)
     if not S.profile then C.new_profile(nil) end
     local needs_camp = not (S.profile.camp.mobile or not S.profile.camp.tank_enabled)
     if needs_camp and not B.ensure_camp() then
@@ -4205,22 +4918,46 @@ function B.start()
         return false, 'set a camp first'
     end
     reset_runtime()
+    B.stop_move()
+    B.disengage()
+    B.clear_target()
+    run_id = text(run_id or '', 48)
+    if run_id == '' then
+        run_id = string.format('%d-%06d', os.time(), math.floor((os.clock() % 1) * 1000000))
+    end
+    S.run_id = run_id
     S.running = true
+    S.phase = 'preparing'
+    R.prepare_started = clock()
+    R.ready = false
     S.visible = true
     S.profile.ui.show = true
+    S.profile.engine.running = true
+    S.profile.engine.ready = false
+    S.profile.engine.run_id = S.run_id
+    B.publish_state(false)
     local role = B.self_role()
     if not role then
         note('error', 'Battle: this character is not assigned to a role; it will wait.')
     else
-        note('action', 'Battle: started as ' .. ROLE_LABELS[role] .. '.')
+        note('action', 'Battle: preparing as ' .. ROLE_LABELS[role] .. '.')
     end
     return true
 end
 
 function B.stop()
     S.running = false
+    S.phase = 'stopped'
+    R.ready = false
+    S.run_id = ''
     B.stop_move()
     B.disengage()
+    if S.profile then
+        S.profile.engine.running = false
+        S.profile.engine.ready = false
+        S.profile.engine.run_id = ''
+    end
+    B.publish_state(false)
     note('action', 'Battle: stopped; waiting for the next instruction.')
 end
 
@@ -4235,6 +4972,12 @@ end
 
 function B.status()
     local role = S.remote_edit and B.role_of(S.remote_edit.name) or B.self_role()
+    local now = clock()
+    if not S.team_status_at or now >= S.team_status_at + 1 then
+        S.team_status_waiting = B.team_waiting()
+        S.team_status_at = now
+    end
+    local waiting = S.team_status_waiting or {}
     local member = B.self()
     local target = nil
     if B.target_valid() then
@@ -4252,6 +4995,11 @@ function B.status()
     end
     return {
         running = S.running,
+        phase = S.phase or (S.running and 'running' or 'stopped'),
+        ready = R.ready == true,
+        run_id = S.run_id or '',
+        team_ready = #waiting == 0,
+        waiting_on = waiting,
         visible = S.visible,
         role = role,
         role_label = role and ROLE_LABELS[role] or nil,
@@ -5136,12 +5884,12 @@ function M.request(args)
             S.ui.opacity = S.profile.ui.opacity
         end
         return snapshot()
-    elseif action == 'save' then
+    elseif action == 'save' or action == 'save_as' then
         if type(args.profile) == 'table' then
             S.profile = C.sanitize(args.profile)
             S.buffers = {}
         end
-        local ok, err = C.save(args.name)
+        local ok, err = C.save(args.name, action == 'save_as')
         if not ok then return nil, err end
         S.dirty = false
         show_hub(false)
@@ -5159,7 +5907,7 @@ function M.request(args)
         S.dirty = true
         return snapshot()
     elseif action == 'start' then
-        local ok, err = B.start()
+        local ok, err = B.start(args.run_id)
         if not ok then return nil, err end
         return snapshot()
     elseif action == 'stop' then
@@ -5277,6 +6025,11 @@ function M.request(args)
         return snapshot()
     elseif action == 'suggest' then
         C.suggest(tostring(args.scope or 'all'))
+        return snapshot()
+    elseif action == 'reset_enfeebles' then
+        R.enf_tries = {}
+        R.enf_due = {}
+        note('action', 'Battle: enfeeble resist counters reset.')
         return snapshot()
     elseif action == 'command' then
         M.command(tostring(args.line or ''))
@@ -6027,6 +6780,102 @@ local function skillchain_diagram(api, plan)
     api.PopFont()
 end
 
+function B.ability_name(ability)
+    local name = ability and ability.name
+    if type(name) == 'table' then name = name.en or name[2] or name[1] end
+    return type(name) == 'string' and name or ''
+end
+
+-- Every weapon skill in the client's resource table.  The HUD's skillchain is a
+-- party-wide plan, so listing only this box's weapon would hide the other actors'
+-- skills; the picker is searchable and the actor combo still chooses who uses it.
+function B.weapon_skill_choices()
+    if S.ws_choices then return S.ws_choices end
+    local out, seen = {}, {}
+    local ok, ids = pcall(S.res.ability_ids)
+    if ok and type(ids) == 'table' then
+        for _, raw in ipairs(ids) do
+            local id = tonumber(raw) or 0
+            local ok2, ability = pcall(S.res.ability, id)
+            if ok2 and type(ability) == 'table'
+                and tostring(ability.type_name or '') == 'WeaponSkill' then
+                local name = B.ability_name(ability)
+                local key = name:lower()
+                if name ~= '' and not seen[key] then
+                    seen[key] = true
+                    out[#out + 1] = { name = name, detail = 'Weapon skill' }
+                end
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.name:lower() < b.name:lower() end)
+    S.ws_choices = out
+    return out
+end
+
+-- Every castable spell except Trusts.  Again the plan can name a spell from another
+-- party member, so the Burst list cannot use only this box's job list.
+function B.spell_choices()
+    if S.spell_choices_cache then return S.spell_choices_cache end
+    local out, seen = {}, {}
+    local ok, ids = pcall(S.res.spell_ids)
+    if ok and type(ids) == 'table' then
+        for _, raw in ipairs(ids) do
+            local id = tonumber(raw) or 0
+            local ok2, spell = pcall(S.res.spell, id)
+            if ok2 and type(spell) == 'table' then
+                local name = spell_name(spell)
+                local kind = tostring(spell.type_name or '')
+                local key = name:lower()
+                if name ~= '' and kind ~= 'Trust' and not seen[key] then
+                    seen[key] = true
+                    out[#out + 1] = { name = name, detail = kind ~= '' and kind or 'Spell' }
+                end
+            end
+        end
+    end
+    table.sort(out, function(a, b) return a.name:lower() < b.name:lower() end)
+    S.spell_choices_cache = out
+    return out
+end
+
+-- The current job pair's known spells and job abilities, for the in-game field pickers.
+-- The skillchain burst list still uses the all-spell catalogue because its actors can be
+-- other party members.
+function B.known_spell_choices()
+    local out, seen = {}, {}
+    for _, spell in ipairs(known_spells()) do
+        local name = spell_name(spell)
+        local key = name:lower()
+        if name ~= '' and tostring(spell.type_name or '') ~= 'Trust' and not seen[key] then
+            seen[key] = true
+            out[#out + 1] = { name = name, detail = tostring(spell.type_name or 'Spell') }
+        end
+    end
+    table.sort(out, function(a, b) return a.name:lower() < b.name:lower() end)
+    return out
+end
+
+function B.known_ability_choices()
+    local out, seen = {}, {}
+    for _, name in ipairs(known_abilities()) do
+        local key = tostring(name or ''):lower()
+        if key ~= '' and not seen[key] then
+            seen[key] = true
+            out[#out + 1] = { name = name, detail = 'Job ability' }
+        end
+    end
+    table.sort(out, function(a, b) return a.name:lower() < b.name:lower() end)
+    return out
+end
+
+function B.sc_open_picker(kind, index, target, multi)
+    S.picker_gen = (S.picker_gen or 0) + 1
+    S.sc_picker = { kind = kind, index = index, target = target, multi = multi == true,
+        gen = S.picker_gen }
+    S.buffers['t:sc-pick-search'] = { '' }
+end
+
 function H.skillchain(api)
     local p = S.profile.skillchain
     section(api, 'Skillchain style')
@@ -6070,8 +6919,10 @@ function H.skillchain(api)
         local actor = combo(api, 'sc-actor-' .. index, values, labels, row.actor, 126)
         if actor then row.actor = actor; touched() end
         api.SameLine(0, 4)
-        local ws = text_field(api, 'sc-ws-' .. index, row.ws, 160)
-        if ws then row.ws = text(ws, 40); touched() end
+        local ws_label = row.ws ~= '' and row.ws or 'Choose weapon skill…'
+        if button(api, ws_label .. '##sc-ws-' .. index, HUB.dim, 160) then
+            B.sc_open_picker('ws', index)
+        end
         if p.mode ~= 'spam' then
             api.SameLine(0, 4)
             local diamond = check(api, 'sc-diamond-' .. index, 'Diamond', row.diamond)
@@ -6115,8 +6966,10 @@ function H.skillchain(api)
                 local name = combo(api, 'sc-burst-name-' .. index, values, labels, row.name, 132)
                 if name then row.name = name; touched() end
                 api.SameLine(0, 4)
-                local spell = text_field(api, 'sc-burst-spell-' .. index, row.spell, 170)
-                if spell then row.spell = text(spell, 40); touched() end
+                local spell_label = row.spell ~= '' and row.spell or 'Choose spell…'
+                if button(api, spell_label .. '##sc-burst-spell-' .. index, HUB.dim, 170) then
+                    B.sc_open_picker('spell', index)
+                end
                 api.SameLine(0, 4)
                 if button(api, 'x##sc-burst-rm-' .. index, HUB.red, 24) then remove_burst = index end
                 api.PopID()
@@ -6205,12 +7058,14 @@ function H.pull(api)
     local method = combo(api, 'pull-method', PULL_METHODS, PULL_LABEL_LIST, p.method, 180)
     if method then p.method = method; touched() end
     if p.method == 'spell' then
-        local spell = text_field(api, 'pull-spell', p.spell, 180)
-        if spell then p.spell = text(spell, 40); touched() end
+        if button(api, (p.spell ~= '' and p.spell or 'Choose spell…') .. '##pull-spell', HUB.dim, 180) then
+            B.sc_open_picker('known_spell', nil, 'pull_spell')
+        end
         api.SameLine(0, 6); hud_text(api, HUB.dim, 'pull spell')
     elseif p.method == 'ability' then
-        local ability = text_field(api, 'pull-ability', p.ability, 180)
-        if ability then p.ability = text(ability, 40); touched() end
+        if button(api, (p.ability ~= '' and p.ability or 'Choose ability…') .. '##pull-ability', HUB.dim, 180) then
+            B.sc_open_picker('ability', nil, 'pull_ability')
+        end
         api.SameLine(0, 6); hud_text(api, HUB.dim, 'pull ability')
     end
     local maxm = int_field(api, 'pull-max', p.max_mobs, 80, 1, 12, '%d mobs')
@@ -6223,12 +7078,15 @@ function H.pull(api)
     if leash then p.leash = leash; touched() end
     local range = yalm_field(api, 'pull-range', p.find_distance, 54, 5, 100, 1, '%d', 'yalms')
     if range then p.find_distance = range; touched() end
-    api.TextDisabled('Search distance is from camp; the puller will not travel farther.')
-    local sleep = text_field(api, 'pull-sleep', p.sleep_spell, 180)
-    if sleep then p.sleep_spell = text(sleep, 40); touched() end
+    api.TextDisabled('Search distance is from camp. The puller leaves up to it, then retraces its route back.')
+    api.TextDisabled('Leash limits how far the rest of the party chases, not the puller.')
+    if button(api, (p.sleep_spell ~= '' and p.sleep_spell or 'Choose sleep…') .. '##pull-sleep', HUB.dim, 180) then
+        B.sc_open_picker('known_spell', nil, 'pull_sleep')
+    end
     api.SameLine(0, 6); hud_text(api, HUB.dim, 'sleep spell')
-    local bind = text_field(api, 'pull-bind', p.bind_spell, 180)
-    if bind then p.bind_spell = text(bind, 40); touched() end
+    if button(api, (p.bind_spell ~= '' and p.bind_spell or 'Choose bind…') .. '##pull-bind', HUB.dim, 180) then
+        B.sc_open_picker('known_spell', nil, 'pull_bind')
+    end
     api.SameLine(0, 6); hud_text(api, HUB.dim, 'bind spell')
     local extras = check(api, 'pull-extras', 'Sleep/bind extra mobs that reach the camp', p.sleep_extras)
     if extras ~= nil then p.sleep_extras = extras; touched() end
@@ -6321,8 +7179,9 @@ function H.heal(api)
     local remove_at = nil
     for index, row in ipairs(p.cures) do
         api.PushID(row.id)
-        local spell = text_field(api, 'cure-spell-' .. row.id, row.spell, 170)
-        if spell then row.spell = text(spell, 40); touched() end
+        if button(api, (row.spell ~= '' and row.spell or 'Choose cure…') .. '##cure-spell-' .. row.id, HUB.dim, 170) then
+            B.sc_open_picker('known_spell', row.id, 'heal_cure')
+        end
         api.SameLine(0, 6)
         local below = int_field(api, 'cure-below-' .. row.id, row.below, 86, 1, 100, '%d%% HP')
         if below then row.below = below; touched() end
@@ -6368,12 +7227,14 @@ function H.heal(api)
     if status ~= nil then p.status = status; touched() end
     local erase = check(api, 'heal-erase', 'Use Erase for anything the -na list cannot name', p.erase)
     if erase ~= nil then p.erase = erase; touched() end
-    local raise = text_field(api, 'heal-raise', p.raise_spell, 160)
-    if raise then p.raise_spell = text(raise, 40); touched() end
+    if button(api, (p.raise_spell ~= '' and p.raise_spell or 'Choose raise…') .. '##heal-raise', HUB.dim, 160) then
+        B.sc_open_picker('known_spell', nil, 'heal_raise')
+    end
     api.SameLine(0, 6); hud_text(api, HUB.dim, 'raise spell')
-    local avoid = text_field(api, 'heal-avoid', p.avoid, 300)
-    if avoid then p.avoid = text(avoid, 160); touched() end
-    api.SameLine(0, 6); hud_text(api, HUB.dim, 'never cast (comma separated)')
+    if button(api, (p.avoid ~= '' and p.avoid or 'Choose never-cast spells…') .. '##heal-avoid', HUB.dim, 300) then
+        B.sc_open_picker('known_spell', nil, 'heal_avoid', true)
+    end
+    api.SameLine(0, 6); hud_text(api, HUB.dim, 'never cast')
     section(api, 'Healing exclusions')
     api.TextDisabled('Excluded players are not cured or watched.')
     api.TextDisabled('If silenced they get Silena first, so a self-curing PLD can cure again;')
@@ -6570,6 +7431,8 @@ function H.support(api)
         end
         return nil
     end
+    local cor = p.cor or { enabled = true, rolls = {}, interval = 300 }
+    p.cor = cor
     if job == 5 and not ability_row('Composure') then
         p.abilities[#p.abilities + 1] = { name = 'Composure', enabled = true, interval = 300 }
         touched()
@@ -6579,8 +7442,14 @@ function H.support(api)
         local abilities = known_abilities()
         for index, name in ipairs(abilities) do
             if index > 20 then break end
-            local row = ability_row(name)
-            local value = check(api, 'support-ability-' .. index, 'Keep ' .. name, row and row.enabled or false)
+            -- GEO's own Entrust/BOG/Bolster controls below own these three, so the generic
+            -- interval list must not also fire them at an arbitrary moment.
+            local special = (job == 21 and (name == 'Bolster' or name == 'Blaze of Glory'
+                or name == 'Entrust'))
+                or (job == 10 and (name == 'Clarion Call' or name == 'Soul Voice'))
+                or (job == 17 and name:lower():sub(-5) == ' roll')
+            local row = not special and ability_row(name) or nil
+            local value = not special and check(api, 'support-ability-' .. index, 'Keep ' .. name, row and row.enabled or false) or nil
             if value ~= nil then
                 if value and not row then
                     p.abilities[#p.abilities + 1] = { name = name, enabled = true, interval = 300 }
@@ -6597,8 +7466,8 @@ function H.support(api)
         api.TextDisabled('Checked abilities are used while this character supports;')
         api.TextDisabled('Composure is on by default for RDM.')
     end
-    if job ~= 21 and job ~= 10 then
-        api.TextDisabled('This job has no Geomancer or Bard support settings.')
+    if job ~= 21 and job ~= 10 and job ~= 17 then
+        api.TextDisabled('This job has no Corsair, Geomancer or Bard support settings.')
         return
     end
     if job == 21 then
@@ -6608,11 +7477,13 @@ function H.support(api)
         api.TextDisabled('Indi- stays around the GEO at support.')
         api.TextDisabled('Geo- buffs are thrown on the tank/anchor by subtarget; Geo- hexes')
         api.TextDisabled('(Frailty, Malaise, ...) are thrown on the claimed monster instead.')
-        local indi = text_field(api, 'geo-indi', p.geo.indi, 170)
-        if indi then p.geo.indi = text(indi, 40); touched() end
+        if button(api, (p.geo.indi ~= '' and p.geo.indi or 'Choose Indi-…') .. '##geo-indi', HUB.dim, 170) then
+            B.sc_open_picker('indi', nil, 'geo_indi')
+        end
         api.SameLine(0, 6); hud_text(api, HUB.dim, 'Indi at support')
-        local geospell = text_field(api, 'geo-geo', p.geo.geo, 170)
-        if geospell then p.geo.geo = text(geospell, 40); touched() end
+        if button(api, (p.geo.geo ~= '' and p.geo.geo or 'Choose Geo-…') .. '##geo-geo', HUB.dim, 170) then
+            B.sc_open_picker('geo', nil, 'geo_geo')
+        end
         api.SameLine(0, 6); hud_text(api, HUB.dim, 'Geo- spell')
         local values, labels = { '' }, { '(tank)' }
         for _, name in ipairs(roster_names()) do values[#values + 1] = name; labels[#labels + 1] = name end
@@ -6625,6 +7496,55 @@ function H.support(api)
         if gi then p.geo.indi_interval = gi; touched() end
         local gg = int_field(api, 'geo-geo-int', p.geo.geo_interval, 100, 30, 600, '%d s Geo')
         if gg then p.geo.geo_interval = gg; touched() end
+        local entrust = check(api, 'geo-entrust-on', 'Entrust an Indi on another player', p.geo.entrust_enabled)
+        if entrust ~= nil then p.geo.entrust_enabled = entrust; touched() end
+        if p.geo.entrust_enabled then
+            local entrust_names = { '' }
+            for _, name in ipairs(roster_names()) do entrust_names[#entrust_names + 1] = name end
+            hud_text(api, HUB.dim, 'Entrust target')
+            api.SameLine(0, 6)
+            local etarget = combo(api, 'geo-entrust-target', entrust_names, entrust_names, p.geo.entrust_target, 150)
+            if etarget then p.geo.entrust_target = etarget; touched() end
+            api.SameLine(0, 6)
+            if button(api, (p.geo.entrust_indi ~= '' and p.geo.entrust_indi or 'Choose Indi-…') .. '##geo-entrust-indi', HUB.dim, 170) then
+                B.sc_open_picker('indi', nil, 'geo_entrust_indi')
+            end
+            api.SameLine(0, 6); hud_text(api, HUB.dim, 'Entrusted Indi')
+        end
+        local bog = check(api, 'geo-bog', 'Use Blaze of Glory when ready', p.geo.blaze_of_glory)
+        if bog ~= nil then p.geo.blaze_of_glory = bog; touched() end
+        local bolster = check(api, 'geo-bolster', 'Use Bolster when ready', p.geo.bolster)
+        if bolster ~= nil then p.geo.bolster = bolster; touched() end
+    elseif job == 17 then
+        section(api, 'Corsair')
+        local cor_on = check(api, 'cor-on', 'Run the COR roll cycle', cor.enabled)
+        if cor_on ~= nil then cor.enabled = cor_on; touched() end
+        api.TextDisabled('Pick up to two rolls, like Luzaf\'s Set rolls. The loop rolls at the support camp.')
+        local roll_choices = {}
+        for _, name in ipairs(known_abilities()) do
+            if name:lower():sub(-5) == ' roll' then roll_choices[#roll_choices + 1] = name end
+        end
+        for index, name in ipairs(roll_choices) do
+            if index > 32 then break end
+            local included = false
+            for _, chosen in ipairs(cor.rolls or {}) do
+                if chosen:lower() == name:lower() then included = true break end
+            end
+            local value = check(api, 'cor-roll-' .. index, name, included)
+            if value ~= nil then
+                if value and not included and #cor.rolls < 2 then
+                    cor.rolls[#cor.rolls + 1] = name
+                elseif not value then
+                    for at = #cor.rolls, 1, -1 do
+                        if cor.rolls[at]:lower() == name:lower() then table.remove(cor.rolls, at) end
+                    end
+                end
+                touched()
+            end
+        end
+        local cor_int = int_field(api, 'cor-interval', cor.interval, 100, 60, 600, '%d s')
+        if cor_int then cor.interval = cor_int; touched() end
+        api.SameLine(0, 6); hud_text(api, HUB.dim, 'roll refresh')
     elseif job == 10 then
         section(api, 'Bard')
         local brd = p.brd
@@ -6669,8 +7589,145 @@ function H.support(api)
         local nitro = combo(api, 'brd-nitro', { 'both', 'tank', 'support', 'off' },
             { 'Both sets', 'Tank set only', 'Support set only', 'Never' }, brd.nitro, 200)
         if nitro then brd.nitro = nitro; touched() end
+        local slots = combo(api, 'brd-max-songs', { 4, 5 },
+            { 'Up to 4 songs', 'Try for 5 songs' }, brd.max_songs, 150)
+        if slots then brd.max_songs = slots; touched() end
+        api.SameLine(0, 6); hud_text(api, HUB.dim, 'Song slots')
+        local clarion = check(api, 'brd-clarion', 'Clarion Call for the fifth song', brd.clarion_call)
+        if clarion ~= nil then brd.clarion_call = clarion; touched() end
+        local soul = check(api, 'brd-soul', 'Soul Voice before a full set', brd.soul_voice)
+        if soul ~= nil then brd.soul_voice = soul; touched() end
+        local nitro_all = check(api, 'brd-nitro-all', 'Start a full set only when every song is due', brd.nitro_all_songs)
+        if nitro_all ~= nil then brd.nitro_all_songs = nitro_all; touched() end
         api.TextDisabled('The Buffs page has the Maintain Nitro switch; this picks the set.')
+        api.TextDisabled('Clarion Call adds the fifth slot only while its buff is up.')
     end
+end
+
+-- Searchable table shared by every in-game spell/ability/weapon-skill field and the
+-- skillchain rows.  The value is always chosen from a client or server catalogue; the
+-- only text box is the search filter.
+function H.sc_picker(api)
+    local pick = S.sc_picker
+    if not pick or not S.profile then return end
+    local kind = pick.kind
+    local multi = pick.multi == true
+    local avoid = {}
+    if multi and pick.target == 'heal_avoid' then
+        for name in tostring(S.profile.heal.avoid or ''):gmatch('[^,]+') do
+            name = name:match('^%s*(.-)%s*$')
+            if name ~= '' then avoid[name:lower()] = name end
+        end
+    end
+    local source, title, heading
+    if kind == 'ws' then
+        source, title, heading = B.weapon_skill_choices(), 'Choose a weapon skill###fanxi_sc_picker', 'WEAPON SKILLS'
+    elseif kind == 'ability' then
+        source, title, heading = B.known_ability_choices(), 'Choose a job ability###fanxi_sc_picker', 'JOB ABILITIES'
+    elseif kind == 'spell' then
+        source, title, heading = B.spell_choices(), 'Choose a Magic Burst spell###fanxi_sc_picker', 'SPELLS'
+    elseif multi then
+        source, title, heading = B.known_spell_choices(), 'Choose never-cast spells###fanxi_sc_picker', 'NEVER CAST'
+    else
+        source, title, heading = B.known_spell_choices(), 'Choose a spell###fanxi_sc_picker', 'SPELLS'
+    end
+    local entries = source
+    if kind == 'indi' or kind == 'geo' then
+        local prefix = kind .. '-'
+        entries = {}
+        for _, entry in ipairs(source) do
+            if tostring(entry.name):lower():sub(1, #prefix) == prefix then
+                entries[#entries + 1] = entry
+            end
+        end
+    end
+    local sw, sh = G.screen(api)
+    api.SetNextWindowPos({ math.max(8, sw / 2 - 330), math.max(8, sh / 2 - 260) }, 1)
+    api.SetNextWindowSize({ math.min(660, sw - 16), math.min(540, sh - 16) }, 1)
+    local close = { true }
+    local open = api.Begin(title, close, 0)
+    if close[1] ~= true then S.sc_picker = nil end
+    if not open then api.End(); return end
+    hud_text(api, HUB.cyan, heading)
+    api.SameLine(0, 10)
+    hud_text(api, HUB.dim, 'Search')
+    api.SameLine(0, 6)
+    text_field(api, 'sc-pick-search', '', 300)
+    local buf = S.buffers['t:sc-pick-search']
+    local needle = tostring(buf and buf[1] or ''):lower()
+    api.TextDisabled(multi
+        and 'Click a row to include or exclude it; changes apply immediately. Search filters the list.'
+        or 'Click a row to replace the field. The search box is the only text input.')
+    api.Separator()
+    if api.BeginChild('sc-pick-list', { 0, -36 }, true) then
+        local shown = 0
+        for _, entry in ipairs(entries) do
+            if needle == '' or entry.name:lower():find(needle, 1, true)
+                or tostring(entry.detail or ''):lower():find(needle, 1, true) then
+                shown = shown + 1
+                local label = tostring(entry.name)
+                if entry.detail and entry.detail ~= '' then
+                    label = label .. '  ·  ' .. tostring(entry.detail)
+                end
+                if multi then
+                    local value = check(api, 'sc-pick-multi-' .. tostring(pick.gen or 0) .. '-' .. tostring(entry.name), label,
+                        avoid[entry.name:lower()] ~= nil)
+                    if value ~= nil then
+                        if value then avoid[entry.name:lower()] = entry.name
+                        else avoid[entry.name:lower()] = nil end
+                        local out = {}
+                        for _, name in pairs(avoid) do out[#out + 1] = name end
+                        table.sort(out)
+                        S.profile.heal.avoid = table.concat(out, ', ')
+                        touched()
+                    end
+                elseif api.Selectable(label .. '##sc-pick-' .. shown, false, 0, { 0, 18 }) then
+                    local target = pick.target
+                    if target == 'pull_spell' then
+                        S.profile.pull.spell = entry.name
+                    elseif target == 'pull_ability' then
+                        S.profile.pull.ability = entry.name
+                    elseif target == 'heal_raise' then
+                        S.profile.heal.raise_spell = entry.name
+                    elseif target == 'geo_indi' then
+                        S.profile.support.geo.indi = entry.name
+                    elseif target == 'geo_geo' then
+                        S.profile.support.geo.geo = entry.name
+                    elseif target == 'geo_entrust_indi' then
+                        S.profile.support.geo.entrust_indi = entry.name
+                    elseif target == 'pull_sleep' then
+                        S.profile.pull.sleep_spell = entry.name
+                    elseif target == 'pull_bind' then
+                        S.profile.pull.bind_spell = entry.name
+                    elseif target == 'heal_cure' then
+                        for _, row in ipairs(S.profile.heal.cures) do
+                            if row.id == pick.index then row.spell = entry.name end
+                        end
+                    elseif target == 'enf_spell' then
+                        for _, row in ipairs(S.profile.enfeebles.rows) do
+                            if row.id == pick.index then row.spell = entry.name end
+                        end
+                    elseif target == 'dispel' then
+                        S.profile.dispel.spell = entry.name
+                    elseif pick.kind == 'ws' then
+                        local step = S.profile.skillchain.steps[pick.index]
+                        if step then step.ws = entry.name end
+                    elseif pick.kind == 'spell' then
+                        local burst = S.profile.skillchain.bursters[pick.index]
+                        if burst then burst.spell = entry.name end
+                    end
+                    touched()
+                    S.sc_picker = nil
+                end
+            end
+        end
+        if shown == 0 then
+            api.TextDisabled('No matches.')
+        end
+        api.EndChild()
+    end
+    if button(api, 'Close', HUB.cyan, 100) then S.sc_picker = nil end
+    api.End()
 end
 
 function H.song_groups(api)
@@ -6690,7 +7747,7 @@ function H.song_groups(api)
     local open = api.Begin('Song groups###fanxi_song_groups', close, 0)
     if close[1] ~= true then S.song_groups_open = false end
     if not open then api.End(); return end
-    api.TextDisabled('Create named song groups from the BRD job songs. Assign a group per camp.')
+    api.TextDisabled('Create named song groups from the BRD job songs (up to 5). Assign a group per camp.')
     api.TextDisabled(string.format('Durations are server-computed; gear bonus +%d%%.', B.tenant_song_bonus()))
     api.Separator()
     if api.BeginChild('song-group-list', { 190, -46 }, true) then
@@ -6738,7 +7795,7 @@ function H.song_groups(api)
                 local label = name .. '  ' .. B.song_duration_text(name)
                 local value = check(api, 'song-group-song-' .. index, label, included)
                 if value ~= nil then
-                    if value and not included and #current.songs < 12 then
+                    if value and not included and #current.songs < 5 then
                         current.songs[#current.songs + 1] = name
                     elseif not value then
                         for at = #current.songs, 1, -1 do
@@ -6747,8 +7804,8 @@ function H.song_groups(api)
                     end
                     touched()
                 end
-                if #current.songs >= 12 and not included then
-                    api.TextDisabled('12-song limit for this group.')
+                if #current.songs >= 5 and not included then
+                    api.TextDisabled('5-song group limit; the 5th slot needs Clarion Call.')
                     break
                 end
             end
@@ -6769,7 +7826,7 @@ function H.debuff(api)
     section(api, 'Enfeebles for ' .. tenant_label())
     local on = check(api, 'enf-on', 'Land these enfeebles', p.enabled)
     if on ~= nil then p.enabled = on; touched() end
-    local max_tries = int_field(api, 'enf-max-tries', p.max_tries, 74, 1, 10, '%d resists')
+    local max_tries = int_field(api, 'enf-max-tries', p.max_tries, 74, 0, 10, '%d resists')
     if max_tries then p.max_tries = max_tries; touched() end
     api.SameLine(0, 4)
     if button(api, 'Reset tries', HUB.cyan, 88) then
@@ -6792,7 +7849,7 @@ function H.debuff(api)
         end
     end
     api.TextDisabled('Chat log watches landing/wear-off; a wear-off makes the next cast immediate.')
-    api.TextDisabled('After the resist limit the row stops until you press Reset tries.')
+    api.TextDisabled('0 resists keeps applying; a limit stops the row until Reset tries.')
     api.TextDisabled('Job: ' .. tenant_label() .. '; enfeebling spells available:')
     if #available == 0 then
         api.TextDisabled('none — add ability/spell rows manually.')
@@ -6806,8 +7863,9 @@ function H.debuff(api)
     local remove_at = nil
     for index, row in ipairs(p.rows) do
         api.PushID(row.id)
-        local spell = text_field(api, 'enf-spell-' .. row.id, row.spell, 180)
-        if spell then row.spell = text(spell, 40); touched() end
+        if button(api, (row.spell ~= '' and row.spell or 'Choose enfeeble…') .. '##enf-spell-' .. row.id, HUB.dim, 180) then
+            B.sc_open_picker('known_spell', row.id, 'enf_spell')
+        end
         api.SameLine(0, 6)
         local interval = int_field(api, 'enf-interval-' .. row.id, row.interval, 92, 1, 3600, '%d s')
         if interval then row.interval = interval; touched() end
@@ -6824,8 +7882,9 @@ function H.debuff(api)
     local d = S.profile.dispel
     local den = check(api, 'dispel-on', 'Dispel the current target', d.enabled)
     if den ~= nil then d.enabled = den; touched() end
-    local spell = text_field(api, 'dispel-spell', d.spell, 170)
-    if spell then d.spell = text(spell, 40); touched() end
+    if button(api, (d.spell ~= '' and d.spell or 'Choose dispel…') .. '##dispel-spell', HUB.dim, 170) then
+        B.sc_open_picker('known_spell', nil, 'dispel')
+    end
     api.SameLine(0, 4); hud_text(api, HUB.dim, 'spell')
     local interval = int_field(api, 'dispel-interval', d.interval, 92, 1, 3600, '%d s')
     if interval then d.interval = interval; touched() end
@@ -7228,7 +8287,9 @@ function H.camp_radar(api)
     local heading = 'Battle HUD'
     if cfg.collapsed then
         local status = B.status()
-        local summary = S.running and 'RUNNING' or 'STOPPED'
+        local summary = not S.running and 'STOPPED'
+            or (S.phase == 'preparing' and 'PREPARING'
+                or (status.team_ready and 'RUNNING' or 'WAITING'))
         if status.target then
             summary = string.format('%s  ·  %s %.0f%%', summary, status.target.name,
                 status.target.hpp)
@@ -7374,6 +8435,7 @@ end
 function H.overlay(api)
     if not S.visible or S.camp_hud_edit then H.camp_radar(api) end
     if S.song_groups_open then H.song_groups(api) end
+    if S.sc_picker then H.sc_picker(api) end
 end
 
 local function tab_content(api)
@@ -7407,8 +8469,12 @@ function H.window(api)
     if open then
         local status = B.status()
         local running = S.running
-        hud_text(api, running and HUB.green or HUB.dim,
-            running and 'RUNNING' or 'STOPPED')
+        local run_label = not running and 'STOPPED'
+            or (S.phase == 'preparing' and 'PREPARING'
+                or (status.team_ready and 'RUNNING' or 'WAITING'))
+        hud_text(api, not running and HUB.dim
+            or (S.phase == 'preparing' and HUB.gold or (status.team_ready and HUB.green or HUB.cyan)),
+            run_label)
         api.SameLine(0, 10)
         hud_text(api, HUB.white, S.profile.name ~= '' and S.profile.name or 'unsaved profile')
         if S.dirty then
@@ -7616,6 +8682,25 @@ function M.install(ctx)
     xi.events.on('text_in', function(e)
         local text = tostring(e.modified or e.data or ''):lower()
         if text == '' or not S.profile then return end
+        -- Reactive dispel: a watched mob move or buff spell just landed.  The action line is
+        -- the only client-visible signal for a monster buff, so remember it and let the
+        -- dispel step react on the next tick instead of waiting for its interval.
+        local dispel = S.profile.dispel
+        if dispel and dispel.reactive and #(dispel.watch or {}) > 0 then
+            local used = text:find(' uses ', 1, true) or text:find(' readies ', 1, true)
+                or text:find(' casts ', 1, true) or text:find('gains the effect', 1, true)
+                or text:find('gains effect', 1, true)
+            if used then
+                for _, move in ipairs(dispel.watch or {}) do
+                    local key = tostring(move or ''):lower()
+                    if key ~= '' and text:find(key, 1, true) then
+                        R.dispel.watch_at = clock()
+                        R.dispel.watch_move = move
+                        break
+                    end
+                end
+            end
+        end
         for _, row in ipairs(S.profile.enfeebles.rows) do
             local name = tostring(row.spell or ''):lower()
             if name ~= '' and text:find(name, 1, true) then
@@ -7671,6 +8756,9 @@ M.melee_slot = B.melee_slot
 M.ability_state = B.ability_state
 M.ability_ready = B.ability_ready
 M.ability_remaining = B.ability_remaining
+-- Test hook: the harness opens the shared field picker and draws one frame.
+M.open_picker = function(kind, index, target, multi) B.sc_open_picker(kind, index, target, multi) end
+M.close_picker = function() S.sc_picker = nil end
 -- The harness drives the Nitro sequence directly; the engine calls the same function.
 M.brd_maybe_nitro = brd_maybe_nitro
 M.nitro_state = function()

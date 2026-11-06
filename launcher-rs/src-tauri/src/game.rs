@@ -630,7 +630,7 @@ async fn ensure_build_tools(app: &AppHandle, root: &Path) -> AppResult<PathBuf> 
     Ok(venv_python)
 }
 
-fn venv_python(root: &Path) -> PathBuf {
+pub(crate) fn venv_python(root: &Path) -> PathBuf {
     if cfg!(windows) {
         root.join(".venv").join("Scripts").join("python.exe")
     } else {
@@ -638,7 +638,32 @@ fn venv_python(root: &Path) -> PathBuf {
     }
 }
 
-fn system_python() -> String {
+/// Whether `python` offers a current TLS stack, asked of the interpreter itself.
+///
+/// Apple's `/usr/bin/python3` (the Command Line Tools interpreter) is Python 3.9 on LibreSSL
+/// 2.8.3: no TLS 1.3, and its `ssl` module drops the SNI for names that begin with an IPv4
+/// literal, so `https://172.236.103.193.sslip.io` is answered with a TLS internal error by
+/// Caddy. A `.venv` built from that interpreter can build `host64`, but it cannot run
+/// `scripts/linux_boxes.py` against an HTTPS API. The TLS 1.3 flag is the cheap proxy for both
+/// faults; every current OpenSSL and LibreSSL build has it.
+pub(crate) fn python_has_modern_tls(python: &Path) -> bool {
+    if python.components().count() > 1 && !python.is_file() {
+        return false;
+    }
+    std::process::Command::new(python)
+        .args([
+            "-c",
+            "import ssl, sys; sys.exit(0 if ssl.HAS_TLSv1_3 else 1)",
+        ])
+        .stdin(Stdio::null())
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+pub(crate) fn system_python() -> String {
     if let Some(given) = std::env::var("FANXI_PYTHON")
         .ok()
         .filter(|value| !value.trim().is_empty())
@@ -651,10 +676,21 @@ fn system_python() -> String {
     // The interpreter decides the architecture of everything it starts: clang spawned by a process
     // running under Rosetta defaults to x86_64, so a python from PATH that is an Intel or Anaconda
     // build builds the whole client x86_64, and it then runs under Rosetta (`file build/fanxi`
-    // says x86_64 rather than arm64). On macOS prefer the system's own interpreter, which is
-    // native; it is also the one tools/setup.py picks for the same reason.
-    if cfg!(target_os = "macos") && Path::new("/usr/bin/python3").is_file() {
-        return "/usr/bin/python3".to_string();
+    // says x86_64 rather than arm64). On macOS prefer the native Homebrew interpreter, which has
+    // a current TLS stack, and the system's own interpreter as the last resort; `tools/setup.py`
+    // picks the system one for the same architecture reason.
+    if cfg!(target_os = "macos") {
+        let homebrew = if cfg!(target_arch = "aarch64") {
+            "/opt/homebrew/bin/python3"
+        } else {
+            "/usr/local/bin/python3"
+        };
+        if python_has_modern_tls(Path::new(homebrew)) {
+            return homebrew.to_string();
+        }
+        if Path::new("/usr/bin/python3").is_file() {
+            return "/usr/bin/python3".to_string();
+        }
     }
     "python3".to_string()
 }

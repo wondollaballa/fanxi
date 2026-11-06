@@ -3,7 +3,10 @@ import type {
   AccountGearLibraryView,
   ArmoryAddResult,
   ArmoryItem,
+  BattleMobCatalog,
+  BattleSpellOption,
   BattleState,
+  BattleWeaponSkill,
   Bootstrap,
   BuildResult,
   Character,
@@ -226,6 +229,14 @@ export const backend = {
   sendHud: (port: number, patch: HudPatch) => call<HudState>("send_hud", { port, patch }),
   battle: (port: number, args: Record<string, unknown>) =>
     call<BattleState>("battle", { port, args }),
+  /** Every spell, for the Battle Magic Burst picker. */
+  battleSpells: () => call<{ spells: BattleSpellOption[] }>("battle_spells"),
+  /** The full weapon-skill catalogue for the Battle skillchain editor. */
+  battleWeaponSkills: () =>
+    call<{ weapon_skills: BattleWeaponSkill[] }>("battle_weapon_skills"),
+  /** TP moves for the selected pull targets, for reactive dispel. */
+  battleMobMoves: (names: string[], zone: number) =>
+    call<BattleMobCatalog>("battle_mob_moves", { names, zone }),
   sendChat: (port: number, line: string) => call<unknown>("send_chat", { port, line }),
   controlState: (port: number) => call<ControlState>("control_state", { port }),
   controlMetrics: (port: number) => call<Record<string, unknown>>("control_metrics", { port }),

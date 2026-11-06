@@ -12377,7 +12377,7 @@ local function send(c, t)
     while i <= #line do
         local n, err, part = c.sock:send(line, i)
         if n then i = n + 1
-        elseif err == 'timeout' and coroutine.running() then
+        elseif err == 'timeout' and (function() local co, main = coroutine.running(); return co ~= nil and not main end)() then
             i = (part or i - 1) + 1
             coroutine.sleepf(1)
         else

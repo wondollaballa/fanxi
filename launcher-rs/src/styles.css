@@ -8891,6 +8891,211 @@ button.ev-cell:hover {
   font-size: 10.5px;
 }
 
+/* The saved-profile strip above the Battle editor: the hot-swap list, Save as and New. */
+.battle-profile-bar {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--border-soft);
+}
+
+.battle-profile-switch {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex: 1 1 280px;
+  min-width: 220px;
+}
+
+.battle-profile-switch .input {
+  font-size: 12px;
+}
+
+.battle-profile-hint {
+  flex: 1 1 220px;
+  margin: 0;
+  align-self: center;
+}
+
+.battle-inline-fields {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.battle-inline-fields .input {
+  max-width: 86px;
+}
+
+.battle-actions-bottom {
+  align-self: end;
+  padding-bottom: 2px;
+}
+
+.battle-table-four .battle-table-head,
+.battle-table-four .battle-table-row {
+  grid-template-columns: minmax(150px, 1fr) 108px 104px 32px;
+}
+
+/* Skillchain step and burster rows: label, actor, action, diamond, remove. */
+.battle-sc-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  padding: 8px;
+  margin-bottom: 6px;
+}
+
+.battle-sc-step {
+  display: grid;
+  grid-template-columns: 52px minmax(120px, 1fr) minmax(170px, 1.3fr) auto 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+.battle-sc-step > strong {
+  color: var(--gold);
+  font-size: 10px;
+  letter-spacing: .06em;
+}
+
+.battle-sc-burster {
+  display: grid;
+  grid-template-columns: minmax(120px, 1fr) minmax(190px, 1.4fr) 32px;
+  gap: 8px;
+  align-items: center;
+}
+
+/* Bard song groups: a card per group with its chosen songs as chips. */
+.battle-song-groups {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 10px;
+  margin: 8px 0 10px;
+}
+
+.battle-song-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--border-soft);
+  border-radius: 8px;
+  background: var(--panel-2);
+}
+
+.battle-song-group-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.battle-song-group-head .input { flex: 1; }
+
+.battle-song-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  min-height: 24px;
+}
+
+.battle-song-chip {
+  padding: 3px 8px;
+  border: 1px solid var(--accent-deep);
+  border-radius: 999px;
+  background: var(--accent-soft);
+  color: var(--text);
+  font-size: 10.5px;
+}
+
+/* Battle puller picker: a clickable field that opens the spell/song/JA dialog.  It mirrors the
+   GearSwap item picker so a value is always chosen from the client's own job list. */
+.battle-action-pick {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  width: 100%;
+  min-height: 38px;
+  padding: 7px 10px;
+  font: inherit;
+  text-align: left;
+  color: var(--muted);
+  background: var(--panel-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+
+.battle-action-pick:hover {
+  color: var(--text);
+  border-color: var(--accent-deep);
+}
+
+.battle-action-pick.filled { color: var(--text); }
+
+.battle-action-pick-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+}
+
+.battle-action-pick-hint {
+  flex: none;
+  color: var(--muted-2);
+  font-size: 9.5px;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+}
+
+.battle-action-pick:hover .battle-action-pick-hint { color: var(--accent); }
+
+.battle-picker-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 10px;
+}
+
+.battle-picker-filter {
+  padding: 3px 9px;
+  border: 1px solid var(--border-soft);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted);
+  font-size: 10.5px;
+  cursor: pointer;
+}
+
+.battle-picker-filter:hover {
+  color: var(--text);
+  border-color: var(--accent-deep);
+}
+
+.battle-picker-filter.on {
+  color: var(--text);
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
+.battle-picker-note {
+  margin: 9px 0 0;
+  color: var(--gold);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
+.item-picker-row.on {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+}
+
 .battle-member-table {
   border: 1px solid var(--border-soft);
   border-radius: 8px;

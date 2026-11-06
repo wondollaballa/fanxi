@@ -1,5 +1,73 @@
 # Changelog
 
+## Unreleased — Battle modes, reactive dispel, and selection-only spell fields
+
+- **Battle profiles hot-swap from the page.** The editor has a **Saved profile** picker, a
+  **Save as** copy action and a **New** action. Loading a profile resets the per-profile timers
+  (songs, bubbles, dispel watchers) and writes the chosen profile back to the server, so the
+  six-second team poll does not undo the switch.
+- **Dispels react to the mob's own buffs.** `/api/v1/battle/mobs` returns the selected pull
+  targets' TP moves with target/AoE/status descriptions and a `dispellable` self-buff flag; the
+  launcher lists those moves in a searchable multi-select. A watched move in the chat log fires
+  the dispel on the next tick, and RDM can use Stymie first. The server now stores generic
+  self-buffs (Cocoon, Stoneskin, ...) as dispellable effects and Dispel prefers them over the
+  player's enfeebles.
+- **No typed spell, song or job ability left in the Battle forms.** Pull, cure, raise,
+  never-cast, buffs, enfeebles, dispel, GEO, BRD song groups, Pianissimo, support abilities,
+  weapon skills and Magic Burst spells all open searchable tables. The in-game hub uses one
+  shared picker window for its pull/raise/GEO/dispel fields and for the skillchain weapon-skill
+  and burst-spell rows.
+- **Enfeebles choose keep-applying (0 resists) or stop after N tries**, with a Reset tries action
+  in the launcher and the existing hub control.
+- **The puller leaves camp and retraces its route.** It searches the full `pull.find_distance`,
+  walks to the target until the chosen spell/ability/ranged action is in range, records a
+  waypoint every 2.5 yalms on the way out, and follows those points back in reverse on claim,
+  failure or target loss. `leash` now only limits the rest of the party's chase. The puller's
+  pull/return step owns the tick, so it no longer starts meleeing the pulled mob and cancelling
+  the walk home.
+- **Start is a coordinated ready-up.** **Start team** launches every assigned running client
+  with one `run_id`; each client walks to camp, cures yellow HP, runs its buffs and support
+  cycle, then publishes `engine.ready` through the server profile. The puller waits until every
+  assigned character in the live party is ready on the same run id. The launcher shows
+  Preparing/Ready and the names still being waited on.
+- **Corsair rolls use a trust-style picker.** Select up to two rolls in the Support tab (or the
+  in-game Support page); the support loop maintains them at the support camp and the ready-up
+  waits until they have been used.
+- **Support is no longer "Support jobs".** The launcher has a **Support** tab. GEO gains
+  Entrust target/Indi, Blaze of Glory and Bolster controls; BRD gains song slots (4, or 5 with
+  Clarion Call), Clarion Call, Soul Voice and "every song Nitro'd" options. Song groups are
+  editable with a multi-select instead of free-text song names.
+- **Skillchain planning has a launcher page and selection-only hub rows.** Target chain, loop
+  goal, actor/weapon-skill steps and Magic Burst actors/spells are all configured without typing;
+  the server catalogue supplies the full weapon-skill and spell lists.
+- **Saving from the launcher no longer throws `coroutine.sleepf: not inside a coroutine`.** The
+  HTTPS helper tested only the first return of `coroutine.running()`, which is truthy for the
+  main thread in Lua 5.2+ and made the save's control-handler call take the coroutine path. It
+  now checks the `isMain` second return and uses the blocking curl perform on the main thread.
+- Server tests: catalog lookups and selected-spawn move descriptions. The addon harness draws
+  every picker kind and all hub tabs.
+
+## Unreleased — the remote helper speaks the same TLS as the server
+
+- **Launch headless team no longer dies with `TLSV1_ALERT_INTERNAL_ERROR`.** The launcher ran
+  `scripts/linux_boxes.py` with `.venv/bin/python`, and `.venv` is built from `system_python()`,
+  which was Apple's `/usr/bin/python3`: Python 3.9 on LibreSSL 2.8.3. That build has no TLS 1.3,
+  and its `ssl` module drops the SNI for an HTTPS host whose name begins with an IPv4 literal, so
+  Caddy answered the handshake with `internal error` before the API saw a request. The launcher
+  now prefers a native Homebrew interpreter that reports TLS 1.3 when it creates `.venv`, and
+  `run_remote_boxes` picks an interpreter that can actually do HTTPS for the helper — the script is
+  standard-library only, so the venv is not required. A failed handshake names the interpreter and
+  the fix in the error instead of leaving a bare urllib traceback.
+- **The helper explains an unreachable API.** `scripts/linux_boxes.py` prints the interpreter, its
+  OpenSSL version and the SNI trap instead of a traceback when the API cannot be reached, and says
+  when the server refuses the launcher token. `docs/launcher.md` and
+  `docs/headless-multibox.md` no longer recommend `/usr/bin/python3` as the venv builder, and
+  `docs/server.md` shows Caddy's `default_sni` for clients that send no SNI.
+- **A Linux host that was never rebuilt now says so.** The artifact was renamed from
+  `host64-headless` to `fanxi-headless`, so a box built before the rename fails every launch with
+  an empty log tail. `scripts/linux_boxes.py` checks for `build/fanxi-headless` before it touches
+  anything and prints the build command (`tools/build_posix.py host64-headless`) instead.
+
 ## Unreleased — weapon changes reset TP, and the hands and ammo follow the weapon
 
 - **Changing a main or sub weapon empties the TP bar; grips, shields, ranged weapons and
@@ -14,10 +82,11 @@
   and ammo items; a two-handed main still accepts a grip and clears any other sub item, and a
   hand-to-hand main can share the sub slot with a shield but not another weapon.
 - **Ranged weapons only accept ammunition they can fire.** Bows take arrows, crossbows take
-  bolts, guns take bullets and culverins take shells; a Tathlum or other skill-0 ammo piece
-  stays legal, while throwing ammunition (skill 27) is refused with a ranged weapon. A
-  ranged-weapon change clears ammo from the wrong family, and a Wear-set burst that sends
-  ammo before range defers the ammo until the ranged slot settles.
+  bolts, guns take bullets and culverins take shells. While a ranged weapon is out, only that
+  matching arrow/bolt/bullet family is legal: a Tathlum, orb, bomblet, pebble, jug, tool or
+  bait is a throwing/utility item, not ammunition, and is refused (it is still legal with no
+  ranged weapon). A ranged-weapon change clears ammo from the wrong family, and a Wear-set
+  burst that sends ammo before range defers the ammo until the ranged slot settles.
 - Migration 191 adds `items.subskill` (LandSandBoat's crossbow/bolt 0, gun/bullet 1,
   culverin/shell 2, shuriken 3, bow 4) so the server can tell a bolt from a bullet.
 - Tests: `test_equipment_rules.py` covers all four TP slots, same-copy re-sends, two-handed

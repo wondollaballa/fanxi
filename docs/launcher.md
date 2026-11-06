@@ -95,7 +95,7 @@ main display.
 | **Warps** | Saved `//warp` places for the selected tenant: mark the live position, rename aliases, delete rows, warp just that character or every online box in the account family, and **Warp team to me** to call the team to the live character. Works for main and sub-account characters. Even when the team is already in that zone the server hands each box a short `0x00B` re-zone: the client ignores its own position update, so this is what actually moves it to the leader. |
 | **Data** | The assignment page, split into **Overview** (merits, job points, Mastery Rank, gil, Home Points, currencies, key items and mounts), **Merits** (the six general menus and every job's Group 1/2 as editable form groups), **Progression** (mission/fame/Mog Garden ranks, jobs and Master Levels, Exemplar Points, crafts, Trusts with their max-all alter-ego upgrade, augment RP paths over Odyssey, Limbus, Temenos and Unity gear — the five Limbus suits and all sixteen Telopanos weapons included — plus Oboro's JSE weapon paths and all 22 JSE necks), **Augments** (the Ambuscade and Reive/Incursion cape augment editors, Nolan mezzotints, Oseem Arcane Glyptics, Skirmish, Sinister Reign, Moonshade, Magian trials and Shantotto's Ascension gear), **Armory** (gear search and purchase history) and **Items** (ninja tools, jug pets, consumables, ingredients and the rest of the general-item store), applied to the selected tenant. The tab you were last on is remembered. |
 | **Gear / GearSwap** | The selected tenant's live gear and GearSwap library, plus job defaults, imports and versioned set libraries. The **Live job** card shows the main and support job pair. The tab and the last set browsed are remembered per account and job. |
-| **Battle** | The selected tenant's Battle profile: roster roles, camp/engage, formation, pull/sleep, healing, buffs, enfeebles, dispel, death/kiting/loot rules and saved profiles. Save/Apply live/Start/Stop/Show hub talk to the same in-game `battle` module as `//battle`. |
+| **Battle** | The selected tenant's Battle profile: a saved-profile hot-swap bar, roster roles, camp/engage, formation, pull/sleep, healing, buffs, enfeebles, reactive dispel, COR/BRD/GEO support, skillchain/Magic Burst, death/kiting/loot rules and saved profiles. Every spell, song, roll and job ability is picked from a searchable table. **Start team** starts every assigned running client on one readiness epoch; each walks to camp, finishes buffs and heals, and the puller waits for the live party to be ready. Save/Apply live/Stop team/Show hub talk to the same in-game `battle` module as `//battle`. |
 | **News** | Posts from `news` in the database. |
 | **Settings** | Server URL, game folder, headless game folder, remote Linux host, 30 fps main cap, **game window** (display, mode, resolution, interface scale), Save, Detect game, Build game, Open data folder, live build log. |
 
@@ -324,6 +324,11 @@ and waits until the character reaches a zone before reporting success. A timeout
 the log. Boxes that need an older install can use the separate **Headless game folder** in Settings.
 Characters on a different saved account are not tenants here: use **Accounts → Use**
 to make that account the main one first.
+
+The helper refuses to touch anything when the host has no `build/fanxi-headless` and prints the
+build command instead (`tools/build_posix.py host64-headless`, run on that host). The artifact was
+renamed from `host64-headless`, so a box built before the rename needs one rebuild; the launcher
+does not build Linux binaries, only this Mac's.
 
 The default server is `http://127.0.0.1:8080`. For a server elsewhere, change it in Settings or
 sign-in before you sign in; it is saved in `api_url`. If you terminate HTTPS with a self-signed
@@ -781,6 +786,7 @@ checkout moves, set **Fanxi checkout** in Settings to the new path.
 | Window does not open | The app needs a WebView: current macOS and Windows include one; Linux needs WebKitGTK 4.1. Run `npm run tauri dev` in `launcher-rs/` to see the startup error. |
 | `cannot reach http://…: is the Fanxi server running?` | Start the server (`scripts/server.sh`) or fix the URL in Settings. |
 | Sign-in says the session expired | Sign out and in again; the token may have been revoked by a server restart or admin action. |
+| `Launch headless team` fails with `_ssl.c` / `TLSV1_ALERT_INTERNAL_ERROR` | The helper's Python is Apple's `/usr/bin/python3` (Python 3.9 on LibreSSL 2.8.3): it has no TLS 1.3 and drops the SNI for a host whose name begins with an IP address, such as `172.236.103.193.sslip.io`, so Caddy answers `internal error`. Rebuild `.venv` from a current Python (`rm -rf .venv`, then build again with Homebrew's `python3` first on `PATH`), or set `FANXI_PYTHON` to one and relaunch. |
 | Build fails on `capstone`/`pefile` | The venv needs network access once. Delete `.venv/` and build again, or run `python3 -m pip install 'capstone>=5,<6' 'pefile>=2023'` in it. |
 | Build fails on clang/CMake | Install Xcode Command Line Tools (macOS) or `build-essential cmake ninja-build` (Linux). |
 | Build fails on `vswhere`/`cl`/`link` | Install Visual Studio Build Tools with the **Desktop development with C++** workload (Windows), then build again. |

@@ -142,6 +142,10 @@ class Api:
             self.reset_gearswap_library)
         route("GET", r"/api/v1/battle/team")(self.battle_team)
         route("PUT", r"/api/v1/battle/team/(?P<character_id>\d+)")(self.save_battle_profile)
+        route("POST", r"/api/v1/battle/team/(?P<character_id>\d+)/state")(self.save_battle_engine)
+        route("GET", r"/api/v1/battle/weapon-skills")(self.battle_weapon_skills)
+        route("GET", r"/api/v1/battle/spells")(self.battle_spells)
+        route("GET", r"/api/v1/battle/mobs")(self.battle_mobs)
         # server-owned sub-accounts; the main account's token is the only key
         route("GET", r"/api/v1/accounts/sub")(self.sub_accounts)
         route("POST", r"/api/v1/accounts/sub")(self.create_sub_account)
@@ -340,6 +344,33 @@ class Api:
             int(request.account["id"]), int(request.params["character_id"]),
             body.get("profile"), bool(body.get("shared")))
         return json_response(200, {"character_id": int(request.params["character_id"]), "profile": saved})
+
+    def save_battle_engine(self, request: Request) -> Response:
+        """Merge Start/ready/stop flags without rewriting the saved profile."""
+        assert request.account
+        saved = self.service.save_battle_engine(
+            int(request.account["id"]), int(request.params["character_id"]), request.json())
+        return json_response(200, saved)
+
+    def battle_weapon_skills(self, request: Request) -> Response:
+        """The full weapon-skill catalogue for the Battle skillchain editor."""
+        assert request.account
+        return json_response(200, {"weapon_skills": self.service.battle_weapon_skills()})
+
+    def battle_spells(self, request: Request) -> Response:
+        """Every spell, for the Battle Magic Burst picker."""
+        assert request.account
+        return json_response(200, {"spells": self.service.battle_spells()})
+
+    def battle_mobs(self, request: Request) -> Response:
+        """TP moves for the pull list's mobs (`?names=Crab,Bat&zone=123`)."""
+        assert request.account
+        names = [part for part in (request.arg("names") or "").split(",") if part.strip()]
+        try:
+            zone = int(request.arg("zone") or 0)
+        except (TypeError, ValueError):
+            zone = 0
+        return json_response(200, self.service.battle_mob_moves(names, zone))
 
     def characters(self, request: Request) -> Response:
         assert request.account

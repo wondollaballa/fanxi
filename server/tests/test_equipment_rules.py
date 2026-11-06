@@ -30,7 +30,7 @@ BONE_ARROW = 17319        # a second arrow
 CROSSBOW_BOLT = 17336     # ammo, skill 26, subskill 0
 BULLET = 17340            # ammo, skill 26, subskill 1
 SHURIKEN = 17301          # throwing ammo, skill 27
-STAUNCH_TATHLUM = 22279   # non-weapon ammo, skill 0
+STAUNCH_TATHLUM = 22279   # throwing/utility ammo, skill 0
 
 TEST_ITEMS = (ONION_SWORD, BRONZE_SWORD, EPEOLATRY, GREAT_AXE, SAKPATAS_FISTS,
               UTU_GRIP, POLE_GRIP, GENBUS_SHIELD, ACHERON_SHIELD, SHORTBOW, CROSSBOW,
@@ -401,18 +401,30 @@ class EquipmentRulesTest(unittest.TestCase):
         self.assertIsNone(self.session._pending_ammo)
         self.assertTrue(any("not for your job" in line for line in chats(self.session)))
 
-    def test_non_weapon_ammo_is_legal_with_a_ranged_weapon(self):
-        self.give(1, MARTIAL_GUN)
+    def test_a_tathlum_or_bait_cannot_be_worn_with_a_bow(self):
+        self.give(1, SHORTBOW)
         self.give(2, STAUNCH_TATHLUM)
-        self.equip(1, 2)
-        self.equip(2, 3)
-        self.assertEqual(self.session.equipped[3][2], STAUNCH_TATHLUM)
-
-        # Fishing bait is skill 48, not a ranged ammo family; it stays legal.
         self.db.execute("UPDATE items SET jobs = 0, level = 1 WHERE item_id = 17405")
         self.give(3, 17405)  # Fly Lure
+        self.equip(1, 2)
+
+        self.session.queue.clear()
+        self.equip(2, 3)
+        self.assertNotIn(3, self.session.equipped)
+        self.session.flush_equipment()
+        self.assertNotIn(3, self.session.equipped)
+        self.assertTrue(any("not compatible" in line for line in chats(self.session)))
+
+        self.session.queue.clear()
         self.equip(3, 3)
-        self.assertEqual(self.session.equipped[3][2], 17405)
+        self.assertNotIn(3, self.session.equipped)
+        self.session.flush_equipment()
+        self.assertNotIn(3, self.session.equipped)
+
+        # Without a ranged weapon the Tathlum is ordinary ammo-slot gear.
+        self.equip(0, 2)
+        self.equip(2, 3)
+        self.assertEqual(self.session.equipped[3][2], STAUNCH_TATHLUM)
 
     def test_ranged_subtypes_came_through_the_catalogue(self):
         expected = {SHORTBOW: 0, CROSSBOW: 0, MARTIAL_GUN: 1, WOODEN_ARROW: 0,

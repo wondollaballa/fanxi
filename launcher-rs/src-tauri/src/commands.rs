@@ -1089,6 +1089,44 @@ async fn stop_local_for_account(state: &State<'_, AppState>, account: &str) -> V
     notes
 }
 
+/// The interpreter for `scripts/linux_boxes.py`.
+///
+/// The helper is standard-library only, so the venv matters less than the ssl stack behind it:
+/// a venv built from Apple's `/usr/bin/python3` is Python 3.9 on LibreSSL 2.8.3, which cannot
+/// reach an `*.sslip.io` API host (`https://172.236.103.193.sslip.io` gets a TLS internal
+/// error). Keep the venv first when it is current, then Homebrew's interpreter, then whatever
+/// the system has; the last two need no packages.
+fn helper_python(root: &Path) -> PathBuf {
+    let venv = game::venv_python(root);
+    let mut candidates = Vec::new();
+    if let Some(given) = std::env::var("FANXI_PYTHON")
+        .ok()
+        .filter(|value| !value.trim().is_empty())
+    {
+        candidates.push(PathBuf::from(given));
+    }
+    candidates.push(venv.clone());
+    candidates.push(PathBuf::from(game::system_python()));
+    candidates.push(PathBuf::from("python3"));
+    candidates
+        .into_iter()
+        .find(|candidate| game::python_has_modern_tls(candidate))
+        .unwrap_or_else(|| {
+            if venv.is_file() {
+                venv
+            } else {
+                PathBuf::from("python3")
+            }
+        })
+}
+
+/// A helper failure whose text is an ssl error from the interpreter, not an answer from the API.
+fn tls_failure(text: &str) -> bool {
+    ["_ssl.c", "TLSV1_ALERT", "CERTIFICATE_VERIFY_FAILED", "SSL:"]
+        .iter()
+        .any(|needle| text.contains(needle))
+}
+
 /// Run `scripts/linux_boxes.py` against the configured Linux host. The helper mints the launch
 /// tokens, starts/restarts the remote `host64-headless` processes, rebuilds their ssh tunnels and
 /// waits until the characters are in a zone.
@@ -1112,12 +1150,7 @@ async fn run_remote_boxes(
             script.display()
         )));
     }
-    let venv_python = root.join(".venv").join("bin").join("python");
-    let python = if venv_python.is_file() {
-        venv_python
-    } else {
-        PathBuf::from("python3")
-    };
+    let python = helper_python(&root);
     let mut command = tokio::process::Command::new(&python);
     command
         .arg(&script)
@@ -1153,10 +1186,17 @@ async fn run_remote_boxes(
     if !output.status.success() {
         let tail: Vec<&str> = text.lines().rev().take(6).collect();
         let tail: Vec<&str> = tail.into_iter().rev().collect();
-        return Err(AppError::Control(format!(
-            "remote box helper failed: {}",
-            tail.join(" | ")
-        )));
+        let mut message = format!("remote box helper failed: {}", tail.join(" | "));
+        if tls_failure(&text) {
+            message.push_str(&format!(
+                " — {} could not do TLS to {}: Apple's /usr/bin/python3 ships LibreSSL 2.8.3, \
+                 which has no TLS 1.3 and drops SNI for hosts like this one. Install a current \
+                 Python (Homebrew's python3) and relaunch.",
+                python.display(),
+                config.api_url
+            ));
+        }
+        return Err(AppError::Control(message));
     }
     Ok(text)
 }
@@ -2444,6 +2484,43 @@ pub async fn battle(state: State<'_, AppState>, port: u16, args: Value) -> AppRe
         .await
 }
 
+/// Every spell, for the Battle Magic Burst picker.
+#[tauri::command]
+pub async fn battle_spells(state: State<'_, AppState>) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.battle_spells(&config.token).await
+}
+
+/// The full weapon-skill catalogue for the Battle skillchain editor.
+#[tauri::command]
+pub async fn battle_weapon_skills(state: State<'_, AppState>) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.battle_weapon_skills(&config.token).await
+}
+
+/// TP moves for the selected pull targets, used by the reactive-dispel picker.
+#[tauri::command]
+pub async fn battle_mob_moves(
+    state: State<'_, AppState>,
+    zone: u16,
+    names: Vec<String>,
+) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.battle_mob_moves(&config.token, zone, &names).await
+}
+
 #[tauri::command]
 pub async fn send_chat(state: State<'_, AppState>, port: u16, line: String) -> AppResult<Value> {
     let line = line.trim().to_string();
@@ -3224,5 +3301,22 @@ mod tests {
         assert!(error.to_string().contains("cannot read"));
         assert!(error.to_string().contains("NIN.lua"));
         std::fs::remove_dir_all(&folder).ok();
+    }
+
+    #[test]
+    fn only_an_ssl_error_is_a_tls_fault() {
+        // The tail of `scripts/linux_boxes.py` when the API answers with a 4xx, and when the
+        // interpreter's handshake dies: only the second one gets the interpreter hint.
+        assert!(!tls_failure(
+            "@aria: launch token refused: {\"error\":\"no session\"}"
+        ));
+        assert!(!tls_failure("could not start; log:\nno pid"));
+        assert!(tls_failure(
+            "urllib.error.URLError: <urlopen error [SSL: TLSV1_ALERT_INTERNAL_ERROR] \
+             tlsv1 alert internal error (_ssl.c:1129)>"
+        ));
+        assert!(tls_failure(
+            "ssl.SSLCertVerificationError: [SSL: CERTIFICATE_VERIFY_FAILED] certificate verify failed"
+        ));
     }
 }

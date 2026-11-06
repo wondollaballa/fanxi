@@ -196,6 +196,42 @@ def status_effect(skill: MobSkill) -> tuple[int, float, int] | None:
     return None
 
 
+# Human names for the statuses the few status rules above can land.  The launcher's
+# dispel-move picker shows them beside the move; only self-buffs can be dispelled.
+STATUS_NAMES: dict[int, str] = {
+    effects.SLEEP: "Sleep",
+    effects.PETRIFICATION: "Petrification",
+    effects.PARALYSIS: "Paralysis",
+    effects.STUN: "Stun",
+    effects.SILENCE: "Silence",
+    effects.BLINDNESS: "Blindness",
+    effects.POISON: "Poison",
+    effects.DISEASE: "Disease",
+    effects.PLAGUE: "Plague",
+    effects.BIND: "Bind",
+    effects.WEIGHT: "Weight",
+    effects.SLOW: "Slow",
+    effects.DEFENSE_DOWN: "Defense Down",
+    effects.ATTACK_DOWN: "Attack Down",
+    effects.EVASION_DOWN: "Evasion Down",
+    effects.ACCURACY_DOWN: "Accuracy Down",
+    effects.MAGIC_DEF_DOWN: "Magic Defense Down",
+    effects.MAGIC_ATK_DOWN: "Magic Attack Down",
+    effects.MAGIC_EVASION_DOWN: "Magic Evasion Down",
+}
+
+
+def status_name(skill: MobSkill) -> str:
+    """The readable enfeeble a TP move lands, or '' for a pure damage move."""
+    status = status_effect(skill)
+    return STATUS_NAMES.get(int(status[0]), "") if status else ""
+
+
+def display_name(name: str) -> str:
+    """``bomb_toss`` -> ``Bomb Toss`` (the spelling the chat log uses)."""
+    return " ".join(word.capitalize() for word in str(name or "").replace("_", " ").split())
+
+
 # TP moves that clearly restore the monster rather than hurt a player.
 _SELF_HEAL = ("cure", "heal", "regen", "drain", "aspir", "absorb")
 _SELF_BUFF = ("haste", "protect", "shell", "stoneskin", "blink", "cocoon",
@@ -217,6 +253,16 @@ def self_effect(skill: MobSkill) -> tuple[str, int, int] | None:
         effect = effects.HASTE if "haste" in name else effects.PROTECT
         return "buff", int(effect), 60
     return None
+
+
+def is_self_buff(skill: MobSkill) -> bool:
+    """True for a self-target move that puts a buff icon on the monster.
+
+    The server's generic self-buff branch stores these as dispellable effects, which is
+    what makes the launcher's reactive-dispel watch list meaningful.
+    """
+    effect = self_effect(skill)
+    return bool(effect is not None and effect[0] == "buff")
 
 
 # Healing Breeze is a max-HP heal, not a flat cure.  LandSandBoat's script passes

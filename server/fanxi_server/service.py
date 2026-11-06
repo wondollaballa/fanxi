@@ -22,7 +22,7 @@ from .config import Config
 from .db import Database
 from .game import (ascension, augment_gear, augment_stats, capes, design as character_design,
                    effects, glyptics, item_effects, job_points, magian, merit_menus,
-                   merits as merit_table, mezzotint, moonshade, oboro, reive,
+                   merits as merit_table, mezzotint, mobskills, moonshade, oboro, reive,
                    set_bonuses, sinister, skirmish)
 from .game import modifiers as mod, prime_weapons, rema_weapons
 
@@ -2049,6 +2049,111 @@ class FanxiService:
             "SELECT k.* FROM mob_skill_lists l JOIN mob_skills k "
             "ON k.id = l.mob_skill_id WHERE l.skill_list_id = ? ORDER BY k.id",
             (int(skill_list_id),))]
+
+    def battle_spells(self) -> list[dict]:
+        """Every spell in the server table, for the Battle Magic Burst picker.
+
+        The burst plan is party-wide, so the same reason as the weapon-skill list applies:
+        the current client only knows its own job spells.  The skill id is enough for the
+        launcher to group and label the row.
+        """
+        return [dict(row) for row in self.db.all(
+            "SELECT id, name, skill, element FROM spells ORDER BY name COLLATE NOCASE")]
+
+    def battle_weapon_skills(self) -> list[dict]:
+        """The full weapon-skill list for the Battle skillchain editor.
+
+        The client's own HUD only knows the current weapon's skills.  The Battle page
+        configures a party-wide chain, so the server's catalogue is the useful list.
+        """
+        return [dict(row) for row in self.db.all(
+            "SELECT id, name, skill, skill_level, element FROM weapon_skills "
+            "ORDER BY name COLLATE NOCASE, id")]
+
+    def battle_mob_moves(self, names, zone: int = 0) -> dict:
+        """The TP moves of the selected pull targets, with a short description.
+
+        The launcher's reactive dispel lets the player pick the self-buffs a camp's
+        mobs use.  The client cannot see a monster's move list, so this joins the
+        spawn/template to ``mob_skill_lists`` and describes each move from the data
+        the server already applies (target shape, status, self-buff).
+        """
+        wanted = []
+        seen_names = set()
+        for raw in names or []:
+            name = str(raw or "").strip()[:48]
+            key = name.casefold()
+            if name and key not in seen_names and len(wanted) < 40:
+                seen_names.add(key)
+                wanted.append(name)
+        if not wanted:
+            return {"moves": [], "unmatched": []}
+        holes = ",".join("?" for _ in wanted)
+        area = [] if not int(zone or 0) else [" AND (s.zone = ? OR s.id IS NULL)"]
+        params = [name.casefold() for name in wanted] * 2
+        if area:
+            params.append(int(zone))
+        rows = self.db.all(
+            "SELECT DISTINCT t.id, t.name, t.skill_list_id, s.name AS spawn_name "
+            "FROM monster_templates t LEFT JOIN monster_spawns s ON s.template_id = t.id "
+            f"WHERE (lower(t.name) IN ({holes}) OR lower(s.name) IN ({holes}))"
+            + "".join(area)
+            + " ORDER BY t.id",
+            tuple(params))
+        found = set()
+        by_skill: dict[int, dict] = {}
+        for raw in rows:
+            row = dict(raw)
+            found.add(str(row["name"]).casefold())
+            if row.get("spawn_name"):
+                found.add(str(row["spawn_name"]).casefold())
+            skill_list_id = int(row.get("skill_list_id") or 0)
+            if skill_list_id <= 0:
+                continue
+            mob_name = str(row.get("spawn_name") or row["name"])
+            for skill_row in self.mob_skills(skill_list_id):
+                skill = mobskills.from_row(skill_row)
+                if skill.id in by_skill:
+                    mobs = by_skill[skill.id]["mobs"]
+                    if mob_name not in mobs:
+                        mobs.append(mob_name)
+                    continue
+                target = "self" if skill.valid_targets & mobskills.TARGET_SELF else (
+                    "enemy" if skill.is_enemy_target else (
+                        "party" if skill.valid_targets & mobskills.TARGET_PARTY else "target"))
+                aoe = {mobskills.AOE_ATTACKER: "self-centered AoE",
+                       mobskills.AOE_TARGET: "target-centered AoE",
+                       mobskills.AOE_CONE: "cone",
+                       mobskills.AOE_CONE_TARGET: "targeted cone"}.get(skill.aoe, "")
+                status = mobskills.status_name(skill)
+                self_effect = mobskills.self_effect(skill)
+                self_buff = mobskills.is_self_buff(skill)
+                if target == "self":
+                    if self_effect is not None and self_effect[0] == "heal":
+                        description = "Self-heal"
+                    elif self_buff:
+                        description = "Self-buff · dispellable"
+                    else:
+                        description = "Self-target effect"
+                elif target == "enemy":
+                    description = f"Enemy {aoe} attack" if aoe else "Enemy single-target attack"
+                else:
+                    description = f"{target.capitalize()} {aoe} effect" if aoe else "Support effect"
+                if status:
+                    description += f" · may inflict {status}"
+                by_skill[skill.id] = {
+                    "name": mobskills.display_name(skill.name),
+                    "description": description,
+                    "target": target,
+                    "aoe": aoe or "single",
+                    "status": status,
+                    "dispellable": self_buff,
+                    "mobs": [mob_name],
+                }
+        moves = sorted(by_skill.values(),
+                       key=lambda item: (not item["dispellable"], item["name"].casefold()))
+        unmatched = [name for name in wanted if name.casefold() not in found]
+        return {"moves": moves, "unmatched": unmatched}
 
     def inventory(self, character_id: int) -> list[dict]:
         return [dict(r) for r in self.db.all(
@@ -5337,6 +5442,43 @@ class FanxiService:
                 self.set_character_setting(int(row["character_id"]), "battle_profile",
                                            json.dumps(other, ensure_ascii=False, separators=(",", ":")))
         return profile
+
+    def save_battle_engine(self, account_id: int, character_id: int, engine) -> dict:
+        """Merge only the live engine flags into one character's saved Battle profile.
+
+        Start/ready/stop publishes happen several times per run and must not rewrite the
+        whole profile (and must not bump ``updated``, or the client would re-apply its own
+        server copy over an unsaved edit).
+        """
+        if not self.account_can_manage_character(int(account_id), int(character_id)):
+            raise ApiError(404, "not_found", "character not found")
+        if not isinstance(engine, dict):
+            raise ApiError(422, "validation_error", "engine must be a JSON object")
+        row = self.db.one(
+            "SELECT value FROM char_settings WHERE character_id = ? AND key = 'battle_profile'",
+            (int(character_id),))
+        profile = {}
+        if row and row["value"]:
+            try:
+                decoded = json.loads(row["value"])
+                if isinstance(decoded, dict):
+                    profile = decoded
+            except (TypeError, ValueError):
+                profile = {}
+        current = profile.get("engine")
+        current = dict(current) if isinstance(current, dict) else {}
+        for key in ("running", "ready", "run_id"):
+            if key in engine:
+                value = engine[key]
+                if key == "run_id":
+                    current[key] = str(value or "")[:48]
+                else:
+                    current[key] = bool(value)
+        profile["engine"] = current
+        self.set_character_setting(
+            int(character_id), "battle_profile",
+            json.dumps(profile, ensure_ascii=False, separators=(",", ":")))
+        return {"engine": current}
 
     def server_name(self) -> str:
         return self.db.setting("server_name", "Fanxi") or "Fanxi"

@@ -314,6 +314,17 @@ fanxi.example.com {
 Then set the launcher's server to `https://fanxi.example.com`. The game auth port keeps its own
 TLS (self-signed by default); the client does not verify it, as is normal for private servers.
 
+A client that sends no SNI — Apple's `/usr/bin/python3` drops it for a name that begins with an
+IPv4 literal, so `https://1.2.3.4.sslip.io` is one — gets Caddy's `internal error` alert instead
+of a certificate. Name a fallback in the global block when anything but the launcher talks to
+this host:
+
+```caddy
+{
+    default_sni fanxi.example.com
+}
+```
+
 ### Firewall
 
 Open only what players need: `8080/tcp` (or 443 if proxied), `54231/tcp`, `54230/tcp`,

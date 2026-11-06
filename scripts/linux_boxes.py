@@ -27,6 +27,7 @@ import json
 import os
 import shlex
 import socket
+import ssl
 import subprocess
 import sys
 import time
@@ -56,6 +57,29 @@ def api_call(base: str, token: str, method: str, path: str, body: dict | None = 
     )
     with urllib.request.urlopen(request, timeout=30) as response:
         return json.load(response)
+
+
+def unreachable(base: str, error: BaseException) -> str:
+    """A readable reason for a request that never reached the API, with the TLS trap named.
+
+    The launcher builds `.venv` from `system_python()`, which on an older checkout was Apple's
+    `/usr/bin/python3`: Python 3.9 on LibreSSL 2.8.3. That build has no TLS 1.3, and its `ssl`
+    module drops the SNI for hosts that begin with an IPv4 literal, so Caddy answers
+    `https://172.236.103.193.sslip.io` with a TLS internal error before the API sees anything.
+    """
+    reason = getattr(error, "reason", error)
+    lines = [f"cannot reach the Fanxi API at {base}: {reason}"]
+    text = f"{reason} {error!r}"
+    if "_ssl.c" in text or "SSL" in text or "CERTIFICATE" in text:
+        lines.append(
+            f"the interpreter is {sys.executable} with {ssl.OPENSSL_VERSION}. Apple's "
+            "/usr/bin/python3 is LibreSSL 2.8.3, which has no TLS 1.3 and drops the SNI for "
+            "hosts that start with an IP address, so a Caddy front answers with an internal "
+            "error. Run the helper with a current Python (Homebrew's or python.org's, for "
+            "example /opt/homebrew/bin/python3 scripts/linux_boxes.py up) or rebuild .venv "
+            "from one."
+        )
+    return "\n".join(lines)
 
 
 def control(port: int, cmd: str, args: dict | None = None, timeout: float = 5.0) -> dict:
@@ -224,7 +248,40 @@ def start_tunnel(ssh: str, port: int) -> subprocess.Popen:
     )
 
 
+def remote_headless_built(ssh: str, repo: str) -> bool:
+    """Whether the current headless client is on the remote host.
+
+    The artifact was renamed from `host64-headless` to `fanxi-headless`, so a box that was built
+    once and never resynced has the old name and every launch fails with a bare "no pid" from the
+    remote shell. Say what is missing instead. An unreachable host is not this check's problem:
+    the launch path reports it with its own error.
+    """
+    if not ssh:
+        return True
+    try:
+        probe = remote_sh(ssh, f"test -x {shlex.quote(repo + '/build/fanxi-headless')}", timeout=10)
+    except (subprocess.TimeoutExpired, OSError):
+        return True
+    # ssh exits 255 for its own failures (no route, bad key); the remote command's exit is 1.
+    return probe.returncode in (0, 255)
+
+
+def headless_missing(args) -> bool:
+    """Say, once, that the box has no current headless client; True when it does not."""
+    if remote_headless_built(args.ssh, args.repo):
+        return False
+    print(
+        f"the Linux host has no {args.repo}/build/fanxi-headless; build it there first:\n"
+        f"  ssh {args.ssh} 'cd {args.repo} && python3 tools/build_posix.py host64-headless "
+        f"--game {args.game}'",
+        file=sys.stderr,
+    )
+    return True
+
+
 def up(args) -> int:
+    if headless_missing(args):
+        return 1
     if not getattr(args, "no_reap", False):
         reap(args)
     config = launcher_config()
@@ -234,7 +291,14 @@ def up(args) -> int:
         print("no launcher token: pass --token or sign in with the launcher first", file=sys.stderr)
         return 1
 
-    subs = api_call(base, token, "GET", "/api/v1/accounts/sub").get("subs", [])
+    try:
+        subs = api_call(base, token, "GET", "/api/v1/accounts/sub").get("subs", [])
+    except urllib.error.HTTPError as error:
+        print(f"the server refused the launcher token ({error.code}); sign in again", file=sys.stderr)
+        return 1
+    except (urllib.error.URLError, OSError) as error:
+        print(unreachable(base, error), file=sys.stderr)
+        return 1
     active = [s for s in subs if s.get("status") == "active" and s.get("character")]
     if args.only:
         wanted = {int(x) for x in args.only.split(",")}
@@ -284,6 +348,9 @@ def up(args) -> int:
         except urllib.error.HTTPError as error:
             print(f"@{user}: launch token refused: {error.read().decode(errors='replace')[:200]}")
             continue
+        except (urllib.error.URLError, OSError) as error:
+            print(f"@{user}: {unreachable(base, error)}", file=sys.stderr)
+            return 1
         client = data["client"]
         login_token = data["login_token"]
         remote_data = f"{args.data}/{user}"
@@ -463,6 +530,8 @@ def stop_box(box: dict, quiet: bool = False) -> None:
 
 
 def restart(args) -> int:
+    if headless_missing(args):
+        return 1
     boxes = load_state()
     wanted = {int(x) for x in args.only.split(",")} if args.only else None
     keep = []

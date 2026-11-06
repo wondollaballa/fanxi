@@ -4538,6 +4538,14 @@ class World:
                     "message": packets.MESSAGE_MAGIC_GAIN_EFFECT,
                 }]})
             elif effect is not None:
+                # Store the generic self-buff too.  It used to be icon-only, which made
+                # Dispel unable to remove every self-buff except Berserk.  The effect is
+                # still icon-only for stats (no mods), but it now lives in effect_state
+                # and the battle picker can mark the move as dispellable.
+                self.apply_mob_effect(
+                    entity,
+                    effects.SpellEffect(int(effect[1]), "buff", float(effect[2])),
+                    None, now, name=str(skill.name))
                 targets.append({"target_id": int(entity.id), "results": [{
                     "damage": int(effect[1]), "miss": False, "kind": 0,
                     "animation": int(skill.animation),
@@ -4785,6 +4793,10 @@ class World:
             "next_tick": now + first_tick,
             "source": int(session.char["char_id"]) if session is not None else 0,
             "name": str(name or ""),
+            # A self-buff is a buff strip candidate even when it has no engine mods
+            # (Cocoon, Stoneskin, ...).  Debuffs keep this false so Dispel prefers the
+            # monster's own buffs before the player's enfeebles.
+            "buff": str(getattr(spec, "kind", "")) == "buff",
         }
         log.info("%s gains effect %d", entity.name, effect_id)
         return True
@@ -4807,7 +4819,8 @@ class World:
         before the Berserk the player is trying to remove made the ability look broken.
         """
         candidates = [effect_id for effect_id in entity.status_effects
-                      if (entity.effect_state.get(effect_id) or {}).get("mods")]
+                      if (entity.effect_state.get(effect_id) or {}).get("mods")
+                      or (entity.effect_state.get(effect_id) or {}).get("buff")]
         for effect_id in reversed(candidates or list(entity.status_effects)):
             state = entity.effect_state.pop(effect_id, None)
             try:

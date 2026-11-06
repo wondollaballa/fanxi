@@ -113,6 +113,24 @@ class ServiceTest(unittest.TestCase):
         self.assertEqual(
             self.service.gearswap_library(account_id, "WAR")["source"], "-- keep me\n")
 
+    def test_battle_catalogs_cover_weapon_skills_and_spells(self):
+        skills = self.service.battle_weapon_skills()
+        self.assertTrue(any(row["name"] == "Savage Blade" for row in skills))
+        self.assertTrue(all(row["id"] and row["name"] for row in skills))
+        spells = self.service.battle_spells()
+        self.assertTrue(any(row["name"] == "Thunder V" for row in spells))
+
+    def test_battle_mob_catalog_describes_selected_spawn(self):
+        row = self.db.one(
+            "SELECT s.zone, COALESCE(s.name, t.name) AS name "
+            "FROM monster_spawns s JOIN monster_templates t ON t.id = s.template_id "
+            "WHERE t.skill_list_id > 0 AND s.name IS NOT NULL LIMIT 1")
+        self.assertIsNotNone(row)
+        catalog = self.service.battle_mob_moves([row["name"]], int(row["zone"]))
+        self.assertGreater(len(catalog["moves"]), 0)
+        self.assertEqual(catalog["unmatched"], [])
+        self.assertTrue(all(move["description"] for move in catalog["moves"]))
+
     def test_battle_team_profile_round_trip(self):
         result = self.register()
         account_id = int(result.account["id"])
@@ -129,6 +147,27 @@ class ServiceTest(unittest.TestCase):
         # difference and keep showing the team instead of treating everyone as offline.
         self.assertFalse(team[0]["online"])
         self.assertFalse(team[0]["online_known"])
+
+    def test_battle_engine_publish_preserves_profile(self):
+        result = self.register()
+        account_id = int(result.account["id"])
+        character = self.service.create_character(account_id, {"name": "Testertwo", "race": 1})
+        profile = {"name": "Keep me", "buffs": {"rows": [{"spell": "Haste"}]}}
+        saved = self.service.save_battle_profile(account_id, int(character["id"]), profile)
+        state = self.service.save_battle_engine(account_id, int(character["id"]), {
+            "running": True, "ready": True, "run_id": "run-123",
+        })
+        self.assertTrue(state["engine"]["running"])
+        self.assertTrue(state["engine"]["ready"])
+        self.assertEqual(state["engine"]["run_id"], "run-123")
+        team = self.service.battle_team_profiles(account_id)
+        self.assertEqual(team[0]["profile"]["name"], "Keep me")
+        self.assertEqual(team[0]["profile"]["buffs"]["rows"][0]["spell"], "Haste")
+        self.assertTrue(team[0]["profile"]["engine"]["ready"])
+        self.assertEqual(team[0]["profile"]["engine"]["run_id"], "run-123")
+        # A state publish must not make the client re-apply its own server copy over an
+        # unsaved edit; only an actual profile save bumps the updated stamp.
+        self.assertEqual(team[0]["updated"], saved["updated"])
 
     def test_duplicate_username(self):
         self.register()

@@ -4870,12 +4870,13 @@ class ZoneSession:
         if not self.equipped and self.restore_equipment():
             # An outfit saved by an older build can hold a 2H main and an off-hand
             # weapon, or a ranged weapon and ammo from the wrong family.  Fix it on
-            # the way in, before the grap list is built.
-            changed = self._enforce_weapon_pair(items)
-            if self._enforce_ranged_ammo(items):
-                changed = True
-            if changed:
-                self.store_equipment()
+            # the way in, before the grap list is built.  The store also drops the
+            # saved rows for items restore skipped (moved out of the bag, or ammo the
+            # ranged weapon cannot fire) so equipped_weapons() cannot keep reading
+            # them from char_equip.
+            self._enforce_weapon_pair(items)
+            self._enforce_ranged_ammo(items)
+            self.store_equipment()
             return
         by_kind: dict[int, list[dict]] = {}
         for item in items:
@@ -5199,24 +5200,22 @@ class ZoneSession:
     def _ranged_ammo_compatible(ranged: dict, ammo: dict) -> bool:
         """Can this ammunition be fired by the ranged weapon in the range slot?
 
-        An ammo-slot item outside the three ranged families (a Tathlum, jug, tool or
-        fishing bait) is always legal.  Throwing ammunition (skill 27) is thrown by
-        hand and never loaded into a bow, gun or crossbow, so it is refused whenever a
-        ranged weapon is out.
-        Marksmanship ammo also has to match the weapon's subtype: bolts (0) with a
-        crossbow, bullets (1) with a gun, shells (2) with a culverin.  The subtype comes
-        from ``items.subskill`` (migration 191); a missing column would fail the inventory
+        When the ranged slot holds a bow, gun, crossbow or throwing weapon, the ammo
+        slot can only hold the matching arrow/bolt/bullet family.  A Tathlum, orb,
+        bomblet, pebble, jug, tool or bait is a throwing/utility item: it may be worn
+        when no ranged weapon is out, but it is not ammunition for one.  Marksmanship
+        ammo also has to match the weapon's subtype: bolts (0) with a crossbow,
+        bullets (1) with a gun, shells (2) with a culverin.  The subtype comes from
+        ``items.subskill`` (migration 191); a missing column would fail the inventory
         query, so every deployed database has it.
         """
-        ammo_skill = int(ammo.get("skill") or 0)
-        # Skill 0 is a Tathlum, jug, tool or other ammo-slot item; fishing bait is
-        # skill 48 and is legal too.  Only the three ranged ammo families are gated.
-        if ammo_skill not in RANGED_WEAPON_SKILLS:
-            return True
         ranged_skill = int(ranged.get("skill") or 0)
         if ranged_skill not in RANGED_WEAPON_SKILLS:
             return True
-        if ammo_skill == 27 or ammo_skill != ranged_skill:
+        ammo_skill = int(ammo.get("skill") or 0)
+        if ammo_skill not in (25, 26):
+            return False
+        if ammo_skill != ranged_skill:
             return False
         if ranged_skill == 26:
             # Crossbow 0, gun 1, culverin 2.  A crossbow's 0 is a real subtype, not
