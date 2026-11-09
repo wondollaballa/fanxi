@@ -127,6 +127,7 @@ class Api:
         route("GET", r"/api/v1/characters/(?P<character_id>\d+)/bags")(self.character_bags)
         route("GET", r"/api/v1/characters/(?P<character_id>\d+)/stats")(self.character_stats)
         route("GET", r"/api/v1/characters/(?P<character_id>\d+)/target")(self.character_target)
+        route("GET", r"/api/v1/characters/(?P<character_id>\d+)/chemist")(self.character_chemist)
         route("GET", r"/api/v1/characters/(?P<character_id>\d+)/magicbag")(self.character_magicbag)
         route("POST", r"/api/v1/characters/(?P<character_id>\d+)/armory")(self.character_armory)
         route("POST", r"/api/v1/launch")(self.launch)
@@ -791,6 +792,11 @@ class Api:
             raise ApiError(422, "validation_error", "entity_id must be a number")
         return json_response(200, self.service.character_target_report(
             int(row["id"]), entity_id))
+
+    def character_chemist(self, request: Request) -> Response:
+        """The live Battle Bag and stance windows (Chemist HUD)."""
+        row = self._data_character(request)
+        return json_response(200, self.service.character_chemist_report(int(row["id"])))
 
     def character_armory(self, request: Request) -> Response:
         row = self._data_character(request)

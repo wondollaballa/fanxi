@@ -156,6 +156,23 @@ class ApiTest(unittest.TestCase):
         self.assertEqual(missing.status, 404, missing.payload)
         self.assertEqual(json.loads(missing.payload)["error"]["message"], "character not found")
 
+    def test_the_chemist_route_accepts_the_long_character_id(self):
+        """The Chemist HUD polls the same short and ServerId forms as Target Debuffs."""
+        token = self.register()["token"]
+        created = self.call("POST", "/api/v1/characters",
+                            {"name": "Fanxi", "race": 1, "face": 1, "size": 1, "nation": 0},
+                            token=token)
+        self.assertEqual(created.status, 201, created.payload)
+        character = json.loads(created.payload)["character"]
+        for path_id in (int(character["id"]), int(character["char_id"])):
+            response = self.call("GET", "/api/v1/characters/%d/chemist" % path_id, token=token)
+            self.assertEqual(response.status, 404, response.payload)
+            self.assertEqual(json.loads(response.payload)["error"]["message"],
+                             "character is not in a zone")
+        missing = self.call("GET", "/api/v1/characters/99999999/chemist", token=token)
+        self.assertEqual(missing.status, 404, missing.payload)
+        self.assertEqual(json.loads(missing.payload)["error"]["message"], "character not found")
+
     def test_world_online_needs_a_token_and_reports_an_unattached_gateway(self):
         response = self.call("GET", "/api/v1/world/online")
         self.assertEqual(response.status, 401)

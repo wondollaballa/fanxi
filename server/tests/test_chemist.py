@@ -128,6 +128,45 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(abilities, [
             "Toss", "Mix", "Catalyst", "Amplify", "Volatile Synthesis"])
 
+    def test_the_hud_report_carries_the_bag_stances_and_recasts(self):
+        """GET /characters/<id>/chemist is the Chemist HUD's data source."""
+        self.give_bag(4112, 5, 1)
+        self.give_bag(30000, 3, 2)
+        self.session.chemist_selected_item = 30000
+        now = time.time()
+        self.session._chemist_catalyst_until = now + 30
+        self.session.ability_recasts[chemist.RECAST_IDS[chemist.CATALYST]] = now + 45
+        report = self.session.chemist_report()
+        self.assertEqual(report["main_job"], 23)
+        self.assertEqual(report["capacity"], 20)
+        self.assertEqual(report["used"], 2)
+        self.assertEqual(report["selected"], 30000)
+        rows = {int(row["item_id"]): row for row in report["bag"]}
+        self.assertTrue(rows[30000]["selected"])
+        self.assertEqual(rows[4112]["quantity"], 5)
+        self.assertEqual(rows[4112]["kind"], "heal")
+        self.assertAlmostEqual(report["stances"]["catalyst"], 30, delta=2)
+        self.assertAlmostEqual(report["recasts"]["catalyst"], 45, delta=2)
+        self.assertEqual(report["alchemy"], 55)
+
+    def test_the_chm_command_fires_catalyst_through_the_ability_gate(self):
+        self.enter()
+        self.session.ability_recasts.clear()
+        self.session.chemist_command(["catalyst"])
+        self.assertGreater(self.session._chemist_catalyst_until, time.time())
+        self.assertGreater(
+            self.session.ability_recasts.get(chemist.RECAST_IDS[chemist.CATALYST], 0),
+            time.time())
+
+    def test_the_chm_use_command_selects_and_tosses_a_hostile_item(self):
+        self.enter()
+        self.give_bag(30000, 3, 2)
+        mob = self.mob()
+        self.session.target_targid = mob.targid
+        self.session.chemist_command(["use", "30000"])
+        self.assertEqual(self.session.chemist_selected_item, 30000)
+        self.assertIsNotNone(mob.effect_state.get(chemist.AQUA_REGIA))
+
     def test_job_23_stats_skills_and_packet_slot(self):
         stats = base_stats.base_stats(1, 23, 99, 0, 0)
         self.assertGreater(int(stats["dex"]), 0)

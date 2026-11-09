@@ -2478,6 +2478,16 @@ class FanxiService:
             raise ApiError(404, "not_found", "character is not in a zone")
         return session.target_effect_report(int(entity_id or 0))
 
+    def character_chemist_report(self, character_id: int) -> dict:
+        """The live Battle Bag and Chemist windows for the in-game Chemist HUD."""
+        row = self.character(int(character_id))
+        world = self.zone_world
+        session = (world.session_by_character_ids(int(row["id"]), int(row["char_id"]))
+                   if world is not None else None)
+        if session is None:
+            raise ApiError(404, "not_found", "character is not in a zone")
+        return session.chemist_report()
+
     def equipped_slot_mods(self, character_id: int) -> list[dict]:
         """One row per equipped slot with that copy's modifiers, augments included.
 

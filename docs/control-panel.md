@@ -69,7 +69,7 @@ Commands the launcher uses:
 | `bag_items {container}` | every item in one client container (diagnostic; scans slots 1-80, including slots past `container_max`) |
 | `icons {ids}` | item icons as top-down RGBA hex, decoded from the game's DATs |
 | `item_ids {names}` | item name -> id, for launcher-side GearSwap set previews; resolves the Reforged and final-form server names to their client ids |
-| `hud {show_hud, show_abilities, show_spells, show_trusts, show_weapon_skills, show_mounts, show_target, show_equipview, show_battle_hud, show_sch, edit, type, layout, columns, size, labels, font, tabs, group, custom_groups, assign_key, assign_group, target, target_tab, targets, warp_marks, mounts, opacity, menu_hide, reset_positions, center_positions}` | change the whole in-game HUD or one of its combat windows (or all of them); `edit` starts/stops in-game move mode, `center_positions` parks all six windows in the middle before editing (the resolution-change repair); `target` + `target_tab` or a `targets` map sets per-tab spell targeting (`selected`, `stnpc` or `stpc`); `warp_marks` is the launcher's `[{slot, alias, zone_name}, ...]` list for the Zoning spell page; `show_mounts` opens the Mount HUD and `mounts: {selected, columns, size, x, y}` sets its own prefs; `show_battle_hud` drives the camp Battle HUD (the same setting as its title-bar X); returns the saved state |
+| `hud {show_hud, show_abilities, show_spells, show_trusts, show_weapon_skills, show_mounts, show_target, show_equipview, show_battle_hud, show_sch, show_chm, edit, type, layout, columns, size, labels, font, tabs, group, custom_groups, assign_key, assign_group, target, target_tab, targets, warp_marks, mounts, opacity, menu_hide, reset_positions, center_positions}` | change the whole in-game HUD or one of its combat windows (or all of them); `edit` starts/stops in-game move mode, `center_positions` parks all six windows in the middle before editing (the resolution-change repair); `target` + `target_tab` or a `targets` map sets per-tab spell targeting (`selected`, `stnpc` or `stpc`); `warp_marks` is the launcher's `[{slot, alias, zone_name}, ...]` list for the Zoning spell page; `show_mounts` opens the Mount HUD and `mounts: {selected, columns, size, x, y}` sets its own prefs; `show_battle_hud` drives the camp Battle HUD (the same setting as its title-bar X); `show_chm` is the Chemist window (a Chemist main suppresses the Scholar one); returns the saved state |
 | `battle_info {show, toggle, start, pause, stop, reset, auto_start, native_fps, advanced, opacity, x, y, reset_position}` | the Stats window and the measurement session; returns the live snapshot |
 | `battle {action, profile, name, role, radius, scope, line, tab}` | the Battle hub and automation engine: `state`, `update`, `save`, `load`, `delete`, `new`, `start`, `stop`, `pause`, `show`, `hide`, `tab`, `camp_hud`, `camp_here`, `camp_radius`, `camp_clear`, `place_there`, `suggest` or `command`; see [battle.md](battle.md) |
 | `party_info {show, toggle, tab, replace, buffs, names, opacity, x, y, reset_position}` | the Party Info window; `tab` is `party` or `alliance`; returns the saved state and the member list |
@@ -537,6 +537,29 @@ has no mark rows until a launcher connects. A mark tile uses the Warp icon, is l
 alias (or zone name when it has none), and a click runs `//warp me <slot>`; the tooltip names the
 zone and slot. Marks are not written into the per-character HUD file, so a rename or delete on the
 Warps page is the one copy that matters.
+
+### Chemist HUD
+
+A Chemist main replaces the Scholar window: the Scholar HUD is suppressed even when the support
+job is Scholar, and the **Chemist** window takes its place. `//hud chm` toggles it and its
+title-bar X hides it; both store the choice in the per-character HUD file. It polls
+`GET /api/v1/characters/{id}/chemist` through the launcher API — the same path Target Debuffs
+uses — and draws:
+
+- Alchemy, Battle Bag slots used/capacity and the selected item.
+- **Toss**, **Mix**, **Catalyst**, **Amplify** and **Volatile Synthesis**, with the server's
+  recast clocks. The five are above the retail ability table's end (ids 395–399), so the HUD
+  supplies their names and sends the matching `//chm` command; the server still enforces the
+  main job, level, range, bag and recast.
+- The Battle Bag rows with quantity and the selected marker; clicking a row selects it
+  (`//chm select`).
+- The Catalyst/Amplify/Volatile windows with the seconds left.
+
+The Spells window gets a **Chemistry** tab for a Chemist main. Its rows are the Battle Bag
+items with the item icons, the quantity in the tooltip, and a **Chemistry** section band.
+Clicking a tile runs `//chm use "<item>"`: a hostile row is Tossed at the current target,
+anything else is Mixed on the Chemist, and a depleted row starts its synthesis. The tab is
+absent for every other main job.
 
 ### Battle hub and automation
 

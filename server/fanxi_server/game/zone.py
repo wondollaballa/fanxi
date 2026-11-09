@@ -2295,7 +2295,8 @@ class ZoneSession:
             "//sleep (park this box without logging out), //wake (resume it), "
             "//ws <name>, //ja <name>, //abilities, //traits, //job <job> [sub] (stores every "
             "other job's gear, pulls this job's set and tidies the bags), "
-            "//chm status|load <item> [qty]|select <item>|toss|mix (Chemist), "
+            "//chm status|load <item> [qty]|select <item>|use <item>|toss|mix|"
+            "catalyst|amplify|volatile (Chemist), "
             "//job <character> <job> <sub> (the same swap on a sub-account), //cast <spell>, "
             "//equip <name>, //unequip <slot>, //model <item> <id>, "
             "//modelnext <item>, //event <id> [p1..p8], "
@@ -11389,8 +11390,56 @@ class ZoneSession:
             log.info("%s Chemist restocked item %d to %d", self.addr, int(item_id),
                      int(result.get("quantity") or 0))
 
+    def chemist_report(self) -> dict:
+        """The Battle Bag and live Chemist windows for the in-game HUD.
+
+        Polled through GET /api/v1/characters/<id>/chemist, the way Target Debuffs
+        reads its target.  The bag rows come from char_chemist_bag; the selection,
+        stances and recasts only exist on this live session.
+        """
+        service = self.world.service
+        rows = chemist.bag(service, int(self.char["id"]))
+        capacity = chemist.capacity(service, self.char)
+        selected = int(getattr(self, "chemist_selected_item", 0) or 0)
+        now = time.time()
+        bag = [{
+            "slot": int(row.slot),
+            "item_id": int(row.item_id),
+            "name": row.name,
+            "quantity": int(row.quantity),
+            "kind": row.kind,
+            "stack": int(row.bag_stack),
+            "depleted": int(row.quantity) <= 0,
+            "selected": int(row.item_id) == selected,
+            "visible": int(row.slot) <= capacity,
+        } for row in rows]
+        recasts = {}
+        for ability_id, recast_id in chemist.RECAST_IDS.items():
+            key = chemist.ABILITY_KEYS.get(int(ability_id), str(ability_id))
+            recasts[key] = round(max(
+                0.0, float(self.ability_recasts.get(int(recast_id), 0.0)) - now), 1)
+        return {
+            "main_job": int(self.char.get("main_job") or 0),
+            "alchemy": chemist.alchemy_skill(service, int(self.char["id"])),
+            "capacity": capacity,
+            "used": len([entry for entry in bag if entry["visible"]]),
+            "selected": selected,
+            "bag": bag,
+            "stances": {key: round(float(value), 1)
+                        for key, value in chemist.stances(self).items()},
+            "recasts": recasts,
+        }
+
+    def _chemist_use_ability(self, ability_id: int, act_index: int = 0) -> None:
+        """Run one Chemist ability from //chm with the same gates and recast as 0x01A."""
+        ability = self.world.service.job_ability(int(ability_id))
+        if ability is None:
+            self.say("The Chemist abilities are not installed.")
+            return
+        self._chemist_ability(int(ability_id), ability, int(act_index), time.time())
+
     def chemist_command(self, words: list[str]) -> None:
-        """//chm status | load <item> [qty] | select <item> | toss | mix."""
+        """//chm status | load <item> [qty] | select <item> | toss | mix | use <item>."""
         service = self.world.service
         action = words[0].casefold() if words else "status"
         if action in ("status", "bag"):
@@ -11449,20 +11498,42 @@ class ZoneSession:
             self.chemist_selected_item = int(item["item_id"])
             self.say("Selected %s for Toss/Mix." % row.name)
             return
-        if action in ("toss", "mix"):
-            ability_id = chemist.TOSS if action == "toss" else chemist.MIX
-            ability = service.job_ability(ability_id)
-            if ability is None:
-                self.say("The Chemist abilities are not installed.")
-                return
-            if action == "toss":
-                self._chemist_toss(ability, int(self.target_targid or 0), time.time())
-            else:
-                # //chm mix defaults to the Chemist; the HUD/ability path can name a
-                # party member through the client's act index.
-                self._chemist_mix(ability, 0, time.time())
+        if action in ("toss", "mix", "catalyst", "amplify", "volatile"):
+            ability_id = {
+                "toss": chemist.TOSS, "mix": chemist.MIX,
+                "catalyst": chemist.CATALYST, "amplify": chemist.AMPLIFY,
+                "volatile": chemist.VOLATILE,
+            }[action]
+            # Toss needs the selected mob; Mix defaults to the Chemist and the stances
+            # are self-only.  The client's 0x01A path can name a party member for Mix.
+            act_index = int(self.target_targid or 0) if action == "toss" else 0
+            self._chemist_use_ability(ability_id, act_index)
             return
-        self.say("Usage: //chm status | load <item> [qty] | select <item> | toss | mix")
+        if action == "use":
+            if len(words) < 2:
+                self.say("Usage: //chm use <item>")
+                return
+            item = chemist.find_item(service, " ".join(words[1:]))
+            if item is None:
+                self.say("No item called %s." % " ".join(words[1:]))
+                return
+            row = chemist.bag_slot(service, int(self.char["id"]), int(item["item_id"]))
+            if row is None:
+                self.say("That item is not in the Battle Bag.")
+                return
+            spec = chemist.item_spec(service, int(item["item_id"]))
+            if spec is None:
+                self.say("That item is not a chemistry item.")
+                return
+            # The Spells HUD's Chemistry tiles come through here: one click selects the
+            # row and resolves it the way the item is used (hostile -> Toss, else Mix).
+            self.chemist_selected_item = int(item["item_id"])
+            hostile = str(spec.get("kind") or "") == "hostile"
+            self._chemist_use_ability(chemist.TOSS if hostile else chemist.MIX,
+                                      int(self.target_targid or 0) if hostile else 0)
+            return
+        self.say("Usage: //chm status | load <item> [qty] | select <item> | use <item> | "
+                 "toss | mix | catalyst | amplify | volatile")
 
     def job_ability(self, p: bytes, act_index: int = 0) -> None:
         """C2S 0x01A action 0x09: a job ability.

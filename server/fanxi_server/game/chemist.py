@@ -39,6 +39,8 @@ ABILITY_NAMES = {
     VOLATILE: "Volatile Synthesis",
 }
 RECAST_IDS = {TOSS: 200, MIX: 201, CATALYST: 202, AMPLIFY: 203, VOLATILE: 204}
+ABILITY_KEYS = {TOSS: "toss", MIX: "mix", CATALYST: "catalyst",
+                AMPLIFY: "amplify", VOLATILE: "volatile"}
 
 # Custom hostile effects.  These are server-side keys, not client status ids.
 # The action packet borrows a retail icon so the client plays something sensible.

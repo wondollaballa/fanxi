@@ -36,6 +36,7 @@ cargo test --manifest-path launcher-rs/src-tauri/Cargo.toml
 # game-free client checks
 tests/battle_hub_test.sh --game <FFXI folder>   # Battle hub widget code, mock ImGui
 tests/sch_hud_test.sh --game <FFXI folder>      # Scholar HUD: chains, charges, saved sets, mock ImGui
+tests/chm_hud_test.sh --game <FFXI folder>      # Chemist HUD: bag snapshot, abilities, mock ImGui
 python3 tests/spell_sections_test.py            # spell page sections, Nuke ordering, Kaustra gate
 python3 tools/build_posix.py vfstest
 python3 tests/replay_test.py -v
@@ -158,6 +159,13 @@ python3 tools/build_posix.py gfxtest     # needs a display/GPU, not game files
 The recompiler reads `meta/builds.json` to match the player's `FFXiMain.dll` hash, then
 `tools/prepare.py` extracts the retail files and `recomp/recomp.py` emits C. `build/`,
 `generated/`, `.venv/` and `data/` are git-ignored.
+
+The admin dashboard runs the same sequence on the machine it is run from: **Rebuild client**
+(`B` in `tools/fanxi_tui.py`, or `./tools/fanxi_tui.py --rebuild`) makes `.venv` if missing, runs
+`prepare.py` when `generated/build.json` names another game folder, then
+`tools/build_posix.py host64`. It takes the game folder and checkout from the launcher's
+`launcher.json` when it can, and writes the build output to `build/tui-build.log`; see
+[server.md](server.md#local-dashboard).
 
 ## Running locally
 

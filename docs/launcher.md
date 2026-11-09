@@ -399,6 +399,10 @@ instead of failing inside the compiler. The player kit — the toolchain, SDL3 a
 download — is described in [Onboarding](onboarding.md).
 
 If `host64` already exists, Play uses it. To rebuild after a game update, run Build game again.
+The same build is available without the launcher window: **Rebuild client** in the admin dashboard
+(`B` in `tools/fanxi_tui.py`, or `--rebuild`) uses this `launcher.json`'s **Game folder** and
+checkout, which is handy when the checkout changed outside the launcher (a `git pull` or a branch
+switch); see [server.md](server.md#local-dashboard).
 
 ## Playing
 

@@ -108,6 +108,7 @@ once.
 | GET | `/characters` | — | `{characters: [...]}` |
 | GET | `/characters/{id}/stats` | — | live stat sheet with every source (see below) |
 | GET | `/characters/{id}/target` | — | selected mob's live effects for the Target Debuffs HUD; optional `?entity_id=<ServerId>` |
+| GET | `/characters/{id}/chemist` | — | live Battle Bag, selection, stances and recasts for the Chemist HUD; also accepts the client's `ServerId` |
 | POST | `/characters` | `{name, race, face, hair, size, nation, main_job, sub_job?}` | `201 {character}` |
 | PATCH | `/characters/{id}` | `{name}` | `{character}` |
 | PATCH | `/characters/{id}/design` | `{race?, face?, hair?, size?}` | `{character}` |
@@ -377,7 +378,8 @@ changed; a launcher release needs no server restart.
 ### Local dashboard
 
 `tools/fanxi_tui.py` is a terminal dashboard you run on the machine you administer from, not on the
-server. It drives the steps above over SSH and shows the state between them:
+server. It drives the steps above over SSH and shows the state between them; it also reads the
+client built on that machine and rebuilds it.
 
 ```bash
 ./tools/fanxi_tui.py
@@ -386,6 +388,7 @@ server. It drives the steps above over SSH and shows the state between them:
 | Key | Action |
 | --- | --- |
 | `d` | deploy: backup, `git pull`, restart (applies migrations), verify `schema_migrations`, health check, offer rollback |
+| `B` | rebuild the local client: `.venv` when missing, `tools/prepare.py` when the game folder changed, `tools/build_posix.py host64`, with the compile's progress in the output pane (`q` cancels) |
 | `R` | restart the service |
 | `b` | take a backup on the server |
 | `p` | pull the latest backup home (the homelab job, run by hand) |
@@ -403,6 +406,30 @@ logged out; `--force` only covers the server's still-unexpired launch row for a 
 already back at the lobby. `clone_character.py` takes a pre-clone database backup, and the target
 needs a relog afterwards.
 
+The status row's **client** is `build/fanxi` on this machine, the binary the launcher starts. It is
+green when the build stamp (`build/runtime.json`) matches `runtime.json`, yellow when the version
+changed or a client source is newer than the binary, and red when there is no build yet. Rebuild
+it with `B` (or `--rebuild`): the dashboard uses the game folder and checkout from the launcher's
+`launcher.json` when it finds them, so the same folder both tools build from; `game_dir` and
+`repo` in `~/.fanxi-manager.json`, or `FANXI_GAME_DIR` and `FANXI_REPO_ROOT`, override that.
+The flow is the launcher's Build game, not a different one: it creates `.venv` and installs
+`capstone` and `pefile` when they are missing, runs `tools/prepare.py` when `generated/build.json`
+is missing or names another folder, then runs `tools/build_posix.py host64`. The first build takes
+several minutes and needs network once; later ones are incremental. Every line is kept in
+`build/tui-build.log`, and the binary that was there is copied to `build/fanxi.previous` first, so
+a failed link puts the client the launcher starts back instead of leaving none. Clients already
+running keep the old binary until they are restarted, and `Fanxi.app` (the bundle
+`tools/setup.py` makes) is a separate build.
+
+If the dashboard was started by an Intel or Anaconda python, it runs under Rosetta on Apple
+silicon. A universal binary such as `/usr/bin/clang` then takes the caller's architecture
+preference and would build the whole client x86_64 — including a link against the native objects
+already on disk. The dashboard detects this and pins `XI_CC`/`XI_CXX` to this Mac's own
+architecture (`clang -arch arm64` on Apple silicon, unless you set them yourself), which changes
+the recorded build flags so `build_posix.py` drops the mixed objects and recompiles them. That
+first build is a full one; later ones are incremental again. Starting the dashboard with a native
+`python3` (`/opt/homebrew/bin/python3`) avoids it.
+
 The menu is navigable three ways — ↑↓ and Enter, a mouse click, or the hotkey in the label — and
 the pane beside it explains the selected action and states its risk. Anything that changes the
 server asks for confirmation first, with the risk repeated in the dialog and "no" as the default,
@@ -411,14 +438,19 @@ red for broken or destructive.
 
 The first run asks for the ssh destination, the checkout path and the launcher URL, and writes
 `~/.fanxi-manager.json` mode 0600. `FANXI_SSH`, `FANXI_REMOTE_DIR`, `FANXI_URL` and
-`FANXI_SSH_KEY` override it.
+`FANXI_SSH_KEY` override it; `FANXI_GAME_DIR` and `FANXI_REPO_ROOT` override the local client
+paths described above.
 
-Two non-interactive modes use the same code, so they can be scripted:
+Three non-interactive modes use the same code, so they can be scripted:
 
 ```bash
 ./tools/fanxi_tui.py --status     # the report, no curses
 ./tools/fanxi_tui.py --deploy     # the deploy sequence, exit 1 on failure
+./tools/fanxi_tui.py --rebuild    # the local client build, no curses
 ```
+
+`--rebuild` takes `--game <FINAL FANTASY XI folder>` and `--repo <checkout>` when discovery would
+pick the wrong one; `--status` accepts the same two.
 
 It uses `ssh -o BatchMode=yes` with your existing key, so it fails fast instead of prompting, and it
 only writes the database through the server's own commands (`db-backup.sh`, `create-admin`,

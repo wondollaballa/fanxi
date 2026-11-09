@@ -27,10 +27,14 @@ Server slice landed 2026-11-09:
   Sludge Bomb, Aether Spore, Vitriol) and the custom effect keys;
 - server tests in `server/tests/test_chemist.py`.
 
-Not yet implemented: the Fanxi HUD page, native ability names/icons, traps, AF/relic/
-Empyrean sets, job-point gifts and the client content pack. The `//chm` command is the
-current player-facing path; the native Ability menu will show placeholder rows until the
-content pack lands.
+The Fanxi HUD page landed with the same slice: a Chemist window with the Battle Bag, the
+five abilities and the stance clocks, and a Chemistry tab in the Spells window, both fed by
+`GET /api/v1/characters/{id}/chemist`. The chat path is
+`//chm status|load|select|use|toss|mix|catalyst|amplify|volatile`.
+
+Not yet implemented: native ability names/icons, traps, AF/relic/Empyrean sets, job-point
+gifts and the client content pack. The native Ability menu still shows placeholder rows until
+the content pack lands; the HUD draws its own names for ids 395-399.
 
 ---
 
@@ -222,11 +226,12 @@ Loading is an out-of-combat action (no cast bar, but a short reuse timer):
 
 ### 4.4 HUD snapshot
 
-The HUD needs server state (slot, item, quantity, capacity, reagents, cooldowns). Phase 0
-can start with `//chm status` chat output. Phase 1 should add a small server-to-client
-miscdata payload on an unused `0x063` type; the native client ignores unknown miscdata,
-and the addon packet tap can read it. If that proves unsafe on a client build, fall back
-to chat plus local action tracking rather than blocking the job.
+The Chemist window and the Chemistry tab poll `GET /api/v1/characters/{id}/chemist`, which
+returns the bag rows (slot, item, quantity, kind, selected, depleted), Alchemy, capacity,
+the three stance windows and the five recast clocks. It is the same launcher-API path
+Target Debuffs uses; the client only needs the `FANXI_API_URL` and `FANXI_API_TOKEN` the
+launcher already passes when it starts `host64`. This kept the miscdata `0x063` idea for
+later and needed no new server-to-client packet.
 
 ---
 

@@ -2817,6 +2817,36 @@ end
 -- The current main/sub job abilities. The client's Abilities command list is rebuilt from the
 -- server's 0x0AC, so it is already narrowed to this job pair and their levels; the 0x200..0x3FF
 -- block is the job-ability range (weapon skills and traits are skipped).
+-- Chemist's five job abilities sit above the retail player table's end (395..399), so this
+-- client's ability table has no name or icon for them.  The HUD supplies both, along with the
+-- //chm command each tile sends; the native Ability menu stays blank until the content pack
+-- in docs/chemist.md phase 3.  The command list stores 0x200 + the server's ability id.
+local HUD_CHM_ABILITIES = {
+    [0x200 + 395] = { key = 'toss', name = 'Toss', command = '//chm toss',
+                      recast_id = 200, recast = 0, item_icon = 4096,
+                      hint = 'Throw the selected hostile item' },
+    [0x200 + 396] = { key = 'mix', name = 'Mix', command = '//chm mix',
+                      recast_id = 201, recast = 0, item_icon = 4112,
+                      hint = 'Mix the selected friendly item' },
+    [0x200 + 397] = { key = 'catalyst', name = 'Catalyst', command = '//chm catalyst',
+                      recast_id = 202, recast = 60, item_icon = 4096,
+                      hint = 'The next Toss or Mix covers nearby targets' },
+    [0x200 + 398] = { key = 'amplify', name = 'Amplify', command = '//chm amplify',
+                      recast_id = 203, recast = 120, item_icon = 4128,
+                      hint = 'The next sub-job spell resolves one tier higher' },
+    [0x200 + 399] = { key = 'volatile', name = 'Volatile Synthesis', command = '//chm volatile',
+                      recast_id = 204, recast = 180, item_icon = 4097,
+                      hint = 'The next hostile Toss lands at maximum potency' },
+}
+
+local function chm_ability_entry(id, spec)
+    return {
+        id = id, name = spec.name, type = 'JobAbility',
+        recastId = spec.recast_id, icon = 0, targets = 0,
+        job = 23, chm = spec, recast = spec.recast, item_icon = spec.item_icon,
+    }
+end
+
 local function job_abilities()
     local main = game.party_member(0, 'MainJob') or 0
     local main_level = game.party_member(0, 'MainJobLevel') or 0
@@ -2838,19 +2868,35 @@ local function job_abilities()
             or ability_id == 199 or ability_id == 200 or ability_id == 213
             or ability_id == 263
         if id >= 0x200 and id < 0x400 and not seen[id] and not category then
-            local ability = res.ability(id)
-            if ability then
-                local name = ability.name
-                if type(name) == 'table' then name = name.en or name[2] or name[1] end
-                if type(name) == 'string' and name ~= '' then
-                    seen[id] = true
-                    out[#out + 1] = {
-                        id = id, name = name, type = ability.type_name or '',
-                        recastId = ability.recast_id or 0,
-                        icon = tonumber(ability.icon_id) or 0,
-                        targets = tonumber(ability.targets) or 0,
-                    }
+            local chm = main == 23 and HUD_CHM_ABILITIES[id] or nil
+            if chm then
+                seen[id] = true
+                out[#out + 1] = chm_ability_entry(id, chm)
+            else
+                local ability = res.ability(id)
+                if ability then
+                    local name = ability.name
+                    if type(name) == 'table' then name = name.en or name[2] or name[1] end
+                    if type(name) == 'string' and name ~= '' then
+                        seen[id] = true
+                        out[#out + 1] = {
+                            id = id, name = name, type = ability.type_name or '',
+                            recastId = ability.recast_id or 0,
+                            icon = tonumber(ability.icon_id) or 0,
+                            targets = tonumber(ability.targets) or 0,
+                        }
+                    end
                 end
+            end
+        end
+    end
+    -- A client command list made before the Chemist rows existed, or one that dropped the
+    -- unknown ids, still gets the full kit on a Chemist main.
+    if main == 23 then
+        for id, spec in pairs(HUD_CHM_ABILITIES) do
+            if not seen[id] then
+                seen[id] = true
+                out[#out + 1] = chm_ability_entry(id, spec)
             end
         end
     end
@@ -4332,6 +4378,9 @@ local function hud_defaults()
         -- The Equip View window: the in-game EquipViewer.  Collapsed it names the set the
         -- phase engine is wearing; expanded it draws the 4x4 equipment grid.
         equipview = { x = -1, y = -1 },
+        -- The Chemist window's own place.  show_chm is absent until the player toggles it,
+        -- so a Chemist main gets the window by default like the Scholar one.
+        chm = { x = 560, y = 40 },
         -- Native ImGui collapse is per-window state; remember it so a login lands on the
         -- same minimized bars.  Window IDs are the stable ### ids used by Begin.
         collapsed = {
@@ -4445,6 +4494,8 @@ local function hud_sanitize(raw)
     -- The Scholar window is automatic when this is absent: a Scholar main job shows it,
     -- every other job hides it.  The launcher switch and //hud sch store true/false.
     if type(raw.show_sch) == 'boolean' then state.show_sch = raw.show_sch end
+    -- The Chemist window follows its own main job, with the same absent-means-auto rule.
+    if type(raw.show_chm) == 'boolean' then state.show_chm = raw.show_chm end
     do
         local target_pos = type(raw.target) == 'table' and raw.target or {}
         state.target.x = math.floor(hud_clamp(target_pos.x, -4000, 8000, state.target.x))
@@ -4455,6 +4506,9 @@ local function hud_sanitize(raw)
         local view_pos = type(raw.equipview) == 'table' and raw.equipview or {}
         state.equipview.x = math.floor(hud_clamp(view_pos.x, -4000, 8000, state.equipview.x))
         state.equipview.y = math.floor(hud_clamp(view_pos.y, -4000, 8000, state.equipview.y))
+        local chm_pos = type(raw.chm) == 'table' and raw.chm or {}
+        state.chm.x = math.floor(hud_clamp(chm_pos.x, -4000, 8000, state.chm.x))
+        state.chm.y = math.floor(hud_clamp(chm_pos.y, -4000, 8000, state.chm.y))
     end
     do
         local raw_collapsed = type(raw.collapsed) == 'table' and raw.collapsed or {}
@@ -4584,7 +4638,9 @@ local function hud_save(state, path)
         show_target = state.show_target,
         show_equipview = state.show_equipview,
         show_sch = state.show_sch,
+        show_chm = state.show_chm,
         equipview = { x = state.equipview.x, y = state.equipview.y },
+        chm = { x = state.chm.x, y = state.chm.y },
         mounts = {
             x = state.mounts.x, y = state.mounts.y, selected = state.mounts.selected,
             columns = state.mounts.columns, size = state.mounts.size,
@@ -4745,6 +4801,28 @@ local function hud_cooling(hud, item)
 end
 
 local function hud_click(hud, item)
+    -- A Chemistry tile is used, not cast: //chm use selects the bag row and resolves it the
+    -- way its kind says (a hostile item is Tossed, anything else is Mixed).
+    if item.kind == 'chemist_item' then
+        local ok, err = pcall(xi.chat.run,
+            string.format('//chm use %s', tostring(item.name)), 1)
+        if not ok then xi.chat.write('HUD: ' .. tostring(err), 1) end
+        return
+    end
+    -- A Chemist job ability has no native name, so its tile runs the //chm command the
+    -- server route understands instead of /ja "<name>".
+    if item.chm then
+        local ok, err = pcall(xi.chat.run, item.chm.command, 1)
+        if not ok then xi.chat.write('HUD: ' .. tostring(err), 1) end
+        local total = tonumber(item.recast) or 0
+        if total > 0 then
+            hud.cool[item.key] = {
+                start = os.clock(), total = total, remaining = total,
+                pending = true, progress = 0,
+            }
+        end
+        return
+    end
     -- The configurable support Trusts open a small menu (call/dismiss and Set actions)
     -- instead of casting immediately.  Every other Trust keeps the one-click call and the
     -- second-click release.
@@ -5403,9 +5481,10 @@ function hud.rebuild(force)
             local item_key = hud_ability_key(aname)
             local item = {
                 key = 'a' .. tostring(ability.id), kind = 'ability', id = ability.id,
-                name = aname, icon = ability.icon, recast = 0,
+                name = aname, icon = ability.icon, recast = tonumber(ability.recast) or 0,
                 recastId = ability.recastId, level = 0,
-                job = HUD_ABILITY_JOB[item_key], ability_type = kind,
+                job = ability.job or HUD_ABILITY_JOB[item_key], ability_type = kind,
+                item_icon = ability.item_icon, chm = ability.chm,
             }
             item.short, item.tiny = hud_short_name(item.name)
             -- A COR's roll and shot actions become the two pickers' rows instead of tiles.
@@ -5506,6 +5585,25 @@ function hud.rebuild(force)
         end
     end
 
+    -- The Chemist's Battle Bag rides the Spells window as its own Chemistry section.  The
+    -- rows are the live API poll's (chm.lua); a depleted slot stays a tile, because clicking
+    -- it runs //chm use and starts the synthesis for that row.
+    if main == 23 and hud.chm then
+        for _, row in ipairs(hud.chm.bag()) do
+            if row.visible then
+                local item = {
+                    key = 'c' .. tostring(row.item_id), kind = 'chemist_item',
+                    id = row.item_id, name = row.name, icon = 0, level = 0, recast = 0,
+                    quantity = row.quantity, chem_kind = row.kind,
+                    depleted = row.depleted, magic = 0,
+                }
+                item.short, item.tiny = hud_short_name(item.name)
+                hud.spells[#hud.spells + 1] = item
+                hud.by_key[item.key] = item
+            end
+        end
+    end
+
     -- Weapon skills are in the client's 0x0AC command list as action ids 1..255. The list is
     -- already narrowed to the character's skill levels, so it is the right HUD source.
     local ok, ids = pcall(game.ability_commands)
@@ -5576,6 +5674,10 @@ local HUD_GEO_DEBUFF = {
 local function hud_spell_kind(item)
     local n = tostring(item.name or ''):lower()
     local magic = item.magic
+    -- A Chemist's Battle Bag gets the Spells window's own Chemistry tab.  The tab holds
+    -- the bag tiles in a Chemistry section, so the consumables are a page of their own
+    -- instead of being scattered through the Scholar buffs.
+    if item.kind == 'chemist_item' then return 'Chemistry' end
     -- Travel magic crosses several skills: Warp/Warp II are Divine, Escape/Retrace and the
     -- Teleport-*/Recall-* families are Enhancing. They share the one property that matters to
     -- the hub, a zone hand-off, so they group together before the skill fallback can call them a
@@ -5669,7 +5771,7 @@ local function hud_group_for(key, item)
 end
 
 local HUD_GROUP_ORDER = {
-    spells_type = { 'Healing', 'Buff', 'Debuff', 'Nuke', 'Zoning', 'Avatar', 'Other' },
+    spells_type = { 'Chemistry', 'Healing', 'Buff', 'Debuff', 'Nuke', 'Zoning', 'Avatar', 'Other' },
     spells_skill = { 'White Magic', 'Black Magic', 'Summoning', 'Ninjutsu', 'Bard Song', 'Blue Magic', 'Geomancy', 'Other' },
     elements = { 'Light', 'Dark', 'Fire', 'Ice', 'Wind', 'Earth', 'Thunder', 'Water', 'None' },
     ws_skill = { 'Hand-to-Hand', 'Dagger', 'Sword', 'Great Sword', 'Axe', 'Great Axe', 'Scythe',
@@ -5777,8 +5879,21 @@ end
 -- 200-local limit.
 hud.sch_visible = function()
     if not (hud.sch and hud.sch.active() == true) then return false end
+    -- A Chemist main uses the Chemist HUD.  CHM/SCH pairs used to draw the Scholar window
+    -- (and its strategems/macros) because the support job was Scholar; the Chemist window
+    -- is the main job's own page, and the Scholar one only comes back when SCH is the main.
+    if (game.party_member(0, 'MainJob') or 0) == 23 then return false end
     if hud.state.show_sch == true then return true end
     if hud.state.show_sch == false then return false end
+    return true
+end
+
+-- The Chemist window follows its own main job, like the Scholar one: absent means shown,
+-- true/false is the saved //hud chm switch or the title-bar X.
+hud.chm_visible = function()
+    if not (hud.chm and hud.chm.active() == true) then return false end
+    if hud.state.show_chm == true then return true end
+    if hud.state.show_chm == false then return false end
     return true
 end
 
@@ -5802,6 +5917,8 @@ function hud.snapshot()
         show_target = hud.state.show_target,
         show_sch = hud.sch_visible(),
         sch = hud.sch and hud.sch.snapshot() or nil,
+        show_chm = hud.chm_visible(),
+        chm = hud.chm and hud.chm.snapshot() or nil,
         show_battle_hud = (hud.battle and hud.battle.camp_hud_visible
             and hud.battle.camp_hud_visible()) == true,
         edit = hud.state.edit,
@@ -5958,6 +6075,10 @@ function hud.command(args)
     if type(args.show_sch) == 'boolean' then
         state.show_sch = args.show_sch
         if args.show_sch then state.show_hud = true end
+    end
+    if type(args.show_chm) == 'boolean' then
+        state.show_chm = args.show_chm
+        if args.show_chm then state.show_hud = true end
     end
     if type(args.show_battle_hud) == 'boolean' and hud.battle then
         -- The in-game Battle HUD is the camp radar/roster window; cfg.show is the same
@@ -6125,11 +6246,12 @@ end
 -- player scans by: Cures/Raises, Protect & Shell, Bars, each nuke element, and a Helix block.
 -- The layout counts every heading before it draws the body, so no section is clipped.
 hud.spell_section_order = {
+    Chemistry = { 'Chemistry' },
     Nuke = { 'Helix', 'Fire', 'Ice', 'Wind', 'Earth', 'Thunder', 'Water', 'Light', 'Dark',
         'Blue Magic', 'Non-elemental' },
     Healing = { 'Cures', 'Raises', 'Status Removal', 'Healing' },
-    Buff = { 'Protect & Shell', 'Regen & Refresh', 'Haste', 'Bars', 'Storms', 'Enspells',
-        'Songs', 'Ninjutsu', 'Blue Magic', 'Geomancy', 'Utility', 'Enhancing' },
+    Buff = { 'Chemistry', 'Protect & Shell', 'Regen & Refresh', 'Haste', 'Bars', 'Storms',
+        'Enspells', 'Songs', 'Ninjutsu', 'Blue Magic', 'Geomancy', 'Utility', 'Enhancing' },
     Debuff = { 'Sleep', 'Bind & Gravity', 'Dispel', 'Slow', 'Paralyze', 'Poison',
         'Blind & Silence', 'Absorb', 'Songs', 'Ninjutsu', 'Blue Magic', 'Geomancy',
         'Enfeebling' },
@@ -6167,6 +6289,7 @@ hud.spell_section_style = {
     Geomancy = { color = { 160, 220, 160 }, hint = 'Indi / Geo' },
     Utility = { color = { 170, 200, 210 }, hint = 'Utility' },
     Enhancing = { color = { 170, 210, 200 }, hint = '' },
+    Chemistry = { color = { 226, 176, 112 }, hint = 'Battle Bag' },
     Sleep = { color = { 170, 150, 255 }, hint = 'Sleep' },
     ['Bind & Gravity'] = { color = { 200, 170, 140 }, hint = 'Bind / Gravity' },
     Dispel = { color = { 220, 170, 255 }, hint = 'Dispel' },
@@ -6202,6 +6325,8 @@ end
 hud.spell_section = function(item, kind)
     local n = tostring(item.name or ''):lower()
     kind = kind or hud_spell_kind(item)
+    -- The Battle Bag's rows are not spells; they get their own band on the Buff page.
+    if item.kind == 'chemist_item' then return 'Chemistry' end
     if kind == 'Nuke' then
         if item.helix or n:find('helix', 1, true) then return 'Helix' end
         local element = tonumber(item.element) or 0
@@ -6345,7 +6470,12 @@ hud.spell_page_sections = function(spec, group)
         end
     end
     add_generic(group.items, 0)
-    if #list < 2 then return nil end
+    if #list < 2 then
+        -- A Chemist's page can be only its Battle Bag; the Chemistry band still belongs
+        -- there, even when it is the page's one section.
+        if #list == 1 and list[1].title == 'Chemistry' then return list end
+        return nil
+    end
     table.sort(list, function(a, b)
         if a.order ~= b.order then return a.order < b.order end
         return a.rank < b.rank
@@ -6608,6 +6738,10 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
         hover_text = string.format('%s  (requires %s)', item.name, gate_reason)
     elseif cooling then
         hover_text = string.format('%s  (%s)', item.name, hud_recast_time(cooling.remaining))
+    elseif item.kind == 'chemist_item' then
+        hover_text = string.format('%s  x%d%s\nClick to use (//chm use)', item.name,
+            tonumber(item.quantity) or 0,
+            item.depleted and '  (depleted — starts its synthesis)' or '')
     elseif (item.kind == 'spell' or item.kind == 'trust') and item.level > 0 then
         hover_text = string.format('%s  (Lv.%d)', item.name, item.level)
     end
@@ -6665,6 +6799,10 @@ local function hud_draw_cell(api, spec, item, cell_width, cell_height, mode)
         else texture = hud_title_texture(item.ws_skill) end
     end
     if not texture and item.kind == 'trust' then texture = hud_face_texture(item.id) end
+    -- Chemistry rows and the custom Chemist abilities draw the item's own icon; the custom
+    -- 30000+ bag items have no client record, so they fall through to the lettered tile.
+    if not texture and item.kind == 'chemist_item' then texture = hud_item_texture(item.id) end
+    if not texture and item.item_icon then texture = hud_item_texture(item.item_icon) end
     if not texture and item.element_icon then texture = hud_icon_texture(item.element_icon) end
     if not texture then texture = hud_icon_texture(item.icon) end
     -- A ranked spell replaced its numeral tile with the line's art; if that art is missing from
@@ -11274,6 +11412,13 @@ xi.events.on('command', function(e)
             xi.chat.write('Quick Draw: shot picker shown', 1)
             return
         elseif rest == 'sch' or rest == 'scholar' or rest == 'sch on' or rest == 'sch off' then
+            -- A Chemist main owns the Chemist HUD; the Scholar window is suppressed even
+            -- when the support job is Scholar, so say that instead of claiming it toggled.
+            if (game.party_member(0, 'MainJob') or 0) == 23 then
+                xi.chat.write('Scholar HUD: hidden while Chemist is the main job — the Chemist '
+                    .. 'HUD carries the bag and abilities (//hud chm).', 1)
+                return
+            end
             local shown
             if rest == 'sch on' then shown = true
             elseif rest == 'sch off' then shown = false
@@ -11296,6 +11441,26 @@ xi.events.on('command', function(e)
                 xi.chat.write('Scholar HUD: off', 1)
             end
             return
+        elseif rest == 'chm' or rest == 'chemist' or rest == 'chm on' or rest == 'chm off' then
+            local shown
+            if rest == 'chm on' then shown = true
+            elseif rest == 'chm off' then shown = false
+            elseif hud.chm and hud.chm.active() then
+                shown = not hud.chm_visible()
+            else
+                shown = hud.state.show_chm ~= true
+            end
+            hud.state.show_chm = shown
+            if shown then hud.state.show_hud = true end
+            hud_save(hud.state, hud.path)
+            if hud.chm and hud.chm.active() then
+                xi.chat.write('Chemist HUD: ' .. (shown and 'shown' or 'hidden'), 1)
+            elseif shown then
+                xi.chat.write('Chemist HUD: on, but it only shows on a Chemist main job.', 1)
+            else
+                xi.chat.write('Chemist HUD: off', 1)
+            end
+            return
         elseif rest == 'target' or rest == 'target on' or rest == 'target off'
             or rest == 'debuffs' then
             if rest == 'target on' then
@@ -11312,7 +11477,7 @@ xi.events.on('command', function(e)
                 (hud.state.show_target and 'shown' or 'hidden'), 1)
             return
         else
-            xi.chat.write('HUD: //hud [on|off|toggle|move|move reset|save|jug|pet|roll|quickdraw|target|sch] (Ctrl+H)', 1)
+            xi.chat.write('HUD: //hud [on|off|toggle|move|move reset|save|jug|pet|roll|quickdraw|target|sch|chm] (Ctrl+H)', 1)
             return
         end
         -- A hidden HUD has no Done box; leave move mode when the HUD is switched off.
@@ -11512,10 +11677,13 @@ function hud.frame()
     -- The Scholar HUD is its own switch like Equip View.  It steps aside for the Battle
     -- hub's full editor, the same way the action windows do, so the two never fight.
     local sch_on = hud.sch_visible() and not battle_open
+    -- The Chemist HUD is the main job's own page; the Scholar one is suppressed above while
+    -- CHM is main, so the two never draw at once.
+    local chm_on = hud.chm_visible() and not battle_open
     -- Move mode still draws its Done box with no windows switched on, so the box is never a trap
     -- that cannot be dismissed and //hud save is not the only way out.
     if not action_on and not hubs_on and not state.edit and not dialog_on and not target_on
-            and not equipview_on and not sch_on then
+            and not equipview_on and not sch_on and not chm_on then
         return
     end
     if action_on or hud.pet_state.open or hud.cor_menu.open then
@@ -11528,6 +11696,12 @@ function hud.frame()
         hud_update_cool(hud)
     end
     if target_on then hud.target_tick() end
+    -- The Chemist window and the Chemistry section both read the same API poll.  Poll while
+    -- either is on screen; the module throttles itself.
+    if hud.chm and (chm_on or (state.show_spells
+            and (game.party_member(0, 'MainJob') or 0) == 23)) then
+        hud.chm.tick()
+    end
 
     -- Every window steps aside for a menu or the chat line when menu_hide is on, while the player
     -- is actually in the game. In combat the client's battle/ability menus are part of play, so the
@@ -11565,6 +11739,13 @@ function hud.frame()
         if not ok_sch and not hud.warned then
             hud.warned = true
             xi.chat.write('Scholar HUD: ' .. tostring(err_sch), 1)
+        end
+    end
+    if chm_on and not hide_hud and hud.chm then
+        local ok_chm, err_chm = pcall(hud.chm.draw, api)
+        if not ok_chm and not hud.warned then
+            hud.warned = true
+            xi.chat.write('Chemist HUD: ' .. tostring(err_chm), 1)
         end
     end
     -- Last, and opaque: the Done box is the one control that must never be hidden by a window.
@@ -11631,6 +11812,38 @@ hud.install_sch = function()
     end
 end
 hud.install_sch()
+-- The Chemist HUD polls the launcher API for the Battle Bag and draws the five custom job
+-- abilities; the spell page's Chemistry section reads the same snapshot.
+hud.install_chm = function()
+    local ok, module = pcall(require, 'xi.chm')
+    if not ok or type(module) ~= 'table' then
+        xi.chat.write('Chemist: the module is missing (' .. tostring(module) .. ')', 1)
+        return
+    end
+    hud.chm = module
+    local installed, err = pcall(module.install, {
+        notify = function(text) xi.chat.write(tostring(text), 1) end,
+        get_shown = hud.chm_visible,
+        on_hide = function(shown)
+            hud.state.show_chm = shown == true
+            if shown then hud.state.show_hud = true end
+            hud_save(hud.state, hud.path)
+        end,
+        get_window = function() return hud.state.chm end,
+        save_window = function(x, y)
+            hud.state.chm.x = x
+            hud.state.chm.y = y
+            hud_save(hud.state, hud.path)
+        end,
+        http_json = hud.battle and hud.battle.http_json or nil,
+        on_bag_changed = function() hud.rebuild(true) end,
+    })
+    if not installed then
+        hud.chm = nil
+        xi.chat.write('Chemist: could not install (' .. tostring(err) .. ')', 1)
+    end
+end
+hud.install_chm()
 hud.rgba = hub_rgba
 hud.colors = HUB_C
 end
