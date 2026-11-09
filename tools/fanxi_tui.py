@@ -6,6 +6,7 @@ Run it on the machine you administer *from* (your Mac), not on the server:
     ./tools/fanxi_tui.py                 # the dashboard
     ./tools/fanxi_tui.py --status        # one-shot report, no curses
     ./tools/fanxi_tui.py --deploy        # the deploy sequence, no curses
+    ./tools/fanxi_tui.py --rebuild       # rebuild the local client, no curses
 
 The menu is navigable with the arrow keys and Enter, a mouse click, or the hotkey in each label.
 The pane beside it explains the selected action and its risk, and every action that changes the
@@ -15,15 +16,23 @@ It keeps its connection settings in ~/.fanxi-manager.json:
 
     {"host": "root@203.0.113.10", "remote_dir": "/srv/fanxi",
      "url": "https://203.0.113.10.sslip.io", "key": "~/.ssh/id_rsa",
-     "local_backups": "~/backups/fanxi"}
+     "local_backups": "~/backups/fanxi",
+     "game_dir": "~/Games/FINAL FANTASY XI", "repo": "~/fanxi"}
 
 Environment overrides: FANXI_SSH, FANXI_REMOTE_DIR, FANXI_URL, FANXI_SSH_KEY,
-FANXI_LOCAL_BACKUPS, FANXI_MANAGER_CONFIG.
+FANXI_LOCAL_BACKUPS, FANXI_GAME_DIR, FANXI_REPO_ROOT, FANXI_MANAGER_CONFIG.
 
 Everything runs through `ssh` with BatchMode=yes, so it never hangs waiting for a password;
 it uses the key you already use for the box. The database is only written through the server's
 own tools (`db-backup.sh`, `create-admin`, `clone_character.py`), never by a query typed at
 the dashboard.
+
+The local half — the client this Mac runs — is read from the checkout and the launcher's own
+launcher.json, so the dashboard can say whether `build/fanxi` was built from the sources on disk
+and rebuild it with the same sequence as the launcher's **Build game**: `.venv`, prepare when
+the game folder changed, then `tools/build_posix.py host64`. The build streams into the output
+pane (q cancels it) and into build/tui-build.log; the client that was there is kept as
+build/fanxi.previous, and put back if the link fails.
 """
 from __future__ import annotations
 
@@ -31,11 +40,14 @@ import argparse
 import curses
 import json
 import os
+import queue
 import shlex
 import shutil
+import signal
 import subprocess
-import textwrap
 import sys
+import textwrap
+import threading
 import time
 from pathlib import Path
 
@@ -51,7 +63,16 @@ DEFAULTS = {
     "url": "https://172.236.103.193.sslip.io",
     "key": "~/.ssh/id_rsa",
     "local_backups": "~/backups/fanxi",
+    # Empty means "find out": the launcher's launcher.json first, then this checkout.
+    "game_dir": "",
+    "repo": "",
 }
+
+CLIENT_TARGET = "host64"  # the build target; it writes build/fanxi
+CLIENT_BIN = "fanxi"  # what tools/build_posix.py host64 makes
+LEGACY_CLIENT_BIN = "host64"  # what earlier builds wrote; still used if that is all there is
+BUILD_LOG = "tui-build.log"
+PACKAGES = ["capstone>=5,<6", "pefile>=2023"]
 
 STATUS_SCRIPT = r"""
 cd __REMOTE__ || exit 1
@@ -103,6 +124,8 @@ def load_config() -> dict:
         ("FANXI_URL", "url"),
         ("FANXI_SSH_KEY", "key"),
         ("FANXI_LOCAL_BACKUPS", "local_backups"),
+        ("FANXI_GAME_DIR", "game_dir"),
+        ("FANXI_REPO_ROOT", "repo"),
     ):
         value = os.environ.get(env)
         if value:
@@ -525,6 +548,597 @@ def tail_logs(config: dict, lines: int = 250) -> str:
     return output
 
 
+# --- local client ------------------------------------------------------------------------------
+#
+# The dashboard runs where the client does, so it can also answer "is build/fanxi the one these
+# sources make?" and rebuild it. The sequence is the launcher's Build game (src-tauri/src/game.rs),
+# kept in Python here so a rebuild needs no launcher window: .venv, prepare when the game folder
+# changed, then tools/build_posix.py host64.
+
+
+def read_json(path: Path) -> dict:
+    try:
+        value = json.loads(Path(path).read_text(encoding="utf-8"))
+    except (OSError, ValueError):
+        return {}
+    return value if isinstance(value, dict) else {}
+
+
+def launcher_config_path(home: Path | None = None) -> Path:
+    """Where the launcher keeps launcher.json: the same rules as config::data_dir()."""
+    override = os.environ.get("FANXI_LAUNCHER_DIR")
+    if override:
+        return Path(os.path.expanduser(override)) / "launcher.json"
+    home = Path(home) if home else Path.home()
+    if sys.platform == "darwin":
+        return home / "Library" / "Application Support" / "Fanxi" / "launcher.json"
+    if os.name == "nt":
+        return Path(os.environ.get("APPDATA") or home) / "Fanxi" / "launcher.json"
+    data_home = os.environ.get("XDG_DATA_HOME")
+    base = Path(data_home) if data_home else home / ".local" / "share"
+    return base / "fanxi" / "launcher.json"
+
+
+def read_launcher_config(home: Path | None = None) -> dict:
+    return read_json(launcher_config_path(home))
+
+
+def is_repo(path: Path | str | None) -> bool:
+    if not path:
+        return False
+    path = Path(path)
+    tools = path / "tools"
+    return (
+        (tools / "build_posix.py").is_file() or (tools / "build.py").is_file()
+    ) and (path / "host").is_dir() and (path / "runtime" / "portable").is_dir()
+
+
+def resolve_repo(config: dict) -> Path | None:
+    """The checkout to build: your setting, the launcher's checkout, else this script's own."""
+    for value in (config.get("repo"), read_launcher_config().get("repo_root"), str(REPO)):
+        if not value:
+            continue
+        path = Path(os.path.expanduser(str(value)))
+        if is_repo(path):
+            return path.resolve()
+    return None
+
+
+def is_game_dir(path: Path | str | None) -> bool:
+    if not path:
+        return False
+    path = Path(path)
+    return (
+        (path / "FFXiMain.dll").is_file()
+        and (path / "FFXi.dll").is_file()
+        and (path / "ROM").is_dir()
+    )
+
+
+def stamped_game_dir(repo: Path | None) -> str:
+    """The game folder tools/prepare.py recorded in generated/build.json, if any."""
+    if not repo:
+        return ""
+    return str(read_json(Path(repo) / "generated" / "build.json").get("game") or "")
+
+
+def game_dir_candidates(
+    config: dict,
+    repo: Path | None = None,
+    launcher: dict | None = None,
+    home: Path | None = None,
+) -> list[tuple[Path, str]]:
+    """The game folders on this machine, in the order they win, with where each came from."""
+    home = Path(home) if home else Path.home()
+    launcher = read_launcher_config(home) if launcher is None else launcher
+    rows: list[tuple[Path, str]] = []
+
+    def add(value, origin: str) -> None:
+        if not value:
+            return
+        path = Path(os.path.expanduser(str(value)))
+        if is_game_dir(path):
+            rows.append((path.resolve(), origin))
+
+    add(config.get("game_dir"), "game_dir setting")
+    add(launcher.get("game_dir"), "the launcher")
+    add(stamped_game_dir(repo), "generated/build.json")
+    games = home / "Games"
+    if games.is_dir():
+        try:
+            children = sorted(path for path in games.iterdir() if path.is_dir())
+        except OSError:
+            children = []
+        for child in children:
+            add(child, "~/Games")
+    for path in (
+        games / "FINAL FANTASY XI",
+        home / "SquareEnix" / "FINAL FANTASY XI",
+        home / "Documents" / "FINAL FANTASY XI",
+        home / "Desktop" / "FINAL FANTASY XI",
+        Path("/Applications/FINAL FANTASY XI"),
+        Path("/Games/FINAL FANTASY XI"),
+    ):
+        add(path, "a usual place")
+    seen: set[Path] = set()
+    unique: list[tuple[Path, str]] = []
+    for path, origin in rows:
+        if path not in seen:
+            seen.add(path)
+            unique.append((path, origin))
+    return unique
+
+
+def needs_prepare(repo: Path, game: Path) -> bool:
+    """Whether generated/build.json is missing or names a different game folder."""
+    chosen = read_json(Path(repo) / "generated" / "build.json").get("game")
+    if not chosen:
+        return True
+    return Path(os.path.expanduser(str(chosen))).resolve() != Path(game).resolve()
+
+
+def client_binary(repo: Path) -> Path:
+    build = Path(repo) / "build"
+    binary = build / CLIENT_BIN
+    if binary.is_file():
+        return binary
+    return build / LEGACY_CLIENT_BIN
+
+
+def newest_source_mtime(repo: Path) -> float:
+    """The newest hand-written client source; generated/ is an output, so it is left out.
+
+    host/addons is walked through because the build embeds its Lua into the client.
+    """
+    newest = 0.0
+
+    def visit(directory: Path, suffixes: tuple) -> None:
+        nonlocal newest
+        try:
+            for path in directory.rglob("*"):
+                if path.is_file() and path.suffix in suffixes:
+                    try:
+                        newest = max(newest, path.stat().st_mtime)
+                    except OSError:
+                        pass
+        except OSError:
+            pass
+
+    for folder in ("host", "runtime", "runtime/portable"):
+        visit(Path(repo) / folder, (".c", ".h", ".cpp", ".m"))
+    visit(Path(repo) / "host" / "addons", (".c", ".h", ".cpp", ".lua"))
+    try:
+        newest = max(newest, (Path(repo) / "runtime.json").stat().st_mtime)
+    except OSError:
+        pass
+    return newest
+
+
+def client_state(repo: Path) -> dict:
+    """What build/fanxi is, and whether the sources on disk have moved past it.
+
+    The launcher's rule is runtime.json's version against the stamp the build wrote in
+    build/runtime.json. A newer source file is the extra hint for a checkout that was edited
+    without raising the version; it is a mtime comparison, not proof.
+    """
+    binary = client_binary(repo)
+    stamp = read_json(Path(repo) / "build" / "runtime.json")
+    wanted = str(read_json(Path(repo) / "runtime.json").get("version") or "")
+    state = {
+        "path": binary,
+        "exists": binary.is_file(),
+        "version": str(stamp.get("version") or ""),
+        "commit": str(stamp.get("commit") or ""),
+        "build": str(stamp.get("build") or ""),
+        "wanted": wanted,
+        "stale": False,
+        "reason": "",
+    }
+    if not state["exists"]:
+        state.update(stale=True, reason="not built")
+        return state
+    if not stamp:
+        state.update(stale=True, reason="no build stamp")
+        return state
+    if wanted and state["version"] != wanted:
+        state.update(stale=True, reason="the version changed")
+        return state
+    try:
+        built_at = binary.stat().st_mtime
+    except OSError:
+        built_at = 0.0
+    if newest_source_mtime(repo) > built_at:
+        state.update(stale=True, reason="sources are newer")
+    return state
+
+
+def local_client(config: dict) -> dict:
+    """client_state() for the checkout this dashboard builds; empty without a checkout."""
+    repo = resolve_repo(config)
+    return client_state(repo) if repo else {}
+
+
+def client_summary(state: dict) -> str:
+    if not state:
+        return "no checkout"
+    if not state.get("exists"):
+        return "not built"
+    version = str(state.get("version") or state.get("wanted") or "?")
+    commit = str(state.get("commit") or "")[:7]
+    text = f"{version} @ {commit}" if commit else version
+    if state.get("stale"):
+        text += f" (stale — {state.get('reason') or 'sources changed'})"
+    return text
+
+
+def client_badge(state: dict) -> tuple[str, int]:
+    """The status row's short form: text and a curses colour pair."""
+    if not state:
+        return "no checkout", 4
+    if not state.get("exists"):
+        return "not built", 3
+    text = str(state.get("version") or state.get("wanted") or "?")
+    commit = str(state.get("commit") or "")[:7]
+    if commit:
+        text += f" @{commit}"
+    if state.get("stale"):
+        return text + " · stale", 4
+    return text, 2
+
+
+def venv_python(repo: Path) -> Path:
+    if os.name == "nt":
+        return Path(repo) / ".venv" / "Scripts" / "python.exe"
+    return Path(repo) / ".venv" / "bin" / "python"
+
+
+def system_python() -> str:
+    """The interpreter a fresh .venv is made from.
+
+    The interpreter decides the architecture of everything clang builds under it, so on macOS
+    prefer the native Homebrew python (as the launcher and tools/setup.py do): a python running
+    under Rosetta builds the whole client x86_64. FANXI_PYTHON overrides the choice.
+    """
+    given = os.environ.get("FANXI_PYTHON")
+    if given and given.strip():
+        return given.strip()
+    if sys.platform == "darwin":
+        machine = os.uname().machine if hasattr(os, "uname") else ""
+        homebrew = "/opt/homebrew/bin/python3" if machine == "arm64" else "/usr/local/bin/python3"
+        for candidate in (homebrew, "/usr/bin/python3"):
+            if os.path.isfile(candidate):
+                return candidate
+    return shutil.which("python3") or sys.executable or "python3"
+
+
+def native_machine() -> str:
+    """This Mac's own architecture, even when this process runs under Rosetta."""
+    if sys.platform == "darwin":
+        try:
+            done = subprocess.run(["sysctl", "-n", "hw.optional.arm64"], capture_output=True,
+                                  text=True, timeout=5)
+            if done.returncode == 0 and done.stdout.strip() == "1":
+                return "arm64"
+        except (OSError, subprocess.TimeoutExpired):
+            pass
+    return os.uname().machine if hasattr(os, "uname") else ""
+
+
+def running_translated() -> bool:
+    """Whether this process is the x86_64 slice under Rosetta on Apple silicon."""
+    if sys.platform != "darwin":
+        return False
+    try:
+        done = subprocess.run(["sysctl", "-n", "sysctl.proc_translated"], capture_output=True,
+                              text=True, timeout=5)
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    return done.returncode == 0 and done.stdout.strip() == "1"
+
+
+def python_machine(python: str) -> str:
+    """The architecture an interpreter reports for itself (arm64, x86_64, ...)."""
+    try:
+        done = subprocess.run([python, "-c", "import platform; print(platform.machine())"],
+                              capture_output=True, text=True, timeout=30)
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def build_environment(python: str, progress: bool) -> dict:
+    """Extra environment for the build driver.
+
+    A universal binary such as /usr/bin/clang takes the architecture preference of the process
+    that started the chain: a TUI run by an Intel/Anaconda python makes clang target x86_64 even
+    when the build itself runs under the native .venv python, and the link then rejects the
+    arm64 objects already on disk. Pin the compiler to this Mac's own architecture in that case,
+    which also changes .flags, so build_posix.py drops the mixed objects and recompiles them.
+    """
+    env = {"FFXI_PROGRESS": "1"} if progress else {}
+    if sys.platform == "darwin":
+        arch = native_machine()
+        if arch and (running_translated() or python_machine(python) not in ("", arch)):
+            if not os.environ.get("XI_CC"):
+                env["XI_CC"] = f"clang -arch {arch}"
+            if not os.environ.get("XI_CXX"):
+                env["XI_CXX"] = f"clang++ -arch {arch}"
+    return env
+
+
+def terminate_process(process: subprocess.Popen) -> None:
+    """Stop a build and the compiler children it started, in one stroke."""
+    if process.poll() is not None:
+        return
+    try:
+        if os.name == "posix":
+            os.killpg(os.getpgid(process.pid), signal.SIGTERM)
+        else:
+            process.terminate()
+    except OSError:
+        pass
+    try:
+        process.wait(timeout=5)
+    except subprocess.TimeoutExpired:
+        try:
+            if os.name == "posix":
+                os.killpg(os.getpgid(process.pid), signal.SIGKILL)
+            else:
+                process.kill()
+        except OSError:
+            pass
+
+
+def local_run(command: list, cwd: Path, emit, env: dict | None = None, should_stop=None,
+              log_path: Path | None = None) -> int:
+    """Run one build step, handing its output to emit as it arrives.
+
+    A reader thread feeds a queue, so the dashboard can draw (and cancel) while a compile runs;
+    the child gets its own process group so a cancel takes the compiler's children with it.
+    """
+    environment = dict(os.environ)
+    environment.setdefault("PYTHONUNBUFFERED", "1")
+    if env:
+        environment.update(env)
+    log = None
+    if log_path:
+        try:
+            Path(log_path).parent.mkdir(parents=True, exist_ok=True)
+            log = open(log_path, "a", encoding="utf-8")
+            log.write("# %s  %s\n" % (time.strftime("%Y-%m-%d %H:%M:%S"),
+                                      " ".join(str(part) for part in command)))
+        except OSError:
+            log = None
+    try:
+        process = subprocess.Popen(
+            [str(part) for part in command],
+            cwd=str(cwd),
+            env=environment,
+            stdin=subprocess.DEVNULL,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
+            text=True,
+            errors="replace",
+            bufsize=1,
+            start_new_session=(os.name == "posix"),
+        )
+    except OSError as error:
+        message = f"could not run {command[0]}: {error}"
+        emit(message)
+        if log:
+            log.write(message + "\n")
+            log.close()
+        return 127
+    lines: "queue.Queue[str | None]" = queue.Queue()
+
+    def pump() -> None:
+        stream = process.stdout
+        try:
+            if stream is not None:
+                for line in stream:
+                    lines.put(line.rstrip("\n"))
+        finally:
+            lines.put(None)
+
+    reader = threading.Thread(target=pump, daemon=True)
+    reader.start()
+    cancelled = False
+    try:
+        while True:
+            if should_stop is not None and should_stop():
+                cancelled = True
+                terminate_process(process)
+                break
+            try:
+                line = lines.get(timeout=0.2)
+            except queue.Empty:
+                continue
+            if line is None:
+                break
+            if log:
+                log.write(line + "\n")
+                log.flush()
+            emit(line)
+    except BaseException:
+        terminate_process(process)
+        raise
+    finally:
+        if cancelled and process.poll() is None:
+            terminate_process(process)
+        try:
+            process.wait(timeout=30)
+        except subprocess.TimeoutExpired:
+            terminate_process(process)
+        reader.join(timeout=2)
+        if process.stdout is not None:
+            try:
+                process.stdout.close()
+            except OSError:
+                pass
+        if log:
+            log.close()
+    if cancelled:
+        emit("cancelled")
+        return 130
+    return process.returncode or 0
+
+
+def ensure_build_tools(repo: Path, emit, should_stop=None,
+                       log_path: Path | None = None) -> str | None:
+    """The checkout's .venv with capstone and pefile, made the way the launcher makes it."""
+    python = venv_python(repo)
+    if not python.is_file():
+        system = system_python()
+        emit(f"creating .venv with {system}…")
+        code = local_run([system, "-m", "venv", str(Path(repo) / ".venv")], repo, emit,
+                         should_stop=should_stop, log_path=log_path)
+        if code != 0 or not python.is_file():
+            emit("could not create .venv — is Python 3.9+ installed?")
+            return None
+    try:
+        probe = subprocess.run(
+            [str(python), "-c", "import capstone, pefile"],
+            cwd=str(repo), capture_output=True, text=True, timeout=60,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        probe = None
+    if probe is None or probe.returncode != 0:
+        emit("installing the recompiler's Python packages (capstone, pefile)…")
+        code = local_run([str(python), "-m", "pip", "install", "--disable-pip-version-check", "-q"]
+                         + PACKAGES, repo, emit, should_stop=should_stop, log_path=log_path)
+        if code != 0:
+            emit("could not install capstone and pefile (the first build needs network)")
+            return None
+    return str(python)
+
+
+def keep_client(repo: Path, binary: Path, emit) -> Path | None:
+    """Copy the working client aside before a rebuild; returns the copy, or None.
+
+    clang deletes its output when the link fails, and the output is the client the launcher
+    starts, so a failed rebuild must not leave the player with nothing to run.
+    """
+    if not binary.is_file():
+        return None
+    previous = binary.with_name(binary.name + ".previous")
+    try:
+        shutil.copy2(binary, previous)
+        stamp = Path(repo) / "build" / "runtime.json"
+        if stamp.is_file():
+            shutil.copy2(stamp, Path(repo) / "build" / "runtime.previous.json")
+    except OSError as error:
+        emit(f"could not keep a copy of the current client: {error}")
+        return None
+    emit(f"kept the current client as {previous}")
+    return previous
+
+
+def restore_client(repo: Path, binary: Path, previous: Path, emit) -> None:
+    """Put the kept client back when a failed or cancelled build left none."""
+    if binary.is_file() or not previous.is_file():
+        return
+    try:
+        shutil.copy2(previous, binary)
+        stamp = Path(repo) / "build" / "runtime.previous.json"
+        if stamp.is_file():
+            shutil.copy2(stamp, Path(repo) / "build" / "runtime.json")
+    except OSError as error:
+        emit(f"could not restore the previous client: {error}")
+        return
+    emit(f"the previous client is back at {binary}; the log says why the rebuild failed")
+
+
+def build_client(config: dict, emit, *, progress: bool = False, should_stop=None,
+                 game: Path | str | None = None, repo: Path | str | None = None) -> bool:
+    """Rebuild build/fanxi the way the launcher's Build game does.
+
+    ``progress`` asks the driver for @phase/@progress lines, which the curses pane renders;
+    without it the build prints its ordinary output. ``game`` and ``repo`` skip discovery
+    (the dashboard has already asked), and ``should_stop`` cancels the compile.
+    """
+    if os.name == "nt":
+        emit("the local rebuild supports macOS and Linux; use the launcher's Build game on Windows")
+        return False
+    repository = Path(repo).resolve() if repo else resolve_repo(config)
+    if repository is None:
+        emit(f"no Fanxi checkout found: set \"repo\" in {CONFIG_PATH} or FANXI_REPO_ROOT")
+        return False
+    if not is_repo(repository):
+        emit(f"{repository} is not a Fanxi checkout (tools/build_posix.py is missing)")
+        return False
+    origin = "chosen"
+    if game:
+        folder = Path(os.path.expanduser(str(game))).resolve()
+    else:
+        candidates = game_dir_candidates(config, repository)
+        if not candidates:
+            emit("no FINAL FANTASY XI folder found: pass --game or set FANXI_GAME_DIR")
+            return False
+        folder, origin = candidates[0]
+    if not is_game_dir(folder):
+        emit(f"{folder} is not a FINAL FANTASY XI folder "
+             "(FFXiMain.dll, FFXi.dll and ROM are needed)")
+        return False
+
+    emit(f"checkout   {repository}")
+    emit(f"game dir   {folder}  ({origin})")
+    log_path = repository / "build" / BUILD_LOG
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write("\n# --- local client rebuild %s ---\n" % time.strftime("%Y-%m-%d %H:%M:%S"))
+    except OSError:
+        pass
+
+    python = ensure_build_tools(repository, emit, should_stop=should_stop, log_path=log_path)
+    if python is None:
+        return False
+
+    extra = build_environment(python, progress)
+    if extra.get("XI_CC") and not os.environ.get("XI_CC"):
+        reason = ("this dashboard runs under Rosetta" if running_translated()
+                  else f"{python} is {python_machine(python)}")
+        emit(f"pinning clang to {native_machine()} ({reason}, so plain clang would target that "
+             "architecture)")
+        emit("the first build after that recompiles every object; later ones are incremental")
+    if needs_prepare(repository, folder):
+        emit("reading the game build (tools/prepare.py)…")
+        code = local_run([python, "tools/prepare.py", "--game", str(folder)], repository, emit,
+                         env=extra, should_stop=should_stop, log_path=log_path)
+        if code == 130:
+            emit("rebuild cancelled")
+            return False
+        if code != 0:
+            emit(f"could not read the game files — see {log_path}")
+            return False
+    else:
+        emit("game files unchanged; skipping prepare")
+
+    emit(f"translating and compiling ({CLIENT_TARGET})…")
+    existing = client_binary(repository)
+    previous = keep_client(repository, existing, emit)
+    code = local_run([python, "tools/build_posix.py", CLIENT_TARGET, "--game", str(folder)],
+                     repository, emit, env=extra, should_stop=should_stop, log_path=log_path)
+    if code == 130:
+        if previous:
+            restore_client(repository, existing, previous, emit)
+        emit("rebuild cancelled")
+        return False
+    if code != 0:
+        if previous:
+            restore_client(repository, existing, previous, emit)
+        emit(f"the build failed — {log_path} has the whole log")
+        return False
+    binary = client_binary(repository)
+    if not binary.is_file():
+        if previous:
+            restore_client(repository, existing, previous, emit)
+        emit(f"the build finished but {binary} is missing")
+        return False
+    emit(f"built {binary} — {client_summary(client_state(repository))}")
+    return True
+
+
 # --- terminal UI -----------------------------------------------------------------------------
 
 
@@ -555,6 +1169,21 @@ ACTIONS = [
         "if a migration is left unapplied; the backup taken first is what restores the schema.",
         confirm=True,
         danger=True,
+    ),
+    Action(
+        "B",
+        "Rebuild client",
+        "Rebuilds build/fanxi, the client the launcher starts, from this checkout and the game "
+        "folder the launcher uses. It makes .venv with capstone and pefile if missing, runs "
+        "tools/prepare.py when generated/build.json names another folder, then "
+        "tools/build_posix.py host64, streaming the compile's progress here. The first build "
+        "takes several minutes; later ones only recompile what changed. Fanxi.app is a different "
+        "build (tools/setup.py).",
+        "Replaces build/fanxi. Clients already running keep the old binary until they are "
+        "restarted; the server is not touched. The first run may create .venv and download "
+        "capstone and pefile, and a dashboard started under Rosetta pins clang to this Mac's "
+        "architecture, which recompiles everything once. q cancels a build in progress.",
+        confirm=True,
     ),
     Action(
         "R",
@@ -657,6 +1286,7 @@ class Dashboard:
         self.screen = screen
         self.config = config
         self.status: dict = {}
+        self.client: dict = {}
         self.fetched_at = 0.0
         self.selected = 0
         self.lines: list[str] = ["ready"]
@@ -666,6 +1296,8 @@ class Dashboard:
         self.previous_commit = ""
         self.last_click = (0.0, -1, -1)
         self.menu_rows: list[tuple[int, int, int, int]] = []
+        self.building = False
+        self.last_progress = 0.0
         self.colors = False
         self._init_colors()
 
@@ -733,12 +1365,12 @@ class Dashboard:
             pass
         self.draw_output(log_top, log_bottom, width)
         self.put(message_y, 0, self.message, self.pair(4, curses.A_BOLD))
-        self.put(
-            hint_y,
-            0,
-            "↑↓ choose · Enter run · hotkey runs · click a row · q quits",
-            self.pair(5),
+        hint = (
+            "building — q cancels · the dashboard is busy until it finishes"
+            if self.building
+            else "↑↓ choose · Enter run · hotkey runs · click a row · q quits"
         )
+        self.put(hint_y, 0, hint, self.pair(5))
         self.screen.refresh()
 
     def draw_header(self, width: int) -> None:
@@ -774,10 +1406,12 @@ class Dashboard:
         x = value(3, x, "disk free", str(status.get("disk") or "?"), 6)
         backup = status.get("backup")
         if not backup:
-            value(3, x, "backup", "none", 3)
+            x = value(3, x, "backup", "none", 3)
         else:
             age = int(status.get("backup_age") or 0)
-            value(3, x, "backup", human_age(age), 2 if age < 86400 else 4)
+            x = value(3, x, "backup", human_age(age), 2 if age < 86400 else 4)
+        badge, colour = client_badge(self.client)
+        value(3, x, "client", badge, colour)
 
     def draw_menu(self, top: int, bottom: int, width: int) -> None:
         menu_width = min(38, max(26, width // 3))
@@ -926,6 +1560,7 @@ class Dashboard:
     def execute(self, action: Action) -> None:
         handler = {
             "d": self.do_deploy,
+            "B": self.do_rebuild,
             "R": self.do_restart,
             "b": self.do_backup,
             "p": self.do_pull,
@@ -981,6 +1616,92 @@ class Dashboard:
             if self.confirm(rollback_action):
                 self.say("— rollback —")
                 rollback(self.config, self.previous_commit, self.say)
+
+    def do_rebuild(self) -> None:
+        repo = resolve_repo(self.config)
+        if repo is None:
+            self.say(f"no Fanxi checkout found: set \"repo\" in {CONFIG_PATH} or FANXI_REPO_ROOT")
+            self.message = "rebuild cancelled"
+            return
+        candidates = game_dir_candidates(self.config, repo)
+        strong = {"game_dir setting", "the launcher", "generated/build.json"}
+        detected = bool(candidates and candidates[0][1] in strong)
+        game = None
+        if detected:
+            game = candidates[0][0]
+            self.say(f"game folder {game} ({candidates[0][1]})")
+        elif len(candidates) == 1:
+            game = candidates[0][0]
+            self.say(f"game folder {game} ({candidates[0][1]})")
+        elif candidates:
+            labels = [f"{path}   ({origin})" for path, origin in candidates]
+            choice = self.choose("which FINAL FANTASY XI folder?", labels)
+            if choice is None:
+                self.message = "cancelled"
+                return
+            game = candidates[choice][0]
+        else:
+            typed = self.prompt("FINAL FANTASY XI folder")
+            if not typed:
+                self.message = "cancelled"
+                return
+            game = Path(os.path.expanduser(typed)).resolve()
+            if not is_game_dir(game):
+                self.say(f"{game} is not a FINAL FANTASY XI folder "
+                         "(FFXiMain.dll, FFXi.dll and ROM are needed)")
+                self.message = "rebuild cancelled"
+                return
+        remembered = str(self.config.get("game_dir") or "")
+        if game is not None and not detected and str(game) != remembered:
+            # A folder the launcher or generated/build.json named stays that way; one picked by
+            # hand is remembered so the next rebuild does not ask again.
+            self.config["game_dir"] = str(game)
+            save_config(self.config)
+
+        self.say("— rebuild client —")
+        self.building = True
+        self.last_progress = 0.0
+        self.screen.timeout(0)
+        try:
+            ok = build_client(self.config, self.build_line, progress=True,
+                              should_stop=self.build_cancelled, game=game, repo=repo)
+        finally:
+            self.building = False
+            self.screen.timeout(1000)
+        if ok:
+            self.say("restart each running client to pick up the new binary")
+            self.message = "client rebuilt — restart clients to use it"
+        else:
+            self.message = "REBUILD FAILED — see the output (and build/tui-build.log)"
+
+    def build_line(self, line: str) -> None:
+        """One line of the build: progress markers update the message, the rest is output."""
+        if line.startswith("@phase "):
+            self.message = f"rebuilding client — {line.split(None, 1)[1].strip()}…"
+            self.draw()
+            return
+        if line.startswith("@progress "):
+            try:
+                done, total = (int(part) for part in line.split()[1:3])
+            except ValueError:
+                return
+            if total:
+                percent = done * 100 // total
+                self.message = f"rebuilding client — compiling {percent}% ({done}/{total})"
+            now = time.time()
+            if now - self.last_progress > 0.2:
+                self.last_progress = now
+                self.draw()
+            return
+        self.say(line)
+        now = time.time()
+        if now - self.last_progress > 0.2:
+            self.last_progress = now
+            self.draw()
+
+    def build_cancelled(self) -> bool:
+        """A key pressed while the build streams; q, Esc or Ctrl-C stops it."""
+        return self.screen.getch() in (ord("q"), 27, 3)
 
     def do_restart(self) -> None:
         code, output = run_remote(self.config, "systemctl restart fanxi")
@@ -1204,6 +1925,7 @@ class Dashboard:
         self.message = "reading status…"
         self.draw()
         self.status = collect_status(self.config)
+        self.client = local_client(self.config)
         self.fetched_at = time.time()
         if self.status.get("error"):
             self.message = "status failed — is ssh working?"
@@ -1315,6 +2037,9 @@ def report(config: dict) -> int:
         print(f"backup     {status['backup']} ({human_age(status.get('backup_age'))})")
     else:
         print("backup     none")
+    client = local_client(config)
+    path = f"  {client['path']}" if client.get("path") else ""
+    print(f"client     {client_summary(client)}{path}")
     return 0
 
 
@@ -1323,6 +2048,10 @@ def main(argv: list[str]) -> int:
     parser.add_argument("--status", action="store_true", help="print a report and exit")
     parser.add_argument("--deploy", action="store_true",
                         help="backup, pull, restart (applies migrations), verify")
+    parser.add_argument("--rebuild", action="store_true",
+                        help="rebuild the local client (build/fanxi), no curses")
+    parser.add_argument("--game", help="the FINAL FANTASY XI folder for --rebuild")
+    parser.add_argument("--repo", help="the Fanxi checkout to build for --rebuild")
     parser.add_argument("--setup", action="store_true", help="write ~/.fanxi-manager.json")
     parser.add_argument("--config", help="path to the settings file")
     args = parser.parse_args(argv)
@@ -1332,16 +2061,22 @@ def main(argv: list[str]) -> int:
         CONFIG_PATH = Path(args.config).expanduser()
 
     config = load_config()
-    interactive = not (args.status or args.deploy)
+    interactive = not (args.status or args.deploy or args.rebuild)
     if args.setup or (interactive and not CONFIG_PATH.is_file()):
         config = setup(config)
     elif not CONFIG_PATH.is_file():
         print(f"no {CONFIG_PATH}: using defaults (run --setup to change)", file=sys.stderr)
+    if args.game:
+        config["game_dir"] = args.game
+    if args.repo:
+        config["repo"] = args.repo
     if args.status:
         return report(config)
     if args.deploy:
         ok, previous = deploy(config, print)
         return 0 if ok else 1
+    if args.rebuild:
+        return 0 if build_client(config, lambda line: print(line, flush=True)) else 1
     try:
         curses.wrapper(lambda screen: Dashboard(screen, config).run())
     except KeyboardInterrupt:

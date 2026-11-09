@@ -1,17 +1,20 @@
 #!/usr/bin/env python3
-"""tools/fanxi_tui.py's deploy: the migration step it reports and verifies.
+"""tools/fanxi_tui.py: the deploy it reports and the local client rebuild it runs.
 
-The SSH calls are scripted, so no server is needed; two cases run the real remote probe against a
-temporary checkout.
+The SSH calls, the compiler and the venv are scripted or stubbed, so no server, game folder or
+toolchain is needed; two cases run the real remote probe against a temporary checkout.
 
   python3 tests/fanxi_tui_test.py [-v]
 """
 import importlib.util
 import json
+import os
 from pathlib import Path
 import sqlite3
 import subprocess
+import sys
 import tempfile
+import types
 import unittest
 from unittest import mock
 
@@ -311,6 +314,411 @@ class CloneFlowTest(unittest.TestCase):
             dashboard.do_clone()
         self.assertIn("--target=Fivedough", commands[0])
         self.assertEqual(dashboard.message, "CLONE FAILED — see the log")
+
+
+def make_repo(root: Path, *, version="0.2.1", stamp_version=None, binary=True, stamp=True) -> Path:
+    """A scratch checkout: only the files the dashboard's local checks look at."""
+    (root / "tools").mkdir(parents=True)
+    (root / "tools" / "build_posix.py").write_text("")
+    (root / "host").mkdir()
+    (root / "runtime" / "portable").mkdir(parents=True)
+    (root / "runtime.json").write_text(json.dumps({"version": version}))
+    (root / "build").mkdir(exist_ok=True)
+    if binary:
+        (root / "build" / TUI.CLIENT_BIN).write_text("")
+    if stamp:
+        (root / "build" / "runtime.json").write_text(json.dumps({
+            "format": "xi-runtime-stamp/1",
+            "version": stamp_version or version,
+            "commit": "0123456789abcdef",
+            "build": "2026-10-05",
+        }))
+    return root
+
+
+def make_game_dir(root: Path) -> Path:
+    (root / "ROM").mkdir(parents=True)
+    (root / "FFXiMain.dll").write_bytes(b"")
+    (root / "FFXi.dll").write_bytes(b"")
+    return root.resolve()  # candidates come back resolved (macOS /var -> /private/var)
+
+
+class ClientStateTest(unittest.TestCase):
+    """build/fanxi against the sources: the launcher's version rule plus a mtime hint."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_checkout_and_a_game_folder_are_recognised(self):
+        repo = make_repo(self.root / "repo")
+        self.assertTrue(TUI.is_repo(repo))
+        self.assertFalse(TUI.is_repo(self.root / "elsewhere"))
+        game = make_game_dir(self.root / "game")
+        self.assertTrue(TUI.is_game_dir(game))
+        (game / "ROM").rmdir()
+        self.assertFalse(TUI.is_game_dir(game))
+
+    def test_missing_binary_is_reported_as_not_built(self):
+        repo = make_repo(self.root / "repo", binary=False)
+        state = TUI.client_state(repo)
+        self.assertFalse(state["exists"])
+        self.assertTrue(state["stale"])
+        self.assertEqual(state["reason"], "not built")
+        self.assertEqual(TUI.client_summary(state), "not built")
+
+    def test_a_fresh_build_is_current(self):
+        repo = make_repo(self.root / "repo")
+        state = TUI.client_state(repo)
+        self.assertTrue(state["exists"])
+        self.assertFalse(state["stale"], state)
+        self.assertEqual(state["version"], "0.2.1")
+        self.assertEqual(TUI.client_summary(state), "0.2.1 @ 0123456")
+        self.assertEqual(TUI.client_badge(state), ("0.2.1 @0123456", 2))
+
+    def test_a_changed_runtime_version_makes_the_client_stale(self):
+        repo = make_repo(self.root / "repo", version="0.2.2", stamp_version="0.2.1")
+        state = TUI.client_state(repo)
+        self.assertTrue(state["stale"])
+        self.assertEqual(state["reason"], "the version changed")
+        self.assertIn("stale", TUI.client_summary(state))
+
+    def test_a_missing_stamp_is_unverified(self):
+        repo = make_repo(self.root / "repo", stamp=False)
+        state = TUI.client_state(repo)
+        self.assertTrue(state["stale"])
+        self.assertEqual(state["reason"], "no build stamp")
+
+    def test_newer_sources_make_the_client_stale(self):
+        repo = make_repo(self.root / "repo")
+        source = repo / "host" / "host64.c"
+        source.write_text("/* changed */")
+        later = (repo / "build" / TUI.CLIENT_BIN).stat().st_mtime + 60
+        os.utime(source, (later, later))
+        state = TUI.client_state(repo)
+        self.assertTrue(state["stale"])
+        self.assertEqual(state["reason"], "sources are newer")
+
+    def test_embedded_addon_lua_counts_as_a_source(self):
+        repo = make_repo(self.root / "repo")
+        lua = repo / "host" / "addons" / "lua" / "control.lua"
+        lua.parent.mkdir(parents=True)
+        lua.write_text("-- changed")
+        later = (repo / "build" / TUI.CLIENT_BIN).stat().st_mtime + 60
+        os.utime(lua, (later, later))
+        self.assertEqual(TUI.client_state(repo)["reason"], "sources are newer")
+
+    def test_the_legacy_binary_is_still_found(self):
+        repo = make_repo(self.root / "repo", binary=False)
+        (repo / "build" / TUI.LEGACY_CLIENT_BIN).write_text("")
+        self.assertTrue(TUI.client_state(repo)["exists"])
+
+    def test_no_checkout_is_not_a_client(self):
+        self.assertEqual(TUI.client_summary({}), "no checkout")
+        self.assertEqual(TUI.client_badge({}), ("no checkout", 4))
+
+
+class GameDirTest(unittest.TestCase):
+    """Which game folder the rebuild would use, and where it came from."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.home = self.root / "home"
+        self.home.mkdir()
+        self.repo = make_repo(self.root / "repo")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_needs_prepare_when_the_recorded_folder_differs(self):
+        game = make_game_dir(self.root / "game")
+        other = make_game_dir(self.root / "other")
+        self.assertTrue(TUI.needs_prepare(self.repo, game))
+        (self.repo / "generated").mkdir()
+        (self.repo / "generated" / "build.json").write_text(
+            json.dumps({"build": "2026-10-05", "game": str(game)})
+        )
+        self.assertFalse(TUI.needs_prepare(self.repo, game))
+        self.assertTrue(TUI.needs_prepare(self.repo, other))
+        self.assertEqual(TUI.stamped_game_dir(self.repo), str(game))
+
+    def test_candidates_prefer_the_setting_then_the_launcher(self):
+        game = make_game_dir(self.root / "game")
+        other = make_game_dir(self.home / "Games" / "OTHER")
+        made = make_game_dir(self.home / "Games" / "FFXI")
+        rows = TUI.game_dir_candidates(
+            {"game_dir": str(game)}, self.repo,
+            launcher={"game_dir": str(other)}, home=self.home,
+        )
+        self.assertEqual(
+            rows,
+            [(game, "game_dir setting"), (other, "the launcher"), (made, "~/Games")],
+        )
+
+    def test_candidates_keep_one_entry_per_folder(self):
+        game = make_game_dir(self.root / "game")
+        rows = TUI.game_dir_candidates(
+            {"game_dir": str(game)}, self.repo,
+            launcher={"game_dir": str(game)}, home=self.home,
+        )
+        self.assertEqual(rows, [(game, "game_dir setting")])
+
+    def test_a_folder_without_the_game_files_is_not_a_candidate(self):
+        (self.home / "Games" / "EMPTY").mkdir(parents=True)
+        self.assertEqual(
+            TUI.game_dir_candidates({}, self.repo, launcher={}, home=self.home), []
+        )
+
+
+class BuildEnvironmentTest(unittest.TestCase):
+    """The compiler target is pinned when the launch would build the wrong architecture."""
+
+    def test_native_machine_is_reported(self):
+        self.assertTrue(TUI.native_machine())
+
+    @unittest.skipUnless(sys.platform == "darwin", "the Rosetta trap is macOS-only")
+    def test_a_rosetta_launch_pins_the_compiler_target(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            for key in ("XI_CC", "XI_CXX"):
+                os.environ.pop(key, None)
+            with mock.patch.object(TUI, "running_translated", return_value=True), \
+                    mock.patch.object(TUI, "native_machine", return_value="arm64"):
+                env = TUI.build_environment("/venv/python", progress=True)
+        self.assertEqual(env["XI_CC"], "clang -arch arm64")
+        self.assertEqual(env["XI_CXX"], "clang++ -arch arm64")
+        self.assertEqual(env["FFXI_PROGRESS"], "1")
+
+    @unittest.skipUnless(sys.platform == "darwin", "the Rosetta trap is macOS-only")
+    def test_a_native_launch_leaves_the_compiler_alone(self):
+        with mock.patch.dict(os.environ, {}, clear=False):
+            for key in ("XI_CC", "XI_CXX"):
+                os.environ.pop(key, None)
+            with mock.patch.object(TUI, "running_translated", return_value=False), \
+                    mock.patch.object(TUI, "python_machine", return_value="arm64"), \
+                    mock.patch.object(TUI, "native_machine", return_value="arm64"):
+                env = TUI.build_environment("/venv/python", progress=False)
+        self.assertEqual(env, {})
+
+    @unittest.skipUnless(sys.platform == "darwin", "the Rosetta trap is macOS-only")
+    def test_an_explicit_compiler_wins(self):
+        with mock.patch.dict(os.environ, {"XI_CC": "zig cc"}, clear=False):
+            with mock.patch.object(TUI, "running_translated", return_value=True), \
+                    mock.patch.object(TUI, "native_machine", return_value="arm64"):
+                env = TUI.build_environment("/venv/python", progress=False)
+        self.assertNotIn("XI_CC", env)
+
+
+class RebuildFlowTest(unittest.TestCase):
+    """The dashboard action: which folder it picks, and what it hands the build."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.repo = make_repo(self.root / "repo")
+        self.game = make_game_dir(self.root / "game")
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def dashboard(self, typed=""):
+        dashboard = TUI.Dashboard.__new__(TUI.Dashboard)
+        dashboard.config = {"game_dir": "", "repo": ""}
+        dashboard.message = ""
+        dashboard.lines = []
+        dashboard.building = False
+        dashboard.last_progress = 0.0
+        dashboard.draw = lambda: None
+        dashboard.say = lambda text: dashboard.lines.extend(str(text).splitlines())
+        dashboard.choose = lambda title, options: 0
+        dashboard.prompt = lambda label, default="": typed
+        dashboard.screen = types.SimpleNamespace(timeout=lambda seconds: None)
+        return dashboard
+
+    def run_action(self, dashboard, candidates, result=True):
+        calls = {}
+
+        def build(config, emit, **kwargs):
+            calls.update(kwargs)
+            return result
+
+        with mock.patch.object(TUI, "resolve_repo", return_value=self.repo), \
+                mock.patch.object(TUI, "game_dir_candidates", return_value=candidates), \
+                mock.patch.object(TUI, "build_client", side_effect=build), \
+                mock.patch.object(TUI, "save_config") as save:
+            dashboard.do_rebuild()
+        return calls, save
+
+    def test_a_launcher_folder_is_used_without_asking(self):
+        dashboard = self.dashboard()
+        calls, save = self.run_action(dashboard, [(self.game, "the launcher")])
+        self.assertEqual(calls["game"], self.game)
+        self.assertTrue(calls["progress"])
+        self.assertEqual(dashboard.message, "client rebuilt — restart clients to use it")
+        save.assert_not_called()
+
+    def test_a_hand_typed_folder_is_remembered(self):
+        dashboard = self.dashboard(typed=str(self.game))
+        calls, save = self.run_action(dashboard, [])
+        self.assertEqual(calls["game"], self.game)
+        save.assert_called_once()
+        self.assertEqual(dashboard.config["game_dir"], str(self.game))
+
+    def test_a_cancelled_prompt_builds_nothing(self):
+        dashboard = self.dashboard(typed="")
+        calls, _ = self.run_action(dashboard, [])
+        self.assertEqual(calls, {})
+        self.assertEqual(dashboard.message, "cancelled")
+
+    def test_a_single_scanned_folder_is_used_and_remembered(self):
+        dashboard = self.dashboard()
+        calls, save = self.run_action(dashboard, [(self.game, "~/Games")])
+        self.assertEqual(calls["game"], self.game)
+        save.assert_called_once()
+
+    def test_a_failed_build_says_so(self):
+        dashboard = self.dashboard()
+        self.run_action(dashboard, [(self.game, "the launcher")], result=False)
+        self.assertTrue(dashboard.message.startswith("REBUILD FAILED"))
+
+
+class LocalBuildTest(unittest.TestCase):
+    """build_client's sequence, with the compiler and the venv stubbed out."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.repo = make_repo(self.root / "repo")
+        self.game = make_game_dir(self.root / "game")
+        self.lines = []
+        self.commands = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def emit(self, line):
+        self.lines.append(str(line))
+
+    def fake_run(self, command, cwd, emit, **kwargs):
+        self.commands.append([str(part) for part in command])
+        return 0
+
+    def build(self, **kwargs):
+        with mock.patch.object(TUI, "local_run", side_effect=self.fake_run), \
+                mock.patch.object(TUI, "ensure_build_tools", return_value="/venv/python"):
+            return TUI.build_client(
+                {"game_dir": str(self.game)}, self.emit, repo=self.repo,
+                game=kwargs.get("game", self.game),
+            )
+
+    def test_prepare_then_host64(self):
+        self.assertTrue(self.build())
+        self.assertEqual(len(self.commands), 2)
+        self.assertEqual(self.commands[0][1:],
+                         ["tools/prepare.py", "--game", str(self.game)])
+        self.assertEqual(self.commands[1][1:],
+                         ["tools/build_posix.py", "host64", "--game", str(self.game)])
+        self.assertTrue(any("built" in line for line in self.lines))
+
+    def test_prepare_is_skipped_when_the_recorded_folder_matches(self):
+        (self.repo / "generated").mkdir()
+        (self.repo / "generated" / "build.json").write_text(
+            json.dumps({"build": "2026-10-05", "game": str(self.game)})
+        )
+        self.assertTrue(self.build())
+        self.assertEqual(len(self.commands), 1)
+        self.assertEqual(self.commands[0][1:3], ["tools/build_posix.py", "host64"])
+
+    def test_a_failed_compile_reports_the_log(self):
+        (self.repo / "generated").mkdir()
+        (self.repo / "generated" / "build.json").write_text(
+            json.dumps({"build": "2026-10-05", "game": str(self.game)})
+        )
+        with mock.patch.object(TUI, "local_run", side_effect=lambda *a, **k: 2), \
+                mock.patch.object(TUI, "ensure_build_tools", return_value="/venv/python"):
+            ok = TUI.build_client(
+                {"game_dir": str(self.game)}, self.emit, repo=self.repo, game=self.game
+            )
+        self.assertFalse(ok)
+        self.assertTrue(any("build failed" in line for line in self.lines))
+
+    def test_a_failed_link_restores_the_previous_client(self):
+        (self.repo / "generated").mkdir()
+        (self.repo / "generated" / "build.json").write_text(
+            json.dumps({"build": "2026-10-05", "game": str(self.game)})
+        )
+        binary = self.repo / "build" / TUI.CLIENT_BIN
+        binary.write_text("old client")
+        binary.chmod(0o755)
+
+        def failing_link(command, cwd, emit, **kwargs):
+            binary.unlink()  # clang removes its output when the link fails
+            return 1
+
+        with mock.patch.object(TUI, "local_run", side_effect=failing_link), \
+                mock.patch.object(TUI, "ensure_build_tools", return_value="/venv/python"):
+            ok = TUI.build_client(
+                {"game_dir": str(self.game)}, self.emit, repo=self.repo, game=self.game
+            )
+        self.assertFalse(ok)
+        self.assertEqual(binary.read_text(), "old client")
+        self.assertTrue(os.access(binary, os.X_OK), "the restored client must still be runnable")
+        self.assertTrue(any("back at" in line for line in self.lines))
+
+    def test_a_successful_build_keeps_a_copy_to_fall_back_to(self):
+        self.assertTrue(self.build())
+        previous = self.repo / "build" / (TUI.CLIENT_BIN + ".previous")
+        self.assertTrue(previous.is_file())
+        self.assertTrue((self.repo / "build" / "runtime.previous.json").is_file())
+
+    def test_a_cancelled_build_says_so(self):
+        with mock.patch.object(TUI, "local_run", side_effect=lambda *a, **k: 130), \
+                mock.patch.object(TUI, "ensure_build_tools", return_value="/venv/python"):
+            ok = TUI.build_client(
+                {"game_dir": str(self.game)}, self.emit, repo=self.repo, game=self.game
+            )
+        self.assertFalse(ok)
+        self.assertIn("rebuild cancelled", self.lines)
+
+    def test_a_directory_that_is_not_a_checkout_is_refused(self):
+        ok = TUI.build_client({}, self.emit, repo=self.root / "not-a-checkout", game=self.game)
+        self.assertFalse(ok)
+        self.assertTrue(any("not a Fanxi checkout" in line for line in self.lines))
+
+    def test_no_game_folder_is_an_error(self):
+        with mock.patch.object(TUI, "game_dir_candidates", return_value=[]):
+            ok = TUI.build_client({}, self.emit, repo=self.repo)
+        self.assertFalse(ok)
+        self.assertTrue(any("no FINAL FANTASY XI folder" in line for line in self.lines))
+
+    def test_local_run_streams_and_cancels(self):
+        lines = []
+        code = TUI.local_run(
+            [sys.executable, "-c", "print('one'); print('two')"], self.root, lines.append
+        )
+        self.assertEqual(code, 0)
+        self.assertEqual(lines, ["one", "two"])
+
+        seen = []
+        code = TUI.local_run(
+            [sys.executable, "-c", "import time; print('go', flush=True); time.sleep(60)"],
+            self.root, seen.append, should_stop=lambda: bool(seen),
+        )
+        self.assertEqual(code, 130)
+        self.assertEqual(seen, ["go", "cancelled"])
+
+    def test_the_build_log_keeps_the_output(self):
+        code = TUI.local_run(
+            [sys.executable, "-c", "print('kept')"], self.root, self.emit,
+            log_path=self.repo / "build" / TUI.BUILD_LOG,
+        )
+        self.assertEqual(code, 0)
+        log = (self.repo / "build" / TUI.BUILD_LOG).read_text()
+        self.assertIn("kept", log)
+        self.assertIn(sys.executable, log.splitlines()[0])
 
 
 if __name__ == "__main__":

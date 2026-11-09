@@ -12,6 +12,8 @@ python3 tools/gen_oboro.py --check
 python3 tools/gen_limbus_weapons.py --check
 python3 tests/verify_install_test.py
 python3 tests/chat_complete_test.py
+echo "== admin dashboard"
+python3 tests/fanxi_tui_test.py
 echo "== hud labels"
 python3 tests/spell_names_test.py
 echo "== hud spell sections"
