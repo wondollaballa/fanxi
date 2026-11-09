@@ -32,7 +32,7 @@ pub fn is_slot(value: &str) -> bool {
     SLOT_KEYS.contains(&normalize_slot(value).as_str())
 }
 
-pub const JOB_NAMES: [&str; 22] = [
+pub const JOB_NAMES: [&str; 23] = [
     "Warrior",
     "Monk",
     "White Mage",
@@ -55,11 +55,12 @@ pub const JOB_NAMES: [&str; 22] = [
     "Scholar",
     "Geomancer",
     "Rune Fencer",
+    "Chemist",
 ];
 
-pub const JOB_ABBRS: [&str; 22] = [
+pub const JOB_ABBRS: [&str; 23] = [
     "WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST", "BRD", "RNG", "SAM", "NIN",
-    "DRG", "SMN", "BLU", "COR", "PUP", "DNC", "SCH", "GEO", "RUN",
+    "DRG", "SMN", "BLU", "COR", "PUP", "DNC", "SCH", "GEO", "RUN", "CHM",
 ];
 
 #[derive(Clone, Debug, Serialize)]
@@ -80,7 +81,7 @@ pub struct JobInfo {
 pub fn job_from_state(state: Option<&Value>) -> Option<JobInfo> {
     let player = state?.get("player")?;
     let job_id = player.get("job").and_then(value_i64)?;
-    if !(1..=22).contains(&job_id) {
+    if !(1..=23).contains(&job_id) {
         return None;
     }
     let level = player.get("level").and_then(value_i64).unwrap_or(0);
@@ -97,7 +98,7 @@ pub fn job_from_state(state: Option<&Value>) -> Option<JobInfo> {
 pub fn job_from_character(character: Option<&Value>) -> Option<JobInfo> {
     let character = character?;
     let job_id = character.get("main_job").and_then(value_i64)?;
-    if !(1..=22).contains(&job_id) {
+    if !(1..=23).contains(&job_id) {
         return None;
     }
     let level = character.get("main_level").and_then(value_i64).unwrap_or(0);
@@ -116,7 +117,7 @@ pub fn job_abbr(value: &Value) -> String {
         .as_i64()
         .or_else(|| value.as_str().and_then(|text| text.parse().ok()))
         .unwrap_or(0);
-    if (1..=22).contains(&number) {
+    if (1..=23).contains(&number) {
         return JOB_ABBRS[(number - 1) as usize].to_string();
     }
     if let Some(text) = value.as_str() {
@@ -129,7 +130,7 @@ pub fn job_abbr(value: &Value) -> String {
 }
 
 pub fn job_name(value: i64) -> String {
-    if (1..=22).contains(&value) {
+    if (1..=23).contains(&value) {
         JOB_NAMES[(value - 1) as usize].to_string()
     } else {
         "Adventurer".to_string()
@@ -143,7 +144,7 @@ fn job_info(
     sub_level: i64,
     character: String,
 ) -> JobInfo {
-    let sub_job_id = if (0..=22).contains(&sub_job_id) {
+    let sub_job_id = if (0..=23).contains(&sub_job_id) {
         sub_job_id
     } else {
         0

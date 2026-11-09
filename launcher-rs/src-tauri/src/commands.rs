@@ -2484,6 +2484,18 @@ pub async fn battle(state: State<'_, AppState>, port: u16, args: Value) -> AppRe
         .await
 }
 
+/// Every family profile, so Start team can use the shared roster/camps from the team
+/// master instead of whichever tenant happens to be selected.
+#[tauri::command]
+pub async fn battle_team_profiles(state: State<'_, AppState>) -> AppResult<Value> {
+    let config = state.config.lock().await.clone();
+    if config.token.is_empty() {
+        return Err(AppError::Validation("sign in first".to_string()));
+    }
+    let api = ApiClient::new(&config.api_url, config.api_insecure)?;
+    api.battle_team(&config.token).await
+}
+
 /// Every spell, for the Battle Magic Burst picker.
 #[tauri::command]
 pub async fn battle_spells(state: State<'_, AppState>) -> AppResult<Value> {

@@ -1389,7 +1389,7 @@ class FanxiService:
 
     # --- ranks, fame, jobs, exemplar and crafts ------------------------------------------------
     def character_jobs_progress(self, character_id: int) -> list[dict]:
-        """All 22 jobs, with the rows this build has and zeroes for the rest."""
+        """All 23 jobs, with the rows this build has and zeroes for the rest."""
         rows = {int(row["job"]): (int(row["level"]), int(row["master_level"]))
                 for row in self.db.all(
                     "SELECT job, level, master_level FROM character_jobs WHERE character_id = ?",
@@ -1397,7 +1397,7 @@ class FanxiService:
         return [{"job": job,
                  "level": rows.get(job, (0, 0))[0],
                  "master_level": rows.get(job, (0, 0))[1]}
-                for job in range(1, 23)]
+                for job in range(1, 24)]
 
     def set_all_jobs(self, character_id: int, level: int = 99,
                      master_level: int | None = None) -> int:
@@ -1413,7 +1413,7 @@ class FanxiService:
             except (TypeError, ValueError):
                 raise ApiError(422, "validation_error", "master level must be a number")
         with self.db.transaction() as conn:
-            for job in range(1, 23):
+            for job in range(1, 24):
                 if master is None:
                     conn.execute(
                         "INSERT INTO character_jobs (character_id, job, level, master_level) "
@@ -1435,8 +1435,8 @@ class FanxiService:
             job, level = int(job), max(0, min(50, int(level)))
         except (TypeError, ValueError):
             raise ApiError(422, "validation_error", "job and master level must be numbers")
-        if not 1 <= job <= 22:
-            raise ApiError(422, "validation_error", "job must be 1..22")
+        if not 1 <= job <= 23:
+            raise ApiError(422, "validation_error", "job must be 1..23")
         with self.db.transaction() as conn:
             conn.execute(
                 "INSERT INTO character_jobs (character_id, job, level, master_level) "
@@ -1451,7 +1451,7 @@ class FanxiService:
         except (TypeError, ValueError):
             raise ApiError(422, "validation_error", "master level must be a number")
         with self.db.transaction() as conn:
-            for job in range(1, 23):
+            for job in range(1, 24):
                 conn.execute(
                     "INSERT INTO character_jobs (character_id, job, level, master_level) "
                     "VALUES (?, ?, 99, ?) ON CONFLICT(character_id, job) "
@@ -1608,8 +1608,8 @@ class FanxiService:
                 "hair": validate_int(data.get("hair", 0), "hair", 0, 1),
                 "size": validate_int(data.get("size", 1), "size", 0, 2),
                 "nation": validate_int(data.get("nation", 0), "nation", 0, 2),
-                "main_job": validate_int(data.get("main_job", 1), "main_job", 1, 22),
-                "sub_job": validate_int(data.get("sub_job", 0), "sub_job", 0, 22),
+                "main_job": validate_int(data.get("main_job", 1), "main_job", 1, 23),
+                "sub_job": validate_int(data.get("sub_job", 0), "sub_job", 0, 23),
             }
         except ValidationError as exc:
             raise ApiError(422, "validation_error", str(exc))
@@ -1661,6 +1661,12 @@ class FanxiService:
             conn.execute(
                 "INSERT OR IGNORE INTO char_inventory (character_id, container, slot, item_id, quantity) "
                 "VALUES (?, 0, ?, ?, ?)", (next_id, item_slot, item_id, quantity))
+        # The live character row carries main_job, but the job menu and //job read
+        # character_jobs.  Give a new character the row for the job they picked so the
+        # first job change is not refused as "not available yet".
+        conn.execute(
+            "INSERT OR IGNORE INTO character_jobs (character_id, job, level, master_level) "
+            "VALUES (?, ?, 1, 0)", (next_id, int(fields["main_job"])))
         return next_id
 
     def create_character(self, account_id: int, data: dict) -> dict:
@@ -3633,8 +3639,8 @@ class FanxiService:
         equipped; job gear with no slip is counted and left in the bags.
         """
         job = int(job)
-        if not 1 <= job <= 22:
-            raise ValueError("job must be 1..22")
+        if not 1 <= job <= 23:
+            raise ValueError("job must be 1..23")
         mask = 1 << (job - 1)
         with self.db.transaction() as conn:
             placeholders = ",".join("?" for _ in PERMANENT_BAGS)
@@ -3703,8 +3709,8 @@ class FanxiService:
         Items are placed in the first free slot, so a grabbed set is immediately usable.
         Anything that finds no room stays on its slip and is reported.
         """
-        if job is not None and not 1 <= int(job) <= 22:
-            raise ValueError("job must be 1..22")
+        if job is not None and not 1 <= int(job) <= 23:
+            raise ValueError("job must be 1..23")
         mask = None if job is None else 1 << (int(job) - 1)
         with self.db.transaction() as conn:
             rows = conn.execute(
@@ -3855,10 +3861,10 @@ class FanxiService:
 
     @staticmethod
     def _job_mask(job: int) -> int:
-        """The item-table job bit for one job id, with the same 1..22 rule as the client."""
+        """The item-table job bit for one job id, with the same 1..23 rule as the client."""
         job = int(job)
-        if not 1 <= job <= 22:
-            raise ValueError("job must be 1..22")
+        if not 1 <= job <= 23:
+            raise ValueError("job must be 1..23")
         return 1 << (job - 1)
 
     @staticmethod
@@ -3968,7 +3974,7 @@ class FanxiService:
 
     def storage_job_counts(self, character_id: int) -> dict:
         """Per-job stored counts and one shared bucket, for //storage list all."""
-        counts = {job: 0 for job in range(1, 23)}
+        counts = {job: 0 for job in range(1, 24)}
         shared = 0
         for row in self._stored_gear(character_id):
             if not self._auto_equipment(row):
@@ -3979,7 +3985,7 @@ class FanxiService:
                 shared += quantity
                 continue
             job = jobs.bit_length()
-            if 1 <= job <= 22:
+            if 1 <= job <= 23:
                 counts[job] += quantity
         return {"jobs": counts, "shared": shared}
 

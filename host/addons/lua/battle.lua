@@ -753,8 +753,7 @@ function B.team_poll()
         end
     end
     if S.ready_dirty and not S.remote_edit then
-        S.ready_dirty = false
-        if not B.publish_state(S.runtime.ready == true) then S.ready_dirty = true end
+        if not B.push_state() then S.ready_dirty = true end
     end
 end
 
@@ -783,21 +782,30 @@ end
 -- Publish this client's run/ready flags.  This is deliberately lightweight: the full
 -- profile is sent only when Start, Stop or the preparation phase changes state, not every
 -- tick.  If the six-second poll has not filled S.team yet, team_poll retries the publish.
+-- Record the local run/ready flags.  The HTTP publish is deliberately left to team_poll:
+-- control commands (Start, Stop, the HUD buttons) run in short-lived tasks, and doing a
+-- network round trip there both stalls the reply and widens the window where the launcher
+-- can disconnect before the reply is sent.  team_poll is the long-lived coroutine that
+-- already owns the server connection.
 function B.publish_state(ready)
     if not S.profile or S.remote_edit then return false end
     S.profile.engine.running = S.running == true
     S.profile.engine.ready = ready == true
     S.profile.engine.run_id = S.run_id or ''
+    S.ready_dirty = true
+    return true
+end
+
+-- The actual POST, called only from team_poll (inside its coroutine).
+function B.push_state()
+    if not S.profile or S.remote_edit then return false end
     local me = B.self()
     local name = me and me.name or ''
     local id = nil
     for _, character in ipairs(S.team or {}) do
         if character.name == name then id = character.character_id break end
     end
-    if not id then
-        S.ready_dirty = true
-        return false
-    end
+    if not id then return false end
     local data = http_json('POST', '/api/v1/battle/team/' .. tostring(id) .. '/state', {
         engine = {
             running = S.profile.engine.running,
@@ -805,10 +813,7 @@ function B.publish_state(ready)
             run_id = S.profile.engine.run_id,
         },
     })
-    if not data then
-        S.ready_dirty = true
-        return false
-    end
+    if not data then return false end
     S.ready_dirty = false
     return true
 end
@@ -3444,7 +3449,18 @@ local function status_removal()
                     if erase and spell_known(erase) and spell_recast(erase) <= 0.05 then
                         for _, raw in ipairs(list) do
                             local id = tonumber(raw) or 0
-                            if id > 0 and id ~= 255 and id ~= 65535 and not NA_SPELL[id] and not NA_SAFE[id] then
+                            -- The player's buff bar is the same list as a party member's status
+                            -- icons: Protect, Haste, Refresh and the rest are "active statuses",
+                            -- not debuffs.  The client's status record marks those buffs with
+                            -- can_cancel=1; only a cancel=0 (a debuff) is a candidate for Erase.
+                            local cancel, info = nil, nil
+                            if xi.res and xi.res.status then
+                                local ok, record = pcall(xi.res.status, id)
+                                if ok then info = record end
+                            end
+                            if info then cancel = tonumber(info.can_cancel) end
+                            if id > 0 and id ~= 255 and id ~= 65535 and cancel == 0
+                                and not NA_SPELL[id] and not NA_SAFE[id] then
                                 dirty = true
                                 break
                             end
@@ -5056,7 +5072,7 @@ end
 
 local JOB_ABBR = {
     [0] = 'NON', 'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK', 'BST', 'BRD',
-    'RNG', 'SAM', 'NIN', 'DRG', 'SMN', 'BLU', 'COR', 'PUP', 'DNC', 'SCH', 'GEO', 'RUN',
+    'RNG', 'SAM', 'NIN', 'DRG', 'SMN', 'BLU', 'COR', 'PUP', 'DNC', 'SCH', 'GEO', 'RUN', 'CHM',
 }
 
 local BUFF_SUGGEST = {

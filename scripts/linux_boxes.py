@@ -148,7 +148,7 @@ def parse_etime_secs(text: str) -> int:
 
 def remote_games(ssh: str) -> list[dict]:
     """Every host64/headless process on the remote host with its account and age."""
-    command = "ps -eo pid=,etime=,args= | grep -E '[h]ost64(-headless)?' || true"
+    command = "ps -eo pid=,etime=,args= | grep -E '[h]ost64(-headless)?|[f]anxi-headless' || true"
     try:
         result = remote_sh(ssh, command, timeout=15)
     except (subprocess.TimeoutExpired, OSError):
@@ -458,7 +458,7 @@ def stop_remote_account(ssh: str, user: str) -> None:
     """Kill every headless client for this account on the remote host, recorded or not."""
     if not ssh or not user:
         return
-    pattern = shlex.quote(f"[h]ost64.*--user {user.replace(chr(39), '')}")
+    pattern = shlex.quote(f"([h]ost64|[f]anxi-headless).*--user {user.replace(chr(39), '')}")
     command = (
         f"pkill -f {pattern} 2>/dev/null || true; "
         "sleep 0.5; "
@@ -494,7 +494,7 @@ def stop_box(box: dict, quiet: bool = False) -> None:
     ssh = box.get("ssh")
     if ssh and user:
         # The recorded pid is the bash wrapper; kill the host64 by its account argument as well.
-        pattern = shlex.quote(f"[h]ost64.*--user {user.replace(chr(39), '')}")
+        pattern = shlex.quote(f"([h]ost64|[f]anxi-headless).*--user {user.replace(chr(39), '')}")
         command = f"pkill -f {pattern} 2>/dev/null || true; "
         if remote_pid:
             command += f"kill {int(remote_pid)} 2>/dev/null || true; pkill -P {int(remote_pid)} 2>/dev/null || true; "

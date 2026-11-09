@@ -76,6 +76,7 @@ const ENGAGE_MODES: Array<[BattleProfile["engage"]["mode"], string]> = [
 const JOB_ABBR = [
   "NON", "WAR", "MNK", "WHM", "BLM", "RDM", "THF", "PLD", "DRK", "BST", "BRD",
   "RNG", "SAM", "NIN", "DRG", "SMN", "BLU", "COR", "PUP", "DNC", "SCH", "GEO", "RUN",
+  "CHM",
 ];
 
 type PickerSource =
@@ -663,8 +664,53 @@ export function BattlePage({
     const runId = `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
     setBusy("start");
     setError("");
+    // The shared sections belong to the team, not to whichever tenant happens to be
+    // selected.  Prefer the current profile when it already has a tank and puller;
+    // otherwise take the richest team profile from the server (the main's saved roster).
+    const assignedCount = (value: BattleProfile) => {
+      const roster = value.roster;
+      let count = (roster.tank ? 1 : 0) + (roster.puller ? 1 : 0) + (roster.kiter ? 1 : 0);
+      for (const key of ["support", "melee", "ranged"] as const) count += roster[key]?.length ?? 0;
+      return count;
+    };
+    const hasCommand = (value: BattleProfile) => value.roster.tank !== "" && value.roster.puller !== "";
+    let source = profile;
+    if (!hasCommand(source)) {
+      try {
+        const team = await backend.battleTeamProfiles();
+        const candidates = team.characters
+          .map((row) => row.profile)
+          .filter((row): row is BattleProfile => row !== null && hasCommand(row))
+          .sort((a, b) => assignedCount(b) - assignedCount(a));
+        if (candidates[0]) source = candidates[0];
+      } catch {
+        // Keep the selected profile when the team API is unavailable.
+      }
+    }
+    if (!hasCommand(source)) {
+      const message = "No tank and puller are assigned. Set them in Roster, save, then press Start team.";
+      setError(message);
+      notify(message, "error");
+      setBusy(null);
+      return;
+    }
+    // Push the shared sections into every assigned client before starting it, otherwise a
+    // freshly restarted box still has an empty roster and cannot resolve its own role.
     const results = await Promise.allSettled(
-      targets.map((item) => backend.battle(item.port, { action: "start", run_id: runId })),
+      targets.map(async (item) => {
+        const current = await backend.battle(item.port, { action: "state" });
+        if (!current.profile) throw new Error(`${item.character?.name ?? item.account} has no Battle profile`);
+        const merged: BattleProfile = {
+          ...current.profile,
+          roster: source.roster,
+          camp: source.camp,
+          support_camp: source.support_camp,
+          camp_assign: source.camp_assign,
+          combat_style: source.combat_style,
+        };
+        await backend.battle(item.port, { action: "update", profile: merged });
+        return backend.battle(item.port, { action: "start", run_id: runId });
+      }),
     );
     const failures = results.filter((result) => result.status === "rejected");
     const failed = failures.length;

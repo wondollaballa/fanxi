@@ -19,6 +19,10 @@
   and burst-spell rows.
 - **Enfeebles choose keep-applying (0 resists) or stop after N tries**, with a Reset tries action
   in the launcher and the existing hub control.
+- **Headless team restarts stop the current `fanxi-headless` binary.** `scripts/linux_boxes.py`
+  still matched only the retired `host64` name when reaping or replacing boxes, so the old
+  team kept ports 54400-54404 and the new boxes could never attach. Both the reap scan and the
+  per-account stop now match `host64` and `fanxi-headless`.
 - **The puller leaves camp and retraces its route.** It searches the full `pull.find_distance`,
   walks to the target until the chosen spell/ability/ranged action is in range, records a
   waypoint every 2.5 yalms on the way out, and follows those points back in reverse on claim,

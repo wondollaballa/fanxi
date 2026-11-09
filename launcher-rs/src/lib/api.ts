@@ -6,6 +6,7 @@ import type {
   BattleMobCatalog,
   BattleSpellOption,
   BattleState,
+  BattleTeamProfile,
   BattleWeaponSkill,
   Bootstrap,
   BuildResult,
@@ -230,6 +231,7 @@ export const backend = {
   battle: (port: number, args: Record<string, unknown>) =>
     call<BattleState>("battle", { port, args }),
   /** Every spell, for the Battle Magic Burst picker. */
+  battleTeamProfiles: () => call<{ characters: BattleTeamProfile[] }>("battle_team_profiles"),
   battleSpells: () => call<{ spells: BattleSpellOption[] }>("battle_spells"),
   /** The full weapon-skill catalogue for the Battle skillchain editor. */
   battleWeaponSkills: () =>

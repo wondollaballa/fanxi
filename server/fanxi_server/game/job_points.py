@@ -38,7 +38,7 @@ JOB_NAMES = {
     "bst": "Beastmaster", "brd": "Bard", "rng": "Ranger", "sam": "Samurai",
     "nin": "Ninja", "drg": "Dragoon", "smn": "Summoner", "blu": "Blue Mage",
     "cor": "Corsair", "pup": "Puppetmaster", "dnc": "Dancer", "sch": "Scholar",
-    "geo": "Geomancer", "run": "Rune Fencer",
+    "geo": "Geomancer", "run": "Rune Fencer", "chm": "Chemist",
 }
 
 # Job-point gift spells, from LandSandBoat's ``RefreshGiftMods`` (the job-point gifts

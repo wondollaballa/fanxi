@@ -1773,6 +1773,13 @@ export type BattleMobMove = {
 
 export type BattleMobCatalog = { moves: BattleMobMove[]; unmatched: string[] };
 
+export type BattleTeamProfile = {
+  name: string;
+  character_id?: number;
+  online?: boolean;
+  profile: BattleProfile | null;
+};
+
 export type BattleProfileSummary = { file: string; name: string; zone: number; zone_name: string; updated: number };
 export type BattleMember = {
   slot: number;

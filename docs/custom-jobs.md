@@ -2,6 +2,9 @@
 
 Status: proposal · 2026-10-22
 
+A worked application of this plan, including the job-23, Battle Bag, HUD-first and
+client-content decisions, is in [Chemist (CHM)](chemist.md).
+
 This note answers two questions together:
 
 1. What does adding a new playable job (a 23rd job) actually require in Fanxi?

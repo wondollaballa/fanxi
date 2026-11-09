@@ -40,6 +40,7 @@ export const JOBS = [
   "Scholar",
   "Geomancer",
   "Rune Fencer",
+  "Chemist",
 ];
 
 export const JOB_ABBRS = [
@@ -65,6 +66,7 @@ export const JOB_ABBRS = [
   "SCH",
   "GEO",
   "RUN",
+  "CHM",
 ];
 
 export const ZONES: Record<number, string> = {

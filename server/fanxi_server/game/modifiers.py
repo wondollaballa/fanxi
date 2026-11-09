@@ -280,6 +280,17 @@ HASTE_MAGIC = 1230
 HASTE_ABILITY = 1231
 TAME = 304
 
+# Chemist (job 23).  Ids 1300+ are unused in the current item data.  ALCHEMY_SKILL is
+# a flat skill bonus; CHEMISTRY_CAST is a signed millisecond adjustment on a synthesis
+# (the ultimate shield is -10000); CHEMISTRY_POTENCY is hundredths of a percent, the
+# same unit as the other potency lines; the remaining three are flat.
+ALCHEMY_SKILL = 1300
+CHEMISTRY_CAST = 1301
+CHEMISTRY_POTENCY = 1302
+CHEMISTRY_BAG_SLOTS = 1303
+CHEMISTRY_RESTOCK_CHANCE = 1304
+CHEMISTRY_RADIUS = 1305
+
 
 def percent(value: int) -> float:
     """10000 -> 1.0, -1000 -> -0.1.  The unit every damage-taken modifier uses."""

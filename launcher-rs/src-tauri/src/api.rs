@@ -168,6 +168,12 @@ impl ApiClient {
             .await
     }
 
+    /// Every character profile in the account family, for the shared team sections.
+    pub async fn battle_team(&self, token: &str) -> AppResult<Value> {
+        self.request(Method::GET, "/battle/team", None, Some(token), None)
+            .await
+    }
+
     /// The full weapon-skill catalogue for the Battle skillchain editor.
     pub async fn battle_weapon_skills(&self, token: &str) -> AppResult<Value> {
         self.request(

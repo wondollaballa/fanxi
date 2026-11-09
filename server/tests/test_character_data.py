@@ -126,7 +126,7 @@ class CharacterDataTest(unittest.TestCase):
 
     def test_progress_snapshot_and_writes(self):
         data = self.service.character_data(self.character["id"])
-        self.assertEqual(len(data["jobs"]), 22)
+        self.assertEqual(len(data["jobs"]), 23)
         self.assertEqual(len(data["crafts"]), 10)
         self.assertEqual(data["trusts"]["spells"], 122)
         self.assertTrue(data["trusts"]["summoning"])

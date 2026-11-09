@@ -1590,7 +1590,7 @@ local TOWN_ZONES = {
 local function zone_town(id) return TOWN_ZONES[tonumber(id) or 0] and 1 or 0 end
 
 local JOB_ABBR = { 'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK', 'BST', 'BRD', 'RNG',
-    'SAM', 'NIN', 'DRG', 'SMN', 'BLU', 'COR', 'PUP', 'DNC', 'SCH', 'GEO', 'RUN' }
+    'SAM', 'NIN', 'DRG', 'SMN', 'BLU', 'COR', 'PUP', 'DNC', 'SCH', 'GEO', 'RUN', 'CHM' }
 
 -- Build the precast/midcast/idle plan from a GearSwap library and hand it to the host's packet
 -- layer (xi.phase, phase.c). The host does the timing; this only decides what each action wears.
@@ -2916,7 +2916,7 @@ local HUD_DEFAULT_POSITIONS = {
 }
 
 local HUD_JOB_ABBR = { 'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK', 'BST', 'BRD', 'RNG',
-    'SAM', 'NIN', 'DRG', 'SMN', 'BLU', 'COR', 'PUP', 'DNC', 'SCH', 'GEO', 'RUN' }
+    'SAM', 'NIN', 'DRG', 'SMN', 'BLU', 'COR', 'PUP', 'DNC', 'SCH', 'GEO', 'RUN', 'CHM' }
 
 local HUD_SPELL_MAGIC = {
     [1] = 'White Magic', [2] = 'Black Magic', [3] = 'Summoning', [4] = 'Ninjutsu',
@@ -12372,10 +12372,18 @@ local commands = {
 local server, clients = nil, {}
 
 local function send(c, t)
+    -- A command runs in a task while poll() may see the launcher disconnect and close the
+    -- socket first.  The task still holds this table; sending on the closed userdata is a
+    -- use-after-free.  Treat it as a closed connection and drop the reply.
+    if not c or c.closed or not c.sock then return end
     local line = json.encode(t) .. '\n'
     local i = 1
     while i <= #line do
-        local n, err, part = c.sock:send(line, i)
+        local ok, n, err, part = pcall(c.sock.send, c.sock, line, i)
+        if not ok then
+            c.closed = true
+            return
+        end
         if n then i = n + 1
         elseif err == 'timeout' and (function() local co, main = coroutine.running(); return co ~= nil and not main end)() then
             i = (part or i - 1) + 1
@@ -12436,6 +12444,7 @@ local function poll()
             if line:match('%S') then handle(c, line) end
         end
         if c.closed then
+            c.closed = true
             c.sock:close()
             table.remove(clients, i)
             xi.log('control: a client left')

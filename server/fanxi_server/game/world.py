@@ -20,8 +20,8 @@ from ..service import FanxiService
 from dataclasses import replace
 
 from . import (
-    chain, combat, dancer, effects, geomancy, job_points, modifiers as mod, mobskills,
-    packets, pets, rolls, stats, trust_ai, trust_gear, trust_stats,
+    chain, chemist, combat, dancer, effects, geomancy, job_points, modifiers as mod,
+    mobskills, packets, pets, rolls, stats, trust_ai, trust_gear, trust_stats,
 )
 from .nav import NavCache
 from .cipher import M32, VIEW_KEY, Huffman, md5, zone_cipher
@@ -4061,13 +4061,20 @@ class World:
             # percent scale Defense Down and Attack Down use.
             flat = max(0, min(999, int(state.get("potency", 0))))
             evasion = max(1, evasion - flat)
+        # Chemist Sludge Bomb is a separate percent cut, so it stacks with the flat
+        # Distract/Evasion Down line instead of replacing it.
+        sludge = entity.effect_state.get(chemist.SLUDGE_BOMB)
+        if sludge is not None:
+            cut = max(0, min(90, int(sludge.get("potency", 0))))
+            evasion = max(1, int(evasion * (100 - cut) / 100.0))
         torpor = entity.effect_state.get(geomancy.GEO_EVASION_DOWN)
         if torpor is not None:
             cut = max(0, min(90, int(torpor.get("potency", 0))))
             evasion = max(1, int(evasion * (100 - cut) / 100.0))
-        # Dia, Defense Down and GEO Frailty are separate effects in retail, so each one
-        # takes its own bite out of the same Defense.
-        for effect_id in (effects.DIA, effects.DEFENSE_DOWN, geomancy.GEO_DEFENSE_DOWN):
+        # Dia, Defense Down, GEO Frailty and Chemist Aqua Regia are separate effects in
+        # retail, so each one takes its own bite out of the same Defense.
+        for effect_id in (effects.DIA, effects.DEFENSE_DOWN,
+                          geomancy.GEO_DEFENSE_DOWN, chemist.AQUA_REGIA):
             state = entity.effect_state.get(effect_id)
             if state is None:
                 continue
@@ -4124,6 +4131,17 @@ class World:
             if evasion_down is not None:
                 amount = int(evasion_down.get("power") or evasion_down.get("potency") or 0)
                 mods[mod.MEVA] = int(mods.get(mod.MEVA, 0)) - amount
+        # Chemist Aether Spore is one effect carrying both halves: potency is the
+        # Magic Defense cut, power is the flat Magic Evasion cut.  Keeping it separate
+        # from 167/404 lets it stack with Armor Break/Frazzle/Threnody.
+        aether = entity.effect_state.get(chemist.AETHER_SPORE)
+        if aether is not None:
+            mdef_cut = max(0, int(aether.get("potency") or 0))
+            meva_cut = max(0, int(aether.get("power") or 0))
+            if mdef_cut:
+                mods[mod.MDEF] = int(mods.get(mod.MDEF, 0)) - mdef_cut
+            if meva_cut:
+                mods[mod.MEVA] = int(mods.get(mod.MEVA, 0)) - meva_cut
         # Stutter Step's Weakened Daze is -3 Magic Evasion per level.
         stutter = dancer.STEPS[203]
         level, _status = dancer.active_daze(entity.effect_state, stutter)

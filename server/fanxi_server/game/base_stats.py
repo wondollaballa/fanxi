@@ -24,8 +24,8 @@ RACES_INDEX = {'hume': 0, 'elvaan': 1, 'tarutaru': 2, 'mithra': 3, 'galka': 4}
 # Client race field 1..8 -> the race index the grade tables use.
 RACE_OF_FIELD = {1: 0, 2: 0, 3: 1, 4: 1, 5: 2, 6: 2, 7: 3, 8: 4}
 
-# Job id (1..22) -> the job key the grade tables use.
-JOB_OF_ID = {1: 'war', 2: 'mnk', 3: 'whm', 4: 'blm', 5: 'rdm', 6: 'thf', 7: 'pld', 8: 'drk', 9: 'bst', 10: 'brd', 11: 'rng', 12: 'sam', 13: 'nin', 14: 'drg', 15: 'smn', 16: 'blu', 17: 'cor', 18: 'pup', 19: 'dnc', 20: 'sch', 21: 'geo', 22: 'run'}
+# Job id (1..23) -> the job key the grade tables use.  Job 23 is Fanxi's Chemist.
+JOB_OF_ID = {1: 'war', 2: 'mnk', 3: 'whm', 4: 'blm', 5: 'rdm', 6: 'thf', 7: 'pld', 8: 'drk', 9: 'bst', 10: 'brd', 11: 'rng', 12: 'sam', 13: 'nin', 14: 'drg', 15: 'smn', 16: 'blu', 17: 'cor', 18: 'pup', 19: 'dnc', 20: 'sch', 21: 'geo', 22: 'run', 23: 'chm'}
 
 ATTRIBUTES = ('str', 'dex', 'vit', 'agi', 'int', 'mnd', 'chr')
 
@@ -131,6 +131,8 @@ JOB_GRADES = {
     'sch': {'hp': 5, 'mp': 4, 'str': 6, 'dex': 4, 'vit': 5, 'agi': 4, 'int': 2, 'mnd': 4, 'chr': 3},
     'geo': {'hp': 4, 'mp': 3, 'str': 6, 'dex': 4, 'vit': 4, 'agi': 5, 'int': 2, 'mnd': 2, 'chr': 5},
     'run': {'hp': 2, 'mp': 6, 'str': 3, 'dex': 4, 'vit': 5, 'agi': 2, 'int': 4, 'mnd': 4, 'chr': 6},
+    # Chemist: a mid-line support body.  MP is only for its support-job spells.
+    'chm': {'hp': 3, 'mp': 3, 'str': 4, 'dex': 3, 'vit': 3, 'agi': 3, 'int': 3, 'mnd': 2, 'chr': 2},
 }
 
 

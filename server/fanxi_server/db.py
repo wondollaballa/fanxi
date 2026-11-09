@@ -78,24 +78,37 @@ class Database:
 
     @staticmethod
     def _apply_script(conn: sqlite3.Connection, path: Path) -> None:
-        """Run a .sql file one complete statement at a time, inside a transaction."""
+        """Run a .sql file one complete statement at a time, inside a transaction.
+
+        A migration that must rebuild a table another table references needs foreign
+        keys off *before* the transaction starts (SQLite ignores the pragma inside
+        one).  Such a file opts in with ``-- fanxi:foreign_keys_off`` as its first
+        line; the pragma is restored after the commit or rollback.
+        """
         sql = path.read_text(encoding="utf-8")
-        conn.execute("BEGIN IMMEDIATE")
+        foreign_keys_off = sql.lstrip().startswith("-- fanxi:foreign_keys_off")
+        if foreign_keys_off:
+            conn.execute("PRAGMA foreign_keys=OFF")
         try:
-            buffer = ""
-            for line in sql.splitlines(keepends=True):
-                buffer += line
-                if sqlite3.complete_statement(buffer):
-                    statement = buffer.strip()
-                    buffer = ""
-                    if statement:
-                        conn.execute(statement)
-            if buffer.strip():
-                conn.execute(buffer.strip())
-            conn.commit()
-        except Exception:
-            conn.rollback()
-            raise
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                buffer = ""
+                for line in sql.splitlines(keepends=True):
+                    buffer += line
+                    if sqlite3.complete_statement(buffer):
+                        statement = buffer.strip()
+                        buffer = ""
+                        if statement:
+                            conn.execute(statement)
+                if buffer.strip():
+                    conn.execute(buffer.strip())
+                conn.commit()
+            except Exception:
+                conn.rollback()
+                raise
+        finally:
+            if foreign_keys_off:
+                conn.execute("PRAGMA foreign_keys=ON")
 
     # --- helpers -------------------------------------------------------------------------------
     def one(self, sql: str, params=()):

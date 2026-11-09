@@ -297,6 +297,16 @@ def _ranged_accuracy_value(mods: dict[int, int], dexterity: int,
     return accuracy
 
 
+def ranged_accuracy(mods: dict[int, int], dexterity: int, skill_value: int) -> int:
+    """Public ranged-accuracy formula for callers outside the sheet builder.
+
+    Chemist's Toss is a ranged physical action without an equipped ranged weapon,
+    so it reads the Throwing skill through the same R.Accuracy/DEX curve a bow or
+    gun would use.
+    """
+    return _ranged_accuracy_value(mods, dexterity, skill_value)
+
+
 def _with_percent(value: int, percent: int, *, floor: int) -> int:
     """Apply an HP/MP percentage modifier to a maximum, clamped to *floor*.
 

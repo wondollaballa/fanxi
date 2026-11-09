@@ -101,6 +101,7 @@ pub fn run() {
             commands::send_command,
             commands::send_hud,
             commands::battle,
+            commands::battle_team_profiles,
             commands::battle_spells,
             commands::battle_weapon_skills,
             commands::battle_mob_moves,
