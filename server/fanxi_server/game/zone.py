@@ -11581,10 +11581,9 @@ class ZoneSession:
             self.say(slot.get("message", "The Battle Bag is full."))
             return
         row = chemist.bag_slot(service, int(self.char["id"]), int(item_id))
-        if row is not None and int(row.quantity) > 0:
+        if row is not None and int(row.quantity) >= 99:
             spec = chemist.item_spec(service, int(item_id)) or {}
-            self.say("%s is already stocked (%d). Use Mix or Toss it first." % (
-                spec.get("name", "That recipe"), int(row.quantity)))
+            self.say("%s is already full (99/99)." % spec.get("name", "That item"))
             return
         self._chemist_start_synthesis(int(item_id), now)
 

@@ -289,6 +289,23 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(self.session.synth_until, 0.0)
         self.assertNotEqual(self.session.own_animation(), chemist.CRAFT_ANIMATION)
 
+    def test_mix_tops_up_an_existing_stack_to_99(self):
+        self.give_bag(30000, 40, 2)
+        self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)
+        result = chemist.craft(self.service, int(self.character["id"]), 30000)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["stack"], 52)  # 40 + NQ 12
+        self.assertEqual(self.bag_quantity(30000), 52)
+
+    def test_mix_caps_at_99(self):
+        self.give_bag(30000, 95, 2)
+        self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)
+        with mock.patch.object(chemist.random, "random", return_value=0.0):
+            result = chemist.craft(self.service, int(self.character["id"]), 30000)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["stack"], 99)
+        self.assertEqual(self.bag_quantity(30000), 99)
+
     def test_mix_hq3_yields_33(self):
         self.give_bag(30000, 0, 2)
         self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)

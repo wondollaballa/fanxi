@@ -541,8 +541,9 @@ def craft(service, character_id: int, item_id: int) -> dict:
             (int(character_id), int(item_id))).fetchone()
         if row is None:
             raise ValueError("the bag slot disappeared")
-        if int(row["quantity"]) > 0:
-            return {"ok": False, "message": "That bag slot is not empty."}
+        current = int(row["quantity"])
+        if current >= 99:
+            return {"ok": False, "message": "That Battle Bag stack is already full (99)."}
         toolkit_used = _toolkit_available(conn, character_id)
         if toolkit_used:
             toolkit_used = bool(_take_toolkit(conn, character_id))
@@ -564,16 +565,19 @@ def craft(service, character_id: int, item_id: int) -> dict:
             quality = 0
         yield_value = max(1, min(int(spec.get("bag_stack") or 99),
                                  HQ_YIELDS[quality]))
+        added = min(yield_value, 99 - current)
+        stack_after = current + added
         conn.execute(
             "UPDATE char_chemist_bag SET quantity = ? "
             "WHERE character_id = ? AND item_id = ?",
-            (yield_value, int(character_id), int(item_id)))
+            (stack_after, int(character_id), int(item_id)))
     quality_name = ("HQ%d" % quality) if quality else "NQ"
     return {"ok": True, "item_id": int(item_id), "name": spec["name"],
-            "quantity": yield_value, "quality": quality, "quality_name": quality_name,
+            "quantity": added, "stack": stack_after,
+            "quality": quality, "quality_name": quality_name,
             "toolkit_used": bool(toolkit_used),
-            "message": "Synthesized %s %s x%d%s." % (
-                quality_name, spec["name"], yield_value,
+            "message": "Synthesized %s %s x%d (%d/99)%s." % (
+                quality_name, spec["name"], added, stack_after,
                 " with a Chemistry Toolkit" if toolkit_used else "")}
 
 
