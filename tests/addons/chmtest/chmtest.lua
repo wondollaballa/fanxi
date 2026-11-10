@@ -86,6 +86,7 @@ end
 local api = {
     GetIO = function() return { DisplaySize = { x = 1280, y = 720 } } end,
     SetNextWindowPos = function() end, SetNextWindowSize = function() end,
+    SetNextWindowCollapsed = function() end,
     SetNextWindowBgAlpha = function() end,
     Begin = function() return true end, End = function() end,
     BeginChild = function() return true end, EndChild = function() end,

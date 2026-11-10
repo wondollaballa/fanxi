@@ -25,7 +25,7 @@ local W = {}      -- the window
 -- constants
 
 local POLL_SECONDS = 1.0
-local WIDTH, HEIGHT = 356, 392
+local WIDTH, HEIGHT = 356, 420
 local BAG_HEIGHT = 190
 local JOB_CHEMIST = 23
 
@@ -391,6 +391,8 @@ function W.window(api)
     end
     api.SetNextWindowPos({ win.x or 560, win.y or 40 }, S.window_force and 1 or 4)
     api.SetNextWindowSize({ WIDTH, HEIGHT }, 1)
+    -- The window is small and has no saved collapsed state of its own; always open it.
+    api.SetNextWindowCollapsed(false, 1)
     api.SetNextWindowBgAlpha(0.95)
     S.window_force = false
     local close = { true }
