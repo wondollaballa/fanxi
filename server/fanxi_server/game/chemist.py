@@ -552,14 +552,23 @@ def craft(service, character_id: int, item_id: int) -> dict:
                 _take_reagents(conn, character_id, recipe_row["reagents"])
             except ValueError as exc:
                 return {"ok": False, "message": "You are missing a reagent: %s." % exc}
-        gap = max(0, alchemy - required)
-        hq_chance = min(0.60, 0.10 + gap * 0.01)
+        # Capped Alchemy plus the shield's Alchemy/Craft Skill is a serious HQ
+        # investment: at cap the batch is 95% HQ, with HQ3 and HQ2 taking the
+        # larger shares rather than being one-in-fifty rolls.
+        try:
+            craft_mods = service.equipped_mods(int(character_id))
+        except Exception:
+            craft_mods = {}
+        craft_skill = max(0, int(craft_mods.get(mod.CRAFT_SKILL, 0) or 0))
+        effective = alchemy + craft_skill // 2
+        gap = max(0, effective - required)
+        hq_chance = min(0.95, 0.30 + gap * 0.0075)
         roll = random.random()
-        if roll < hq_chance * 0.05:
+        if roll < hq_chance * 0.15:
             quality = 3
-        elif roll < hq_chance * 0.20:
+        elif roll < hq_chance * 0.45:
             quality = 2
-        elif roll < hq_chance * 0.50:
+        elif roll < hq_chance * 0.80:
             quality = 1
         else:
             quality = 0
