@@ -11398,8 +11398,9 @@ class ZoneSession:
         self._chemist_send_action(
             int(ability_id), int(ability.get("animation") or 0), entries)
         # The ability result must arrive first: its 0x028 resets the motion state, so an
-        # emote queued before it is immediately cancelled and never renders.
-        if verb == "toss":
+        # emote queued before it is immediately cancelled and never renders.  While
+        # engaged the client suppresses emotes, so send them only out of battle.
+        if verb == "toss" and not self.engaged_id:
             self._chemist_toss_emote(target)
         if catalyst:
             self._chemist_catalyst_until = 0.0
@@ -11531,8 +11532,11 @@ class ZoneSession:
                 self.say("Your %s misses %s." % (spec["name"], enemy.name))
         self._chemist_send_action(
             chemist.TOSS, int(ability.get("animation") or 0), entries)
-        # Last word on the motion: /toss after the ability result, never before it.
-        self._chemist_toss_emote(target)
+        # Last word on the motion.  In battle the 0x028 result carries animation 186;
+        # adding an emote there would cancel it because the client blocks emotes while
+        # engaged.  Out of battle the emote is the exact /toss motion.
+        if not self.engaged_id:
+            self._chemist_toss_emote(target)
         if catalyst:
             self._chemist_catalyst_until = 0.0
         if volatile:
