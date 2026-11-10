@@ -564,12 +564,15 @@ def craft(service, character_id: int, item_id: int) -> dict:
         gap = max(0, effective - required)
         hq_chance = min(0.95, 0.30 + gap * 0.0075)
         roll = random.random()
-        if roll < hq_chance * 0.15:
-            quality = 3
-        elif roll < hq_chance * 0.45:
-            quality = 2
-        elif roll < hq_chance * 0.80:
-            quality = 1
+        if roll < hq_chance:
+            # Within the HQ share: HQ3 is the rarest, HQ1 the common upgrade.
+            tier_roll = roll / hq_chance
+            if tier_roll < 0.15:
+                quality = 3
+            elif tier_roll < 0.45:
+                quality = 2
+            else:
+                quality = 1
         else:
             quality = 0
         yield_value = max(1, min(int(spec.get("bag_stack") or 99),

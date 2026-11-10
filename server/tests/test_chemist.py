@@ -306,6 +306,15 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(result["stack"], 99)
         self.assertEqual(self.bag_quantity(30000), 99)
 
+    def test_capped_alchemy_rolls_hq_often(self):
+        self.give_bag(30000, 0, 2)
+        self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)
+        with mock.patch.object(chemist.random, "random", return_value=0.5):
+            result = chemist.craft(self.service, int(self.character["id"]), 30000)
+        self.assertTrue(result["ok"])
+        self.assertGreaterEqual(result["quality"], 1)
+        self.assertGreaterEqual(result["quantity"], 18)
+
     def test_mix_hq3_yields_33(self):
         self.give_bag(30000, 0, 2)
         self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)
