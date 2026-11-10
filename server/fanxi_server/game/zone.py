@@ -168,6 +168,12 @@ JOB_POINT_RANK = 20
 # two-hour timer.
 TWO_HOUR_RECAST_BASE = 0x100000
 
+# Retail leaves a K.O.'d body down for an hour before the Home Point return.  The
+# server keeps the dead flag (dead_until = inf) and this separate wall-clock deadline
+# so a Raise can still end the state early.
+KO_HOME_SECONDS = 3600
+PLAYER_DEATH_ANIMATION = 3
+
 
 def spell_animation(spell: dict) -> int:
     """The client animation id a finished spell plays (spell_list.animation).
@@ -692,6 +698,7 @@ class ZoneSession:
         self.abilities_retries: list[float] = []
         self.next_attack_at = 0.0
         self.dead_until = 0.0
+        self.ko_home_at = 0.0
         self.zone_loaded = False
         self.entities_sent = False
         self.sent_targids: set[int] = set()
@@ -1354,6 +1361,7 @@ class ZoneSession:
             s.position_seen = False
             s.engaged_id = None
             s.dead_until = 0.0
+            s.ko_home_at = 0.0
             s.load_zone_entities()
             log.info("%s char %#x logs in to %s at (%.1f, %.1f, %.1f)", addr, cid,
                      world.zones.name(s.zone), s.pos[0], s.pos[1], s.pos[2])
@@ -4357,6 +4365,7 @@ class ZoneSession:
         self.geo_bubble: dict[str, tuple[int, int]] = {}
         self.position_seen = False
         self.dead_until = 0.0
+        self.ko_home_at = 0.0
         self.engaged_id = None
         self.engaged_targid = 0
         self._merit_counts = None
@@ -4375,6 +4384,7 @@ class ZoneSession:
             # only a Raise or a Home Point return brings them back.  The record keeps
             # their 0 HP, so this only restores the in-session flag.
             self.dead_until = float("inf")
+            self.ko_home_at = time.time() + KO_HOME_SECONDS
             # A K.O. takes the buffs in retail; the recasts still come back.
             self.restore_live_state(include_effects=False)
         else:
@@ -8419,10 +8429,13 @@ class ZoneSession:
         skill = int(cast.get("skill") or spell.get("skill") or 0)
         me = int(self.char["char_id"])
         targid = int(getattr(self, "targid", 0) or 0x400)
+        action_arg = (packets.ACTION_SKILL_INTERRUPT
+                      if cast.get("chemist") is not None
+                      else packets.magic_interrupt_arg(skill))
         self.queue.append(sub(0x028, packets.battle_action(
             me, me, int(spell.get("id") or 0), animation=0, message=0, kind=0,
             category=packets.ACTION_CATEGORY_MAGIC_START,
-            action_id=packets.magic_interrupt_arg(skill), info=0)))
+            action_id=action_arg, info=0)))
         self.queue.append(sub(0x029, packets.battle_message(
             me, me, targid, targid, 0, 0, packets.MESSAGE_CASTING_INTERRUPTED)))
         if self.engaged_id and not self.zoning:
@@ -11184,39 +11197,180 @@ class ZoneSession:
                 break
         return out
 
-    def _chemist_party_targets(self, center, radius: float) -> list:
-        """The Mix target plus nearby party/alliance members when Catalyst is up."""
-        if radius <= 0:
-            return [center]
-        out = [center]
+    def _chemist_is_allied(self, other) -> bool:
+        """True for self, a party member or an alliance member."""
+        if other is None:
+            return False
+        if other is self:
+            return True
+        mine = self.world.party_of(int(self.char["char_id"]))
+        theirs = self.world.party_of(int(other.char["char_id"]))
+        if mine is None or theirs is None:
+            return False
+        if mine is theirs:
+            return True
+        return mine.alliance is not None and mine.alliance is theirs.alliance
+
+    def _chemist_party_sessions(self) -> list:
+        """The caster plus every live player in the party or alliance."""
+        out = [self]
         party = self.world.party_of(int(self.char["char_id"]))
         if party is None:
             return out
-        for member in party.members:
-            other = self.world.session_by_char(int(member.char_id))
-            if other is None or other is center or int(other.zone) != int(self.zone):
-                continue
-            if getattr(other, "dead_until", 0.0) or int(other.char.get("hp_current", 0)) <= 0:
-                continue
-            if math.dist(center.pos[:3], other.pos[:3]) <= radius:
+        parties = (list(party.alliance.parties)
+                   if party.alliance is not None else [party])
+        for group in parties:
+            for member in group.members:
+                other = self.world.session_by_char(int(member.char_id))
+                if other is None or other is self or int(other.zone) != int(self.zone):
+                    continue
+                if getattr(other, "dead_until", 0.0) or int(other.char.get("hp_current", 0)) <= 0:
+                    continue
                 out.append(other)
+        return out
+
+    def _chemist_trust_allowed(self, entity) -> bool:
+        """A Trust may be targeted when its owner is in the caster's alliance."""
+        owner_id = int(getattr(entity, "owner_char_id", 0) or 0)
+        if owner_id == int(self.char["char_id"]):
+            return True
+        owner = self.world.session_by_char(owner_id)
+        return self._chemist_is_allied(owner) if owner is not None else False
+
+    def _chemist_party_targets(self, center, radius: float) -> list:
+        """The friendly target plus nearby party/alliance members and their Trusts."""
+        if radius <= 0:
+            return [center]
+        out = [center]
+        center_pos = chemist.target_pos(center)
+        seen = {chemist.target_id(center)}
+        sessions = self._chemist_party_sessions()
+        candidates = list(sessions)
+        for session in sessions:
+            candidates.extend(self.world.active_trusts(session))
+        for other in candidates:
+            if other is center or chemist.target_id(other) in seen:
+                continue
+            if hasattr(other, "char"):
+                if (getattr(other, "dead_until", 0.0)
+                        or int(other.char.get("hp_current", 0)) <= 0):
+                    continue
+            elif not getattr(other, "alive", False):
+                continue
+            if math.dist(center_pos, chemist.target_pos(other)) <= radius:
+                out.append(other)
+                seen.add(chemist.target_id(other))
             if len(out) >= 8:
                 break
         return out
 
-    def _chemist_toss(self, ability: dict, act_index: int, now: float) -> None:
-        target = None
-        if act_index:
-            target = self.world.entity_by_targid(self.zone, int(act_index))
-        if target is None and self.engaged_id:
-            target = self.world.entity_by_id(self.zone, int(self.engaged_id))
-        if target is None or getattr(target, "kind", "") != "mob" or not target.alive:
-            self.say("There is no valid target for Toss.")
-            return
+    def _chemist_ally_target(self, act_index: int, ability: dict):
+        """Resolve a player, Trust or self-friendly target, with an error string."""
         reach = float(ability.get("range") or 20.0)
-        if target.distance_to(*self.pos[:3]) > reach + 1.0:
-            self.say("You are too far away.")
+        entity = None
+        if act_index:
+            entity = self.world.entity_by_targid(self.zone, int(act_index))
+        if entity is not None and getattr(entity, "kind", "") == "trust":
+            if not self._chemist_trust_allowed(entity):
+                return None, "That Trust is not in your party or alliance."
+            if entity.distance_to(*self.pos[:3]) > reach + 1.0:
+                return None, "You are too far away."
+            return entity, None
+        ally, error = self._waltz_target(int(act_index), ability)
+        if error:
+            return None, error
+        if ally is None:
+            ally = self
+        if not self._chemist_is_allied(ally):
+            return None, "That is not a party or alliance member."
+        return ally, None
+
+    def _chemist_toss_target(self, act_index: int, ability: dict):
+        """('mob', entity) or ('friendly', session/Trust), with an error string."""
+        entity = None
+        if act_index:
+            entity = self.world.entity_by_targid(self.zone, int(act_index))
+        if entity is not None and getattr(entity, "kind", "") == "mob":
+            if not entity.alive:
+                return None, None, "There is no valid target for Toss."
+            reach = float(ability.get("range") or 20.0)
+            if entity.distance_to(*self.pos[:3]) > reach + 1.0:
+                return None, None, "You are too far away."
+            return "mob", entity, None
+        if not act_index and self.engaged_id:
+            mob = self.world.entity_by_id(self.zone, int(self.engaged_id))
+            if mob is not None and getattr(mob, "kind", "") == "mob" and mob.alive:
+                reach = float(ability.get("range") or 20.0)
+                if mob.distance_to(*self.pos[:3]) <= reach + 1.0:
+                    return "mob", mob, None
+        ally, error = self._chemist_ally_target(act_index, ability)
+        if error:
+            return None, None, error
+        return "friendly", ally, None
+
+    def _chemist_friendly_action(self, ability: dict, ability_id: int, target,
+                                 now: float, verb: str) -> None:
+        """Apply a friendly bag item to a player/Trust, optionally as an AoE."""
+        slot, spec = chemist.choose_bag_item(self, hostile=False)
+        if slot is None or spec is None:
+            self.say("Load a friendly item into the Battle Bag first.")
             return
+        if int(slot.quantity) <= 0:
+            self._chemist_start_synthesis(int(slot.item_id), now)
+            return
+        catalyst = float(getattr(self, "_chemist_catalyst_until", 0.0)) > now
+        targets = self._chemist_party_targets(
+            target, chemist.cast_radius(self) if catalyst else 0.0)
+        applied = []
+        for member in targets:
+            result = chemist.apply_friendly(self, member, spec)
+            if result.get("ok"):
+                applied.append((member, result))
+            elif member is target:
+                self.say(result.get("message", "The item has no effect."))
+        if not applied:
+            return
+        consumed = chemist.consume_slot(
+            self.world.service, int(self.char["id"]), int(slot.item_id))
+        if consumed is None:
+            log.warning("%s Chemist friendly item lost its bag charge", self.addr)
+        entries = []
+        for member, result in applied:
+            kind = result.get("kind")
+            message = 0
+            if kind == "heal":
+                message = packets.MESSAGE_SKILL_RECOVERS_HP
+            elif kind == "mp":
+                message = packets.MESSAGE_SKILL_RECOVERS_MP
+            entries.append({
+                "target_id": chemist.target_id(member),
+                "results": [{
+                    "damage": int(result.get("amount") or 0),
+                    "miss": False, "kind": 2,
+                    "animation": int(ability.get("animation") or 0),
+                    "message": message,
+                }],
+            })
+            self.say("%s: %s" % (chemist.target_name(member),
+                                 result.get("message", "applied")))
+        self._chemist_send_action(
+            int(ability_id), int(ability.get("animation") or 0), entries)
+        if catalyst:
+            self._chemist_catalyst_until = 0.0
+        self.say("You %s a %s." % (verb, spec["name"]))
+
+    def _chemist_toss(self, ability: dict, act_index: int, now: float) -> None:
+        """Toss a hostile item at a mob or a friendly item at an ally/self."""
+        target_kind, target, error = self._chemist_toss_target(act_index, ability)
+        if error:
+            self.say(error)
+            return
+        if target_kind == "mob":
+            self._chemist_toss_hostile(ability, target, now)
+            return
+        self._chemist_friendly_action(ability, chemist.TOSS, target, now, "toss")
+
+    def _chemist_toss_hostile(self, ability: dict, target, now: float) -> None:
         slot, spec = chemist.choose_bag_item(self, hostile=True)
         if slot is None or spec is None:
             self.say("Load a hostile item into the Battle Bag first.")
@@ -11282,59 +11436,42 @@ class ZoneSession:
                 spec["name"], landed, len(targets)))
 
     def _chemist_mix(self, ability: dict, act_index: int, now: float) -> None:
-        ally, error = self._waltz_target(act_index, ability)
+        ally, error = self._chemist_ally_target(act_index, ability)
         if error:
             self.say(error)
             return
-        if ally is None:
-            ally = self
-        slot, spec = chemist.choose_bag_item(self, hostile=False)
-        if slot is None or spec is None:
-            self.say("Load a friendly item into the Battle Bag first.")
+        self._chemist_friendly_action(ability, chemist.MIX, ally, now, "mix")
+
+    def _chemist_craft(self, item_id: int, now: float) -> None:
+        """Start a learned recipe from the HUD's Mix picker.
+
+        The bag row is created empty first, then the ordinary synthesis timer runs.
+        Mix's level gate is the one that applies: this is the ability the player
+        selected, and it uses the same animation as the synthesis.
+        """
+        service = self.world.service
+        if not chemist.is_chemist(self):
+            self.say("Only a Chemist can synthesize a recipe.")
             return
-        if int(slot.quantity) <= 0:
-            self._chemist_start_synthesis(int(slot.item_id), now)
+        if int(self.char.get("main_level", 1) or 1) < 15:
+            self.say("You have not learned Mix yet.")
             return
-        catalyst = float(getattr(self, "_chemist_catalyst_until", 0.0)) > now
-        targets = self._chemist_party_targets(
-            ally, chemist.cast_radius(self) if catalyst else 0.0)
-        applied = []
-        for member in targets:
-            result = chemist.apply_mix(self, member, spec)
-            if result.get("ok"):
-                applied.append((member, result))
-            elif member is ally:
-                self.say(result.get("message", "The item has no effect."))
-        if not applied:
+        learned = {int(row["item_id"]) for row in chemist.learned_recipes(
+            service, int(self.char["id"]))}
+        if int(item_id) not in learned:
+            self.say("You have not learned that recipe.")
             return
-        consumed = chemist.consume_slot(
-            self.world.service, int(self.char["id"]), int(slot.item_id))
-        if consumed is None:
-            log.warning("%s Chemist mix lost its bag charge", self.addr)
-        entries = []
-        for member, result in applied:
-            kind = result.get("kind")
-            message = 0
-            if kind == "heal":
-                message = packets.MESSAGE_SKILL_RECOVERS_HP
-            elif kind == "mp":
-                message = packets.MESSAGE_SKILL_RECOVERS_MP
-            entries.append({
-                "target_id": int(member.char["char_id"]),
-                "results": [{
-                    "damage": int(result.get("amount") or 0),
-                    "miss": False, "kind": 2,
-                    "animation": int(ability.get("animation") or 0),
-                    "message": message,
-                }],
-            })
-            self.say("%s: %s" % (member.char.get("name", "Target"),
-                                 result.get("message", "applied")))
-        self._chemist_send_action(
-            chemist.MIX, int(ability.get("animation") or 0), entries)
-        if catalyst:
-            self._chemist_catalyst_until = 0.0
-        self.say("You mix a %s." % spec["name"])
+        slot = chemist.ensure_bag_slot(service, self.char, int(item_id))
+        if not slot.get("ok"):
+            self.say(slot.get("message", "The Battle Bag is full."))
+            return
+        row = chemist.bag_slot(service, int(self.char["id"]), int(item_id))
+        if row is not None and int(row.quantity) > 0:
+            spec = chemist.item_spec(service, int(item_id)) or {}
+            self.say("%s is already stocked (%d). Use Mix or Toss it first." % (
+                spec.get("name", "That recipe"), int(row.quantity)))
+            return
+        self._chemist_start_synthesis(int(item_id), now)
 
     def _chemist_start_synthesis(self, item_id: int, now: float) -> None:
         """Start the restock cast for one depleted bag slot."""
@@ -11371,9 +11508,10 @@ class ZoneSession:
         self.stop_resting()
         me = int(self.char["char_id"])
         self.queue.append(sub(0x028, packets.battle_action(
-            me, me, int(item_id), animation=0,
+            me, me, int(item_id), animation=chemist.CRAFT_ANIMATION,
             message=packets.MESSAGE_MAGIC_STARTS_CASTING, kind=0,
-            category=packets.ACTION_CATEGORY_MAGIC_START, action_id=0)))
+            category=packets.ACTION_CATEGORY_MAGIC_START,
+            action_id=packets.ACTION_SKILL_USE)))
         self.say("You begin synthesizing a restock (%.1fs)." % (cast_ms / 1000.0))
 
     def _finish_chemist_synthesis(self, item_id: int) -> None:
@@ -11381,8 +11519,8 @@ class ZoneSession:
             self.world.service, int(self.char["id"]), int(item_id))
         me = int(self.char["char_id"])
         self.queue.append(sub(0x028, packets.battle_action(
-            me, me, int(item_id), animation=186, message=0, kind=0,
-            category=packets.ACTION_CATEGORY_MAGIC_FINISH,
+            me, me, int(item_id), animation=chemist.CRAFT_ANIMATION, message=0,
+            kind=0, category=packets.ACTION_CATEGORY_MAGIC_FINISH,
             action_id=int(item_id))))
         self.refresh_inventory()
         self.say(result.get("message", "The synthesis fails."))
@@ -11418,6 +11556,7 @@ class ZoneSession:
             key = chemist.ABILITY_KEYS.get(int(ability_id), str(ability_id))
             recasts[key] = round(max(
                 0.0, float(self.ability_recasts.get(int(recast_id), 0.0)) - now), 1)
+        book = chemist.recipe_book(service, int(self.char["id"]))
         return {
             "main_job": int(self.char.get("main_job") or 0),
             "alchemy": chemist.alchemy_skill(service, int(self.char["id"])),
@@ -11425,6 +11564,9 @@ class ZoneSession:
             "used": len([entry for entry in bag if entry["visible"]]),
             "selected": selected,
             "bag": bag,
+            "toolkits": book["toolkits"],
+            "toolkit_item_id": book["toolkit_item_id"],
+            "recipes": book["recipes"],
             "stances": {key: round(float(value), 1)
                         for key, value in chemist.stances(self).items()},
             "recasts": recasts,
@@ -11498,6 +11640,30 @@ class ZoneSession:
             self.chemist_selected_item = int(item["item_id"])
             self.say("Selected %s for Toss/Mix." % row.name)
             return
+        if action == "recipes":
+            book = chemist.recipe_book(service, int(self.char["id"]))
+            self.say("Chemistry Toolkits: %d. Recipes: %d." % (
+                int(book["toolkits"]), len(book["recipes"])))
+            for row in book["recipes"]:
+                missing = ""
+                if row.get("missing"):
+                    missing = " missing " + ", ".join(
+                        "%s %d/%d" % (item["name"], item["have"], item["need"])
+                        for item in row["missing"])
+                elif not row.get("craftable"):
+                    missing = " Alchemy %d required" % int(row.get("alchemy_req") or 0)
+                self.say("%s -> x%d%s" % (row["name"], int(row["yield"]), missing))
+            return
+        if action == "craft":
+            if len(words) < 2:
+                self.say("Usage: //chm craft <recipe|item id>")
+                return
+            item = chemist.find_item(service, " ".join(words[1:]))
+            if item is None:
+                self.say("No recipe item called %s." % " ".join(words[1:]))
+                return
+            self._chemist_craft(int(item["item_id"]), time.time())
+            return
         if action in ("toss", "mix", "catalyst", "amplify", "volatile"):
             ability_id = {
                 "toss": chemist.TOSS, "mix": chemist.MIX,
@@ -11533,7 +11699,7 @@ class ZoneSession:
                                       int(self.target_targid or 0) if hostile else 0)
             return
         self.say("Usage: //chm status | load <item> [qty] | select <item> | use <item> | "
-                 "toss | mix | catalyst | amplify | volatile")
+                 "recipes | craft <recipe> | toss | mix | catalyst | amplify | volatile")
 
     def job_ability(self, p: bytes, act_index: int = 0) -> None:
         """C2S 0x01A action 0x09: a job ability.
@@ -12941,6 +13107,7 @@ class ZoneSession:
             return
         restored = max(1, int(int(target.char.get("hp", 1)) * float(fraction)))
         target.dead_until = 0.0
+        target.ko_home_at = 0.0
         target.casting = None
         target.resting = False
         target.engaged_id = None
@@ -13521,6 +13688,7 @@ class ZoneSession:
             self.remove_effect(reraise_key, quiet=True)
             self.char["hp_current"] = max(1, int(self.char.get("hp", 1)) // 10)
             self.dead_until = 0.0
+            self.ko_home_at = 0.0
             self.queue += [self.char_status(), self.char_stats(),
                            self.char_update(packets.SEND_HP)]
             self.world.broadcast_player(self, packets.SEND_HP)
@@ -13533,17 +13701,43 @@ class ZoneSession:
                 pass
             return
         self.dead_until = float("inf")
+        self.ko_home_at = now + KO_HOME_SECONDS
         self.queue += [self.char_status(), self.party_member(),
                        self.char_update(packets.SEND_HP)]
         # Observers draw the body from its HP byte; without this the K.O. was only
         # visible to the player who died.
         self.world.broadcast_player(self, packets.SEND_HP)
-        self.say("You have been defeated. Wait for a raise, or use //hp to return "
-                 "to your Home Point.")
+        self.say("You have been defeated. You will return to your Home Point in "
+                 "60 minutes, or use //hp now.")
         try:
             self.world.service.record_death(int(self.char["id"]))
         except Exception:
             pass
+
+    def _return_home_from_ko(self) -> None:
+        """The one-hour K.O. expiry: return the body to its Home Point."""
+        self.ko_home_at = 0.0
+        home = None
+        try:
+            home = self.world.service.last_home_point(int(self.char["id"]))
+        except Exception as exc:
+            log.warning("%s K.O. home-point lookup failed: %s", self.addr, exc)
+        if home is not None:
+            zone = int(home["zone"])
+            dest = [float(home["x"]), float(home["y"]), float(home["z"]),
+                    int(home.get("rot") or 0)]
+        else:
+            zone = int(self.char.get("home_zone") or 0)
+            dest = [float(self.char.get("home_x") or 0.0),
+                    float(self.char.get("home_y") or 0.0),
+                    float(self.char.get("home_z") or 0.0),
+                    int(self.char.get("home_rot") or 0)]
+        if zone <= 0:
+            self.say("Your K.O. timer expired, but you have no Home Point set.")
+            self.ko_home_at = time.time() + KO_HOME_SECONDS
+            return
+        self.say("Your spirit returns to your Home Point.")
+        self.change_zone(zone, dest)
 
     def revive_from_ko(self, hp_fraction: float = 0.5) -> None:
         """Bring a K.O.'d character back at a fraction of maximum HP/MP.
@@ -13554,6 +13748,7 @@ class ZoneSession:
         they fell.
         """
         self.dead_until = 0.0
+        self.ko_home_at = 0.0
         self.casting = None
         self.resting = False
         self.engaged_id = None
@@ -13653,6 +13848,9 @@ class ZoneSession:
             self._commands_pending = False
             self.queue.append(message)
         if self.sleeping:
+            return
+        if self.dead_until and self.ko_home_at and now >= self.ko_home_at:
+            self._return_home_from_ko()
             return
         if self.meditate is not None and now >= float(self.meditate["next"]):
             state = self.meditate
@@ -15334,6 +15532,8 @@ class ZoneSession:
         Mounted overrides the stance: 5 draws the chocobo and 85 the other mounts, and
         the rider's own client learns the ride from this byte (see docs/mounts.md).
         """
+        if self.dead_until > time.time():
+            return PLAYER_DEATH_ANIMATION
         ridden = mounts.by_id(self.mount_id)
         if ridden is not None:
             return ridden.animation()

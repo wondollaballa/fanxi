@@ -25,7 +25,7 @@ local W = {}      -- the window
 -- constants
 
 local POLL_SECONDS = 1.0
-local WIDTH, HEIGHT = 356, 420
+local WIDTH, HEIGHT = 356, 560
 local BAG_HEIGHT = 190
 local JOB_CHEMIST = 23
 
@@ -48,7 +48,7 @@ local ABILITIES = {
     { key = 'toss', name = 'Toss', command = '//chm toss', color = 'violet',
       hint = 'Throw the selected hostile item at the target' },
     { key = 'mix', name = 'Mix', command = '//chm mix', color = 'green',
-      hint = 'Mix the selected friendly item (self target here)' },
+      hint = 'Choose a learned recipe to synthesize' },
     { key = 'catalyst', name = 'Catalyst', command = '//chm catalyst', color = 'yellow',
       hint = 'The next Toss or Mix covers nearby targets' },
     { key = 'amplify', name = 'Amplify', command = '//chm amplify', color = 'cyan',
@@ -176,11 +176,32 @@ function M.accept(raw)
         used = tonumber(raw.used) or 0,
         selected = tonumber(raw.selected) or 0,
         bag = {},
+        recipes = {},
+        toolkits = tonumber(raw.toolkits) or 0,
         stances = {},
         recasts = {},
     }
     for _, row in ipairs(raw.bag) do
         data.bag[#data.bag + 1] = normalize_row(row)
+    end
+    for _, row in ipairs(type(raw.recipes) == 'table' and raw.recipes or {}) do
+        local missing = {}
+        for _, need in ipairs(type(row.missing) == 'table' and row.missing or {}) do
+            missing[#missing + 1] = {
+                name = tostring(need.name or 'reagent'),
+                have = tonumber(need.have) or 0,
+                need = tonumber(need.need) or 0,
+            }
+        end
+        data.recipes[#data.recipes + 1] = {
+            item_id = tonumber(row.item_id) or 0,
+            name = tostring(row.name or 'Recipe'),
+            yield = tonumber(row.yield) or 1,
+            cast_ms = tonumber(row.cast_ms) or 12000,
+            alchemy_req = tonumber(row.alchemy_req) or 0,
+            craftable = row.craftable == true,
+            missing = missing,
+        }
     end
     for key, value in pairs(type(raw.stances) == 'table' and raw.stances or {}) do
         data.stances[tostring(key)] = tonumber(value) or 0
@@ -205,6 +226,10 @@ function M.bag()
     return S.data and S.data.bag or {}
 end
 
+function M.recipes()
+    return S.data and S.data.recipes or {}
+end
+
 function M.selected_name()
     local selected = S.data and tonumber(S.data.selected) or 0
     for _, row in ipairs(M.bag()) do
@@ -226,6 +251,8 @@ function M.snapshot()
         capacity = data and data.capacity or 0,
         selected = data and data.selected or 0,
         bag = data and #data.bag or 0,
+        recipes = data and #data.recipes or 0,
+        toolkits = data and tonumber(data.toolkits) or 0,
         stances = active,
         error = S.error,
     }
@@ -314,10 +341,71 @@ function W.abilities(api)
             api.SetTooltip(ability.hint .. (cooling and '\nRecast ' .. ceil_seconds(remaining)
                 .. 's' or '\nReady'))
         end
-        if clicked then run(ability.command) end
+        if clicked then
+            if ability.key == 'mix' then
+                S.show_recipes = not S.show_recipes
+            else
+                run(ability.command)
+            end
+        end
         if index % 3 ~= 0 and index < #ABILITIES then
             api.SameLine(0, 6)
         end
+    end
+end
+
+function W.recipes(api)
+    if not S.show_recipes then return end
+    local data = S.data
+    local recipes = M.recipes()
+    local toolkits = data and tonumber(data.toolkits) or 0
+    api.Separator()
+    text(api, COLORS.cyan, string.format('Mix recipes  ·  Chemistry Toolkits x%d', toolkits))
+    api.SameLine(0, 12)
+    if button(api, 'Close', COLORS.dim, 64, 20) then
+        S.show_recipes = false
+        return
+    end
+    if #recipes == 0 then
+        text(api, COLORS.dim, 'No recipes learned yet.')
+        return
+    end
+    if api.BeginChild('chm_recipes', { 0, 170 }, true) then
+        for _, recipe in ipairs(recipes) do
+            local label = string.format('%s  x%d', recipe.name, recipe.yield)
+            if not recipe.craftable then label = label .. '  (not craftable)' end
+            local chosen = api.Selectable(label .. '##chm_recipe_' .. tostring(recipe.item_id),
+                false, 0, { 0, 19 })
+            if api.IsItemHovered and api.IsItemHovered() then
+                local lines = {
+                    string.format('%s: %d per synthesis, %.1fs', recipe.name,
+                        recipe.yield, (recipe.cast_ms or 12000) / 1000),
+                    string.format('Alchemy %d required', recipe.alchemy_req),
+                }
+                if recipe.craftable then
+                    lines[#lines + 1] = 'Click to synthesize'
+                elseif #recipe.missing > 0 then
+                    local missing = {}
+                    for _, item in ipairs(recipe.missing) do
+                        missing[#missing + 1] = string.format('%s %d/%d', item.name,
+                            item.have, item.need)
+                    end
+                    lines[#lines + 1] = 'Missing: ' .. table.concat(missing, ', ')
+                else
+                    lines[#lines + 1] = 'Raise Alchemy to synthesize this recipe'
+                end
+                api.SetTooltip(table.concat(lines, '\n'))
+            end
+            if chosen then
+                if not recipe.craftable then
+                    notify('Not enough reagents or Alchemy for ' .. recipe.name)
+                else
+                    S.show_recipes = false
+                    run(string.format('//chm craft %d', recipe.item_id))
+                end
+            end
+        end
+        api.EndChild()
     end
 end
 
@@ -407,6 +495,7 @@ function W.window(api)
         W.header(api)
         api.Separator()
         W.abilities(api)
+        W.recipes(api)
         W.bag(api)
         api.Separator()
         W.stances(api)

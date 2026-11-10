@@ -25,12 +25,16 @@ Server slice landed 2026-11-09:
 - the persistent Battle Bag, load caps, Alchemy gates and atomic Chemistry restock;
 - Alchemy-scaled potency/tick/duration, Toss hit rolls, stacking debuffs (Aqua Regia,
   Sludge Bomb, Aether Spore, Vitriol) and the custom effect keys;
+- a learned recipe book, the Chemistry Toolkit universal reagent and a Mix recipe picker;
+- the Brewer's Escutcheon craft-skill shield (`CRAFT_SKILL`/`ALCHEMY_SKILL` and a 2,000 ms
+  synthesis cast);
+- Mix and synthesis use the client's synthesis pose (animation 44);
 - server tests in `server/tests/test_chemist.py`.
 
 The Fanxi HUD page landed with the same slice: a Chemist window with the Battle Bag, the
 five abilities and the stance clocks, and a Chemistry tab in the Spells window, both fed by
 `GET /api/v1/characters/{id}/chemist`. The chat path is
-`//chm status|load|select|use|toss|mix|catalyst|amplify|volatile`.
+`//chm status|load|select|use|recipes|craft|toss|mix|catalyst|amplify|volatile`.
 
 Not yet implemented: native ability names/icons, traps, AF/relic/Empyrean sets, job-point
 gifts and the client content pack. The native Ability menu still shows placeholder rows until
@@ -313,7 +317,8 @@ alone.
 
 ### 5.4 Actions and feedback
 
-- Toss/Mix send a normal `0x028` ability-finish action with a reused throw/item animation.
+- Toss sends a normal `0x028` ability-finish action with the throw animation; Mix and
+  synthesis use the client's synthesis pose (animation 44).
 - The effect result carries a retail effect id as its visible value so the client plays a
   sensible icon; the server stores its own internal key.
 - Chat lines are server-authored: "You toss an Aqua Regia. Defense down: 13%."
@@ -348,13 +353,18 @@ CREATE TABLE IF NOT EXISTS chemist_recipe_reagents (
 );
 ```
 
-The eight elemental reagents should be **real stackable inventory items**, because the
-player must carry them and the client must show them. For the first pass, reuse the eight
-elemental crystals already in `items` (Fire 4096, Ice 4097, Wind 4098, Earth 4099,
-Lightning 4100, Water 4101, Light 4102, Dark 4103). Their retail stack is 12, not 99; if
-the 99-reagent fantasy matters more than reuse, add eight custom reagent items with
-`stack = 99` and a small client item overlay later. Do not rewrite the global crystal
-stack size just for this job.
+The eight elemental reagents are **real stackable inventory items**, because the player
+must carry them and the client must show them. They reuse the eight elemental crystals
+already in `items` (Fire 4096, Ice 4097, Wind 4098, Earth 4099, Lightning 4100, Water
+4101, Light 4102, Dark 4103). Their retail stack is 12, not 99.
+
+`char_chemist_recipes` is the learned book. Every character is seeded with all eight
+recipes in the current build, and a new character gets the same rows on creation.
+
+The **Chemistry Toolkit** is the client-known **Alchemy Kit 55** (item 8899), so the
+inventory and equipment screens never meet a custom item record. The HUD labels the
+stack "Chemistry Toolkit"; one kit pays one recipe's entire crystal bill. A craft with no
+kit falls back to the elemental reagents, so both routes remain valid.
 
 ### 6.3 Cast and interruption
 
@@ -382,9 +392,12 @@ just to satisfy the client, and do not rely on `spell_list` — Fanxi does not h
 
 ### 6.4 The Ultimate Alchemy Shield
 
-A sub-slot shield item with `mod.CHEMISTRY_CAST = -10000`. It is snapshotted at cast
-start; swapping it in mid-cast does not help. This is deliberately not `FASTCAST`, which
-would also speed every subjob spell.
+The current item is the **Brewer's Escutcheon** (item 26457, client name `Br.
+Escutcheon`). Its `item_mods` carry `CRAFT_SKILL +100` (every craft skill, shown by the
+client's craft page), `ALCHEMY_SKILL +100` (the Chemist gate) and `CHEMISTRY_CAST -10000`
+(synthesis drops from 12 s to 2 s). It is snapshotted at cast start; swapping it in
+mid-cast does not help. This is deliberately not `FASTCAST`, which would also speed every
+subjob spell.
 
 ### 6.5 Empyrean "Augments Chemistry"
 

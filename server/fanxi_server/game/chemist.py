@@ -53,6 +53,16 @@ VITRIOL = 2010
 # char_inventory rows, so the client never needs an item record for them.
 CUSTOM_ITEM_BASE = 30000
 
+# A universal consumable reagent: one toolkit replaces a recipe's elemental bill.
+# It uses the client-known Alchemy Kit 55 rather than a custom id, so opening the
+# inventory or equipment screen cannot meet an item record the client does not have.
+TOOLKIT_ITEM_ID = 8899  # Alchemy Kit 55: a client-known stackable reagent
+
+# The client's synthesis pose (LandSandBoat's xi::Animation::Synth).  Mix uses the
+# same animation so the ability visibly reads as preparation, and the synthesis
+# start/finish packets use it as the result sub-kind.
+CRAFT_ANIMATION = 44
+
 
 @dataclass(frozen=True)
 class EffectInfo:
@@ -206,6 +216,100 @@ def recipe(service, item_id: int) -> dict | None:
     return result
 
 
+def toolkit_count(service, character_id: int) -> int:
+    """How many universal Chemistry Toolkits the character carries."""
+    return inventory_quantity(service, character_id, TOOLKIT_ITEM_ID)
+
+
+def learned_recipes(service, character_id: int) -> list[dict]:
+    """The recipes this character has learned, in item-name order."""
+    rows = service.db.all(
+        "SELECT r.item_id, i.name, r.yield, r.cast_ms, r.alchemy_req "
+        "FROM char_chemist_recipes cr "
+        "JOIN chemist_recipes r ON r.item_id = cr.item_id "
+        "JOIN items i ON i.item_id = r.item_id "
+        "WHERE cr.character_id = ? ORDER BY i.name",
+        (int(character_id),))
+    return [dict(row) for row in rows]
+
+
+def recipe_book(service, character_id: int) -> dict:
+    """Everything the HUD needs to draw the Mix recipe picker.
+
+    A recipe is craftable when the character knows it, has the Alchemy requirement,
+    and can pay either one Chemistry Toolkit or the elemental reagent bill.
+    """
+    toolkits = toolkit_count(service, character_id)
+    alchemy = alchemy_skill(service, character_id)
+    recipes = []
+    for row in learned_recipes(service, character_id):
+        recipe_row = recipe(service, int(row["item_id"])) or {}
+        reagents = []
+        missing = []
+        for reagent in recipe_row.get("reagents", []):
+            have = inventory_quantity(service, character_id, int(reagent["reagent_id"]))
+            need = int(reagent["quantity"])
+            reagents.append({
+                "item_id": int(reagent["reagent_id"]),
+                "name": reagent["name"],
+                "quantity": need,
+                "have": have,
+            })
+            if toolkits <= 0 and have < need:
+                missing.append({"item_id": int(reagent["reagent_id"]),
+                                "name": reagent["name"], "need": need, "have": have})
+        required = max(int(row.get("alchemy_req") or 0),
+                       int(recipe_row.get("alchemy_req") or 0))
+        recipes.append({
+            "item_id": int(row["item_id"]),
+            "name": str(row["name"]),
+            "yield": int(row["yield"]),
+            "cast_ms": int(row["cast_ms"]),
+            "alchemy_req": required,
+            "reagents": reagents,
+            "missing": missing,
+            "toolkits": toolkits,
+            "craftable": alchemy >= required and (toolkits > 0 or not missing),
+        })
+    return {
+        "alchemy": alchemy,
+        "toolkits": toolkits,
+        "toolkit_item_id": TOOLKIT_ITEM_ID,
+        "recipes": recipes,
+    }
+
+
+def ensure_bag_slot(service, character: dict, item_id: int) -> dict:
+    """Make sure a recipe has a bag row (quantity 0) before its synthesis starts."""
+    item_id = int(item_id)
+    spec = item_spec(service, item_id)
+    if spec is None:
+        return {"ok": False, "message": "That item is not a Chemist recipe product."}
+    character_id = int(character["id"])
+    existing = bag_slot(service, character_id, item_id)
+    if existing is not None:
+        return {"ok": True, "slot": int(existing.slot), "item_id": item_id}
+    active = capacity(service, character)
+    used = {int(row.slot) for row in bag(service, character_id) if int(row.slot) <= active}
+    slot = next((index for index in range(1, active + 1) if index not in used), None)
+    if slot is None:
+        return {"ok": False, "message": "The Battle Bag is full."}
+    with service.db.transaction() as conn:
+        conn.execute(
+            "INSERT OR IGNORE INTO char_chemist_bag "
+            "(character_id, slot, item_id, quantity) VALUES (?, ?, ?, 0)",
+            (character_id, slot, item_id))
+    return {"ok": True, "slot": slot, "item_id": item_id}
+
+
+def _toolkit_available(conn, character_id: int) -> bool:
+    row = conn.execute(
+        "SELECT COALESCE(SUM(quantity), 0) AS quantity FROM char_inventory "
+        "WHERE character_id = ? AND container = 0 AND item_id = ?",
+        (int(character_id), TOOLKIT_ITEM_ID)).fetchone()
+    return bool(row is not None and int(row["quantity"] or 0) > 0)
+
+
 def _take_reagents(conn, character_id: int, reagents: list[dict]) -> None:
     """Consume an exact reagent bill inside the caller's transaction."""
     for reagent in reagents:
@@ -276,9 +380,15 @@ def inventory_quantity(service, character_id: int, item_id: int) -> int:
 
 
 def missing_reagents(service, character_id: int, item_id: int) -> list[dict]:
-    """The reagents still needed for one restock, for a useful refusal message."""
+    """The reagents still needed for one restock, for a useful refusal message.
+
+    A Chemistry Toolkit pays the whole bill, so its presence means nothing is
+    missing even when the elemental crystals are gone.
+    """
     recipe_row = recipe(service, item_id)
     if recipe_row is None:
+        return []
+    if toolkit_count(service, character_id) > 0:
         return []
     missing = []
     for reagent in recipe_row["reagents"]:
@@ -386,10 +496,16 @@ def craft(service, character_id: int, item_id: int) -> dict:
             raise ValueError("the bag slot disappeared")
         if int(row["quantity"]) > 0:
             return {"ok": False, "message": "That bag slot is not empty."}
-        try:
-            _take_reagents(conn, character_id, recipe_row["reagents"])
-        except ValueError as exc:
-            return {"ok": False, "message": "You are missing a reagent: %s." % exc}
+        toolkit_used = _toolkit_available(conn, character_id)
+        if toolkit_used:
+            taken = _take_inventory(conn, character_id, TOOLKIT_ITEM_ID, 1)
+            if taken < 1:
+                toolkit_used = False
+        if not toolkit_used:
+            try:
+                _take_reagents(conn, character_id, recipe_row["reagents"])
+            except ValueError as exc:
+                return {"ok": False, "message": "You are missing a reagent: %s." % exc}
         yield_value = max(1, min(int(spec.get("bag_stack") or 1),
                                  int(recipe_row.get("yield") or 1)))
         conn.execute(
@@ -397,8 +513,10 @@ def craft(service, character_id: int, item_id: int) -> dict:
             "WHERE character_id = ? AND item_id = ?",
             (yield_value, int(character_id), int(item_id)))
     return {"ok": True, "item_id": int(item_id), "name": spec["name"],
-            "quantity": yield_value, "message": "Synthesized %d %s." % (
-                yield_value, spec["name"])}
+            "quantity": yield_value, "toolkit_used": bool(toolkit_used),
+            "message": "Synthesized %d %s%s." % (
+                yield_value, spec["name"],
+                " with a Chemistry Toolkit" if toolkit_used else "")}
 
 
 def craft_cast_ms(service, character_id: int, item_id: int) -> int:
@@ -573,6 +691,86 @@ def apply_mix(session, target, spec: dict) -> dict:
     return {"ok": False, "message": "That item cannot be mixed."}
 
 
+def apply_mix_entity(session, target, spec: dict) -> dict:
+    """Apply a friendly item to a Trust/alter ego entity rather than a player."""
+    kind = str(spec.get("kind") or "")
+    alchemy = alchemy_skill(session.world.service, int(session.char["id"]))
+    name = str(getattr(target, "name", "The target"))
+    if kind == "heal":
+        amount = max(0, int(spec.get("amount") or 0)
+                     + int(spec.get("alchemy_scale") or 0) * alchemy)
+        current = int(getattr(target, "hp", 0) or 0)
+        maximum = max(1, int(getattr(target, "hp_max", 1) or 1))
+        healed = min(amount, max(0, maximum - current))
+        if healed <= 0:
+            return {"ok": False, "message": "%s is already at full health." % name}
+        target.hp = current + healed
+        try:
+            session.world._queue_mob_hp(target)
+        except Exception:
+            log.debug("trust HP refresh failed", exc_info=True)
+        return {"ok": True, "kind": "heal", "amount": healed,
+                "message": "%s recovers %d HP." % (name, healed)}
+    if kind == "mp":
+        amount = max(0, int(spec.get("amount") or 0)
+                     + int(spec.get("alchemy_scale") or 0) * alchemy)
+        current = int(getattr(target, "mp", 0) or 0)
+        maximum = max(0, int(getattr(target, "mp_max", 0) or 0))
+        restored = min(amount, max(0, maximum - current))
+        if restored <= 0:
+            return {"ok": False, "message": "%s already has full MP." % name}
+        target.mp = current + restored
+        try:
+            session.world._queue_mob_hp(target)
+        except Exception:
+            log.debug("trust MP refresh failed", exc_info=True)
+        return {"ok": True, "kind": "mp", "amount": restored,
+                "message": "%s recovers %d MP." % (name, restored)}
+    if kind == "status":
+        removed = []
+        for effect_id in _status_ids(spec.get("statuses") or ""):
+            if int(effect_id) in getattr(target, "effect_state", {}):
+                target.effect_state.pop(int(effect_id), None)
+                try:
+                    target.status_effects.remove(int(effect_id))
+                except (AttributeError, ValueError):
+                    pass
+                removed.append(int(effect_id))
+        if not removed:
+            return {"ok": False, "message": "%s has no matching status." % name}
+        return {"ok": True, "kind": "status", "removed": removed,
+                "message": "Removed %d status effect%s from %s." % (
+                    len(removed), "" if len(removed) == 1 else "s", name)}
+    return {"ok": False, "message": "That item cannot be mixed."}
+
+
+def apply_friendly(session, target, spec: dict) -> dict:
+    """Dispatch a friendly item to a player session or a Trust entity."""
+    if hasattr(target, "char"):
+        return apply_mix(session, target, spec)
+    return apply_mix_entity(session, target, spec)
+
+
+def target_id(target) -> int:
+    """The action-result id for a player session or world entity."""
+    if hasattr(target, "char"):
+        return int(target.char["char_id"])
+    return int(getattr(target, "id", 0))
+
+
+def target_name(target) -> str:
+    if hasattr(target, "char"):
+        return str(target.char.get("name", "Target"))
+    return str(getattr(target, "name", "Target"))
+
+
+def target_pos(target) -> tuple[float, float, float]:
+    if hasattr(target, "pos"):
+        return tuple(float(value) for value in target.pos[:3])
+    return (float(getattr(target, "x", 0.0)), float(getattr(target, "y", 0.0)),
+            float(getattr(target, "z", 0.0)))
+
+
 def _status_ids(raw) -> list[int]:
     if isinstance(raw, (list, tuple)):
         values = raw
@@ -691,11 +889,10 @@ def craft_reagent_summary(service, item_id: int) -> str:
 def synthesis_packet_values(item_id: int) -> tuple[int, int]:
     """(action id, animation) for a synthesis action.
 
-    The client has no spell record for a synthetic synthesis, so use a reserved
-    id and the item's Toss animation; the HUD reads the real progress from the
-    server state.
+    The client has no spell record for a synthetic synthesis, so use the
+    synthesis pose; the HUD reads the real progress from the server state.
     """
-    return int(item_id), 186
+    return int(item_id), CRAFT_ANIMATION
 
 
 def is_chemist(session) -> bool:

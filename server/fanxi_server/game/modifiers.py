@@ -283,13 +283,15 @@ TAME = 304
 # Chemist (job 23).  Ids 1300+ are unused in the current item data.  ALCHEMY_SKILL is
 # a flat skill bonus; CHEMISTRY_CAST is a signed millisecond adjustment on a synthesis
 # (the ultimate shield is -10000); CHEMISTRY_POTENCY is hundredths of a percent, the
-# same unit as the other potency lines; the remaining three are flat.
+# same unit as the other potency lines; CRAFT_SKILL is a flat bonus to every craft
+# skill (the Brewer's Escutcheon); the remaining lines are flat.
 ALCHEMY_SKILL = 1300
 CHEMISTRY_CAST = 1301
 CHEMISTRY_POTENCY = 1302
 CHEMISTRY_BAG_SLOTS = 1303
 CHEMISTRY_RESTOCK_CHANCE = 1304
 CHEMISTRY_RADIUS = 1305
+CRAFT_SKILL = 1306
 
 
 def percent(value: int) -> float:

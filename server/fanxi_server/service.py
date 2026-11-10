@@ -1537,7 +1537,15 @@ class FanxiService:
         values = {int(row["skill_id"]): int(row["value"]) for row in self.db.all(
             "SELECT skill_id, value FROM char_craft WHERE character_id = ?",
             (int(character_id),))}
-        return [{"skill_id": skill_id, "name": name, "value": values.get(skill_id, 0)}
+        # A crafting shield can carry every craft skill at once.  The Chemist's
+        # Brewer's Escutcheon is the first item to use this line; the client's skill
+        # page and the Chemist's Alchemy gate read the same bonus.
+        try:
+            bonus = int(self.equipped_mods(int(character_id)).get(mod.CRAFT_SKILL, 0))
+        except Exception:
+            bonus = 0
+        return [{"skill_id": skill_id, "name": name,
+                 "value": max(0, min(CRAFT_MAX, values.get(skill_id, 0) + bonus))}
                 for skill_id, name in CRAFT_SKILLS]
 
     def set_craft_skills(self, character_id: int, values: dict) -> list[dict]:
@@ -1667,6 +1675,12 @@ class FanxiService:
         conn.execute(
             "INSERT OR IGNORE INTO character_jobs (character_id, job, level, master_level) "
             "VALUES (?, ?, 1, 0)", (next_id, int(fields["main_job"])))
+        # A character starts with the whole Chemist recipe book.  The table exists
+        # once migration 0194 has run; unlike the job row this is content, not a
+        # level unlock, so it does not depend on which job was picked.
+        conn.execute(
+            "INSERT OR IGNORE INTO char_chemist_recipes (character_id, item_id, learned_at) "
+            "SELECT ?, item_id, datetime('now') FROM chemist_recipes", (next_id,))
         return next_id
 
     def create_character(self, account_id: int, data: dict) -> dict:

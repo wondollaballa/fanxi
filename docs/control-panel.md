@@ -552,6 +552,9 @@ uses — and draws:
   recast clocks. The five are above the retail ability table's end (ids 395–399), so the HUD
   supplies their names and sends the matching `//chm` command; the server still enforces the
   main job, level, range, bag and recast.
+- A **Mix** button that opens the learned recipe list. Clicking a recipe starts its
+  synthesis with `//chm craft <id>`; a Chemistry Toolkit pays the reagent bill and the
+  row's tooltip shows missing crystals or Alchemy.
 - The Battle Bag rows with quantity and the selected marker; clicking a row selects it
   (`//chm select`).
 - The Catalyst/Amplify/Volatile windows with the seconds left.

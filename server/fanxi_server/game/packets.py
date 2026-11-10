@@ -81,6 +81,7 @@ MAGIC_CAST_SUMMON = 0x6D736163  # "casm"
 MAGIC_CAST_BLUE = 0x6C626163    # "cabl"
 # The action id on a weapon skill's start packet (LandSandBoat's FourCC::SkillUse).
 ACTION_SKILL_USE = 0x65746163    # "cate"
+ACTION_SKILL_INTERRUPT = 0x65747073  # "spte"
 MAGIC_CAST_GEOMANCY = 0x65676163  # "cage"
 MAGIC_CAST_TRUST = 0x61666163    # "cafa", the Trust magic cast 4CC
 

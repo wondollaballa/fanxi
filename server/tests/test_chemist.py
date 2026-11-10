@@ -176,6 +176,66 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(int(body[0x44 + 23]), 99)
         self.assertEqual(int(body[0x68 + 23]), 0)
 
+    def test_mix_uses_the_synthesis_pose(self):
+        self.assertEqual(int(self.service.job_ability(chemist.MIX)["animation"]),
+                         chemist.CRAFT_ANIMATION)
+        self.assertEqual(chemist.CRAFT_ANIMATION, 44)
+
+    def test_all_recipes_are_learned(self):
+        learned = chemist.learned_recipes(self.service, int(self.character["id"]))
+        self.assertEqual(len(learned), 8)
+        self.assertEqual({int(row["item_id"]) for row in learned},
+                         set(range(30000, 30008)))
+
+    def test_toolkit_pays_a_recipe_and_is_consumed(self):
+        self.give_bag(30000, 0, 2)
+        self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 99)
+        result = chemist.craft(self.service, int(self.character["id"]), 30000)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["toolkit_used"])
+        self.assertEqual(self.bag_quantity(30000), 3)
+        self.assertEqual(chemist.toolkit_count(
+            self.service, int(self.character["id"])), 98)
+
+    def test_craft_creates_the_bag_slot(self):
+        result = chemist.ensure_bag_slot(self.service, self.session.char, 30000)
+        self.assertTrue(result["ok"])
+        self.assertEqual(self.bag_quantity(30000), 0)
+        self.assertEqual(self.session.chemist_report()["toolkits"], 0)
+
+    def test_brewer_shield_grants_all_craft_skills(self):
+        self.service.add_item(int(self.character["id"]), 26457, 1)
+        row = next(row for row in self.service.inventory(int(self.character["id"]))
+                   if int(row["item_id"]) == 26457 and int(row["container"]) == 0)
+        self.db.execute(
+            "INSERT OR REPLACE INTO char_equip "
+            "(character_id, kind, container, slot, item_id) VALUES (?, 1, 0, ?, 26457)",
+            (int(self.character["id"]), int(row["slot"])))
+        crafts = self.service.crafts_for_character(int(self.character["id"]))
+        self.assertTrue(all(int(row["value"]) == 100 for row in crafts))
+        self.assertEqual(chemist.alchemy_skill(
+            self.service, int(self.character["id"])), 100)
+        self.assertEqual(
+            chemist.craft_cast_ms(self.service, int(self.character["id"]), 30000), 2000)
+
+    def test_chm_craft_starts_the_mix_synthesis_and_uses_a_toolkit(self):
+        self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)
+        self.session.queue.clear()
+        self.session.chemist_command(["craft", "Aqua Regia"])
+        self.assertIsNotNone(self.session.casting)
+        self.assertEqual(self.session.casting["chemist"], 30000)
+        self.session.casting["finish"] = time.time() - 1
+        self.session.resolve_casting(time.time())
+        self.assertEqual(self.bag_quantity(30000), 3)
+        self.assertEqual(chemist.toolkit_count(
+            self.service, int(self.character["id"])), 0)
+
+    def test_recipes_reach_the_hud_report(self):
+        report = self.session.chemist_report()
+        self.assertEqual(report["toolkits"], 0)
+        self.assertEqual(len(report["recipes"]), 8)
+        self.assertTrue(all(row["craftable"] is False for row in report["recipes"]))
+
     def test_command_data_carries_the_custom_ability_ids(self):
         self.session.char.setdefault("jobs", {})[23] = (99, 0)
         bits = bytes(self.session.char_abilities()[4:])
@@ -325,6 +385,44 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(int(state["potency"]), 15)
         self.assertEqual(self.session._chemist_volatile_until, 0.0)
 
+    def test_toss_on_self_uses_a_potion(self):
+        self.session.char["hp_current"] = 1000
+        self.give_bag(4112, 10, 1)
+        self.use(chemist.TOSS, 0x400)
+        self.assertEqual(int(self.session.char["hp_current"]), 1105)
+        self.assertEqual(self.bag_quantity(4112), 9)
+
+    def test_toss_on_a_party_member_uses_a_potion(self):
+        other = self.party_with()
+        other.char["hp_current"] = 1000
+        other.pos = list(self.session.pos)
+        self.give_bag(4112, 10, 1)
+        self.use(chemist.TOSS, other.targid)
+        self.assertEqual(int(other.char["hp_current"]), 1105)
+        self.assertEqual(self.bag_quantity(4112), 9)
+
+    def test_toss_on_a_trust_uses_a_potion(self):
+        self.enter()
+        trust = self.world.spawn_trust(self.session, self.service.trust(981))
+        self.assertIsNotNone(trust)
+        trust.hp = 100
+        self.give_bag(4112, 10, 1)
+        self.use(chemist.TOSS, trust.targid)
+        self.assertGreater(int(trust.hp), 100)
+        self.assertEqual(self.bag_quantity(4112), 9)
+
+    def test_toss_refuses_a_non_party_player(self):
+        account = self.service.register("stranger", "password123").account
+        row = self.service.create_character(account["id"], {"name": "Stranger", "race": 1})
+        other = self.make_session(row, "Stranger", targid=0x401)
+        other.char["hp_current"] = 1000
+        other.pos = list(self.session.pos)
+        self.world.sessions[("127.0.0.1", 4321)] = other
+        self.give_bag(4112, 10, 1)
+        self.use(chemist.TOSS, other.targid)
+        self.assertEqual(int(other.char["hp_current"]), 1000)
+        self.assertEqual(self.bag_quantity(4112), 10)
+
     def test_mix_heals_and_consumes_one_charge(self):
         self.session.char["hp_current"] = 1000
         self.give_bag(4112, 10, 1)
@@ -392,6 +490,19 @@ class ChemistTest(unittest.TestCase):
         self.service.add_item(int(self.character["id"]), 4101, 1)
         self.session._chemist_start_synthesis(30000, time.time())
         self.assertIsNone(self.session.casting)
+
+    def test_ko_shows_the_body_and_auto_homes_after_an_hour(self):
+        now = time.time()
+        self.session.char["hp_current"] = 0
+        self.session.hit_zero_hp(now)
+        self.assertEqual(self.session.dead_until, float("inf"))
+        self.assertGreater(self.session.ko_home_at, now + 3599)
+        self.assertEqual(self.session.own_animation(), 3)
+        # Let the one-hour deadline pass; the tick returns the body to the Home Point.
+        self.session.ko_home_at = now - 1
+        self.session.tick(time.time())
+        self.assertEqual(self.session.dead_until, 0.0)
+        self.assertGreater(int(self.session.char["hp_current"]), 0)
 
     def test_sludge_bomb_lowers_evasion(self):
         self.enter()
