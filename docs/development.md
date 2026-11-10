@@ -148,6 +148,9 @@ The admin dashboard can rebuild the app without install.sh: **Rebuild launcher**
 --bundles app` on macOS (`--no-bundle` on Linux), logging to `build/tui-launcher.log`.
 It leaves the app in the checkout's target folder; it does not install it to
 `~/Applications` or restart a running launcher. See [server.md](server.md#local-dashboard).
+**Launch launcher** (`O`, or `./tools/fanxi_tui.py --launch-launcher`) is the one-button
+version: it pulls the checkout, rebuilds only when the sources moved, then restarts the app
+from this checkout.
 
 ## Client build
 

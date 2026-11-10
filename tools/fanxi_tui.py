@@ -8,6 +8,7 @@ Run it on the machine you administer *from* (your Mac), not on the server:
     ./tools/fanxi_tui.py --deploy        # the deploy sequence, no curses
     ./tools/fanxi_tui.py --rebuild       # rebuild the local client, no curses
     ./tools/fanxi_tui.py --rebuild-launcher  # rebuild the Rust + Tauri launcher, no curses
+    ./tools/fanxi_tui.py --launch-launcher   # pull, rebuild if needed, and open the launcher
 
 The menu is navigable with the arrow keys and Enter, a mouse click, or the hotkey in each label.
 The pane beside it explains the selected action and its risk, and every action that changes the
@@ -36,6 +37,8 @@ was built from the sources on disk and rebuild it with the same sequence as the 
 build/tui-build.log; the client that was there is kept as build/fanxi.previous, and put back
 if the link fails. **Rebuild launcher** does the same for launcher-rs with install.sh's own
 steps (`npm ci` when needed, then `npm run tauri build`), logging to build/tui-launcher.log.
+**Launch launcher** pulls the checkout first, rebuilds only when the sources moved, then
+restarts the app from this checkout, so the button hands back the latest launcher.
 """
 from __future__ import annotations
 
@@ -1204,8 +1207,12 @@ def newest_launcher_source(root: Path) -> float:
                     pass
 
     visit(Path(root) / "src", (".ts", ".tsx", ".js", ".jsx", ".css", ".html"))
+    visit(Path(root) / "public", (".html", ".css", ".js", ".json", ".png", ".svg"))
     visit(Path(root) / "src-tauri" / "src", (".rs",))
+    visit(Path(root) / "src-tauri" / "capabilities", (".json",))
     visit(Path(root) / "src-tauri" / "icons", (".png", ".icns", ".ico", ".svg"))
+    # The bundle carries the checkout's gearswap library; a change there is a new bundle too.
+    visit(Path(root).parent / "gearswap", (".lua", ".json", ".txt"))
     for name in (
         "package.json", "package-lock.json", "index.html", "vite.config.ts", "vite.config.js",
         "tsconfig.json", "tsconfig.node.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock",
@@ -1378,6 +1385,189 @@ def build_launcher(config: dict, emit, *, progress: bool = False, should_stop=No
     return True
 
 
+def git_head(repository: Path) -> str:
+    """The short commit of the checkout, or '' when git cannot answer."""
+    try:
+        done = subprocess.run(
+            ["git", "-C", str(repository), "rev-parse", "--short", "HEAD"],
+            capture_output=True, text=True, timeout=15,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return ""
+    return done.stdout.strip() if done.returncode == 0 else ""
+
+
+def git_pull_latest(repository: Path, emit, should_stop=None,
+                    log_path: Path | None = None) -> bool:
+    """git pull --ff-only in the checkout, with the same streaming and cancel as a build."""
+    if not (Path(repository) / ".git").exists():
+        emit(f"{repository} is not a git checkout; cannot grab the latest")
+        return False
+    if not shutil.which("git"):
+        emit("git is not on PATH; cannot grab the latest")
+        return False
+    code = local_run(["git", "pull", "--ff-only"], Path(repository), emit,
+                     env={"GIT_TERMINAL_PROMPT": "0"},
+                     should_stop=should_stop, log_path=log_path)
+    if code == 130:
+        emit("launch cancelled")
+        return False
+    if code != 0:
+        emit("could not pull the latest — commit or stash local changes, or set the branch's "
+             "upstream")
+        return False
+    return True
+
+
+def launcher_processes(repository: Path | None) -> list[int]:
+    """PIDs of launcher processes started from this checkout (not an installed copy)."""
+    root = launcher_root(repository)
+    if root is None:
+        return []
+    artifact, kind = launcher_artifact(root)
+    executable = str(launcher_executable(root, artifact, kind))
+    release = str(Path(root) / "src-tauri" / "target" / "release" / "fanxi-launcher")
+    targets = [executable] if executable == release else [executable, release]
+    try:
+        rows = subprocess.run(["ps", "-eo", "pid=,args="], capture_output=True, text=True,
+                              timeout=10).stdout.splitlines()
+    except (OSError, subprocess.TimeoutExpired):
+        return []
+    found = []
+    for row in rows:
+        parts = row.strip().split(None, 1)
+        if len(parts) != 2:
+            continue
+        pid, args = parts
+        if any(target in args for target in targets):
+            try:
+                found.append(int(pid))
+            except ValueError:
+                pass
+    return found
+
+
+def stop_launcher(repository: Path, emit) -> bool:
+    """Quit a launcher running from this checkout so the freshly built app is the one that runs."""
+    pids = launcher_processes(repository)
+    if not pids:
+        emit("launcher is not running")
+        return True
+    emit(f"stopping the running launcher ({len(pids)} process{'es' if len(pids) != 1 else ''})…")
+    for pid in pids:
+        try:
+            os.kill(pid, signal.SIGTERM)
+        except OSError:
+            pass
+    deadline = time.time() + 8
+    while time.time() < deadline and launcher_processes(repository):
+        time.sleep(0.25)
+    remaining = launcher_processes(repository)
+    for pid in remaining:
+        try:
+            os.kill(pid, signal.SIGKILL)
+        except OSError:
+            pass
+    if remaining:
+        time.sleep(0.5)
+    if launcher_processes(repository):
+        emit("the running launcher did not stop — quit it and press Launch launcher again")
+        return False
+    return True
+
+
+def open_launcher(repository: Path, emit) -> bool:
+    """Open the built app (macOS) or release binary (Linux) and wait for its process."""
+    state = launcher_state(repository)
+    if not state.get("exists"):
+        emit("the launcher is not built; use Rebuild launcher first")
+        return False
+    artifact = Path(state["artifact"])
+    if sys.platform == "darwin":
+        try:
+            done = subprocess.run(["open", str(artifact)], capture_output=True, text=True,
+                                  timeout=30)
+        except (OSError, subprocess.TimeoutExpired) as error:
+            emit(f"could not open the launcher: {error}")
+            return False
+        if done.returncode != 0:
+            emit(f"could not open the launcher: {done.stderr.strip() or done.returncode}")
+            return False
+    else:
+        try:
+            subprocess.Popen([str(artifact)], cwd=str(artifact.parent), stdin=subprocess.DEVNULL,
+                             stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                             start_new_session=True)
+        except OSError as error:
+            emit(f"could not start the launcher: {error}")
+            return False
+    deadline = time.time() + 8
+    while time.time() < deadline and not launcher_processes(repository):
+        time.sleep(0.2)
+    pids = launcher_processes(repository)
+    if not pids:
+        emit("the launcher did not appear within 8 s; open it by hand and check its log")
+        return False
+    emit(f"launcher running (pid {pids[0]})")
+    return True
+
+
+def launch_latest_launcher(config: dict, emit, *, should_stop=None,
+                           repo: Path | str | None = None) -> bool:
+    """Pull the checkout, rebuild the launcher when the sources moved, then start that app.
+
+    This is the one-button version of `git pull`, **Rebuild launcher** and opening the app:
+    the running launcher from this checkout is quit first, so the binary that comes back is
+    the one just built (or the one already on disk when nothing changed).
+    """
+    if os.name == "nt":
+        emit("the local launcher flow supports macOS and Linux")
+        return False
+    repository = Path(repo).resolve() if repo else resolve_repo(config)
+    if repository is None:
+        emit(f"no Fanxi checkout found: set \"repo\" in {CONFIG_PATH} or FANXI_REPO_ROOT")
+        return False
+    root = launcher_root(repository)
+    if root is None:
+        emit(f"{repository} has no launcher-rs checkout")
+        return False
+    log_path = repository / "build" / LAUNCHER_LOG
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write("\n# --- launch launcher (latest) %s ---\n"
+                      % time.strftime("%Y-%m-%d %H:%M:%S"))
+    except OSError:
+        pass
+
+    emit(f"checkout    {repository}")
+    before = git_head(repository)
+    if before:
+        emit(f"commit      {before}")
+    if not git_pull_latest(repository, emit, should_stop=should_stop, log_path=log_path):
+        return False
+    after = git_head(repository)
+    if before and after and before != after:
+        emit(f"updated     {before} → {after}")
+    else:
+        emit("already up to date")
+
+    state = launcher_state(repository)
+    if not state.get("exists") or state.get("stale"):
+        emit(f"launcher {launcher_summary(state)}; building the latest…")
+        if not build_launcher(config, emit, should_stop=should_stop, repo=repository):
+            return False
+    else:
+        emit(f"launcher {launcher_summary(state)}; no rebuild needed")
+
+    if not stop_launcher(repository, emit):
+        return False
+    if not open_launcher(repository, emit):
+        return False
+    emit("launcher opened — latest")
+    return True
+
+
 # --- terminal UI -----------------------------------------------------------------------------
 
 
@@ -1437,6 +1627,18 @@ ACTIONS = [
         "and the Tauri build packages (Xcode command line tools on macOS, WebKitGTK 4.1 on "
         "Linux). The first run may execute npm ci and use the network. q cancels a build in "
         "progress.",
+        confirm=True,
+    ),
+    Action(
+        "O",
+        "Launch launcher",
+        "Grabs the latest: git pull --ff-only in this checkout, rebuilds launcher-rs when the "
+        "sources are newer than the built app, then quits any launcher running from the checkout "
+        "and opens the new app. This is Rebuild launcher plus the update and the launch; the "
+        "server and build/fanxi are not touched.",
+        "Pulls the checkout and may compile Rust for several minutes. The running launcher is "
+        "restarted (its game clients keep running; unsaved launcher state is lost). Needs network "
+        "and Node 18+/Rust 1.85+ if a rebuild is needed. q cancels a pull or build.",
         confirm=True,
     ),
     Action(
@@ -1816,6 +2018,7 @@ class Dashboard:
             "d": self.do_deploy,
             "B": self.do_rebuild,
             "L": self.do_rebuild_launcher,
+            "O": self.do_launch_launcher,
             "R": self.do_restart,
             "b": self.do_backup,
             "p": self.do_pull,
@@ -1958,6 +2161,28 @@ class Dashboard:
             self.message = "launcher rebuilt — restart it to use the new app"
         else:
             self.message = "LAUNCHER BUILD FAILED — see the output (and build/tui-launcher.log)"
+
+    def do_launch_launcher(self) -> None:
+        repo = resolve_repo(self.config)
+        if repo is None:
+            self.say(f"no Fanxi checkout found: set \"repo\" in {CONFIG_PATH} or FANXI_REPO_ROOT")
+            self.message = "launch cancelled"
+            return
+        self.say("— launch launcher, latest —")
+        self.message = "grabbing the latest and launching the launcher…"
+        self.building = True
+        self.last_progress = 0.0
+        self.screen.timeout(0)
+        try:
+            ok = launch_latest_launcher(self.config, self.build_line,
+                                        should_stop=self.build_cancelled, repo=repo)
+        finally:
+            self.building = False
+            self.screen.timeout(1000)
+        if ok:
+            self.message = "launcher launched — latest"
+        else:
+            self.message = "LAUNCH FAILED — see the output (and build/tui-launcher.log)"
 
     def build_line(self, line: str) -> None:
         """One line of the build: progress markers update the message, the rest is output."""
@@ -2340,8 +2565,10 @@ def main(argv: list[str]) -> int:
                         help="rebuild the local client (build/fanxi), no curses")
     parser.add_argument("--rebuild-launcher", action="store_true",
                         help="rebuild the Rust + Tauri launcher in launcher-rs, no curses")
+    parser.add_argument("--launch-launcher", action="store_true",
+                        help="pull the latest, rebuild the launcher if needed, and open it")
     parser.add_argument("--game", help="the FINAL FANTASY XI folder for --rebuild")
-    parser.add_argument("--repo", help="the Fanxi checkout to build for --rebuild / --rebuild-launcher")
+    parser.add_argument("--repo", help="the Fanxi checkout for the local build/launch actions")
     parser.add_argument("--setup", action="store_true", help="write ~/.fanxi-manager.json")
     parser.add_argument("--config", help="path to the settings file")
     args = parser.parse_args(argv)
@@ -2351,7 +2578,8 @@ def main(argv: list[str]) -> int:
         CONFIG_PATH = Path(args.config).expanduser()
 
     config = load_config()
-    interactive = not (args.status or args.deploy or args.rebuild or args.rebuild_launcher)
+    interactive = not (args.status or args.deploy or args.rebuild
+                       or args.rebuild_launcher or args.launch_launcher)
     if args.setup or (interactive and not CONFIG_PATH.is_file()):
         config = setup(config)
     elif not CONFIG_PATH.is_file():
@@ -2369,6 +2597,8 @@ def main(argv: list[str]) -> int:
         return 0 if build_client(config, lambda line: print(line, flush=True)) else 1
     if args.rebuild_launcher:
         return 0 if build_launcher(config, lambda line: print(line, flush=True)) else 1
+    if args.launch_launcher:
+        return 0 if launch_latest_launcher(config, lambda line: print(line, flush=True)) else 1
     try:
         curses.wrapper(lambda screen: Dashboard(screen, config).run())
     except KeyboardInterrupt:

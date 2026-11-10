@@ -390,6 +390,7 @@ client and launcher built on that machine and rebuilds them.
 | `d` | deploy: backup, `git pull`, restart (applies migrations), verify `schema_migrations`, health check, offer rollback |
 | `B` | rebuild the local client: `.venv` when missing, `tools/prepare.py` when the game folder changed, `tools/build_posix.py host64`, with the compile's progress in the output pane (`q` cancels) |
 | `L` | rebuild the Rust + Tauri launcher: `npm ci` when the packages are missing or stale, then `npm run tauri build -- --bundles app` (macOS) or `--no-bundle` (Linux), streaming into the output pane (`q` cancels) |
+| `O` | launch the launcher from the latest checkout: `git pull --ff-only`, rebuild it when the sources moved, quit the running copy and open the app |
 | `R` | restart the service |
 | `b` | take a backup on the server |
 | `p` | pull the latest backup home (the homelab job, run by hand) |
@@ -430,6 +431,11 @@ or `--no-bundle` on Linux. The output streams into the pane, cancelling with `q`
 `build/tui-launcher.log`. It does not copy the app to `~/Applications` or restart a running
 launcher; `--status` reports the build's version and whether the sources are newer.
 
+**Launch launcher** (`O`, or `--launch-launcher`) is the one-button version: it runs
+`git pull --ff-only`, rebuilds only when the pulled sources are newer than the built app, then
+stops any launcher running from this checkout and opens the new app. The game clients the
+launcher started keep running; the launcher itself is the thing that restarts.
+
 If the dashboard was started by an Intel or Anaconda python, it runs under Rosetta on Apple
 silicon. A universal binary such as `/usr/bin/clang` then takes the caller's architecture
 preference and would build the whole client x86_64 — including a link against the native objects
@@ -450,17 +456,19 @@ The first run asks for the ssh destination, the checkout path and the launcher U
 `FANXI_SSH_KEY` override it; `FANXI_GAME_DIR` and `FANXI_REPO_ROOT` override the local client
 paths described above.
 
-Four non-interactive modes use the same code, so they can be scripted:
+Five non-interactive modes use the same code, so they can be scripted:
 
 ```bash
 ./tools/fanxi_tui.py --status            # the report, no curses
 ./tools/fanxi_tui.py --deploy            # the deploy sequence, exit 1 on failure
 ./tools/fanxi_tui.py --rebuild           # the local client build, no curses
 ./tools/fanxi_tui.py --rebuild-launcher  # the launcher build, no curses
+./tools/fanxi_tui.py --launch-launcher   # pull, rebuild if needed, open the launcher
 ```
 
 `--rebuild` takes `--game <FINAL FANTASY XI folder>` and `--repo <checkout>` when discovery would
-pick the wrong one; `--rebuild-launcher` takes `--repo`, and `--status` accepts the same two.
+pick the wrong one; `--rebuild-launcher` and `--launch-launcher` take `--repo`, and `--status`
+accepts the same two.
 
 It uses `ssh -o BatchMode=yes` with your existing key, so it fails fast instead of prompting, and it
 only writes the database through the server's own commands (`db-backup.sh`, `create-admin`,

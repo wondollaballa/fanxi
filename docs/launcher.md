@@ -780,8 +780,13 @@ The admin dashboard can run the same app-only build without install.sh: **Rebuil
 (`L` in `tools/fanxi_tui.py`, or `--rebuild-launcher`) runs `npm ci` when the packages are
 missing or stale, then `npm run tauri build -- --bundles app` on macOS (`--no-bundle` on
 Linux), and leaves the result in the checkout's target folder. It does not copy the app to
-`~/Applications` or restart a launcher that is already open. The bundle carries the `gearswap/` default libraries in
-its Resources folder. `install.sh` builds with `--bundles app` on macOS and `--no-bundle` on Linux,
+`~/Applications` or restart a launcher that is already open.
+
+**Launch launcher** (`O`, or `--launch-launcher`) does the whole job: `git pull --ff-only`,
+a rebuild only when the pulled sources are newer than the built app, then it stops the
+launcher running from this checkout and opens the new one. The game clients keep running.
+
+The bundle carries the `gearswap/` default libraries in its Resources folder. `install.sh` builds with `--bundles app` on macOS and `--no-bundle` on Linux,
 then copies the app to `~/Applications` (or `/Applications` when writable) or writes a desktop
 entry that runs the release binary from the checkout.
 

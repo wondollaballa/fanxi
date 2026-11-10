@@ -639,6 +639,138 @@ class LauncherFlowTest(unittest.TestCase):
         self.assertTrue(any("no launcher-rs checkout" in line for line in dashboard.lines))
 
 
+class LauncherLaunchTest(unittest.TestCase):
+    """The one-button flow: pull the latest, rebuild when needed, restart the app."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.repo, self.launcher = make_launcher(self.root / "repo")
+        self.lines = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def emit(self, line):
+        self.lines.append(str(line))
+
+    def state(self, stale=False):
+        state = TUI.launcher_state(self.repo)
+        if stale:
+            state.update(stale=True, reason="sources are newer")
+        return state
+
+    def run_flow(self, *, pull=True, state=None, build=True, stop=True, opened=True,
+                 before="aaaa", after="bbbb"):
+        order = []
+
+        def record(name, result):
+            order.append(name)
+            return result
+
+        with mock.patch.object(TUI, "resolve_repo", return_value=self.repo), \
+                mock.patch.object(TUI, "git_head", side_effect=[before, after]), \
+                mock.patch.object(TUI, "git_pull_latest",
+                                  side_effect=lambda *a, **k: record("pull", pull)), \
+                mock.patch.object(TUI, "launcher_state",
+                                  return_value=state if state is not None else self.state()), \
+                mock.patch.object(TUI, "build_launcher",
+                                  side_effect=lambda *a, **k: record("build", build)), \
+                mock.patch.object(TUI, "stop_launcher",
+                                  side_effect=lambda *a, **k: record("stop", stop)), \
+                mock.patch.object(TUI, "open_launcher",
+                                  side_effect=lambda *a, **k: record("open", opened)):
+            ok = TUI.launch_latest_launcher({}, self.emit, repo=self.repo)
+        return ok, order
+
+    def test_it_pulls_builds_stops_and_opens(self):
+        ok, order = self.run_flow(state=self.state(stale=True))
+        self.assertTrue(ok)
+        self.assertEqual(order, ["pull", "build", "stop", "open"])
+        self.assertTrue(any("updated" in line and "aaaa" in line for line in self.lines))
+
+    def test_a_current_build_skips_the_rebuild(self):
+        ok, order = self.run_flow(state=self.state())
+        self.assertTrue(ok)
+        self.assertEqual(order, ["pull", "stop", "open"])
+        self.assertTrue(any("no rebuild needed" in line for line in self.lines))
+
+    def test_already_up_to_date_is_reported(self):
+        ok, _ = self.run_flow(state=self.state(), before="aaaa", after="aaaa")
+        self.assertTrue(ok)
+        self.assertTrue(any("already up to date" in line for line in self.lines))
+
+    def test_a_failed_pull_stops_the_flow(self):
+        ok, order = self.run_flow(pull=False)
+        self.assertFalse(ok)
+        self.assertEqual(order, ["pull"])
+
+    def test_a_failed_build_does_not_open(self):
+        ok, order = self.run_flow(state=self.state(stale=True), build=False)
+        self.assertFalse(ok)
+        self.assertEqual(order, ["pull", "build"])
+
+    def test_a_launcher_that_will_not_stop_does_not_open(self):
+        ok, order = self.run_flow(state=self.state(stale=True), stop=False)
+        self.assertFalse(ok)
+        self.assertEqual(order, ["pull", "build", "stop"])
+
+    def test_a_launcher_that_does_not_appear_is_an_error(self):
+        ok, order = self.run_flow(state=self.state(), opened=False)
+        self.assertFalse(ok)
+        self.assertEqual(order, ["pull", "stop", "open"])
+
+    def test_a_checkout_without_launcher_rs(self):
+        empty = self.root / "empty"
+        empty.mkdir()
+        with mock.patch.object(TUI, "resolve_repo", return_value=empty):
+            self.assertFalse(TUI.launch_latest_launcher({}, self.emit))
+        self.assertTrue(any("no launcher-rs checkout" in line for line in self.lines))
+
+    def test_processes_from_this_checkout_are_found(self):
+        artifact, kind = TUI.launcher_artifact(self.launcher)
+        executable = str(TUI.launcher_executable(self.launcher, artifact, kind))
+        ps = "\n".join([
+            f" 123 {executable} --flag",
+            " 456 /Applications/Other.app/Contents/MacOS/other",
+            " 789 /usr/bin/python3",
+        ])
+        with mock.patch.object(TUI.subprocess, "run",
+                               return_value=types.SimpleNamespace(stdout=ps, returncode=0)):
+            self.assertEqual(TUI.launcher_processes(self.repo), [123])
+
+    def test_git_pull_uses_ff_only(self):
+        (self.repo / ".git").mkdir()
+        commands = []
+
+        def run(command, cwd, emit, **kwargs):
+            commands.append([str(part) for part in command])
+            return 0
+
+        with mock.patch.object(TUI, "local_run", side_effect=run):
+            self.assertTrue(TUI.git_pull_latest(self.repo, self.emit))
+        self.assertEqual(commands, [["git", "pull", "--ff-only"]])
+
+    def test_git_pull_needs_a_checkout(self):
+        self.assertFalse(TUI.git_pull_latest(self.repo, self.emit))
+        self.assertTrue(any("not a git checkout" in line for line in self.lines))
+
+    def test_the_dashboard_action_says_when_the_launcher_was_launched(self):
+        dashboard = TUI.Dashboard.__new__(TUI.Dashboard)
+        dashboard.config = {"repo": ""}
+        dashboard.message = ""
+        dashboard.lines = []
+        dashboard.building = False
+        dashboard.last_progress = 0.0
+        dashboard.draw = lambda: None
+        dashboard.say = lambda text: dashboard.lines.extend(str(text).splitlines())
+        dashboard.screen = types.SimpleNamespace(timeout=lambda seconds: None)
+        with mock.patch.object(TUI, "resolve_repo", return_value=self.repo), \
+                mock.patch.object(TUI, "launch_latest_launcher", return_value=True):
+            dashboard.do_launch_launcher()
+        self.assertEqual(dashboard.message, "launcher launched — latest")
+
+
 class LocalBuildTest(unittest.TestCase):
     """build_client's sequence, with the compiler and the venv stubbed out."""
 
@@ -837,6 +969,15 @@ class LauncherStateTest(unittest.TestCase):
         self.assertTrue(state["stale"])
         self.assertEqual(state["reason"], "sources are newer")
         self.assertIn("stale", TUI.launcher_summary(state))
+
+    def test_a_gearswap_resource_change_makes_it_stale(self):
+        repo, launcher = make_launcher(self.root / "repo")
+        library = repo / "gearswap" / "data" / "default.lua"
+        library.parent.mkdir(parents=True)
+        library.write_text("-- changed")
+        later = time.time() + 60
+        os.utime(library, (later, later))
+        self.assertTrue(TUI.launcher_state(repo)["stale"])
 
     def test_a_checkout_without_launcher_rs(self):
         self.assertEqual(TUI.launcher_state(self.root / "empty"), {})
