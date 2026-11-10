@@ -11631,9 +11631,14 @@ class ZoneSession:
         # 0x030 is the packet that actually starts the client's crafting animation.
         # The status/entity animation bytes alone only carry the pose value; the
         # effect packet is what the client's crafting-animation handler reads.
-        self.queue.append(sub(0x030, packets.synthesis_effect(
+        effect = sub(0x030, packets.synthesis_effect(
             int(self.char["char_id"]), self.targid or TARGID,
-            effect=0x16, status=chemist.CRAFT_ANIMATION)))
+            effect=0x10, status=chemist.CRAFT_ANIMATION))
+        # Keep the crafting-effect packet on its own datagram.  The client's 0x030
+        # handler starts the synthesis motion; sharing a packet with the status /
+        # entity update made it run before those writes were applied.
+        effect.own_packet = True
+        self.queue.append(effect)
         self.world.broadcast_player(self, packets.SEND_HP)
         self.say("You begin synthesizing a restock (%.1fs)." % (cast_ms / 1000.0))
 
