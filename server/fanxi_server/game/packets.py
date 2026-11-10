@@ -117,6 +117,23 @@ def magic_cast_arg(skill: int) -> int:
     return MAGIC_CAST_WHITE
 
 
+def synthesis_effect(unique_no: int, act_index: int, effect: int = 0x16,
+                     status: int = 0, result: int = 0, timer: int = 0) -> bytes:
+    """Body of a 0x030 effect packet for a crafting animation.
+
+    LandSandBoat's ``GP_SERV_COMMAND_EFFECT`` is documented as the packet that
+    sets an entity's crafting animation: UniqueNo, ActIndex, the crystal's
+    elemental effect, the synthesis result, the entity animation (44 = Synth),
+    and a timer.  Sending only 0x037/0x00D set the animation byte but did not
+    make the client play the synthesis motion.
+    """
+    body = bytearray(12)
+    struct.pack_into("<IHHBBH", body, 0, int(unique_no) & 0xFFFFFFFF,
+                     int(act_index) & 0xFFFF, int(effect) & 0xFFFF,
+                     int(result) & 0xFF, int(status) & 0xFF, int(timer) & 0xFFFF)
+    return bytes(body)
+
+
 def magic_interrupt_arg(skill: int) -> int:
     """The 4CC a Magic Interrupt carries for a spell of this skill.
 

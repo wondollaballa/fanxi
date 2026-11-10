@@ -11534,6 +11534,12 @@ class ZoneSession:
         # synthesis; MagicStart made the client play Protect and MagicFinish made it
         # play the erase-looking action at the end.
         self.queue += [self.char_status(), self.char_update(packets.SEND_HP)]
+        # 0x030 is the packet that actually starts the client's crafting animation.
+        # The status/entity animation bytes alone only carry the pose value; the
+        # effect packet is what the client's crafting-animation handler reads.
+        self.queue.append(sub(0x030, packets.synthesis_effect(
+            int(self.char["char_id"]), self.targid or TARGID,
+            effect=0x16, status=chemist.CRAFT_ANIMATION)))
         self.world.broadcast_player(self, packets.SEND_HP)
         self.say("You begin synthesizing a restock (%.1fs)." % (cast_ms / 1000.0))
 

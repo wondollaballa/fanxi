@@ -273,6 +273,9 @@ class ChemistTest(unittest.TestCase):
         self.assertIsNotNone(self.session.casting)
         self.assertGreater(self.session.synth_until, time.time())
         self.assertEqual(self.session.own_animation(), chemist.CRAFT_ANIMATION)
+        effects = [m for m in self.session.queue if (m[0] & 0x1FF) == 0x030]
+        self.assertTrue(effects, "the synth start must queue the crafting effect packet")
+        self.assertEqual(effects[-1][13], chemist.CRAFT_ANIMATION)
         self.session.casting["finish"] = time.time() - 1
         self.session.resolve_casting(time.time())
         self.assertEqual(self.session.synth_until, 0.0)
