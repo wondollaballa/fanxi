@@ -19326,7 +19326,12 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
         {
             node->LastAutoSizeTabId = tab_bar->SelectedTabId;
             node->IsMinimized = false;
-            node->AutoSizeRequest = selected->DockRequestedSize;
+            // [Fanxi] Only the height follows the selected tab.  The width belongs to
+            // the player once they resize the group; keep the current width (or the
+            // expanded width a minimized group remembered), never the tab's own width.
+            float width = node->RestoreSize.x > 0.0f ? node->RestoreSize.x :
+                          (node->Size.x > 0.0f ? node->Size.x : selected->DockRequestedSize.x);
+            node->AutoSizeRequest = ImVec2(width, selected->DockRequestedSize.y);
         }
     }
 

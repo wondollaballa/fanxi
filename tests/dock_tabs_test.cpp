@@ -139,7 +139,7 @@ int main()
     check(b && b->DockRequestedSize.x == 520.0f && b->DockRequestedSize.y == 420.0f,
           "window B's own size is captured", "");
     check(dock->VisibleWindow == b, "the last docked tab is selected");
-    check_size(dock, 520, 420, "the group fits the selected tab");
+    check_size(dock, 320, 420, "tab selection adjusts height, keeps the set width");
 
     // A manual resize is the user's until they pick another tab.
     dock->Size = ImVec2(400, 300);
@@ -149,11 +149,11 @@ int main()
 
     focus_window("WindowA");
     run(3);
-    check_size(dock, 320, 220, "selecting tab A fits the group to A");
+    check_size(dock, 400, 220, "selecting tab A keeps the user's width");
 
     focus_window("WindowB");
     run(3);
-    check_size(dock, 520, 420, "selecting tab B fits the group to B");
+    check_size(dock, 400, 420, "selecting tab B keeps the user's width");
 
     // The minimize button sits at the left of the tab bar. Click above the bottom resize
     // border: the group is only a tab bar tall.
@@ -161,7 +161,7 @@ int main()
     const float button_y = dock->Pos.y + 6.0f;
     click_at(button_x, button_y);
     check(dock->IsMinimized, "the tab-bar button minimizes the group");
-    check(dock->RestoreSize.x == 520.0f && dock->RestoreSize.y == 420.0f,
+    check(dock->RestoreSize.x == 400.0f && dock->RestoreSize.y == 420.0f,
           "the group remembers its expanded size", "");
     check(dock->Size.y == ImGui::GetFrameHeight(), "a minimized group is its tab bar",
           "");
@@ -169,20 +169,20 @@ int main()
     focus_window("WindowA");
     run(3);
     check(!dock->IsMinimized, "selecting a tab opens a minimized group");
-    check_size(dock, 320, 220, "the reopened group fits the selected tab");
+    check_size(dock, 400, 220, "the reopened group keeps the user's width");
 
     click_at(button_x, button_y);
     check(dock->IsMinimized, "the group minimizes again");
     click_at(button_x, button_y);
     check(!dock->IsMinimized, "clicking the button again maximizes the group");
-    check_size(dock, 320, 220, "maximizing restores the size the group had");
+    check_size(dock, 400, 220, "maximizing restores the size the group had");
 
     // A tab dragged out of a minimized group must not keep the tab-bar height as its floating
     // size: the action windows cannot be resized by hand.
     click_at(button_x, button_y);
     check(dock->IsMinimized, "the group minimizes before undocking a tab");
     ImGui::DockContextProcessUndockWindow(ImGui::GetCurrentContext(), b, false);
-    check(b->SizeFull.x == 320.0f && b->SizeFull.y == 220.0f,
+    check(b->SizeFull.x == 400.0f && b->SizeFull.y == 220.0f,
           "an undocked tab gets the group's expanded size, not the tab-bar height");
 
     ImGui::DestroyContext();
