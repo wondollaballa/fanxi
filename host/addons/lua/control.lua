@@ -2922,17 +2922,17 @@ local function hud_init()
 -- menu icon (res.menu_icon_rgba), a button that runs /ja, /ma or /ws, and a clock-face cooldown
 -- for abilities and magic. Trust spells live in their own window so the spell list stays usable.
 
-local HUD_FILE_VERSION = 2
-local HUD_GRID_GAP = 6
-local HUD_MAX_BODY_HEIGHT = 420
+HUD_FILE_VERSION = 2
+HUD_GRID_GAP = 6
+HUD_MAX_BODY_HEIGHT = 420
 
-local HUD_COLOR_TEXT = 0
-local HUD_COLOR_BG = 0
-local HUD_COLOR_BORDER = 0
-local HUD_COLOR_ACCENT = 0
-local HUD_COLOR_SHADE = 0
-local HUD_COLOR_WEDGE = 0
-local HUD_COLOR_WHITE = 0
+HUD_COLOR_TEXT = 0
+HUD_COLOR_BG = 0
+HUD_COLOR_BORDER = 0
+HUD_COLOR_ACCENT = 0
+HUD_COLOR_SHADE = 0
+HUD_COLOR_WEDGE = 0
+HUD_COLOR_WHITE = 0
 
 local function hud_color(r, g, b, a)
     return a * 16777216 + b * 65536 + g * 256 + r
@@ -2946,32 +2946,32 @@ HUD_COLOR_SHADE = hud_color(0, 0, 0, 72)
 HUD_COLOR_WEDGE = hud_color(0, 0, 0, 196)
 HUD_COLOR_WHITE = hud_color(255, 255, 255, 255)
 
-local HUD_TYPES = { 'abilities', 'spells', 'trusts', 'weapon_skills' }
-local HUD_TYPE_INFO = {
+HUD_TYPES = { 'abilities', 'spells', 'trusts', 'weapon_skills' }
+HUD_TYPE_INFO = {
     abilities = { title = 'Abilities', default_group = 'job', groups = { 'job', 'type', 'none', 'custom' } },
     spells = { title = 'Spells', default_group = 'type', groups = { 'type', 'skill', 'element', 'none', 'custom' } },
     trusts = { title = 'Trusts', default_group = 'job', groups = { 'job', 'none', 'custom' } },
     weapon_skills = { title = 'Weapon skills', default_group = 'skill', groups = { 'skill', 'none', 'custom' } },
 }
 
-local HUD_DEFAULT_POSITIONS = {
+HUD_DEFAULT_POSITIONS = {
     abilities = { x = 48, y = 80 },
     spells = { x = 48, y = 400 },
     trusts = { x = 900, y = 80 },
     weapon_skills = { x = 900, y = 400 },
 }
 
-local HUD_JOB_ABBR = { 'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK', 'BST', 'BRD', 'RNG',
+HUD_JOB_ABBR = { 'WAR', 'MNK', 'WHM', 'BLM', 'RDM', 'THF', 'PLD', 'DRK', 'BST', 'BRD', 'RNG',
     'SAM', 'NIN', 'DRG', 'SMN', 'BLU', 'COR', 'PUP', 'DNC', 'SCH', 'GEO', 'RUN', 'CHM' }
 
-local HUD_SPELL_MAGIC = {
+HUD_SPELL_MAGIC = {
     [1] = 'White Magic', [2] = 'Black Magic', [3] = 'Summoning', [4] = 'Ninjutsu',
     [5] = 'Bard Song', [6] = 'Blue Magic', [7] = 'Geomancy', [8] = 'Trust',
 }
-local HUD_ELEMENTS = { 'Fire', 'Ice', 'Wind', 'Earth', 'Thunder', 'Water', 'Light', 'Dark' }
+HUD_ELEMENTS = { 'Fire', 'Ice', 'Wind', 'Earth', 'Thunder', 'Water', 'Light', 'Dark' }
 
 -- Weapon skill id bands. 224+ is the prime/extra table, which needs its own map.
-local HUD_WS_RANGES = {
+HUD_WS_RANGES = {
     { 1, 15, 'Hand-to-Hand' }, { 16, 31, 'Dagger' }, { 32, 47, 'Sword' },
     { 48, 63, 'Great Sword' }, { 64, 79, 'Axe' }, { 80, 95, 'Great Axe' },
     { 96, 111, 'Scythe' }, { 112, 127, 'Polearm' }, { 128, 143, 'Katana' },
@@ -2981,7 +2981,7 @@ local HUD_WS_RANGES = {
 
 -- Weapon skill -> its three skillchain resonance ids (1..14; 0 none). Generated from
 -- data/skillchains.json (LandSandBoat weapon_skills.sql and the BGWiki Prime pages).
-local HUD_WS_SC = {
+HUD_WS_SC = {
     [1] = { 8, 0, 0 },
     [2] = { 8, 5, 0 },
     [3] = { 2, 0, 0 },
@@ -3198,7 +3198,7 @@ local HUD_WS_SC = {
 }
 
 -- fTP anchors at 1000/2000/3000 TP and main-hand hits, from data/weapon_skills.json.
-local HUD_WS_STATS = {
+HUD_WS_STATS = {
     [1] = { ftp = { 1, 2.4, 3.4 }, hits = 3 },
     [2] = { ftp = { 1, 1, 1 }, hits = 2 },
     [3] = { ftp = { 1, 1, 1 }, hits = 2 },
@@ -3418,7 +3418,7 @@ local HUD_WS_STATS = {
 }
 
 -- Skillchain resonance ids from the server enum (data/enums/skillchain_type.yaml).
-local HUD_SC_NAMES = {
+HUD_SC_NAMES = {
     'Transfixion', 'Compression', 'Liquefaction', 'Scission', 'Reverberation',
     'Detonation', 'Induration', 'Impaction', 'Gravitation', 'Distortion',
     'Fusion', 'Fragmentation', 'Light', 'Darkness',
@@ -11737,29 +11737,43 @@ end)
 -- Ctrl+H is the same as //hud toggle, with the chat line open or closed.
 if xi.input and xi.input.bind then xi.input.bind(HUD_HOTKEY, '//hud toggle') end
 
--- One control for every HUD window: the action pages, the information hubs, Target
--- Debuffs, Equip View, the Chemist window and the mounted camp HUD all step aside while
--- this is on.  It is a tiny no-title window pinned to the top-right corner, so the
--- restore control is visible even when everything else is gone.
-local function hud_global_minimize(api)
+-- The title-row caret.  Expanded it is a tiny ▼ at the left of the dock tab row;
+-- collapsed it becomes a full row of the window titles, with no window bodies.  This
+-- replaces the old hide-everything button: the tabs stay visible, exactly like a
+-- window title bar, and clicking any title restores the row.
+local function hud_minimize_row(api)
     local state = hud.state
+    local collapsed = state.hud_minimized == true
     local screen_w = select(1, hud_screen_size(api))
-    local label = state.hud_minimized and 'Show all HUD' or 'Minimize all HUD'
-    local width = 116
-    api.SetNextWindowPos({ math.max(4, screen_w - width - 6), 2 }, 1)
-    api.SetNextWindowSize({ width, 26 }, 1)
-    api.SetNextWindowBgAlpha(0.92)
-    -- No title bar, no resize, no move, no scrollbar, no saved/auto size.
-    local open = api.Begin('###fanxi_hud_min', nil, 1 + 4 + 8 + 16 + 64)
+    local width = collapsed and math.max(120, screen_w) or 24
+    api.SetNextWindowPos({ 0, 0 }, 1)
+    api.SetNextWindowSize({ width, 24 }, 1)
+    api.SetNextWindowBgAlpha(collapsed and 0.96 or 0.0)
+    local open = api.Begin('###fanxi_hud_minrow', nil, 1 + 4 + 8 + 16 + 64)
     if open then
         api.PushStyleColor(21, { 0.12, 0.16, 0.22, 1 })
         api.PushStyleColor(22, { 0.18, 0.24, 0.32, 1 })
         api.PushStyleColor(23, { 0.10, 0.13, 0.18, 1 })
-        if api.Button(label, { width - 8, 22 }) then
-            state.hud_minimized = state.hud_minimized ~= true
+        if api.Button(collapsed and '▶' or '▼', { 20, 20 }) then
+            state.hud_minimized = not collapsed
             hud_save(state, hud.path)
+            collapsed = state.hud_minimized
         end
         api.PopStyleColor(3)
+        if collapsed then
+            local titles = {
+                'Magic Bag', 'Abilities', 'Spells', 'Weapon skills', 'Trusts', 'Stats',
+                'Target Debuffs', 'Chemist', 'Equip View',
+            }
+            for index, title in ipairs(titles) do
+                api.SameLine(0, 2)
+                if api.Button(title .. '##hud-min-' .. index, { 0, 20 }) then
+                    state.hud_minimized = false
+                    hud_save(state, hud.path)
+                    break
+                end
+            end
+        end
     end
     api.End()
 end
@@ -11778,7 +11792,7 @@ function hud.frame()
     if not api then return end
     local state = hud.state
     if state.hud_minimized then
-        hud_global_minimize(api)
+        hud_minimize_row(api)
         return
     end
     local battle_open = hud.battle and hud.battle.visible and hud.battle.visible() or false
@@ -11875,8 +11889,8 @@ function hud.frame()
     end
     -- Last, and opaque: the Done box is the one control that must never be hidden by a window.
     if state.edit then hud_edit_box(api) end
-    -- Draw the global minimizer after every HUD window so it stays on top of the tab row.
-    hud_global_minimize(api)
+    -- Draw the caret/title row last so it sits above the native dock tab row.
+    hud_minimize_row(api)
     if hud.reposition then hud.reposition = false end
     if hud.clamp_positions then hud.clamp_positions = false end
 end
