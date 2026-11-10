@@ -458,7 +458,11 @@ def load_item(service, character: dict, item_id: int, quantity: int = 1) -> dict
     if spec is None:
         return {"ok": False, "message": "That item cannot go in the Battle Bag."}
     if item_id >= CUSTOM_ITEM_BASE:
-        return {"ok": False, "message": "That item has to be synthesized first."}
+        # Elemental animas are custom catalogue items with real inventory stacks.
+        # A bag-only chemistry result still has to be synthesized first.
+        if inventory_quantity(service, character_id, item_id) <= 0:
+            return {"ok": False,
+                    "message": "That item has to be synthesized first."}
     alchemy = alchemy_skill(service, character_id)
     required = int(spec.get("alchemy_req") or 0)
     if alchemy < required:
