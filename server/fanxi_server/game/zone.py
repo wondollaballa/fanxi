@@ -11551,6 +11551,11 @@ class ZoneSession:
             self.say(error)
             return
         self._chemist_friendly_action(ability, chemist.MIX, ally, now, "mix")
+        # Mix has no retail recast field; give it a short haste-scaled lockout so the
+        # capped Haste set actually shortens the ability, not only the synth cast.
+        haste = chemist.haste_percent(self.world.service, int(self.char["id"]))
+        self.ability_recasts[chemist.RECAST_IDS[chemist.MIX]] = (
+            now + 8.0 * (1.0 - haste / 100.0))
 
     def _chemist_craft(self, item_id: int, now: float) -> None:
         """Start a learned recipe from the HUD's Mix picker.

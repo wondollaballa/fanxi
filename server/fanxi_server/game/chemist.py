@@ -577,6 +577,18 @@ def craft(service, character_id: int, item_id: int) -> dict:
                 " with a Chemistry Toolkit" if toolkit_used else "")}
 
 
+def haste_percent(service, character_id: int) -> float:
+    """Capped equipment/magic/ability Haste, as a percentage."""
+    try:
+        mods = service.equipped_mods(int(character_id))
+    except Exception:
+        return 0.0
+    points = (int(mods.get(mod.HASTE_GEAR, 0) or 0)
+              + int(mods.get(mod.HASTE_MAGIC, 0) or 0)
+              + int(mods.get(mod.HASTE_ABILITY, 0) or 0))
+    return max(0.0, min(25.0, points / 100.0))
+
+
 def craft_cast_ms(service, character_id: int, item_id: int) -> int:
     """Synthesis cast time after the ultimate shield's flat reduction.
 
@@ -603,6 +615,8 @@ def craft_cast_ms(service, character_id: int, item_id: int) -> int:
         except Exception:
             log.debug("carried CHEMISTRY_CAST lookup failed", exc_info=True)
     # CHEMISTRY_CAST is a signed millisecond adjustment (the shield is -10000).
+    haste = haste_percent(service, character_id)
+    base = int(base * (1.0 - haste / 100.0))
     return max(1000, base + min(0, reduction))
 
 

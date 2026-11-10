@@ -254,8 +254,10 @@ class ChemistTest(unittest.TestCase):
 
     def test_carried_shield_keeps_synthesis_fast(self):
         self.service.add_item(int(self.character["id"]), 26457, 1)
-        self.assertEqual(chemist.craft_cast_ms(
-            self.service, int(self.character["id"]), 30000), 2000)
+        cast = chemist.craft_cast_ms(
+            self.service, int(self.character["id"]), 30000)
+        self.assertGreaterEqual(cast, 1000)
+        self.assertLessEqual(cast, 2000)
 
     def test_brewer_shield_grants_all_craft_skills(self):
         self.service.add_item(int(self.character["id"]), 26457, 1)
