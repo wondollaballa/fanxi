@@ -19079,6 +19079,10 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
     // [Fanxi] On a floating HUD tab group this button minimizes/maximizes the whole group; the
     // window menu stays available on right-click. Split/dockspace nodes keep the stock menu.
     const bool can_minimize = node->IsLeafNode() && !node->IsDockSpace();
+    // A clipped group is a leaf inside a split parent.  Minimize the whole root so two
+    // side-by-side groups both become their tab rows; minimizing only the child cannot
+    // change the child's height (the parent split owns that axis).
+    ImGuiDockNode* minimize_node = DockNodeGetRootNode(node);
     if (has_window_menu_button)
     {
         bool pressed = false;
@@ -19096,7 +19100,7 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
                 host_window->DrawList->AddRectFilled(bb.Min, bb.Max,
                     GetColorU32((held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button));
             ImU32 icon_col = GetColorU32(ImGuiCol_Text);
-            if (node->IsMinimized)
+            if (minimize_node->IsMinimized)
             {
                 // Maximize: the dock menu's bar at the bottom, chevron pointing up.
                 host_window->DrawList->AddRectFilled(window_menu_button_pos + ImVec2(g.FontSize * 0.20f, g.FontSize * 0.70f),
@@ -19110,20 +19114,20 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
             }
             if (pressed)
             {
-                if (node->IsMinimized)
+                if (minimize_node->IsMinimized)
                 {
-                    node->IsMinimized = false;
+                    minimize_node->IsMinimized = false;
                     ImGuiWindow* selected = FanxiDockNodeFindWindowByTabId(node, tab_bar->SelectedTabId);
-                    if (node->RestoreSize.x > 0.0f && node->RestoreSize.y > 0.0f)
-                        node->AutoSizeRequest = node->RestoreSize;
+                    if (minimize_node->RestoreSize.x > 0.0f && minimize_node->RestoreSize.y > 0.0f)
+                        minimize_node->AutoSizeRequest = minimize_node->RestoreSize;
                     else if (selected)
-                        node->AutoSizeRequest = selected->DockRequestedSize;
+                        minimize_node->AutoSizeRequest = selected->DockRequestedSize;
                 }
                 else
                 {
-                    node->RestoreSize = node->Size;
-                    node->IsMinimized = true;
-                    node->AutoSizeRequest = ImVec2(node->Size.x, GetFrameHeight());
+                    minimize_node->RestoreSize = minimize_node->Size;
+                    minimize_node->IsMinimized = true;
+                    minimize_node->AutoSizeRequest = ImVec2(minimize_node->Size.x, GetFrameHeight());
                 }
             }
             if (IsItemClicked(ImGuiMouseButton_Right))
@@ -19133,7 +19137,7 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
                 StartMouseMovingWindowOrNode(host_window, node, true);
             }
             if (hovered && g.HoveredIdTimer > 0.5f)
-                SetTooltip("%s\nRight-click for the window menu", node->IsMinimized ? "Maximize" : "Minimize");
+                SetTooltip("%s\nRight-click for the window menu", minimize_node->IsMinimized ? "Maximize" : "Minimize");
         }
         else
         {
@@ -19325,13 +19329,14 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
         if (selected && selected->DockRequestedSize.x > 0.0f && selected->DockRequestedSize.y > 0.0f)
         {
             node->LastAutoSizeTabId = tab_bar->SelectedTabId;
-            node->IsMinimized = false;
-            // [Fanxi] Only the height follows the selected tab.  The width belongs to
-            // the player once they resize the group; keep the current width (or the
-            // expanded width a minimized group remembered), never the tab's own width.
-            float width = node->RestoreSize.x > 0.0f ? node->RestoreSize.x :
-                          (node->Size.x > 0.0f ? node->Size.x : selected->DockRequestedSize.x);
-            node->AutoSizeRequest = ImVec2(width, selected->DockRequestedSize.y);
+            // [Fanxi] The root owns the geometry when groups are clipped side by side.
+            // Only the height follows the selected tab; the width stays what the player
+            // chose (or the expanded width a minimized group remembered).
+            ImGuiDockNode* root = DockNodeGetRootNode(node);
+            root->IsMinimized = false;
+            float width = root->RestoreSize.x > 0.0f ? root->RestoreSize.x :
+                          (root->Size.x > 0.0f ? root->Size.x : selected->DockRequestedSize.x);
+            root->AutoSizeRequest = ImVec2(width, selected->DockRequestedSize.y);
         }
     }
 
