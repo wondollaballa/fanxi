@@ -224,7 +224,8 @@ bars of abilities that survive it. The same snapshot is refreshed on every launc
 Control room's counts follow the change even while the windows are hidden.
 
 **The Scholar HUD is the job's own window.** It opens by itself when the job pair has a Scholar
-main **or support** job and does not appear at all on any other pair — a saved "show" from an
+main **or support** job and does not appear at all on any other pair; a Chemist main suppresses it
+even with a Scholar support job, because the Chemist window takes its place — a saved "show" from an
 earlier Scholar main no longer keeps it on a RDM. The Control room's **Scholar** switch, `//hud
 sch` and the window's title-bar X store the choice in the character's HUD file (the job pair still
 gates it). A support Scholar is scaled to its 49 cap: **two** charges instead of five, no job
