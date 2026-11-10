@@ -95,7 +95,8 @@ local function run(command)
 end
 
 local function text(api, color, value)
-    api.TextColored(u32(color or COLORS.text), tostring(value))
+    -- The binding takes the {r,g,b,a} table (u32() is only for PushStyleColor).
+    api.TextColored(color or COLORS.text, tostring(value))
 end
 
 local function button(api, label, color, width, height)

@@ -37,12 +37,16 @@ static const char* const TOP[] = {
     "bags", "magicbag", "stock", "r30",
     "odyssey", "rp30", "augment", "cape", "moghouse", "mh", "reload", "disengage", "gs",
     "follow", "trust", "makeparty", "invite", "battle", "help", "hint", "mount", "mounts",
-    "songs",
+    "songs", "chm",
 };
 /* Server commands that are not completed in chat: `wake` would make `//wa` ambiguous with
  * `//warp`, and both are for the launcher's park/resume path rather than everyday typing.
  * cmd.c still forwards them. */
 static const char* const FORWARD_ONLY[] = { "sleep", "wake" };
+/* The Chemist's chat route: the HUD's ability buttons and Chemistry tiles send these. */
+static const char* const CHM_ACTIONS[] = {
+    "status", "load", "select", "use", "toss", "mix", "catalyst", "amplify", "volatile",
+};
 static const char* const WARP_ACTIONS[] = {
     "mark", "list", "me", "all", "delete", "rename", "help",
 };
@@ -256,6 +260,9 @@ static int command_matches(const char* body, const char* token, size_t token_len
                            token, token_len, output);
         if (equal_ci(first, "job"))
             return collect(JOBS, sizeof JOBS / sizeof *JOBS, token, token_len, output);
+        if (equal_ci(first, "chm"))
+            return collect(CHM_ACTIONS, sizeof CHM_ACTIONS / sizeof *CHM_ACTIONS,
+                           token, token_len, output);
         return 0;
     }
 
@@ -456,6 +463,9 @@ static const Command COMMANDS[] = {
     { "character", "//character model <race> <1-48|random>", "change a character's model" },
     { "job", "//job <job> [sub] | //job <character> <job> <sub>",
       "change a job, yours or a sub-account's" },
+    { "chm", "//chm status | load <item> [qty] | select <item> | use <item> | "
+             "toss | mix | catalyst | amplify | volatile",
+      "the Chemist Battle Bag, Toss/Mix and stances" },
     { "cast", "//cast <spell>", "cast a spell by name" },
     { "ws", "//ws <name>", "a weapon skill by name" },
     { "ja", "//ja <name>", "a job ability by name" },
