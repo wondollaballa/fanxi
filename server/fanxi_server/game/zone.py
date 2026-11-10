@@ -8212,6 +8212,19 @@ class ZoneSession:
                 amount = int(amount * 1.10)
             if self.has_effect(effects.EBULLIENCE):
                 amount = int(amount * 1.20)
+        # Chemist oil / anima: the next matching elemental spell gets +25% and
+        # consumes the coating.  This is deliberately checked after the base nuke
+        # and the generic multipliers, so it is a true final-damage boost.
+        if not healing and int(amount) > 0 and target_sheet is not None:
+            element_id = int(spell.get("element") or 0)
+            for key, element in chemist.OIL_EFFECTS.items():
+                state = target.effect_state.get(key)
+                if (state is not None and float(state.get("until") or 0) > time.time()
+                        and chemist.OIL_ELEMENT_IDS.get(element) == element_id):
+                    amount = int(amount * 1.25)
+                    del target.effect_state[key]
+                    self.say("The %s coating boosts the spell by 25%%." % element)
+                    break
         # Enfeebles share the Magic Accuracy roll: an under-geared caster keeps the
         # effect for less time instead of the spell always landing at full duration.
         resist = 1.0
@@ -11126,10 +11139,14 @@ class ZoneSession:
         # Toss is presented by the /toss emote (0x05A); the ability-result animation
         # field must stay zero or it plays a second, non-toss motion afterwards.
         if int(ability_id) == chemist.TOSS:
-            animation = 0
+            # Engaged, the client suppresses emote motions, so the ability result
+            # itself must carry a battle animation.  186 is the throwing/ranged job
+            # animation used by Toss's data row; out of battle the /toss emote follows
+            # this result and supplies the exact emote motion.
+            animation = 186 if self.engaged_id else 0
             for entry in entries:
                 for result in entry.get("results") or []:
-                    result["animation"] = 0
+                    result["animation"] = animation
         message = sub(0x028, packets.battle_action(
             me, 0, 0, animation=int(animation), kind=2,
             message=packets.MESSAGE_USES_JOB_ABILITY,
@@ -11355,8 +11372,7 @@ class ZoneSession:
                 self.say(result.get("message", "The item has no effect."))
         if not applied:
             return
-        if verb == "toss":
-            consumed = chemist.consume_slot(
+        consumed = chemist.consume_slot(
             self.world.service, int(self.char["id"]), int(slot.item_id))
         if consumed is None:
             log.warning("%s Chemist friendly item lost its bag charge", self.addr)
@@ -11423,6 +11439,31 @@ class ZoneSession:
             return
         self._chemist_friendly_action(ability, chemist.TOSS, target, now, "toss")
 
+    def _chemist_toss_grenade(self, target, now: float) -> None:
+        """Throw a Grenade; a fire oil turns it into a Fire V-scale burst."""
+        oil_key = 2101
+        oil = target.effect_state.pop(oil_key, None)
+        boosted = oil is not None and float(oil.get("until") or 0) > now
+        alchemy = chemist.alchemy_skill(self.world.service, int(self.char["id"]))
+        amount = int((1600 + alchemy * 10) * (1.25 if boosted else 1.0))
+        defeated = int(target.hp) - amount <= 0
+        target.hp = max(0, int(target.hp) - amount)
+        self.world._queue_mob_hp(target)
+        self.world.wake_mob(target)
+        self.world.add_damage_hate(target, int(self.char["char_id"]), amount, now)
+        self._chemist_send_action(chemist.TOSS, 0, [{
+            "target_id": int(target.id),
+            "results": [{
+                "damage": amount, "miss": False, "kind": 0,
+                "animation": 0, "message": packets.MESSAGE_MAGIC_DMG,
+            }],
+        }])
+        self._chemist_toss_emote(target)
+        self.say("The Grenade erupts for %d damage%s." % (
+            amount, " through the fire oil" if boosted else ""))
+        if defeated:
+            self.world.kill_mob(self, target, now)
+
     def _chemist_toss_hostile(self, ability: dict, target, now: float) -> None:
         slot, spec = chemist.choose_bag_item(self, hostile=True)
         if slot is None or spec is None:
@@ -11441,6 +11482,13 @@ class ZoneSession:
         catalyst = float(getattr(self, "_chemist_catalyst_until", 0.0)) > now
         targets = self._chemist_mob_targets(
             target, chemist.cast_radius(self) if catalyst else 0.0)
+        if int(spec.get("effect_key") or 0) == 2105:
+            self._chemist_toss_grenade(target, now)
+            if catalyst:
+                self._chemist_catalyst_until = 0.0
+            if volatile:
+                self._chemist_volatile_until = 0.0
+            return
         entries = []
         landed = 0
         for enemy in targets:

@@ -32,19 +32,19 @@ function get_sets()
     -- Scholar-test accessories.  These are SCH-usable pieces already in Onedough's
     -- bags; the end goal is a Chemist-only set, not best-in-slot.
     local test = {
-        head = "Kaykaus Mitra +1",
-        body = "Kaykaus Bliaut +1",
-        hands = "Kaykaus Cuffs +1",
-        legs = "Kaykaus Tights +1",
-        feet = "Kaykaus Boots +1",
+        head = "Null Masque",
+        body = "Onca Suit",
+        hands = "Scholar's Bracers",
+        legs = "Querkening Brais",
+        feet = "Amalric Nails",
         neck = "Unmoving Collar +1",
-        waist = "Embla Sash",
+        waist = "Cornelia's Belt",
         ear1 = "Hoxne Earring",
         ear2 = "Eabani Earring",
         ring1 = "Stikini Ring +1",
         ring2 = "Epaminondas's Ring",
         back = "Alabaster Mantle",
-        ammo = "Sroda Tathlum",
+        ammo = "Staunch Tathlum +1",
     }
 
     local function with_shield(extra)
@@ -64,14 +64,14 @@ function get_sets()
     sets.engaged.tp = with_shield({ ammo = "Sroda Tathlum" })
 
     -- Precast (including the recipe's client-visible 0x028 job-ability path).
-    sets.precast.FC = with_shield({ waist = "Witful Belt", ear1 = "Loquac. Earring" })
+    sets.precast.FC = with_shield()
     sets.precast = sets.precast.FC
 
     -- SCH-test midcast categories.  Keep the shield on every one.
-    sets.midcast.HealingMagic = with_shield({ neck = "Incanter's Torque" })
-    sets.midcast.EnhancingMagic = with_shield({ waist = "Witful Belt" })
-    sets.midcast.EnfeeblingMagic = with_shield({ neck = "Incanter's Torque" })
-    sets.midcast.ElementalMagic = with_shield({ neck = "Incanter's Torque" })
+    sets.midcast.HealingMagic = with_shield()
+    sets.midcast.EnhancingMagic = with_shield()
+    sets.midcast.EnfeeblingMagic = with_shield()
+    sets.midcast.ElementalMagic = with_shield()
     sets.midcast.DarkMagic = with_shield()
     sets.midcast.DivineMagic = with_shield()
     sets.midcast.SummoningMagic = with_shield()
@@ -88,5 +88,5 @@ function get_sets()
     sets.JA["Volatile Synthesis"] = with_shield()
 
     -- A club weaponskill; useful for testing the rod without losing the shield.
-    sets.WS["Black Halo"] = with_shield({ neck = "Fotia Gorget", waist = "Fotia Belt" })
+    sets.WS["Black Halo"] = with_shield()
 end

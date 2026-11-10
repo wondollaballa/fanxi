@@ -13,6 +13,7 @@ borrowed retail icon and stacking key), because those are protocol semantics.
 from __future__ import annotations
 
 import logging
+import random
 import re
 import time
 from dataclasses import dataclass
@@ -48,6 +49,34 @@ AQUA_REGIA = 2001
 SLUDGE_BOMB = 2002
 AETHER_SPORE = 2003
 VITRIOL = 2010
+
+# Mix quality tiers: NQ, HQ, HQ2, HQ3.  A higher Alchemy skill than the recipe
+# requires raises the roll, but a batch is still capped by the 99-slot stack.
+HQ_YIELDS = (12, 18, 24, 33)
+OIL_EFFECTS = {
+    2101: "fire",
+    2102: "ice",
+    2103: "lightning",
+    2104: "light",
+    2106: "wind",
+    2107: "earth",
+    2108: "water",
+    2109: "dark",
+}
+OIL_ELEMENT_IDS = {
+    "fire": 1, "ice": 2, "wind": 3, "earth": 4,
+    "lightning": 5, "water": 6, "light": 7, "dark": 8,
+}
+OIL_NAMES = {
+    2101: "Oil (fire)",
+    2102: "Oil (ice)",
+    2103: "Oil (lightning)",
+    2104: "Oil (light)",
+    2106: "Oil (wind)",
+    2107: "Oil (earth)",
+    2108: "Oil (water)",
+    2109: "Oil (dark)",
+}
 
 # The first item id used for bag-only chemistry items.  They are not real
 # char_inventory rows, so the client never needs an item record for them.
@@ -518,16 +547,29 @@ def craft(service, character_id: int, item_id: int) -> dict:
                 _take_reagents(conn, character_id, recipe_row["reagents"])
             except ValueError as exc:
                 return {"ok": False, "message": "You are missing a reagent: %s." % exc}
-        yield_value = max(1, min(int(spec.get("bag_stack") or 1),
-                                 int(recipe_row.get("yield") or 1)))
+        gap = max(0, alchemy - required)
+        hq_chance = min(0.60, 0.10 + gap * 0.01)
+        roll = random.random()
+        if roll < hq_chance * 0.05:
+            quality = 3
+        elif roll < hq_chance * 0.20:
+            quality = 2
+        elif roll < hq_chance * 0.50:
+            quality = 1
+        else:
+            quality = 0
+        yield_value = max(1, min(int(spec.get("bag_stack") or 99),
+                                 HQ_YIELDS[quality]))
         conn.execute(
             "UPDATE char_chemist_bag SET quantity = ? "
             "WHERE character_id = ? AND item_id = ?",
             (yield_value, int(character_id), int(item_id)))
+    quality_name = ("HQ%d" % quality) if quality else "NQ"
     return {"ok": True, "item_id": int(item_id), "name": spec["name"],
-            "quantity": yield_value, "toolkit_used": bool(toolkit_used),
-            "message": "Synthesized %d %s%s." % (
-                yield_value, spec["name"],
+            "quantity": yield_value, "quality": quality, "quality_name": quality_name,
+            "toolkit_used": bool(toolkit_used),
+            "message": "Synthesized %s %s x%d%s." % (
+                quality_name, spec["name"], yield_value,
                 " with a Chemistry Toolkit" if toolkit_used else "")}
 
 
@@ -644,6 +686,20 @@ def apply_hostile(session, target, spec: dict, *, volatile: bool = False,
                   duration_scale: float = 1.0, now: float | None = None) -> dict:
     """Apply one hostile chemistry item.  The caller has already rolled the hit."""
     effect_id = int(spec.get("effect_key") or 0)
+    if effect_id in OIL_EFFECTS:
+        now = time.time() if now is None else float(now)
+        element = OIL_EFFECTS[effect_id]
+        duration = max(60.0, float(spec.get("duration") or 300.0))
+        target.effect_state[effect_id] = {
+            "until": now + duration,
+            "element": element,
+            "boost": 25,
+            "name": OIL_NAMES[effect_id],
+        }
+        return {"ok": True, "name": OIL_NAMES[effect_id], "effect_id": effect_id,
+                "icon": 0, "values": {"duration": duration, "potency": 25},
+                "message": "%s: next %s spell +25%% (up to %ds)." % (
+                    OIL_NAMES[effect_id], element.title(), int(duration))}
     info = EFFECTS.get(effect_id)
     if info is None:
         return {"ok": False, "message": "That item has no effect."}

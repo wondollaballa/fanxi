@@ -25,6 +25,10 @@ class ChemistTest(unittest.TestCase):
         self.tmp = tempfile.TemporaryDirectory()
         self.addCleanup(self.tmp.cleanup)
         self.config, self.db, self.service = make_service(Path(self.tmp.name))
+        # Most tests assert the NQ batch; HQ tests replace this return value.
+        self._hq_patch = mock.patch.object(chemist.random, "random", return_value=0.99)
+        self._hq_patch.start()
+        self.addCleanup(self._hq_patch.stop)
         self.account = self.service.register("chm", "password123").account
         self.character = self.service.create_character(
             self.account["id"], {"name": "Chemist", "race": 1, "main_job": 23})
@@ -185,9 +189,11 @@ class ChemistTest(unittest.TestCase):
 
     def test_all_recipes_are_learned(self):
         learned = chemist.learned_recipes(self.service, int(self.character["id"]))
-        self.assertEqual(len(learned), 8)
-        self.assertEqual({int(row["item_id"]) for row in learned},
-                         set(range(30000, 30008)))
+        self.assertEqual(len(learned), 22)
+        expected = set(range(30000, 30008)) | {
+            637, 947, 4509, 18228, 4164, 17313,
+            30008, 30009, 30010, 30011, 30012, 30013, 30014, 30015}
+        self.assertEqual({int(row["item_id"]) for row in learned}, expected)
 
     def test_toolkit_pays_a_recipe_and_is_consumed(self):
         self.give_bag(30000, 0, 2)
@@ -195,7 +201,7 @@ class ChemistTest(unittest.TestCase):
         result = chemist.craft(self.service, int(self.character["id"]), 30000)
         self.assertTrue(result["ok"])
         self.assertTrue(result["toolkit_used"])
-        self.assertEqual(self.bag_quantity(30000), 3)
+        self.assertEqual(self.bag_quantity(30000), 12)
         self.assertEqual(chemist.toolkit_count(
             self.service, int(self.character["id"])), 98)
 
@@ -205,7 +211,7 @@ class ChemistTest(unittest.TestCase):
         result = chemist.craft(self.service, int(self.character["id"]), 30000)
         self.assertTrue(result["ok"])
         self.assertTrue(result["toolkit_used"])
-        self.assertEqual(self.bag_quantity(30000), 3)
+        self.assertEqual(self.bag_quantity(30000), 12)
         self.assertEqual(chemist.toolkit_count(
             self.service, int(self.character["id"])), 0)
 
@@ -281,6 +287,36 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(self.session.synth_until, 0.0)
         self.assertNotEqual(self.session.own_animation(), chemist.CRAFT_ANIMATION)
 
+    def test_mix_hq3_yields_33(self):
+        self.give_bag(30000, 0, 2)
+        self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)
+        with mock.patch.object(chemist.random, "random", return_value=0.0):
+            result = chemist.craft(self.service, int(self.character["id"]), 30000)
+        self.assertTrue(result["ok"])
+        self.assertEqual(result["quality"], 3)
+        self.assertEqual(result["quantity"], 33)
+        self.assertEqual(self.bag_quantity(30000), 33)
+
+    def test_toss_oil_coats_the_mob_for_five_minutes(self):
+        self.enter()
+        self.give_bag(637, 1, 4)
+        mob = self.mob()
+        self.use(chemist.TOSS, mob.targid)
+        state = mob.effect_state.get(2101)
+        self.assertIsNotNone(state)
+        self.assertGreater(float(state["until"]) - time.time(), 290)
+
+    def test_grenade_consumes_fire_oil_for_a_large_hit(self):
+        self.enter()
+        self.give_bag(17313, 1, 4)
+        mob = self.mob()
+        mob.hp = 10000
+        mob.effect_state[2101] = {
+            "until": time.time() + 300, "element": "fire", "boost": 25}
+        self.use(chemist.TOSS, mob.targid)
+        self.assertLess(int(mob.hp), 9000)
+        self.assertNotIn(2101, mob.effect_state)
+
     def test_chm_craft_starts_the_mix_synthesis_and_uses_a_toolkit(self):
         self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)
         self.session.queue.clear()
@@ -289,14 +325,14 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(self.session.casting["chemist"], 30000)
         self.session.casting["finish"] = time.time() - 1
         self.session.resolve_casting(time.time())
-        self.assertEqual(self.bag_quantity(30000), 3)
+        self.assertEqual(self.bag_quantity(30000), 12)
         self.assertEqual(chemist.toolkit_count(
             self.service, int(self.character["id"])), 0)
 
     def test_recipes_reach_the_hud_report(self):
         report = self.session.chemist_report()
         self.assertEqual(report["toolkits"], 0)
-        self.assertEqual(len(report["recipes"]), 8)
+        self.assertEqual(len(report["recipes"]), 22)
         self.assertTrue(all(row["craftable"] is False for row in report["recipes"]))
 
     def test_command_data_carries_the_custom_ability_ids(self):
@@ -575,7 +611,7 @@ class ChemistTest(unittest.TestCase):
         self.assertIsNotNone(self.session.casting)
         self.session.casting["finish"] = time.time() - 1
         self.session.resolve_casting(time.time())
-        self.assertEqual(self.bag_quantity(30000), 3)
+        self.assertEqual(self.bag_quantity(30000), 12)
         self.assertEqual(chemist.inventory_quantity(
             self.service, int(self.character["id"]), 4096), 0)
         self.assertEqual(chemist.inventory_quantity(
