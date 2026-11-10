@@ -586,6 +586,59 @@ class RebuildFlowTest(unittest.TestCase):
         self.assertTrue(dashboard.message.startswith("REBUILD FAILED"))
 
 
+class LauncherFlowTest(unittest.TestCase):
+    """The dashboard action around build_launcher: what it reports and when it builds."""
+
+    def dashboard(self):
+        dashboard = TUI.Dashboard.__new__(TUI.Dashboard)
+        dashboard.config = {"repo": ""}
+        dashboard.message = ""
+        dashboard.lines = []
+        dashboard.building = False
+        dashboard.last_progress = 0.0
+        dashboard.draw = lambda: None
+        dashboard.say = lambda text: dashboard.lines.extend(str(text).splitlines())
+        dashboard.screen = types.SimpleNamespace(timeout=lambda seconds: None)
+        return dashboard
+
+    def run_action(self, dashboard, state, result=True):
+        calls = {}
+
+        def build(config, emit, **kwargs):
+            calls.update(kwargs)
+            return result
+
+        with mock.patch.object(TUI, "resolve_repo", return_value=Path("/tmp/repo")), \
+                mock.patch.object(TUI, "launcher_state", return_value=state), \
+                mock.patch.object(TUI, "build_launcher", side_effect=build):
+            dashboard.do_rebuild_launcher()
+        return calls
+
+    def state(self):
+        return {"root": Path("/tmp/repo/launcher-rs"), "artifact": Path("/tmp/launcher.app"),
+                "kind": "app", "version": "0.1.0", "exists": True, "stale": False,
+                "reason": ""}
+
+    def test_a_build_says_how_to_use_it(self):
+        dashboard = self.dashboard()
+        calls = self.run_action(dashboard, self.state())
+        self.assertTrue(calls["repo"])
+        self.assertEqual(dashboard.message, "launcher rebuilt — restart it to use the new app")
+        self.assertTrue(any("launcher 0.1.0 · built" in line for line in dashboard.lines))
+
+    def test_a_failed_build_says_so(self):
+        dashboard = self.dashboard()
+        self.run_action(dashboard, self.state(), result=False)
+        self.assertTrue(dashboard.message.startswith("LAUNCHER BUILD FAILED"))
+
+    def test_a_checkout_without_launcher_rs_cancels(self):
+        dashboard = self.dashboard()
+        calls = self.run_action(dashboard, {})
+        self.assertEqual(calls, {})
+        self.assertEqual(dashboard.message, "rebuild cancelled")
+        self.assertTrue(any("no launcher-rs checkout" in line for line in dashboard.lines))
+
+
 class LocalBuildTest(unittest.TestCase):
     """build_client's sequence, with the compiler and the venv stubbed out."""
 
