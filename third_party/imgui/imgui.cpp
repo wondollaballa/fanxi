@@ -19078,7 +19078,7 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
     // Docking/Collapse button
     // [Fanxi] On a floating HUD tab group this button minimizes/maximizes the whole group; the
     // window menu stays available on right-click. Split/dockspace nodes keep the stock menu.
-    const bool can_minimize = node->IsRootNode() && node->IsLeafNode() && !node->IsDockSpace();
+    const bool can_minimize = node->IsLeafNode() && !node->IsDockSpace();
     if (has_window_menu_button)
     {
         bool pressed = false;
