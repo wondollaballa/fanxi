@@ -4346,7 +4346,6 @@ local function hud_defaults()
     local battle, party = hub_sanitize(nil)
     return {
         show_hud = true,
-        hud_minimized = false,
         show_abilities = false,
         show_spells = false,
         show_trusts = false,
@@ -4498,7 +4497,6 @@ local function hud_sanitize(raw)
     if type(raw.show_sch) == 'boolean' then state.show_sch = raw.show_sch end
     -- The Chemist window follows its own main job, with the same absent-means-auto rule.
     if type(raw.show_chm) == 'boolean' then state.show_chm = raw.show_chm end
-    if type(raw.hud_minimized) == 'boolean' then state.hud_minimized = raw.hud_minimized end
     do
         local target_pos = type(raw.target) == 'table' and raw.target or {}
         state.target.x = math.floor(hud_clamp(target_pos.x, -4000, 8000, state.target.x))
@@ -4642,7 +4640,6 @@ local function hud_save(state, path)
         show_equipview = state.show_equipview,
         show_sch = state.show_sch,
         show_chm = state.show_chm,
-        hud_minimized = state.hud_minimized == true,
         equipview = { x = state.equipview.x, y = state.equipview.y },
         chm = { x = state.chm.x, y = state.chm.y },
         mounts = {
@@ -11737,47 +11734,6 @@ end)
 -- Ctrl+H is the same as //hud toggle, with the chat line open or closed.
 if xi.input and xi.input.bind then xi.input.bind(HUD_HOTKEY, '//hud toggle') end
 
--- The title-row caret.  Expanded it is a tiny ▼ at the left of the dock tab row;
--- collapsed it becomes a full row of the window titles, with no window bodies.  This
--- replaces the old hide-everything button: the tabs stay visible, exactly like a
--- window title bar, and clicking any title restores the row.
-local function hud_minimize_row(api)
-    local state = hud.state
-    local collapsed = state.hud_minimized == true
-    local screen_w = select(1, hud_screen_size(api))
-    local width = collapsed and math.max(120, screen_w) or 24
-    api.SetNextWindowPos({ 0, 0 }, 1)
-    api.SetNextWindowSize({ width, 24 }, 1)
-    api.SetNextWindowBgAlpha(collapsed and 0.96 or 0.0)
-    local open = api.Begin('###fanxi_hud_minrow', nil, 1 + 4 + 8 + 16 + 64)
-    if open then
-        api.PushStyleColor(21, { 0.12, 0.16, 0.22, 1 })
-        api.PushStyleColor(22, { 0.18, 0.24, 0.32, 1 })
-        api.PushStyleColor(23, { 0.10, 0.13, 0.18, 1 })
-        if api.Button(collapsed and '▶' or '▼', { 20, 20 }) then
-            state.hud_minimized = not collapsed
-            hud_save(state, hud.path)
-            collapsed = state.hud_minimized
-        end
-        api.PopStyleColor(3)
-        if collapsed then
-            local titles = {
-                'Magic Bag', 'Abilities', 'Spells', 'Weapon skills', 'Trusts', 'Stats',
-                'Target Debuffs', 'Chemist', 'Equip View',
-            }
-            for index, title in ipairs(titles) do
-                api.SameLine(0, 2)
-                if api.Button(title .. '##hud-min-' .. index, { 0, 20 }) then
-                    state.hud_minimized = false
-                    hud_save(state, hud.path)
-                    break
-                end
-            end
-        end
-    end
-    api.End()
-end
-
 function hud.frame()
     if (game.player_index() or -1) < 0 then return end
     if not hud_character() then return end
@@ -11791,10 +11747,6 @@ function hud.frame()
     local api = hud.imgui
     if not api then return end
     local state = hud.state
-    if state.hud_minimized then
-        hud_minimize_row(api)
-        return
-    end
     local battle_open = hud.battle and hud.battle.visible and hud.battle.visible() or false
     -- While the Battle hub is up it owns the screen: the action windows and the two information
     -- hubs step aside without changing their saved switches, so they return as soon as it closes.
@@ -11889,8 +11841,6 @@ function hud.frame()
     end
     -- Last, and opaque: the Done box is the one control that must never be hidden by a window.
     if state.edit then hud_edit_box(api) end
-    -- Draw the caret/title row last so it sits above the native dock tab row.
-    hud_minimize_row(api)
     if hud.reposition then hud.reposition = false end
     if hud.clamp_positions then hud.clamp_positions = false end
 end
