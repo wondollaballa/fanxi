@@ -891,6 +891,60 @@ static int item_dump_scan(void)
     return 0;
 }
 
+/* CHM item-mask compatibility.
+ *
+ * The retail client carries a 22-job mask in each item record and rejects a job-23
+ * equip before it ever reaches the server (the native equipment menu and GearSwap's
+ * 0x050 both go through that record).  Once the client has decoded its item array,
+ * OR the Chemist bit into every gear record's job mask.  The server still owns the
+ * real gate (items.jobs), so this only teaches the client that job 23 is a valid job.
+ *
+ * Records with no job bits (general items) and ids below the gear range are left
+ * alone.  The array base/stride are the ones item_dump_scan verified against four
+ * known model ids; a client that does not expose the array is left untouched.
+ */
+static int item_patch_job_masks(void)
+{
+    if (!item_record_base || !item_record_stride)
+        return 0;
+    unsigned patched = 0;
+    for (uint32_t id = 0x2800; id <= 0xFFFF; ++id)
+    {
+        int64_t a = item_record_base + (int64_t)id * (int64_t)item_record_stride;
+        if (a < 0 || a > 0xFFFFFFFFll - 0x20)
+            continue;
+        uint32_t addr = (uint32_t)a;
+        if (!gwin_is_committed(addr + 0x18))
+            continue;
+        uint32_t jobs = rd32(addr + 0x18);
+        if (jobs == 0 || jobs > 0x3FFFFFu || (jobs & 0x400000u))
+            continue;
+        uint16_t slots = rd16(addr + 0x12);
+        if (!slots)
+            continue;
+        wr32(addr + 0x18, jobs | 0x400000u);
+        ++patched;
+    }
+    rt_log("[items] chm mask: %u gear records now accept job 23\n", patched);
+    return 1;
+}
+
+static void item_patch_thread(void* unused)
+{
+    (void)unused;
+    for (int i = 0; i < 120; ++i)
+    {
+        plat_sleep_ms(1000);
+        if (!rt_guest_base)
+            continue;
+        if (item_dump_scan())
+        {
+            item_patch_job_masks();
+            return;
+        }
+    }
+}
+
 static void item_dump_report(void)
 {
     static const struct { const char* name; uint16_t first, last; } groups[] = {
@@ -964,6 +1018,8 @@ int main(int argc, char** argv)
 #endif
     if (getenv("FANXI_ITEM_DUMP"))
         plat_thread_start(item_dump_thread, NULL);
+    else
+        plat_thread_start(item_patch_thread, NULL);
 #if defined(__linux__) && !defined(__ANDROID__)
     /* the Wayland app id (X11 class) of the sign-in's and the game's windows, before SDL starts:
      * fanxi-launcher.desktop (install.sh) or fanxi.desktop (build_posix.py desktop) names its icon; without it docks
