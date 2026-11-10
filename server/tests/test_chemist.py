@@ -192,7 +192,7 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(len(learned), 22)
         expected = set(range(30000, 30008)) | {
             637, 947, 4509, 18228, 4164, 17313,
-            30008, 30009, 30010, 30011, 30012, 30013, 30014, 30015}
+            30016, 30009, 30010, 30011, 30012, 30013, 30014, 30015}
         self.assertEqual({int(row["item_id"]) for row in learned}, expected)
 
     def test_toolkit_pays_a_recipe_and_is_consumed(self):

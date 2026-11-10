@@ -8,7 +8,7 @@ INSERT OR IGNORE INTO items
     (item_id, name, stack, usable, equip_slot, level, description, model,
      slot_mask, jobs, skill, rare, ex, base_sell, price, item_level, category, subskill)
 VALUES
-    (30008, 'Fire Anima',      99, 1, '', 1, 'Chemist elemental anima (fire).',      0, 0, 4194304, 0, 0, 0, 0, 0, 0, '', 0),
+    (30016, 'Fire Anima',      99, 1, '', 1, 'Chemist elemental anima (fire).',      0, 0, 4194304, 0, 0, 0, 0, 0, 0, '', 0),
     (30009, 'Ice Anima',       99, 1, '', 1, 'Chemist elemental anima (ice).',       0, 0, 4194304, 0, 0, 0, 0, 0, 0, '', 0),
     (30010, 'Wind Anima',      99, 1, '', 1, 'Chemist elemental anima (wind).',      0, 0, 4194304, 0, 0, 0, 0, 0, 0, '', 0),
     (30011, 'Earth Anima',     99, 1, '', 1, 'Chemist elemental anima (earth).',     0, 0, 4194304, 0, 0, 0, 0, 0, 0, '', 0),
@@ -29,7 +29,7 @@ VALUES
     (18228, 'hostile', 20, 99, 2103, 300, 0), -- Battery: lightning
     (4164,  'hostile', 20, 99, 2104, 300, 0), -- Prism Powder: light
     (17313, 'hostile', 50, 99, 2105,   0, 1), -- Grenade: fire burst
-    (30008, 'hostile', 10, 99, 2101,  60, 0), -- Fire Anima
+    (30016, 'hostile', 10, 99, 2101,  60, 0), -- Fire Anima
     (30009, 'hostile', 10, 99, 2102,  60, 0), -- Ice Anima
     (30010, 'hostile', 10, 99, 2106,  60, 0), -- Wind Anima
     (30011, 'hostile', 10, 99, 2107,  60, 0), -- Earth Anima
@@ -45,7 +45,7 @@ INSERT OR REPLACE INTO chemist_recipes (item_id, yield, cast_ms, alchemy_req)
 VALUES
     (637, 12, 12000, 0), (947, 12, 12000, 0), (4509, 12, 12000, 20),
     (18228, 12, 12000, 20), (4164, 12, 12000, 20), (17313, 12, 15000, 50),
-    (30008, 12, 12000, 10), (30009, 12, 12000, 10), (30010, 12, 12000, 10),
+    (30016, 12, 12000, 10), (30009, 12, 12000, 10), (30010, 12, 12000, 10),
     (30011, 12, 12000, 10), (30012, 12, 12000, 10), (30013, 12, 12000, 10),
     (30014, 12, 12000, 10), (30015, 12, 12000, 10);
 
@@ -55,7 +55,7 @@ VALUES
     (947, 4096, 1), (947, 4099, 1),
     (4509, 4101, 1), (18228, 4100, 1), (4164, 4102, 1),
     (17313, 4096, 1), (17313, 4099, 1),
-    (30008, 4096, 1), (30009, 4097, 1), (30010, 4098, 1),
+    (30016, 4096, 1), (30009, 4097, 1), (30010, 4098, 1),
     (30011, 4099, 1), (30012, 4100, 1), (30013, 4101, 1),
     (30014, 4102, 1), (30015, 4103, 1);
 
@@ -64,5 +64,5 @@ SELECT c.id, r.item_id FROM characters c CROSS JOIN chemist_recipes r;
 
 -- Retail stack sizes matter for the inventory copies of the new consumables.
 UPDATE items SET stack = 99
-WHERE item_id IN (637, 947, 4509, 18228, 4164, 17313, 30008, 30009, 30010,
+WHERE item_id IN (637, 947, 4509, 18228, 4164, 17313, 30016, 30009, 30010,
                   30011, 30012, 30013, 30014, 30015);
