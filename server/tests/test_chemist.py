@@ -251,6 +251,18 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(
             chemist.craft_cast_ms(self.service, int(self.character["id"]), 30000), 2000)
 
+    def test_chm_craft_holds_the_synth_pose(self):
+        self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)
+        self.session.queue.clear()
+        self.session.chemist_command(["craft", "Aqua Regia"])
+        self.assertIsNotNone(self.session.casting)
+        self.assertGreater(self.session.synth_until, time.time())
+        self.assertEqual(self.session.own_animation(), chemist.CRAFT_ANIMATION)
+        self.session.casting["finish"] = time.time() - 1
+        self.session.resolve_casting(time.time())
+        self.assertEqual(self.session.synth_until, 0.0)
+        self.assertNotEqual(self.session.own_animation(), chemist.CRAFT_ANIMATION)
+
     def test_chm_craft_starts_the_mix_synthesis_and_uses_a_toolkit(self):
         self.service.add_item(int(self.character["id"]), chemist.TOOLKIT_ITEM_ID, 1)
         self.session.queue.clear()

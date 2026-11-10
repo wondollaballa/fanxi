@@ -704,6 +704,11 @@ class ZoneSession:
         self.sent_targids: set[int] = set()
         self.next_entity_sync = 0.0
         self.casting = None
+        # While a Chemist synthesis runs the client should hold animation 44 (Synth).
+        # The magic-start result's animation field is unused by the client, so the
+        # pose rides 0x00D/0x037 like the battle stance does.
+        self.synth_until = 0.0
+        self.synth_pose_at = 0.0
         # Chemist: the bag item Toss/Mix should use, and the three one-shot windows.
         # They are session state, not status icons: the client has no Chemist records
         # for them, and the HUD reads the live session through the control API.
@@ -4350,6 +4355,11 @@ class ZoneSession:
         self.sent_targids: set[int] = set()
         self.next_entity_sync = 0.0
         self.casting = None
+        # While a Chemist synthesis runs the client should hold animation 44 (Synth).
+        # The magic-start result's animation field is unused by the client, so the
+        # pose rides 0x00D/0x037 like the battle stance does.
+        self.synth_until = 0.0
+        self.synth_pose_at = 0.0
         # Chemist: the bag item Toss/Mix should use, and the three one-shot windows.
         # They are session state, not status icons: the client has no Chemist records
         # for them, and the HUD reads the live session through the control API.
@@ -4543,6 +4553,8 @@ class ZoneSession:
         self.sent_targids: set[int] = set()
         self.next_entity_sync = 0.0
         self.casting = None
+        self.synth_until = 0.0
+        self.synth_pose_at = 0.0
         self.engaged_id = None
         self.engaged_targid = 0
         self.target_targid = 0
@@ -8429,6 +8441,10 @@ class ZoneSession:
         skill = int(cast.get("skill") or spell.get("skill") or 0)
         me = int(self.char["char_id"])
         targid = int(getattr(self, "targid", 0) or 0x400)
+        if cast.get("chemist") is not None:
+            self.synth_until = 0.0
+            self.queue += [self.char_status(), self.char_update(packets.SEND_HP)]
+            self.world.broadcast_player(self, packets.SEND_HP)
         action_arg = (packets.ACTION_SKILL_INTERRUPT
                       if cast.get("chemist") is not None
                       else packets.magic_interrupt_arg(skill))
@@ -11501,13 +11517,20 @@ class ZoneSession:
             return
         cast_ms = chemist.craft_cast_ms(
             self.world.service, int(self.char["id"]), int(item_id))
+        finish = now + max(0.1, cast_ms / 1000.0)
         self.casting = {
             "chemist": int(item_id),
             "spell": {"id": 0, "name": "Synthesis", "skill": 0},
             "skill": 0, "target": 0, "party_target": 0, "self": True,
-            "finish": now + max(0.1, cast_ms / 1000.0),
+            "finish": finish,
         }
+        self.synth_until = finish
+        self.synth_pose_at = now
         self.stop_resting()
+        # The action's animation field on a MagicStart is ignored; the synth pose is
+        # the entity animation, so send the self update and the status block together.
+        self.queue += [self.char_status(), self.char_update(packets.SEND_HP)]
+        self.world.broadcast_player(self, packets.SEND_HP)
         me = int(self.char["char_id"])
         self.queue.append(sub(0x028, packets.battle_action(
             me, me, int(item_id), animation=chemist.CRAFT_ANIMATION,
@@ -11517,6 +11540,7 @@ class ZoneSession:
         self.say("You begin synthesizing a restock (%.1fs)." % (cast_ms / 1000.0))
 
     def _finish_chemist_synthesis(self, item_id: int) -> None:
+        self.synth_until = 0.0
         result = chemist.craft(
             self.world.service, int(self.char["id"]), int(item_id))
         me = int(self.char["char_id"])
@@ -11524,6 +11548,8 @@ class ZoneSession:
             me, me, int(item_id), animation=chemist.CRAFT_ANIMATION, message=0,
             kind=0, category=packets.ACTION_CATEGORY_MAGIC_FINISH,
             action_id=int(item_id))))
+        self.queue += [self.char_status(), self.char_update(packets.SEND_HP)]
+        self.world.broadcast_player(self, packets.SEND_HP)
         self.refresh_inventory()
         self.say(result.get("message", "The synthesis fails."))
         if result.get("ok"):
@@ -13884,6 +13910,12 @@ class ZoneSession:
         if self.dead_until and self.ko_home_at and now >= self.ko_home_at:
             self._return_home_from_ko()
             return
+        if (self.synth_until > now and now - self.synth_pose_at >= 0.5):
+            # Keep the synth pose on the client while the long cast runs: the pose is
+            # the entity animation, and any nearby action can drop it.
+            self.synth_pose_at = now
+            self.queue += [self.char_status(), self.char_update(packets.SEND_HP)]
+            self.world.broadcast_player(self, packets.SEND_HP)
         if self.meditate is not None and now >= float(self.meditate["next"]):
             state = self.meditate
             gain = min(int(state["per"]), max(0, int(state["cap"]) - int(state["total"])))
@@ -15566,6 +15598,8 @@ class ZoneSession:
         """
         if self.dead_until > time.time():
             return PLAYER_DEATH_ANIMATION
+        if self.synth_until > time.time():
+            return chemist.CRAFT_ANIMATION
         ridden = mounts.by_id(self.mount_id)
         if ridden is not None:
             return ridden.animation()
