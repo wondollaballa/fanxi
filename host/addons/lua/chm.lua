@@ -46,7 +46,7 @@ local COLORS = {
 -- or icon for a post-retail id yet.
 local ABILITIES = {
     { key = 'toss', name = 'Toss', command = '//chm toss', color = 'violet',
-      hint = 'Throw the selected hostile item at the target' },
+      hint = 'Throw the selected item; a party, alliance, Trust or self target uses it as a potion' },
     { key = 'mix', name = 'Mix', command = '//chm mix', color = 'green',
       hint = 'Choose a learned recipe to synthesize' },
     { key = 'catalyst', name = 'Catalyst', command = '//chm catalyst', color = 'yellow',

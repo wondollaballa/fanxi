@@ -11271,6 +11271,8 @@ class ZoneSession:
         if act_index:
             entity = self.world.entity_by_targid(self.zone, int(act_index))
         if entity is not None and getattr(entity, "kind", "") == "trust":
+            if not getattr(entity, "alive", False):
+                return None, "That Trust is not available."
             if not self._chemist_trust_allowed(entity):
                 return None, "That Trust is not in your party or alliance."
             if entity.distance_to(*self.pos[:3]) > reach + 1.0:
@@ -11572,6 +11574,30 @@ class ZoneSession:
             "recasts": recasts,
         }
 
+    def _chemist_named_target(self, name: str) -> int:
+        """Resolve a party/alliance player, Trust or self name to an act index."""
+        wanted = " ".join(str(name or "").split()).casefold()
+        if not wanted:
+            return 0
+        if str(self.char.get("name") or "").casefold() == wanted:
+            return TARGID
+        party = self.world.party_of(int(self.char["char_id"]))
+        parties = (list(party.alliance.parties)
+                   if party is not None and party.alliance is not None
+                   else ([party] if party is not None else []))
+        for group in parties:
+            for member in group.members:
+                if str(member.name or "").casefold() == wanted:
+                    other = self.world.session_by_char(int(member.char_id))
+                    if other is not None:
+                        return int(other.targid)
+        for entity in self.entities:
+            if (getattr(entity, "kind", "") == "trust"
+                    and str(getattr(entity, "name", "")).casefold() == wanted
+                    and self._chemist_trust_allowed(entity)):
+                return int(entity.targid)
+        return 0
+
     def _chemist_use_ability(self, ability_id: int, act_index: int = 0) -> None:
         """Run one Chemist ability from //chm with the same gates and recast as 0x01A."""
         ability = self.world.service.job_ability(int(ability_id))
@@ -11670,9 +11696,15 @@ class ZoneSession:
                 "catalyst": chemist.CATALYST, "amplify": chemist.AMPLIFY,
                 "volatile": chemist.VOLATILE,
             }[action]
-            # Toss needs the selected mob; Mix defaults to the Chemist and the stances
-            # are self-only.  The client's 0x01A path can name a party member for Mix.
+            # Toss/Mix can use the client target or an explicit friendly name.
+            # The HUD's Toss button sends //chm toss and the client target; the
+            # named form is the escape hatch for a Trust the client did not target.
             act_index = int(self.target_targid or 0) if action == "toss" else 0
+            if len(words) > 1:
+                act_index = self._chemist_named_target(" ".join(words[1:]))
+                if not act_index:
+                    self.say("No party, alliance or Trust member by that name.")
+                    return
             self._chemist_use_ability(ability_id, act_index)
             return
         if action == "use":
@@ -11699,7 +11731,7 @@ class ZoneSession:
                                       int(self.target_targid or 0) if hostile else 0)
             return
         self.say("Usage: //chm status | load <item> [qty] | select <item> | use <item> | "
-                 "recipes | craft <recipe> | toss | mix | catalyst | amplify | volatile")
+                 "recipes | craft <recipe> | toss [name] | mix [name] | catalyst | amplify | volatile")
 
     def job_ability(self, p: bytes, act_index: int = 0) -> None:
         """C2S 0x01A action 0x09: a job ability.
@@ -13707,8 +13739,8 @@ class ZoneSession:
         # Observers draw the body from its HP byte; without this the K.O. was only
         # visible to the player who died.
         self.world.broadcast_player(self, packets.SEND_HP)
-        self.say("You have been defeated. You will return to your Home Point in "
-                 "60 minutes, or use //hp now.")
+        self.say("You have been defeated. Wait for a raise, or use //hp now. "
+                 "You will return to your Home Point in 60 minutes.")
         try:
             self.world.service.record_death(int(self.char["id"]))
         except Exception:

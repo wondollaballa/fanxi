@@ -243,10 +243,12 @@ later and needed no new server-to-client packet.
 
 ### 5.1 Toss
 
-Toss is a job ability with a hostile target, a 20-yalm range, zero cast time and no MP.
-It does not use `/ra`, does not require a ranged weapon, and does not grant TP.
+Toss is a job ability with a 20-yalm range, zero cast time and no MP. A hostile target
+takes the hostile item path below; a party/alliance member, a Trust, or the Chemist
+themself takes a friendly item and resolves exactly like Mix (so "Toss on me" is a
+potion). It does not use `/ra`, does not require a ranged weapon, and does not grant TP.
 
-Resolution order:
+Hostile resolution order:
 
 1. The player must be CHM main, alive, not zoning, and not already casting.
 2. Resolve the bag slot or the real inventory item.
@@ -271,7 +273,10 @@ from `zone.py`, so Toss and future ranged abilities use one formula.
 
 Mix is the friendly mirror:
 
-- Party/alliance target from the client's act index, self when none, 10-yalm range.
+- Party/alliance player, Trust, or self from the client's act index; self when none.
+  Alliance members are valid, not only the Chemist's own party. `//chm mix <name>`
+  (and `//chm toss <name>`) resolves a named ally or Trust when the client target is
+  not the intended one.
 - Consumes one bag charge or one real standard item.
 - Applies the item's `chemist_items` effect: heal, MP restore, status removal or a timed
   buff.
@@ -363,8 +368,9 @@ recipes in the current build, and a new character gets the same rows on creation
 
 The **Chemistry Toolkit** is the client-known **Alchemy Kit 55** (item 8899), so the
 inventory and equipment screens never meet a custom item record. The HUD labels the
-stack "Chemistry Toolkit"; one kit pays one recipe's entire crystal bill. A craft with no
-kit falls back to the elemental reagents, so both routes remain valid.
+stack "Chemistry Toolkit"; one kit pays one recipe's entire crystal bill. The launcher's
+Data -> Items tab finds it through the `chemistry toolkit` alias, and a craft with no kit
+falls back to the elemental reagents, so both routes remain valid.
 
 ### 6.3 Cast and interruption
 
@@ -398,6 +404,11 @@ client's craft page), `ALCHEMY_SKILL +100` (the Chemist gate) and `CHEMISTRY_CAS
 (synthesis drops from 12 s to 2 s). It is snapshotted at cast start; swapping it in
 mid-cast does not help. This is deliberately not `FASTCAST`, which would also speed every
 subjob spell.
+
+CHM has the club skill at rank C in `game/skills.py`; migration 0195 adds the job-23
+bit to every one-handed club, including **Wizard's Rod (Reforged)**, Maxentius and
+Bunzi's Rod. A club and a sub-slot shield are a legal pair, so the Brewer's Escutcheon
+can be worn with the Wizard's Rod.
 
 ### 6.5 Empyrean "Augments Chemistry"
 

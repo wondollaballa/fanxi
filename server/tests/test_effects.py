@@ -676,7 +676,7 @@ class EffectTest(unittest.TestCase):
                          (235, -344.0, -10.0, -155.0, 0))
 
     def test_zero_hp_waits_for_a_raise_instead_of_returning_home(self):
-        """A K.O. has no timer: six seconds (the old recovery) changes nothing."""
+        """A K.O. waits for a raise; six seconds does not trigger the one-hour return."""
         self.session.char["hp_current"] = 0
         self.session.hit_zero_hp(time.time())
         self.assertEqual(float("inf"), self.session.dead_until)

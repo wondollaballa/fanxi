@@ -519,8 +519,10 @@ When a monster reaches 0 HP:
 - after the spawn's respawn time the monster returns at full HP with a fresh `0x00E` spawn.
 
 Player death is not temporary: Fanxi records the death, disengages, and leaves the body at
-0 HP until another player's Raise, Raise II, Raise III or Arise lands.  A zone change
-returns the character to the Home Point at half HP and MP.  There is no EXP loss yet.
+0 HP until another player's Raise, Raise II, Raise III or Arise lands.  The body plays the
+client's death pose (animation 3) for every observer.  After one hour the server returns
+the body to its Home Point at half HP and MP; a zone change does the same thing at once.
+There is no EXP loss yet.
 
 ### Zone navigation
 
@@ -1256,11 +1258,11 @@ Warp, Warp II and Retrace send the character to the **one Home Point set in Prof
 (`characters.home_*`, updated by the crystal's "Set Home Point" choice), not to a crystal
 registered in the current zone.  South Gustaberg has no Home Point crystal, so the old
 current-zone lookup refused Warp there even though the character's set Home Point existed.
-A K.O. has no timed recovery: the character stays down until another player's Raise,
-Raise II, Raise III or Arise lands.  A zone change is the deliberate way out, so `//hp`,
-`//home`, the Home Point menu and every other warp revive a fallen character at half HP
-and MP.  `characters.hp_current` keeps the 0 across a logout, and the next login is still
-K.O.
+A K.O. has a one-hour recovery: the body stays down for a Raise, Raise II, Raise III or
+Arise, then `tick` returns it to the Home Point at half HP and MP.  A zone change is the
+deliberate way out, so `//hp`, `//home`, the Home Point menu and every other warp revive a
+fallen character at half HP and MP at once.  `characters.hp_current` keeps the 0 across a
+logout, and the next login is still K.O. (with a fresh one-hour deadline).
 Home Point teleportation from a crystal uses the registered `char_home_points` list and
 the client menu index (`home_points.hp_index`); opening the crystal menu requires the
 `world_npcs.hp_index` column, which migration 0084 fills.

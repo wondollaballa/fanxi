@@ -17,7 +17,7 @@ import re
 import time
 from dataclasses import dataclass
 
-from . import combat, effects, modifiers as mod, stats
+from . import combat, effects, modifiers as mod, packets, stats
 
 log = logging.getLogger("fanxi.chemist")
 
@@ -657,7 +657,12 @@ def apply_mix(session, target, spec: dict) -> dict:
         if healed <= 0:
             return {"ok": False, "message": "The target is already at full health."}
         target.char["hp_current"] = current + healed
-        target.queue += [target.char_status(), target.party_member()]
+        target.queue += [target.char_status(), target.char_update(packets.SEND_HP),
+                         target.party_member()]
+        try:
+            target.world.broadcast_player(target, packets.SEND_HP)
+        except Exception:
+            log.debug("player HP refresh failed", exc_info=True)
         _save_vitals(session, target)
         return {"ok": True, "kind": "heal", "amount": healed,
                 "message": "%s recovers %d HP." % (
@@ -671,7 +676,12 @@ def apply_mix(session, target, spec: dict) -> dict:
         if restored <= 0:
             return {"ok": False, "message": "The target already has full MP."}
         target.char["mp_current"] = current + restored
-        target.queue += [target.char_status(), target.party_member()]
+        target.queue += [target.char_status(), target.char_update(packets.SEND_HP),
+                         target.party_member()]
+        try:
+            target.world.broadcast_player(target, packets.SEND_HP)
+        except Exception:
+            log.debug("player MP refresh failed", exc_info=True)
         _save_vitals(session, target)
         return {"ok": True, "kind": "mp", "amount": restored,
                 "message": "%s recovers %d MP." % (

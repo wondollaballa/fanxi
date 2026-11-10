@@ -203,6 +203,29 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(self.bag_quantity(30000), 0)
         self.assertEqual(self.session.chemist_report()["toolkits"], 0)
 
+    def test_brewer_shield_equips_cleanly(self):
+        self.service.add_item(int(self.character["id"]), 26457, 1)
+        row = next(row for row in self.service.inventory(int(self.character["id"]))
+                   if int(row["item_id"]) == 26457 and int(row["container"]) == 0)
+        packet = bytes([0, 0, 0, 0, int(row["slot"]), 1, 0])
+        self.session.equip(packet)
+        self.assertEqual(self.session.equipped.get(1), (0, int(row["slot"]), 26457))
+
+    def test_wizard_rod_and_shield_can_be_worn_together(self):
+        self.assertGreaterEqual(
+            int(self.service.item(21991)["jobs"]) & (1 << 22), 1)
+        self.assertGreater(skills.cap_for(11, 23, 99) or 0, 0)
+        self.service.add_item(int(self.character["id"]), 21991, 1)
+        rod = next(row for row in self.service.inventory(int(self.character["id"]))
+                   if int(row["item_id"]) == 21991 and int(row["container"]) == 0)
+        self.session.equip(bytes([0, 0, 0, 0, int(rod["slot"]), 0, 0]))
+        self.assertEqual(self.session.equipped.get(0), (0, int(rod["slot"]), 21991))
+        self.service.add_item(int(self.character["id"]), 26457, 1)
+        shield = next(row for row in self.service.inventory(int(self.character["id"]))
+                      if int(row["item_id"]) == 26457 and int(row["container"]) == 0)
+        self.session.equip(bytes([0, 0, 0, 0, int(shield["slot"]), 1, 0]))
+        self.assertEqual(self.session.equipped.get(1), (0, int(shield["slot"]), 26457))
+
     def test_brewer_shield_grants_all_craft_skills(self):
         self.service.add_item(int(self.character["id"]), 26457, 1)
         row = next(row for row in self.service.inventory(int(self.character["id"]))
@@ -409,6 +432,28 @@ class ChemistTest(unittest.TestCase):
         self.give_bag(4112, 10, 1)
         self.use(chemist.TOSS, trust.targid)
         self.assertGreater(int(trust.hp), 100)
+        self.assertEqual(self.bag_quantity(4112), 9)
+
+    def test_catalyst_toss_heals_the_whole_alliance(self):
+        first = self.party_with("Ally")
+        first.char["hp_current"] = 1000
+        first.pos = list(self.session.pos)
+        account = self.service.register("otherally", "password123").account
+        row = self.service.create_character(account["id"], {"name": "Otherally", "race": 1})
+        second = self.make_session(row, "Otherally", targid=0x402)
+        second.char.update({"hp": 2000, "hp_current": 1000, "mp": 500, "mp_current": 500})
+        second.pos = list(self.session.pos)
+        self.world.sessions[("127.0.0.1", 4322)] = second
+        second_party = self.world.create_party(second)
+        self.assertIsNotNone(self.world.form_alliance(
+            self.world.party_of(int(self.session.char["char_id"])), second_party))
+        self.session.char["hp_current"] = 1000
+        self.give_bag(4112, 10, 1)
+        self.session._chemist_catalyst_until = time.time() + 60
+        self.use(chemist.TOSS, 0x400)
+        self.assertGreater(int(self.session.char["hp_current"]), 1000)
+        self.assertGreater(int(first.char["hp_current"]), 1000)
+        self.assertGreater(int(second.char["hp_current"]), 1000)
         self.assertEqual(self.bag_quantity(4112), 9)
 
     def test_toss_refuses_a_non_party_player(self):
