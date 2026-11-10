@@ -11123,6 +11123,13 @@ class ZoneSession:
                              entries: list[dict]) -> None:
         """Broadcast one 0x028 ability result (one entry per target)."""
         me = int(self.char["char_id"])
+        # Toss is presented by the /toss emote (0x05A); the ability-result animation
+        # field must stay zero or it plays a second, non-toss motion afterwards.
+        if int(ability_id) == chemist.TOSS:
+            animation = 0
+            for entry in entries:
+                for result in entry.get("results") or []:
+                    result["animation"] = 0
         message = sub(0x028, packets.battle_action(
             me, 0, 0, animation=int(animation), kind=2,
             message=packets.MESSAGE_USES_JOB_ABILITY,
@@ -11348,6 +11355,8 @@ class ZoneSession:
                 self.say(result.get("message", "The item has no effect."))
         if not applied:
             return
+        if verb == "toss":
+            self._chemist_toss_emote(target)
         consumed = chemist.consume_slot(
             self.world.service, int(self.char["id"]), int(slot.item_id))
         if consumed is None:
@@ -11377,6 +11386,29 @@ class ZoneSession:
             self._chemist_catalyst_until = 0.0
         self.say("You %s a %s." % (verb, spec["name"]))
 
+    def _chemist_toss_emote(self, target) -> None:
+        """Play the /toss emote (44, motion only) for a Toss action.
+
+        Toss is a Chemist ability, not a ranged attack.  Its retail presentation is the
+        ordinary /toss emote; the ability-result 0x028 does not carry that motion.  The
+        emote packet is sent to the caster and every observer in the zone, with the
+        selected target as the emote target so the character turns toward it.
+        """
+        me = int(self.char["char_id"])
+        target_id = chemist.target_id(target)
+        if hasattr(target, "char"):
+            target_targid = int(target.char.get("targid") or TARGID)
+        else:
+            target_targid = int(getattr(target, "targid", 0) or 0)
+        body = packets.motion_message(
+            me, target_id, int(self.char.get("targid") or TARGID), target_targid,
+            44, 2, 0)
+        sessions = self.world.sessions_in_zone(self.zone)
+        for other in sessions:
+            other.queue.append(sub(0x05A, body))
+        if not any(other is self for other in sessions):
+            self.queue.append(sub(0x05A, body))
+
     def _chemist_toss(self, ability: dict, act_index: int, now: float) -> None:
         """Toss a hostile item at a mob or a friendly item at an ally/self."""
         target_kind, target, error = self._chemist_toss_target(act_index, ability)
@@ -11396,6 +11428,7 @@ class ZoneSession:
         if int(slot.quantity) <= 0:
             self._chemist_start_synthesis(int(slot.item_id), now)
             return
+        self._chemist_toss_emote(target)
         consumed = chemist.consume_slot(
             self.world.service, int(self.char["id"]), int(slot.item_id))
         if consumed is None:

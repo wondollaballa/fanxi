@@ -383,6 +383,18 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(int(state["potency"]), 12)
         self.assertEqual(self.bag_quantity(30000), 2)
 
+    def test_toss_plays_the_toss_emote_not_the_ability_animation(self):
+        self.enter()
+        self.give_bag(30000, 3, 2)
+        mob = self.mob()
+        self.use(chemist.TOSS, mob.targid)
+        emotes = [m for m in self.session.queue if (m[0] & 0x1FF) == 0x05A]
+        self.assertTrue(emotes, "Toss must send the 0x05A /toss emote")
+        self.assertEqual(struct.unpack_from("<H", emotes[-1], 16)[0], 44)
+        self.assertEqual(emotes[-1][22], 2)  # motion only, no emote text
+        actions = [m for m in self.session.queue if (m[0] & 0x1FF) == 0x028]
+        self.assertTrue(actions)
+
     def test_aqua_regia_stacks_with_dia_and_armor_break(self):
         self.enter()
         self.give_bag(30000, 3, 2)
