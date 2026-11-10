@@ -7,6 +7,7 @@ Run it on the machine you administer *from* (your Mac), not on the server:
     ./tools/fanxi_tui.py --status        # one-shot report, no curses
     ./tools/fanxi_tui.py --deploy        # the deploy sequence, no curses
     ./tools/fanxi_tui.py --rebuild       # rebuild the local client, no curses
+    ./tools/fanxi_tui.py --rebuild-launcher  # rebuild the Rust + Tauri launcher, no curses
 
 The menu is navigable with the arrow keys and Enter, a mouse click, or the hotkey in each label.
 The pane beside it explains the selected action and its risk, and every action that changes the
@@ -27,12 +28,14 @@ it uses the key you already use for the box. The database is only written throug
 own tools (`db-backup.sh`, `create-admin`, `clone_character.py`), never by a query typed at
 the dashboard.
 
-The local half — the client this Mac runs — is read from the checkout and the launcher's own
-launcher.json, so the dashboard can say whether `build/fanxi` was built from the sources on disk
-and rebuild it with the same sequence as the launcher's **Build game**: `.venv`, prepare when
-the game folder changed, then `tools/build_posix.py host64`. The build streams into the output
-pane (q cancels it) and into build/tui-build.log; the client that was there is kept as
-build/fanxi.previous, and put back if the link fails.
+The local half — the client this Mac runs and the launcher that starts it — is read from the
+checkout and the launcher's own launcher.json, so the dashboard can say whether `build/fanxi`
+was built from the sources on disk and rebuild it with the same sequence as the launcher's
+**Build game**: `.venv`, prepare when the game folder changed, then
+`tools/build_posix.py host64`. The build streams into the output pane (q cancels it) and into
+build/tui-build.log; the client that was there is kept as build/fanxi.previous, and put back
+if the link fails. **Rebuild launcher** does the same for launcher-rs with install.sh's own
+steps (`npm ci` when needed, then `npm run tauri build`), logging to build/tui-launcher.log.
 """
 from __future__ import annotations
 
@@ -1139,6 +1142,242 @@ def build_client(config: dict, emit, *, progress: bool = False, should_stop=None
     return True
 
 
+# --- local launcher ----------------------------------------------------------------------------
+#
+# The other half of the same checkout: the Rust + Tauri launcher.  install.sh builds it with
+# `npm ci && npm run tauri build -- --bundles app` on macOS (--no-bundle on Linux); this keeps
+# that sequence in one place so the dashboard can rebuild the app it is looking at.
+
+LAUNCHER_DIR = "launcher-rs"
+LAUNCHER_APP = (Path("src-tauri") / "target" / "release" / "bundle" / "macos"
+                / "Fanxi Launcher.app")
+LAUNCHER_BIN = Path("src-tauri") / "target" / "release" / "fanxi-launcher"
+LAUNCHER_LOG = "tui-launcher.log"
+LAUNCHER_MIN_RUST = (1, 85)
+LAUNCHER_MIN_NODE = 18
+
+
+def launcher_root(repo: Path | None) -> Path | None:
+    """The launcher-rs checkout inside *repo*, if this is a Fanxi checkout with one."""
+    if not repo:
+        return None
+    root = Path(repo) / LAUNCHER_DIR
+    if (root / "package.json").is_file() and (root / "src-tauri" / "Cargo.toml").is_file():
+        return root
+    return None
+
+
+def launcher_artifact(root: Path) -> tuple[Path, str]:
+    """Where the platform's build lands: the .app bundle on macOS, the binary elsewhere."""
+    if sys.platform == "darwin":
+        return Path(root) / LAUNCHER_APP, "app"
+    return Path(root) / LAUNCHER_BIN, "binary"
+
+
+def launcher_executable(root: Path, artifact: Path, kind: str) -> Path:
+    if kind == "app":
+        return Path(artifact) / "Contents" / "MacOS" / "fanxi-launcher"
+    return Path(artifact)
+
+
+def launcher_version(root: Path) -> str:
+    return str(read_json(Path(root) / "src-tauri" / "tauri.conf.json").get("version") or "")
+
+
+def newest_launcher_source(root: Path) -> float:
+    """The newest file `npm run tauri build` reads; node_modules and dist are outputs."""
+    newest = 0.0
+
+    def visit(directory: Path, suffixes: tuple) -> None:
+        nonlocal newest
+        if not directory.is_dir():
+            return
+        try:
+            entries = directory.rglob("*")
+        except OSError:
+            return
+        for path in entries:
+            if path.is_file() and path.suffix in suffixes:
+                try:
+                    newest = max(newest, path.stat().st_mtime)
+                except OSError:
+                    pass
+
+    visit(Path(root) / "src", (".ts", ".tsx", ".js", ".jsx", ".css", ".html"))
+    visit(Path(root) / "src-tauri" / "src", (".rs",))
+    visit(Path(root) / "src-tauri" / "icons", (".png", ".icns", ".ico", ".svg"))
+    for name in (
+        "package.json", "package-lock.json", "index.html", "vite.config.ts", "vite.config.js",
+        "tsconfig.json", "tsconfig.node.json", "src-tauri/Cargo.toml", "src-tauri/Cargo.lock",
+        "src-tauri/build.rs", "src-tauri/tauri.conf.json",
+    ):
+        try:
+            newest = max(newest, (Path(root) / name).stat().st_mtime)
+        except OSError:
+            pass
+    return newest
+
+
+def launcher_state(repo: Path | None) -> dict:
+    """What the launcher build is, and whether the sources on disk have moved past it."""
+    root = launcher_root(repo)
+    if root is None:
+        return {}
+    artifact, kind = launcher_artifact(root)
+    executable = launcher_executable(root, artifact, kind)
+    state = {
+        "root": root, "artifact": artifact, "kind": kind,
+        "version": launcher_version(root),
+        "exists": executable.is_file(),
+        "stale": False, "reason": "",
+    }
+    if not state["exists"]:
+        state.update(stale=True, reason="not built")
+        return state
+    try:
+        built_at = executable.stat().st_mtime
+    except OSError:
+        built_at = 0.0
+    if newest_launcher_source(root) > built_at:
+        state.update(stale=True, reason="sources are newer")
+    return state
+
+
+def launcher_summary(state: dict) -> str:
+    if not state:
+        return "no launcher-rs"
+    if not state.get("exists"):
+        return "not built"
+    version = str(state.get("version") or "?")
+    if state.get("stale"):
+        return f"{version} · stale — {state.get('reason') or 'sources changed'}"
+    return f"{version} · built"
+
+
+def ensure_launcher_tools(root: Path, emit, should_stop=None,
+                          log_path: Path | None = None) -> str | None:
+    """Check Node and Rust, and install the npm packages when node_modules is missing or old."""
+    missing = [name for name in ("node", "npm", "cargo") if not shutil.which(name)]
+    if missing:
+        emit("missing " + ", ".join(missing)
+             + " — install Node 18+ and Rust 1.85+ to build the launcher")
+        return None
+    node = shutil.which("node")
+    try:
+        check = subprocess.run(
+            [node, "-e",
+             "process.exit(Number(process.versions.node.split('.')[0]) >= 18 ? 0 : 1)"],
+            capture_output=True, text=True, timeout=30,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        check = None
+    if check is None or check.returncode != 0:
+        emit(f"Node {LAUNCHER_MIN_NODE} or newer is required to build the launcher")
+        return None
+    cargo = shutil.which("cargo")
+    try:
+        version = subprocess.run([cargo, "--version"], capture_output=True, text=True, timeout=30)
+        words = version.stdout.split()
+        if len(words) >= 2:
+            numbers = words[1].split(".")
+            try:
+                found = (int(numbers[0]), int(numbers[1]))
+            except (IndexError, ValueError):
+                found = LAUNCHER_MIN_RUST
+            if found < LAUNCHER_MIN_RUST:
+                emit(f"Rust {LAUNCHER_MIN_RUST[0]}.{LAUNCHER_MIN_RUST[1]} or newer is required "
+                     f"(found {words[1]})")
+                return None
+    except (OSError, subprocess.TimeoutExpired):
+        emit("could not run cargo — is Rust 1.85+ installed?")
+        return None
+    npm = shutil.which("npm") or "npm"
+    lock = Path(root) / "package-lock.json"
+    stamp = Path(root) / "node_modules" / ".package-lock.json"
+    tauri = Path(root) / "node_modules" / ".bin" / "tauri"
+    install = not tauri.is_file()
+    if not install and lock.is_file() and stamp.is_file():
+        try:
+            install = lock.stat().st_mtime > stamp.stat().st_mtime
+        except OSError:
+            pass
+    if install:
+        if not lock.is_file():
+            emit(f"{lock} is missing; cannot install the launcher's packages")
+            return None
+        emit("installing the launcher's packages (npm ci)…")
+        code = local_run([npm, "ci"], Path(root), emit,
+                         env={"NO_COLOR": "1", "npm_config_color": "false"},
+                         should_stop=should_stop, log_path=log_path)
+        if code == 130:
+            emit("rebuild cancelled")
+            return None
+        if code != 0 or not tauri.is_file():
+            emit("could not install the launcher's packages — see the log")
+            return None
+    return npm
+
+
+def build_launcher(config: dict, emit, *, progress: bool = False, should_stop=None,
+                   repo: Path | str | None = None) -> bool:
+    """Build the Rust + Tauri launcher the way install.sh does.
+
+    ``npm ci`` runs when node_modules is missing or older than package-lock.json, then
+    ``npm run tauri build``: ``--bundles app`` on macOS (the app the launcher is run from)
+    and ``--no-bundle`` on Linux (the release binary and desktop entry).  The build output
+    goes to build/tui-launcher.log.
+    """
+    if os.name == "nt":
+        emit("the local rebuild supports macOS and Linux; build on Windows with install.sh")
+        return False
+    repository = Path(repo).resolve() if repo else resolve_repo(config)
+    if repository is None:
+        emit(f"no Fanxi checkout found: set \"repo\" in {CONFIG_PATH} or FANXI_REPO_ROOT")
+        return False
+    root = launcher_root(repository)
+    if root is None:
+        emit(f"{repository} has no launcher-rs checkout")
+        return False
+    log_path = repository / "build" / LAUNCHER_LOG
+    try:
+        log_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(log_path, "a", encoding="utf-8") as log:
+            log.write("\n# --- local launcher rebuild %s ---\n"
+                      % time.strftime("%Y-%m-%d %H:%M:%S"))
+    except OSError:
+        pass
+
+    emit(f"checkout    {repository}")
+    emit(f"launcher    {root}")
+    emit(f"before      {launcher_summary(launcher_state(repository))}")
+    npm = ensure_launcher_tools(root, emit, should_stop=should_stop, log_path=log_path)
+    if npm is None:
+        return False
+
+    command = [npm, "run", "tauri", "build", "--"]
+    if sys.platform == "darwin":
+        command += ["--bundles", "app"]
+    else:
+        command += ["--no-bundle"]
+    emit("building the launcher (npm run tauri build)…")
+    code = local_run(command, root, emit,
+                     env={"CARGO_TERM_COLOR": "never", "NO_COLOR": "1",
+                          "npm_config_color": "false"},
+                     should_stop=should_stop, log_path=log_path)
+    if code == 130:
+        emit("rebuild cancelled")
+        return False
+    if code != 0:
+        emit(f"the launcher build failed — {log_path} has the whole log")
+        return False
+    state = launcher_state(repository)
+    if not state.get("exists"):
+        emit("the build finished but the launcher artifact is missing")
+        return False
+    emit(f"built {state['artifact']} — {launcher_summary(state)}")
+    return True
+
+
 # --- terminal UI -----------------------------------------------------------------------------
 
 
@@ -1183,6 +1422,21 @@ ACTIONS = [
         "restarted; the server is not touched. The first run may create .venv and download "
         "capstone and pefile, and a dashboard started under Rosetta pins clang to this Mac's "
         "architecture, which recompiles everything once. q cancels a build in progress.",
+        confirm=True,
+    ),
+    Action(
+        "L",
+        "Rebuild launcher",
+        "Builds the Rust + Tauri launcher from launcher-rs with the same commands as install.sh: "
+        "npm ci when node_modules is missing or older than package-lock.json, then "
+        "npm run tauri build -- --bundles app on macOS (--no-bundle on Linux). The first build "
+        "compiles Rust and takes several minutes; later ones are incremental. The macOS app "
+        "lands at launcher-rs/src-tauri/target/release/bundle/macos/Fanxi Launcher.app.",
+        "Replaces the built launcher. A launcher that is already open keeps the old binary until "
+        "it is restarted; build/fanxi and the server are not touched. Needs Node 18+, Rust 1.85+ "
+        "and the Tauri build packages (Xcode command line tools on macOS, WebKitGTK 4.1 on "
+        "Linux). The first run may execute npm ci and use the network. q cancels a build in "
+        "progress.",
         confirm=True,
     ),
     Action(
@@ -1561,6 +1815,7 @@ class Dashboard:
         handler = {
             "d": self.do_deploy,
             "B": self.do_rebuild,
+            "L": self.do_rebuild_launcher,
             "R": self.do_restart,
             "b": self.do_backup,
             "p": self.do_pull,
@@ -1673,6 +1928,36 @@ class Dashboard:
             self.message = "client rebuilt — restart clients to use it"
         else:
             self.message = "REBUILD FAILED — see the output (and build/tui-build.log)"
+
+    def do_rebuild_launcher(self) -> None:
+        repo = resolve_repo(self.config)
+        if repo is None:
+            self.say(f"no Fanxi checkout found: set \"repo\" in {CONFIG_PATH} or FANXI_REPO_ROOT")
+            self.message = "rebuild cancelled"
+            return
+        state = launcher_state(repo)
+        if not state:
+            self.say(f"{repo} has no launcher-rs checkout")
+            self.message = "rebuild cancelled"
+            return
+        self.say(f"launcher {launcher_summary(state)}")
+        self.say(f"artifact {state['artifact']}")
+        self.say("— rebuild launcher —")
+        self.message = "rebuilding launcher…"
+        self.building = True
+        self.last_progress = 0.0
+        self.screen.timeout(0)
+        try:
+            ok = build_launcher(self.config, self.build_line,
+                                should_stop=self.build_cancelled, repo=repo)
+        finally:
+            self.building = False
+            self.screen.timeout(1000)
+        if ok:
+            self.say("quit and reopen the launcher to use the new app")
+            self.message = "launcher rebuilt — restart it to use the new app"
+        else:
+            self.message = "LAUNCHER BUILD FAILED — see the output (and build/tui-launcher.log)"
 
     def build_line(self, line: str) -> None:
         """One line of the build: progress markers update the message, the rest is output."""
@@ -2040,6 +2325,9 @@ def report(config: dict) -> int:
     client = local_client(config)
     path = f"  {client['path']}" if client.get("path") else ""
     print(f"client     {client_summary(client)}{path}")
+    launcher = launcher_state(resolve_repo(config))
+    artifact = f"  {launcher['artifact']}" if launcher.get("artifact") else ""
+    print(f"launcher   {launcher_summary(launcher)}{artifact}")
     return 0
 
 
@@ -2050,8 +2338,10 @@ def main(argv: list[str]) -> int:
                         help="backup, pull, restart (applies migrations), verify")
     parser.add_argument("--rebuild", action="store_true",
                         help="rebuild the local client (build/fanxi), no curses")
+    parser.add_argument("--rebuild-launcher", action="store_true",
+                        help="rebuild the Rust + Tauri launcher in launcher-rs, no curses")
     parser.add_argument("--game", help="the FINAL FANTASY XI folder for --rebuild")
-    parser.add_argument("--repo", help="the Fanxi checkout to build for --rebuild")
+    parser.add_argument("--repo", help="the Fanxi checkout to build for --rebuild / --rebuild-launcher")
     parser.add_argument("--setup", action="store_true", help="write ~/.fanxi-manager.json")
     parser.add_argument("--config", help="path to the settings file")
     args = parser.parse_args(argv)
@@ -2061,7 +2351,7 @@ def main(argv: list[str]) -> int:
         CONFIG_PATH = Path(args.config).expanduser()
 
     config = load_config()
-    interactive = not (args.status or args.deploy or args.rebuild)
+    interactive = not (args.status or args.deploy or args.rebuild or args.rebuild_launcher)
     if args.setup or (interactive and not CONFIG_PATH.is_file()):
         config = setup(config)
     elif not CONFIG_PATH.is_file():
@@ -2077,6 +2367,8 @@ def main(argv: list[str]) -> int:
         return 0 if ok else 1
     if args.rebuild:
         return 0 if build_client(config, lambda line: print(line, flush=True)) else 1
+    if args.rebuild_launcher:
+        return 0 if build_launcher(config, lambda line: print(line, flush=True)) else 1
     try:
         curses.wrapper(lambda screen: Dashboard(screen, config).run())
     except KeyboardInterrupt:

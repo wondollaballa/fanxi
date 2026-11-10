@@ -14,6 +14,7 @@ import sqlite3
 import subprocess
 import sys
 import tempfile
+import time
 import types
 import unittest
 from unittest import mock
@@ -719,6 +720,170 @@ class LocalBuildTest(unittest.TestCase):
         log = (self.repo / "build" / TUI.BUILD_LOG).read_text()
         self.assertIn("kept", log)
         self.assertIn(sys.executable, log.splitlines()[0])
+
+
+def make_launcher(root: Path, *, version="0.1.0", built=True):
+    """A scratch checkout with launcher-rs, and the launcher directory in it."""
+    launcher = root / "launcher-rs"
+    (launcher / "src").mkdir(parents=True)
+    (launcher / "src-tauri" / "src").mkdir(parents=True)
+    (launcher / "src" / "main.tsx").write_text("")
+    (launcher / "src-tauri" / "src" / "main.rs").write_text("")
+    (launcher / "package.json").write_text(json.dumps({"name": "fanxi-launcher", "version": version}))
+    (launcher / "package-lock.json").write_text("{}")
+    (launcher / "src-tauri" / "Cargo.toml").write_text("")
+    (launcher / "src-tauri" / "tauri.conf.json").write_text(json.dumps({"version": version}))
+    (launcher / "node_modules" / ".bin").mkdir(parents=True)
+    (launcher / "node_modules" / ".bin" / "tauri").write_text("")
+    stamp = launcher / "node_modules" / ".package-lock.json"
+    stamp.write_text("{}")
+    now = time.time()
+    os.utime(stamp, (now + 1, now + 1))
+    if built:
+        artifact, kind = TUI.launcher_artifact(launcher)
+        executable = TUI.launcher_executable(launcher, artifact, kind)
+        executable.parent.mkdir(parents=True, exist_ok=True)
+        executable.write_text("")
+        os.utime(executable, (now + 5, now + 5))
+    return root, launcher
+
+
+class LauncherStateTest(unittest.TestCase):
+    """The launcher artifact against the sources: is the built app still current?"""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_a_built_launcher_is_current(self):
+        repo, launcher = make_launcher(self.root / "repo")
+        state = TUI.launcher_state(repo)
+        self.assertTrue(state["exists"])
+        self.assertFalse(state["stale"], state)
+        self.assertEqual(state["version"], "0.1.0")
+        self.assertEqual(state["kind"], "app" if sys.platform == "darwin" else "binary")
+        self.assertEqual(TUI.launcher_summary(state), "0.1.0 · built")
+
+    def test_a_missing_artifact_is_not_built(self):
+        repo, launcher = make_launcher(self.root / "repo", built=False)
+        state = TUI.launcher_state(repo)
+        self.assertFalse(state["exists"])
+        self.assertTrue(state["stale"])
+        self.assertEqual(TUI.launcher_summary(state), "not built")
+
+    def test_newer_sources_make_it_stale(self):
+        repo, launcher = make_launcher(self.root / "repo")
+        source = launcher / "src-tauri" / "src" / "main.rs"
+        source.write_text("// changed")
+        later = time.time() + 60
+        os.utime(source, (later, later))
+        state = TUI.launcher_state(repo)
+        self.assertTrue(state["stale"])
+        self.assertEqual(state["reason"], "sources are newer")
+        self.assertIn("stale", TUI.launcher_summary(state))
+
+    def test_a_checkout_without_launcher_rs(self):
+        self.assertEqual(TUI.launcher_state(self.root / "empty"), {})
+        self.assertEqual(TUI.launcher_summary({}), "no launcher-rs")
+
+
+class LauncherBuildTest(unittest.TestCase):
+    """build_launcher's sequence, with npm, cargo and the build stubbed out."""
+
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name)
+        self.repo, self.launcher = make_launcher(self.root / "repo")
+        self.lines = []
+        self.commands = []
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def emit(self, line):
+        self.lines.append(str(line))
+
+    def tool(self, command, **kwargs):
+        if str(command[0]).endswith("node"):
+            return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+        if str(command[0]).endswith("cargo"):
+            return types.SimpleNamespace(returncode=0, stdout="cargo 1.97.1 (x)\n", stderr="")
+        return types.SimpleNamespace(returncode=0, stdout="", stderr="")
+
+    def fake_run(self, command, cwd, emit, **kwargs):
+        self.commands.append([str(part) for part in command])
+        if [str(part) for part in command[1:3]] == ["ci"]:
+            (self.launcher / "node_modules" / ".bin" / "tauri").write_text("")
+        return 0
+
+    def build(self, result=0):
+        with mock.patch.object(TUI.shutil, "which",
+                               side_effect=lambda name: f"/fake/{name}"
+                               if name in ("node", "npm", "cargo") else None), \
+                mock.patch.object(TUI.subprocess, "run", side_effect=self.tool), \
+                mock.patch.object(TUI, "local_run", side_effect=self.fake_run):
+            return TUI.build_launcher({}, self.emit, repo=self.repo)
+
+    def expected_tauri(self):
+        return ["run", "tauri", "build", "--"] + (
+            ["--bundles", "app"] if sys.platform == "darwin" else ["--no-bundle"])
+
+    def test_builds_the_launcher_with_the_platform_bundles(self):
+        self.assertTrue(self.build())
+        self.assertEqual(len(self.commands), 1)
+        self.assertEqual(self.commands[0][1:], self.expected_tauri())
+        self.assertTrue(any("built" in line for line in self.lines))
+        self.assertTrue(any("0.1.0" in line for line in self.lines))
+
+    def test_missing_packages_run_npm_ci_first(self):
+        (self.launcher / "node_modules" / ".bin" / "tauri").unlink()
+        self.assertTrue(self.build())
+        self.assertEqual(self.commands[0][1:], ["ci"])
+        self.assertEqual(self.commands[1][1:], self.expected_tauri())
+
+    def test_a_stale_package_lock_runs_npm_ci(self):
+        lock = self.launcher / "package-lock.json"
+        stamp = self.launcher / "node_modules" / ".package-lock.json"
+        later = time.time() + 60
+        os.utime(lock, (later, later))
+        self.assertTrue(lock.stat().st_mtime > stamp.stat().st_mtime)
+        self.assertTrue(self.build())
+        self.assertEqual(self.commands[0][1:], ["ci"])
+
+    def test_a_missing_toolchain_is_explained(self):
+        with mock.patch.object(TUI.shutil, "which",
+                               side_effect=lambda name: None if name == "cargo"
+                               else f"/fake/{name}"):
+            ok = TUI.build_launcher({}, self.emit, repo=self.repo)
+        self.assertFalse(ok)
+        self.assertTrue(any("missing cargo" in line for line in self.lines))
+
+    def test_a_failed_build_reports_the_log(self):
+        with mock.patch.object(TUI.shutil, "which",
+                               side_effect=lambda name: f"/fake/{name}"), \
+                mock.patch.object(TUI.subprocess, "run", side_effect=self.tool), \
+                mock.patch.object(TUI, "local_run", side_effect=lambda *a, **k: 2):
+            ok = TUI.build_launcher({}, self.emit, repo=self.repo)
+        self.assertFalse(ok)
+        self.assertTrue(any("launcher build failed" in line for line in self.lines))
+
+    def test_a_cancelled_build_says_so(self):
+        with mock.patch.object(TUI.shutil, "which",
+                               side_effect=lambda name: f"/fake/{name}"), \
+                mock.patch.object(TUI.subprocess, "run", side_effect=self.tool), \
+                mock.patch.object(TUI, "local_run", side_effect=lambda *a, **k: 130):
+            ok = TUI.build_launcher({}, self.emit, repo=self.repo)
+        self.assertFalse(ok)
+        self.assertIn("rebuild cancelled", self.lines)
+
+    def test_a_checkout_without_launcher_rs_is_an_error(self):
+        empty = self.root / "empty"
+        empty.mkdir()
+        self.assertFalse(TUI.build_launcher({}, self.emit, repo=empty))
+        self.assertTrue(any("no launcher-rs checkout" in line for line in self.lines))
 
 
 if __name__ == "__main__":

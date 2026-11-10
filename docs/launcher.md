@@ -774,7 +774,13 @@ npm run tauri build          # .app/.dmg (macOS), AppImage/deb (Linux), MSI/NSIS
 
 The macOS app lands in `launcher-rs/src-tauri/target/release/bundle/macos/Fanxi Launcher.app`
 (with a `.dmg` beside it); the Linux bundles and the raw binary land under
-`launcher-rs/src-tauri/target/release/`. The bundle carries the `gearswap/` default libraries in
+`launcher-rs/src-tauri/target/release/`.
+
+The admin dashboard can run the same app-only build without install.sh: **Rebuild launcher**
+(`L` in `tools/fanxi_tui.py`, or `--rebuild-launcher`) runs `npm ci` when the packages are
+missing or stale, then `npm run tauri build -- --bundles app` on macOS (`--no-bundle` on
+Linux), and leaves the result in the checkout's target folder. It does not copy the app to
+`~/Applications` or restart a launcher that is already open. The bundle carries the `gearswap/` default libraries in
 its Resources folder. `install.sh` builds with `--bundles app` on macOS and `--no-bundle` on Linux,
 then copies the app to `~/Applications` (or `/Applications` when writable) or writes a desktop
 entry that runs the release binary from the checkout.

@@ -379,7 +379,7 @@ changed; a launcher release needs no server restart.
 
 `tools/fanxi_tui.py` is a terminal dashboard you run on the machine you administer from, not on the
 server. It drives the steps above over SSH and shows the state between them; it also reads the
-client built on that machine and rebuilds it.
+client and launcher built on that machine and rebuilds them.
 
 ```bash
 ./tools/fanxi_tui.py
@@ -389,6 +389,7 @@ client built on that machine and rebuilds it.
 | --- | --- |
 | `d` | deploy: backup, `git pull`, restart (applies migrations), verify `schema_migrations`, health check, offer rollback |
 | `B` | rebuild the local client: `.venv` when missing, `tools/prepare.py` when the game folder changed, `tools/build_posix.py host64`, with the compile's progress in the output pane (`q` cancels) |
+| `L` | rebuild the Rust + Tauri launcher: `npm ci` when the packages are missing or stale, then `npm run tauri build -- --bundles app` (macOS) or `--no-bundle` (Linux), streaming into the output pane (`q` cancels) |
 | `R` | restart the service |
 | `b` | take a backup on the server |
 | `p` | pull the latest backup home (the homelab job, run by hand) |
@@ -421,6 +422,14 @@ a failed link puts the client the launcher starts back instead of leaving none. 
 running keep the old binary until they are restarted, and `Fanxi.app` (the bundle
 `tools/setup.py` makes) is a separate build.
 
+The launcher half is **Rebuild launcher** (`L`, or `--rebuild-launcher`): it builds
+`launcher-rs` with install.sh's own steps — `npm ci` when `node_modules` is missing or older
+than `package-lock.json`, then `npm run tauri build -- --bundles app` on macOS (the app the
+launcher is run from, at `launcher-rs/src-tauri/target/release/bundle/macos/Fanxi Launcher.app`)
+or `--no-bundle` on Linux. The output streams into the pane, cancelling with `q`, and goes to
+`build/tui-launcher.log`. It does not copy the app to `~/Applications` or restart a running
+launcher; `--status` reports the build's version and whether the sources are newer.
+
 If the dashboard was started by an Intel or Anaconda python, it runs under Rosetta on Apple
 silicon. A universal binary such as `/usr/bin/clang` then takes the caller's architecture
 preference and would build the whole client x86_64 — including a link against the native objects
@@ -441,16 +450,17 @@ The first run asks for the ssh destination, the checkout path and the launcher U
 `FANXI_SSH_KEY` override it; `FANXI_GAME_DIR` and `FANXI_REPO_ROOT` override the local client
 paths described above.
 
-Three non-interactive modes use the same code, so they can be scripted:
+Four non-interactive modes use the same code, so they can be scripted:
 
 ```bash
-./tools/fanxi_tui.py --status     # the report, no curses
-./tools/fanxi_tui.py --deploy     # the deploy sequence, exit 1 on failure
-./tools/fanxi_tui.py --rebuild    # the local client build, no curses
+./tools/fanxi_tui.py --status            # the report, no curses
+./tools/fanxi_tui.py --deploy            # the deploy sequence, exit 1 on failure
+./tools/fanxi_tui.py --rebuild           # the local client build, no curses
+./tools/fanxi_tui.py --rebuild-launcher  # the launcher build, no curses
 ```
 
 `--rebuild` takes `--game <FINAL FANTASY XI folder>` and `--repo <checkout>` when discovery would
-pick the wrong one; `--status` accepts the same two.
+pick the wrong one; `--rebuild-launcher` takes `--repo`, and `--status` accepts the same two.
 
 It uses `ssh -o BatchMode=yes` with your existing key, so it fails fast instead of prompting, and it
 only writes the database through the server's own commands (`db-backup.sh`, `create-admin`,

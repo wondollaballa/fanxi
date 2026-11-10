@@ -142,6 +142,13 @@ the front end; `cargo test --manifest-path src-tauri/Cargo.toml` runs the Rust t
 The launch command is a pure function (`build_launch_command`) so it stays testable without
 spawning `host64`. If you add a client argument, add it there and to the test.
 
+The admin dashboard can rebuild the app without install.sh: **Rebuild launcher** (`L` in
+`tools/fanxi_tui.py`, or `./tools/fanxi_tui.py --rebuild-launcher`) runs `npm ci` when
+`node_modules` is missing or older than `package-lock.json`, then `npm run tauri build --
+--bundles app` on macOS (`--no-bundle` on Linux), logging to `build/tui-launcher.log`.
+It leaves the app in the checkout's target folder; it does not install it to
+`~/Applications` or restart a running launcher. See [server.md](server.md#local-dashboard).
+
 ## Client build
 
 ```bash
