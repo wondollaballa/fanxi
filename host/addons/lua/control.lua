@@ -4346,6 +4346,7 @@ local function hud_defaults()
     local battle, party = hub_sanitize(nil)
     return {
         show_hud = true,
+        hud_minimized = false,
         show_abilities = false,
         show_spells = false,
         show_trusts = false,
@@ -4386,6 +4387,7 @@ local function hud_defaults()
         collapsed = {
             fanxi_battle = false, fanxi_party = false,
             ['fanxi-target'] = false, ['inventory-hud'] = false, ['fanxi-equipview'] = false,
+            ['fanxi_chm_hud'] = false,
         },
     }
 end
@@ -4496,6 +4498,7 @@ local function hud_sanitize(raw)
     if type(raw.show_sch) == 'boolean' then state.show_sch = raw.show_sch end
     -- The Chemist window follows its own main job, with the same absent-means-auto rule.
     if type(raw.show_chm) == 'boolean' then state.show_chm = raw.show_chm end
+    if type(raw.hud_minimized) == 'boolean' then state.hud_minimized = raw.hud_minimized end
     do
         local target_pos = type(raw.target) == 'table' and raw.target or {}
         state.target.x = math.floor(hud_clamp(target_pos.x, -4000, 8000, state.target.x))
@@ -4513,7 +4516,7 @@ local function hud_sanitize(raw)
     do
         local raw_collapsed = type(raw.collapsed) == 'table' and raw.collapsed or {}
         for _, key in ipairs({ 'fanxi_battle', 'fanxi_party', 'fanxi-target', 'inventory-hud',
-                               'fanxi-equipview' }) do
+                               'fanxi-equipview', 'fanxi_chm_hud' }) do
             if type(raw_collapsed[key]) == 'boolean' then
                 state.collapsed[key] = raw_collapsed[key]
             end
@@ -4639,6 +4642,7 @@ local function hud_save(state, path)
         show_equipview = state.show_equipview,
         show_sch = state.show_sch,
         show_chm = state.show_chm,
+        hud_minimized = state.hud_minimized == true,
         equipview = { x = state.equipview.x, y = state.equipview.y },
         chm = { x = state.chm.x, y = state.chm.y },
         mounts = {
@@ -4653,6 +4657,7 @@ local function hud_save(state, path)
             ['fanxi-target'] = state.collapsed['fanxi-target'] == true,
             ['inventory-hud'] = state.collapsed['inventory-hud'] == true,
             ['fanxi-equipview'] = state.collapsed['fanxi-equipview'] == true,
+            ['fanxi_chm_hud'] = state.collapsed['fanxi_chm_hud'] == true,
         },
     }))
     file:close()
@@ -4801,6 +4806,7 @@ local function hud_cooling(hud, item)
 end
 
 local function hud_click(hud, item)
+    if hud.chm and item.kind == 'chemist_item' then hud.chm.expand() end
     -- A Chemistry tile is used, not cast: //chm use selects the bag row and resolves it the
     -- way its kind says (a hostile item is Tossed, anything else is Mixed).
     if item.kind == 'chemist_item' then
@@ -7562,6 +7568,9 @@ local function hud_window(api, key, title, groups)
         end
         if key == 'spells' then
             hud.spell_tab = active.title or 'Other'
+            -- Selecting the Chemistry tab brings the Chemist HUD back if its title bar
+            -- was minimized, the way clicking a page tab reopens its own window.
+            if hud.spell_tab == 'Chemistry' and hud.chm then hud.chm.expand() end
             hud_spell_modes(api, width, spec, hud.spell_tab)
         end
         local child_flags = scroll_x and 2048 or 0
@@ -11535,6 +11544,7 @@ xi.events.on('command', function(e)
                 shown = hud.state.show_chm ~= true
             end
             hud.state.show_chm = shown
+            if shown and hud.chm then hud.chm.expand() end
             if shown then hud.state.show_hud = true end
             hud_save(hud.state, hud.path)
             if hud.chm and hud.chm.active() then
@@ -11727,6 +11737,33 @@ end)
 -- Ctrl+H is the same as //hud toggle, with the chat line open or closed.
 if xi.input and xi.input.bind then xi.input.bind(HUD_HOTKEY, '//hud toggle') end
 
+-- One control for every HUD window: the action pages, the information hubs, Target
+-- Debuffs, Equip View, the Chemist window and the mounted camp HUD all step aside while
+-- this is on.  It is a tiny no-title window pinned to the top-right corner, so the
+-- restore control is visible even when everything else is gone.
+local function hud_global_minimize(api)
+    local state = hud.state
+    local screen_w = select(1, hud_screen_size(api))
+    local label = state.hud_minimized and 'Show all HUD' or 'Minimize all HUD'
+    local width = 116
+    api.SetNextWindowPos({ math.max(4, screen_w - width - 6), 2 }, 1)
+    api.SetNextWindowSize({ width, 26 }, 1)
+    api.SetNextWindowBgAlpha(0.92)
+    -- No title bar, no resize, no move, no scrollbar, no saved/auto size.
+    local open = api.Begin('###fanxi_hud_min', nil, 1 + 4 + 8 + 16 + 64)
+    if open then
+        api.PushStyleColor(21, { 0.12, 0.16, 0.22, 1 })
+        api.PushStyleColor(22, { 0.18, 0.24, 0.32, 1 })
+        api.PushStyleColor(23, { 0.10, 0.13, 0.18, 1 })
+        if api.Button(label, { width - 8, 22 }) then
+            state.hud_minimized = state.hud_minimized ~= true
+            hud_save(state, hud.path)
+        end
+        api.PopStyleColor(3)
+    end
+    api.End()
+end
+
 function hud.frame()
     if (game.player_index() or -1) < 0 then return end
     if not hud_character() then return end
@@ -11740,6 +11777,10 @@ function hud.frame()
     local api = hud.imgui
     if not api then return end
     local state = hud.state
+    if state.hud_minimized then
+        hud_global_minimize(api)
+        return
+    end
     local battle_open = hud.battle and hud.battle.visible and hud.battle.visible() or false
     -- While the Battle hub is up it owns the screen: the action windows and the two information
     -- hubs step aside without changing their saved switches, so they return as soon as it closes.
@@ -11834,6 +11875,8 @@ function hud.frame()
     end
     -- Last, and opaque: the Done box is the one control that must never be hidden by a window.
     if state.edit then hud_edit_box(api) end
+    -- Draw the global minimizer after every HUD window so it stays on top of the tab row.
+    hud_global_minimize(api)
     if hud.reposition then hud.reposition = false end
     if hud.clamp_positions then hud.clamp_positions = false end
 end
@@ -11914,6 +11957,11 @@ hud.install_chm = function()
             hud_save(hud.state, hud.path)
         end,
         get_window = function() return hud.state.chm end,
+        get_collapsed = function() return hud.state.collapsed['fanxi_chm_hud'] == true end,
+        set_collapsed = function(value)
+            hud.state.collapsed['fanxi_chm_hud'] = value == true
+            hud_save(hud.state, hud.path)
+        end,
         save_window = function(x, y)
             hud.state.chm.x = x
             hud.state.chm.y = y

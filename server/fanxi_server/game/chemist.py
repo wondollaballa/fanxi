@@ -532,13 +532,30 @@ def craft(service, character_id: int, item_id: int) -> dict:
 
 
 def craft_cast_ms(service, character_id: int, item_id: int) -> int:
-    """Synthesis cast time after the ultimate shield's flat reduction."""
+    """Synthesis cast time after the ultimate shield's flat reduction.
+
+    The shield is counted while carried as well as while worn.  Chemist synthesis is
+    server-side and GearSwap cannot see a //chm craft action, so a two-handed staff
+    (or a client-side gear lock) must not turn a 2-second synthesis back into 12.
+    """
     recipe_row = recipe(service, item_id)
     base = int(recipe_row.get("cast_ms") or 12000) if recipe_row else 12000
     try:
         reduction = int(service.equipped_mods(int(character_id)).get(mod.CHEMISTRY_CAST, 0))
     except Exception:
         reduction = 0
+    if reduction >= 0:
+        try:
+            rows = service.db.all(
+                "SELECT im.value FROM char_inventory ci "
+                "JOIN item_mods im ON im.item_id = ci.item_id "
+                "WHERE ci.character_id = ? AND ci.container = 0 "
+                "AND im.mod_id = ? AND im.value < 0",
+                (int(character_id), int(mod.CHEMISTRY_CAST)))
+            if rows:
+                reduction = min(int(row["value"]) for row in rows)
+        except Exception:
+            log.debug("carried CHEMISTRY_CAST lookup failed", exc_info=True)
     # CHEMISTRY_CAST is a signed millisecond adjustment (the shield is -10000).
     return max(1000, base + min(0, reduction))
 
@@ -589,31 +606,42 @@ def item_values(spec: dict, alchemy: int, *, volatile: bool = False,
 
 
 def toss_accuracy(session, target) -> float:
-    """Physical ranged hit chance for one Toss.
+    """Toss lands unless the target is explicitly immune to it.
 
-    Throwing skill is the weapon skill; R.Accuracy, DEX and the target's
-    (debuffed) Evasion follow the normal ranged formula.  Magic Evasion is not
-    part of the roll.
+    The old physical ranged roll made a level-99 Chemist miss ordinary merit mobs.
+    Toss is a preparation action in this design: land it, then let resistance shorten
+    the debuff (``toss_resistance``).  A target that marks itself fully immune still
+    misses/does nothing, so the caller keeps its miss branch for that case.
+    """
+    if getattr(target, "toss_immune", False) or getattr(target, "immune", False):
+        return 0.0
+    return 1.0
+
+
+def toss_resistance(session, target) -> float:
+    """Duration multiplier for one hostile Toss.
+
+    Full resistance is not a miss; it is a shorter debuff.  Use Alchemy as the
+    casting skill, the Chemist's INT/Magic Accuracy, and the target's level/Magic
+    Evasion.  ``apply_mob_effect`` clamps this to 0.5..1.0, so a resisted Toss still
+    lands but wears off faster.
     """
     try:
         sheet = session.stat_sheet()
-        caps, _base = session.effective_skills()
-        throwing = int(caps.get(27, 0))
-        accuracy = stats.ranged_accuracy(
-            session.combat_mods(), int(sheet.attributes.get("dex", 0)), throwing)
         enemy = session.world.debuffed_monster(target)
-        rate = combat.hit_rate(
-            accuracy=accuracy, evasion=int(enemy.evasion),
-            attacker_level=int(sheet.fighter.level), target_level=int(enemy.level),
-            is_pc=True, corrected=combat.level_corrected(int(session.zone)))
+        return combat.magic_resist(
+            skill=alchemy_skill(session.world.service, int(session.char["id"])),
+            caster_int=int(sheet.attributes.get("int", 0)),
+            mods=session.combat_mods(),
+            target_level=int(enemy.level),
+            target_mods=dict(getattr(enemy, "mods", {}) or {}))
     except Exception as exc:
-        log.warning("%s Toss accuracy unavailable: %s", session.addr, exc)
-        return 0.95
-    return max(0.05, min(0.99, float(rate)))
+        log.warning("%s Toss resistance unavailable: %s", session.addr, exc)
+        return 1.0
 
 
 def apply_hostile(session, target, spec: dict, *, volatile: bool = False,
-                  now: float | None = None) -> dict:
+                  duration_scale: float = 1.0, now: float | None = None) -> dict:
     """Apply one hostile chemistry item.  The caller has already rolled the hit."""
     effect_id = int(spec.get("effect_key") or 0)
     info = EFFECTS.get(effect_id)
@@ -633,7 +661,8 @@ def apply_hostile(session, target, spec: dict, *, volatile: bool = False,
         effect_id, "debuff", values["duration"], power=values["power"],
         potency=values["potency"], tick=values["tick"], icon=info.icon)
     applied = session.world.apply_mob_effect(
-        target, effect, session, now, duration=values["duration"],
+        target, effect, session, now, duration_scale=duration_scale,
+        duration=values["duration"],
         potency=values["potency"], tick=values["tick"],
         tick_interval=values["tick_interval"], tier=values["tier"],
         name=info.name)

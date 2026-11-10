@@ -1018,7 +1018,7 @@ int main(int argc, char** argv)
 #endif
     if (getenv("FANXI_ITEM_DUMP"))
         plat_thread_start(item_dump_thread, NULL);
-    else
+    else if (getenv("FANXI_CHM_ITEM_MASK"))
         plat_thread_start(item_patch_thread, NULL);
 #if defined(__linux__) && !defined(__ANDROID__)
     /* the Wayland app id (X11 class) of the sign-in's and the game's windows, before SDL starts:

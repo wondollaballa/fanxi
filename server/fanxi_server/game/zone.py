@@ -11410,7 +11410,9 @@ class ZoneSession:
         for enemy in targets:
             rate = 1.0 if volatile else chemist.toss_accuracy(self, enemy)
             if volatile or self.world.rng.random() < rate:
-                result = chemist.apply_hostile(self, enemy, spec, volatile=volatile, now=now)
+                result = chemist.apply_hostile(
+                    self, enemy, spec, volatile=volatile,
+                    duration_scale=chemist.toss_resistance(self, enemy), now=now)
                 if result.get("ok"):
                     landed += 1
                     entries.append({
@@ -11527,30 +11529,18 @@ class ZoneSession:
         self.synth_until = finish
         self.synth_pose_at = now
         self.stop_resting()
-        # The action's animation field on a MagicStart is ignored; the synth pose is
-        # the entity animation, so send the self update and the status block together.
+        # This is exactly what LandSandBoat's startSynth does: set the entity's
+        # animation to Synth and send the status packet.  There is no 0x028 for a
+        # synthesis; MagicStart made the client play Protect and MagicFinish made it
+        # play the erase-looking action at the end.
         self.queue += [self.char_status(), self.char_update(packets.SEND_HP)]
         self.world.broadcast_player(self, packets.SEND_HP)
-        me = int(self.char["char_id"])
-        # 0x028's animation field is the *spell* animation id, and 44 is Protect.
-        # The synthesis pose rides the entity animation (0x00D/0x037), not this
-        # field; putting 44 here played Protect's cast animation instead.
-        self.queue.append(sub(0x028, packets.battle_action(
-            me, me, int(item_id), animation=0,
-            message=packets.MESSAGE_MAGIC_STARTS_CASTING, kind=0,
-            category=packets.ACTION_CATEGORY_MAGIC_START,
-            action_id=packets.ACTION_SKILL_USE)))
         self.say("You begin synthesizing a restock (%.1fs)." % (cast_ms / 1000.0))
 
     def _finish_chemist_synthesis(self, item_id: int) -> None:
         self.synth_until = 0.0
         result = chemist.craft(
             self.world.service, int(self.char["id"]), int(item_id))
-        me = int(self.char["char_id"])
-        self.queue.append(sub(0x028, packets.battle_action(
-            me, me, int(item_id), animation=0, message=0,
-            kind=0, category=packets.ACTION_CATEGORY_MAGIC_FINISH,
-            action_id=int(item_id))))
         self.queue += [self.char_status(), self.char_update(packets.SEND_HP)]
         self.world.broadcast_player(self, packets.SEND_HP)
         self.refresh_inventory()

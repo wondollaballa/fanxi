@@ -253,6 +253,7 @@ function M.snapshot()
         bag = data and #data.bag or 0,
         recipes = data and #data.recipes or 0,
         toolkits = data and tonumber(data.toolkits) or 0,
+        collapsed = S.collapsed == true,
         stances = active,
         error = S.error,
     }
@@ -477,9 +478,13 @@ function W.window(api)
         win.y = math.max(4, math.min(tonumber(win.y) or 300, sh - HEIGHT - 4))
     end
     api.SetNextWindowPos({ win.x or 560, win.y or 40 }, S.window_force and 1 or 4)
-    api.SetNextWindowSize({ WIDTH, HEIGHT }, 1)
-    -- The window is small and has no saved collapsed state of its own; always open it.
-    api.SetNextWindowCollapsed(false, 1)
+    local collapsed = S.collapsed == true
+    -- A collapsed window auto-fits its title bar; forcing the full height here made the
+    -- minimised box keep the content rectangle and draw an empty body.
+    if not collapsed then api.SetNextWindowSize({ WIDTH, HEIGHT }, 1) end
+    -- The title-bar caret owns this after the first frame; the saved value is forced
+    -- once so a login lands on the same minimized title bar.
+    api.SetNextWindowCollapsed(collapsed, S.collapse_force and 1 or 4)
     api.SetNextWindowBgAlpha(0.95)
     S.window_force = false
     local close = { true }
@@ -491,15 +496,44 @@ function W.window(api)
     local open = api.Begin(title, close, 0)
     if not close[1] and ctx.on_hide then ctx.on_hide(false) end
     if open then
-        W.header(api)
-        api.Separator()
-        W.abilities(api)
-        W.recipes(api)
-        W.bag(api)
-        api.Separator()
-        W.stances(api)
-        if S.error then text(api, COLORS.red, 'Server: ' .. S.error) end
-        text(api, COLORS.faint, '//chm load <item> · //hud chm hides · //chm status in chat')
+        local now_collapsed = api.IsWindowCollapsed and api.IsWindowCollapsed() or false
+        if S.collapse_force and now_collapsed == collapsed then
+            S.collapse_force = false
+        end
+        if now_collapsed ~= collapsed then
+            S.collapsed = now_collapsed
+            if ctx.set_collapsed then ctx.set_collapsed(now_collapsed) end
+        end
+        -- When the box is reduced to its title, a click anywhere on that title row
+        -- brings it back (the caret already does the same).  While expanded only the
+        -- caret collapses, so dragging the title bar never minimizes it by accident.
+        if now_collapsed and api.IsMouseClicked and api.IsMouseClicked(0)
+                and api.IsWindowHovered and api.IsWindowHovered() then
+            M.expand()
+            now_collapsed = false
+        elseif not now_collapsed and api.IsMouseDoubleClicked
+                and api.IsMouseDoubleClicked(0) and api.IsMouseHoveringRect then
+            -- Double-click anywhere on the whole title row toggles the box; the
+            -- caret still works for a single click.
+            local wx, wy = api.GetWindowPos()
+            local title_h = api.GetFrameHeight and api.GetFrameHeight() or 24
+            if wx and wy and api.IsMouseHoveringRect(
+                    { wx, wy }, { wx + WIDTH, wy + title_h }) then
+                M.collapse()
+                now_collapsed = true
+            end
+        end
+        if not now_collapsed then
+            W.header(api)
+            api.Separator()
+            W.abilities(api)
+            W.recipes(api)
+            W.bag(api)
+            api.Separator()
+            W.stances(api)
+            if S.error then text(api, COLORS.red, 'Server: ' .. S.error) end
+            text(api, COLORS.faint, '//chm load <item> · //hud chm hides · //chm status in chat')
+        end
         if api.IsMouseReleased and api.IsMouseReleased(0) then
             local px, py = api.GetWindowPos()
             if px and py and ctx.save_window then
@@ -513,10 +547,33 @@ end
 -- ---------------------------------------------------------------------------------------------
 -- public
 
+function M.expand()
+    if not S.installed then return end
+    local hidden = S.ctx and S.ctx.get_shown and not S.ctx.get_shown()
+    if not S.collapsed and not hidden then return end
+    S.collapsed = false
+    S.collapse_force = true
+    if S.ctx and S.ctx.set_collapsed then S.ctx.set_collapsed(false) end
+    if S.ctx and S.ctx.on_hide then S.ctx.on_hide(true) end
+end
+
+function M.collapse()
+    if not S.installed then return end
+    S.collapsed = true
+    S.collapse_force = true
+    if S.ctx and S.ctx.set_collapsed then S.ctx.set_collapsed(true) end
+end
+
+function M.collapsed()
+    return S.collapsed == true
+end
+
 function M.install(ctx)
     S.ctx = type(ctx) == 'table' and ctx or {}
     S.installed = true
     S.window_force = true
+    S.collapsed = S.ctx.get_collapsed and S.ctx.get_collapsed() == true or false
+    S.collapse_force = true
     M.tick()
     return M
 end

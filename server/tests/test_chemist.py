@@ -246,6 +246,11 @@ class ChemistTest(unittest.TestCase):
         self.session.equip(bytes([0, 0, 0, 0, int(shield["slot"]), 1, 0]))
         self.assertEqual(self.session.equipped.get(1), (0, int(shield["slot"]), 26457))
 
+    def test_carried_shield_keeps_synthesis_fast(self):
+        self.service.add_item(int(self.character["id"]), 26457, 1)
+        self.assertEqual(chemist.craft_cast_ms(
+            self.service, int(self.character["id"]), 30000), 2000)
+
     def test_brewer_shield_grants_all_craft_skills(self):
         self.service.add_item(int(self.character["id"]), 26457, 1)
         row = next(row for row in self.service.inventory(int(self.character["id"]))
@@ -391,6 +396,14 @@ class ChemistTest(unittest.TestCase):
         self.assertIn(chemist.AQUA_REGIA, mob.effect_state)
         after = int(self.world.debuffed_monster(mob).defense)
         self.assertLess(after, before)
+
+    def test_toss_is_effectively_certain_and_resistance_shortens_it(self):
+        self.enter()
+        mob = self.mob()
+        self.assertEqual(chemist.toss_accuracy(self.session, mob), 1.0)
+        scale = chemist.toss_resistance(self.session, mob)
+        self.assertGreaterEqual(scale, 0.5)
+        self.assertLessEqual(scale, 1.0)
 
     def test_toss_miss_consumes_a_charge(self):
         self.enter()

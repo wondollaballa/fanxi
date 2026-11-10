@@ -257,15 +257,14 @@ Hostile resolution order:
 3. If the slot is empty, start Chemistry (section 6) instead of throwing. The craft
    restocks the slot; it does not also apply the effect.
 4. Consume one charge.
-5. Roll physical ranged accuracy:
-   - throwing skill (id 27) from `skills.caps_for()`,
-   - DEX and `RACC` from the stat sheet,
-   - target Evasion from `world.debuffed_monster()`, so a Sludge Bomb makes the next
-     Toss more likely to land,
-   - `combat.hit_rate()`, one-handed cap, level correction only in corrected zones.
-6. On a miss: show the miss action and consume the charge. No effect. Magic Evasion is
-   never consulted.
-7. On a hit: apply the effect at the Alchemy-scaled potency, with no magic resist roll.
+5. Toss lands by default (accuracy 1.0); only an explicitly immune target misses.
+   The old physical ranged roll made ordinary merit mobs miss a level-99 Chemist.
+6. Resistance is expressed as **duration**, not a miss: Alchemy, INT/Magic Accuracy
+   against the target's level/Magic Evasion scale the debuff's timer down to as little
+   as half. A resisted Toss still applies its icon and effect.
+7. On a miss (complete immunity): show the miss action and consume the charge. No effect.
+8. On a hit: apply the effect at the Alchemy-scaled potency and resistance-scaled
+   duration.
 
 The low-level helper currently lives as `stats._ranged_accuracy_value()`. Phase 0 should
 expose a public `stats.ranged_accuracy()` wrapper rather than import a private function
