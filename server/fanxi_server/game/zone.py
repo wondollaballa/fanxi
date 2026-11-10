@@ -11356,8 +11356,7 @@ class ZoneSession:
         if not applied:
             return
         if verb == "toss":
-            self._chemist_toss_emote(target)
-        consumed = chemist.consume_slot(
+            consumed = chemist.consume_slot(
             self.world.service, int(self.char["id"]), int(slot.item_id))
         if consumed is None:
             log.warning("%s Chemist friendly item lost its bag charge", self.addr)
@@ -11382,6 +11381,10 @@ class ZoneSession:
                                  result.get("message", "applied")))
         self._chemist_send_action(
             int(ability_id), int(ability.get("animation") or 0), entries)
+        # The ability result must arrive first: its 0x028 resets the motion state, so an
+        # emote queued before it is immediately cancelled and never renders.
+        if verb == "toss":
+            self._chemist_toss_emote(target)
         if catalyst:
             self._chemist_catalyst_until = 0.0
         self.say("You %s a %s." % (verb, spec["name"]))
@@ -11402,7 +11405,7 @@ class ZoneSession:
             target_targid = int(getattr(target, "targid", 0) or 0)
         body = packets.motion_message(
             me, target_id, int(self.char.get("targid") or TARGID), target_targid,
-            44, 2, 0)
+            44, 0, 0)
         sessions = self.world.sessions_in_zone(self.zone)
         for other in sessions:
             other.queue.append(sub(0x05A, body))
@@ -11480,6 +11483,8 @@ class ZoneSession:
                 self.say("Your %s misses %s." % (spec["name"], enemy.name))
         self._chemist_send_action(
             chemist.TOSS, int(ability.get("animation") or 0), entries)
+        # Last word on the motion: /toss after the ability result, never before it.
+        self._chemist_toss_emote(target)
         if catalyst:
             self._chemist_catalyst_until = 0.0
         if volatile:

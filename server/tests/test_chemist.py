@@ -391,7 +391,7 @@ class ChemistTest(unittest.TestCase):
         emotes = [m for m in self.session.queue if (m[0] & 0x1FF) == 0x05A]
         self.assertTrue(emotes, "Toss must send the 0x05A /toss emote")
         self.assertEqual(struct.unpack_from("<H", emotes[-1], 16)[0], 44)
-        self.assertEqual(emotes[-1][22], 2)  # motion only, no emote text
+        self.assertEqual(emotes[-1][22], 0)  # the ordinary /toss emote mode
         actions = [m for m in self.session.queue if (m[0] & 0x1FF) == 0x028]
         self.assertTrue(actions)
 
