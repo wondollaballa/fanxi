@@ -2017,6 +2017,11 @@ struct IMGUI_API ImGuiDockNode
     ImGuiID                 SelectedTabId;              // [Leaf node only] Which of our tab/window is selected.
     ImGuiID                 WantCloseTabId;             // [Leaf node only] Set when closing a specific tab/window.
     ImGuiID                 RefViewportId;              // Reference viewport ID from visible window when HostWindow == NULL.
+    // [Fanxi] HUD tab groups: fit the group to the selected window and collapse it to the tab bar.
+    ImVec2                  AutoSizeRequest;            // Pending node size from a tab selection (0,0 == none)
+    ImVec2                  RestoreSize;                // Node size before the minimize button collapsed it
+    ImGuiID                 LastAutoSizeTabId;          // Last tab we fitted the node to
+    bool                    IsMinimized;                // Group collapsed to its tab bar
     ImGuiDataAuthority      AuthorityForPos         :3;
     ImGuiDataAuthority      AuthorityForSize        :3;
     ImGuiDataAuthority      AuthorityForViewport    :3;
@@ -2909,6 +2914,7 @@ struct IMGUI_API ImGuiWindow
     bool                    MemoryCompacted;                    // Set when window extraneous data have been garbage collected
 
     // Docking
+    ImVec2                  DockRequestedSize;                  // [Fanxi] Last SetNextWindowSize while docked: the tab's own size
     bool                    DockIsActive        :1;             // When docking artifacts are actually visible. When this is set, DockNode is guaranteed to be != NULL. ~~ (DockNode != NULL) && (DockNode->Windows.Size > 1).
     bool                    DockNodeIsVisible   :1;
     bool                    DockTabIsVisible    :1;             // Is our window visible this frame? ~~ is the corresponding tab selected?

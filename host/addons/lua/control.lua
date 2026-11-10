@@ -5045,6 +5045,12 @@ end
 hud = {
     character = nil,
     path = nil,
+    -- A per-character suffix on the action windows' ### ids: ImGui keeps their floating position
+    -- and dock tab group in imgui.ini, and two characters should not inherit each other's layout.
+    window_suffix = 'fanxi-hud-default',
+    -- Whether each action window was docked on the previous frame, so a forced reposition (a
+    -- resolution change, //hud move reset) does not pull it out of its tab group by accident.
+    docked = {},
     state = hud_defaults(),
     abilities = {},
     spells = {},
@@ -5253,6 +5259,7 @@ function hud.ensure()
     if hud.character == key then return end
     local previous = hud.character
     hud.character = key
+    hud.window_suffix = 'fanxi-hud-' .. key
     hud.path = xi.paths.data .. 'hud/' .. key .. '.json'
     local stored = hud_load_file(hud.path)
     if stored then
@@ -5280,6 +5287,7 @@ function hud.ensure()
     hud.active_trusts = {}
     hud.next_trust_scan = 0
     hud.page = {}
+    hud.docked = {}
     hud.center, hud.clamp_positions = {}, false
     hud.refresh_signature = nil
     hud.pet_commands = {}
@@ -6186,6 +6194,17 @@ end
 local function hud_label_height(spec)
     if spec.labels ~= 'always' then return 0 end
     return hud_font_size(spec) + 4
+end
+
+-- The height ImGui reserves above a window's content: the title bar while the window floats,
+-- and the dock tab bar once it is clipped into a group. Both use the same frame height, so one
+-- allowance keeps the body the same size in either place. A field, not a file-scope local:
+-- hud_init() is already at LuaJIT's 200-local ceiling.
+function hud.frame_height(api)
+    local ok, value = pcall(api.GetFrameHeight)
+    value = ok and tonumber(value) or nil
+    if value and value > 0 then return value end
+    return 24 -- Ashita's 18 px default font plus 3 px frame padding
 end
 
 -- Recast timers are read at a glance: 300 s -> "5m", 299 s -> "4m59s", 45 s -> "45s".
@@ -7351,7 +7370,10 @@ local function hud_layout(api, key, spec, groups)
         tab_h = rows * th + (rows - 1) * 4 + HUD_GRID_GAP
     end
     local ws_header_h = key == 'weapon_skills' and hud_ws_header_height(width) or 0
-    local height = ws_header_h + tab_h + body_h + (hud.state.edit and 72 or 12)
+    -- The action windows now have a title bar (they can be dragged into a tab group like the
+    -- other HUDs). The frame height covers that bar while floating and the tab bar while docked;
+    -- the outer size has to include it or the body would lose a row to the decoration.
+    local height = ws_header_h + tab_h + body_h + (hud.state.edit and 72 or (hud.frame_height(api) + 12))
     return width, height, body_h, cell_h, list_row, tabs_on, active_index, tab_h, scroll_x,
         ws_header_h, content_h <= body_h
 end
@@ -7452,40 +7474,68 @@ local function hud_window(api, key, title, groups)
     end
     local screen_w, screen_h = hud_screen_size(api)
     local position = state.positions[key] or HUD_DEFAULT_POSITIONS[key]
-    local snap = hud.reposition or hud.clamp_positions or false
+    local docked = hud.docked[key] == true
+    -- A docked window's place belongs to its tab group. Only a deliberate reset (move reset,
+    -- //hud reset positions) forces a position and undocks it; a resolution clamp leaves a
+    -- clipped window alone, because the group's own node handles the screen edge.
+    local forced = hud.center[key] or hud.force_pos[key] or hud.reposition
+        or (not docked and hud.clamp_positions)
     if hud.center[key] then
         -- //hud move reset: park the window (not just its top-left) in the middle of the screen.
         position.x = math.floor((screen_w - width) / 2)
         position.y = math.floor((screen_h - height) / 2)
         hud.center[key] = nil
-        snap = true
+        forced = true
     end
-    if edit or snap then
+    if forced or (edit and not docked) then
         -- The saved position may belong to a resolution that no longer exists; keep the whole
         -- window inside the back buffer while it is being placed, so it can always be grabbed.
         position.x = math.max(4, math.min(position.x, math.max(4, screen_w - width - 4)))
         position.y = math.max(4, math.min(position.y, math.max(4, screen_h - height - 4)))
-    else
+    elseif not docked then
         -- A resolution change must not leave a window with its title bar off screen.
         if position.x + width > screen_w then position.x = math.max(4, screen_w - width - 4) end
         if position.y + height > screen_h then position.y = math.max(4, screen_h - height - 4) end
     end
-    -- While the user drags, FirstUseEver lets ImGui own the window position; a reset snaps it.
-    api.SetNextWindowPos({ position.x, position.y }, (snap or not edit) and 1 or 4)
+    -- FirstUseEver is what lets ImGui own a floating window after a title-bar drag and keeps a
+    -- docked window in its node; only a force (a user reset) moves it.
+    api.SetNextWindowPos({ position.x, position.y }, forced and 1 or 4)
     api.SetNextWindowSize({ width, height }, 1)
     api.SetNextWindowBgAlpha(state.opacity)
     -- The window is fixed-size; a window scrollbar would only duplicate the body's or show
     -- over empty space. Let the body own scrolling.
     -- NoBringToFrontOnFocus keeps the Done box above a window being dragged in move mode.
-    local flags = edit and (2 + 8 + 32 + 256 + 8192) or (1 + 2 + 4 + 8 + 32 + 256)
+    -- NoCollapse: the only collapse control is the dock group's minimize button.
+    local flags = 2 + 8 + 32 + (edit and 8192 or 0)
     local count = 0
     for _, group in ipairs(groups) do count = count + #group.items end
-    local shown_title = title .. '  (' .. count .. ')'
+    -- The ### id is stable across count changes and per character: ImGui persists the window's
+    -- place and its dock tab membership under it.
+    local shown_title = title .. '  (' .. count .. ')' .. '###' .. tostring(hud.window_suffix or 'fanxi-hud') .. '-' .. key
     if edit then shown_title = shown_title .. ' - drag to move' end
 
+    local show_key = 'show_' .. key
+    local shown = state[show_key] == true
+    local close = { shown }
     api.PushStyleVar(2, { 4, 4 })       -- ImGuiStyleVar_WindowPadding
     api.PushStyleVar(14, { HUD_GRID_GAP, HUD_GRID_GAP }) -- ImGuiStyleVar_ItemSpacing
-    local open = api.Begin(shown_title, nil, flags)
+    local open = api.Begin(shown_title, close, flags)
+    -- A tab's X (or the group's) closes the window exactly like its //hud switch.
+    if close[1] ~= shown then
+        state[show_key] = close[1] == true
+        hud_save(state, hud.path)
+    end
+    -- DockId, not DockIsActive: a group with one window left hides its tab bar and looks
+    -- floating, but the window is still bound to its node and a forced position would undock it.
+    local docked_now = false
+    if api.GetWindowDockID then
+        local ok, value = pcall(api.GetWindowDockID)
+        docked_now = ok and (tonumber(value) or 0) ~= 0
+    elseif api.IsWindowDocked then
+        local ok, value = pcall(api.IsWindowDocked)
+        docked_now = ok and value == true
+    end
+    hud.docked[key] = docked_now
     if not open then
         api.End()
         api.PopStyleVar(2)
@@ -7565,15 +7615,16 @@ local function hud_window(api, key, title, groups)
             api.Text('Drag the title bar to move; click Done or //hud save to finish.')
         end
     end
-    if edit then
-        local px, py = api.GetWindowPos()
+    -- Save a floating window's place when the user lets go of it (the title bar is the usual
+    -- place, but ImGui also lets an empty gutter start the drag). A clipped window belongs to
+    -- its tab group, whose position ImGui persists with the dock node.
+    if not docked_now and api.IsMouseReleased and api.IsMouseReleased(0) then
+        local wx, wy = api.GetWindowPos()
         local current = state.positions[key]
-        -- Only a drag moves a window.  Reading the position on idle frames would turn an ImGui
-        -- relocation the user did not ask for into a saved position.
-        local dragging = api.IsMouseDown(0) or api.IsMouseReleased(0)
-        if current and dragging and (math.abs(px - current.x) > 0.5 or math.abs(py - current.y) > 0.5) then
-            current.x, current.y = px, py
-            if api.IsMouseReleased(0) then hud_save(state, hud.path) end
+        if current and wx and wy
+            and (math.abs(wx - current.x) > 0.5 or math.abs(wy - current.y) > 0.5) then
+            current.x, current.y = wx, wy
+            hud_save(state, hud.path)
         end
     end
     api.End()
@@ -11371,6 +11422,39 @@ xi.events.on('command', function(e)
         e.blocked = true
         hud.ensure()
         rest = (rest or ''):lower():match('^%s*(.-)%s*$') or ''
+        -- The four action windows gained a tab/title-bar X, so they need the same switch from
+        -- chat. Aliases follow the words players use for them.
+        local action_windows = {
+            abilities = { 'abilities', 'Job Abilities' },
+            ability = { 'abilities', 'Job Abilities' },
+            ja = { 'abilities', 'Job Abilities' },
+            spells = { 'spells', 'Spells' },
+            spell = { 'spells', 'Spells' },
+            magic = { 'spells', 'Spells' },
+            trusts = { 'trusts', 'Trusts' },
+            trust = { 'trusts', 'Trusts' },
+            ['weapon_skills'] = { 'weapon_skills', 'Weapon Skills' },
+            weaponskills = { 'weapon_skills', 'Weapon Skills' },
+            ['weapon_skill'] = { 'weapon_skills', 'Weapon Skills' },
+            ['weapon skills'] = { 'weapon_skills', 'Weapon Skills' },
+            ws = { 'weapon_skills', 'Weapon Skills' },
+        }
+        -- Lua patterns have no alternation: match the two suffixes separately.
+        local window_name, window_mode = rest:match('^(.-)%s+(on)$')
+        if not window_name then window_name, window_mode = rest:match('^(.-)%s+(off)$') end
+        local window = action_windows[window_name or rest]
+        if window then
+            local state_key = 'show_' .. window[1]
+            local shown
+            if window_mode == 'on' then shown = true
+            elseif window_mode == 'off' then shown = false
+            else shown = not hud.state[state_key] end
+            hud.state[state_key] = shown
+            if shown then hud.state.show_hud = true end
+            hud_save(hud.state, hud.path)
+            xi.chat.write(window[2] .. ': ' .. (shown and 'shown' or 'hidden'), 1)
+            return
+        end
         if rest == '' or rest == 'toggle' then
             hud.state.show_hud = not hud.state.show_hud
         elseif rest == 'on' or rest == 'show' then
@@ -11477,7 +11561,7 @@ xi.events.on('command', function(e)
                 (hud.state.show_target and 'shown' or 'hidden'), 1)
             return
         else
-            xi.chat.write('HUD: //hud [on|off|toggle|move|move reset|save|jug|pet|roll|quickdraw|target|sch|chm] (Ctrl+H)', 1)
+            xi.chat.write('HUD: //hud [on|off|toggle|move|move reset|save|abilities|spells|trusts|weapon_skills|jug|pet|roll|quickdraw|target|sch|chm] (Ctrl+H)', 1)
             return
         end
         -- A hidden HUD has no Done box; leave move mode when the HUD is switched off.

@@ -62,9 +62,9 @@ TOOLKIT_ITEM_ID = 8899  # Alchemy Kit 55: a client-known stackable reagent
 # the client-known Alchemy Kit 55.
 TOOLKIT_ITEM_IDS = (TOOLKIT_ITEM_ID, 30008)
 
-# The client's synthesis pose (LandSandBoat's xi::Animation::Synth).  Mix uses the
-# same animation so the ability visibly reads as preparation, and the synthesis
-# start/finish packets use it as the result sub-kind.
+# The client's synthesis pose (LandSandBoat's xi::Animation::Synth).  This is an
+# *entity* animation (0x00D/0x037), not the 0x028 spell-animation field: 44 in that
+# field is Protect, which is how the old implementation played the wrong cast.
 CRAFT_ANIMATION = 44
 
 

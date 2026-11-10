@@ -404,13 +404,21 @@ layout:
 - **List** width is measured from the longest name in that window, so it fits the text instead of
   using a fixed column. **Grid** and **Bar** set their width and height from the tile size so the
   cells sit flush inside the window.
-- **Edit** turns on move mode in game: each visible window grows a title bar
-  (`Spells (40) - drag to move`) and is moved by dragging it, and the two hubs get the same accent
-  outline. An opaque **Done** box sits in the middle of the screen and is drawn above every
-  window, so it stays readable and clickable while a window is being dragged. Either click
-  **Done** or type `//hud save` to save every position and leave. Drag positions are also saved
-  when the mouse is released. **Reset positions** puts the visible windows back in their default
-  corners.
+- **Edit** turns on move mode in game: every window (the action windows now keep a title bar at
+  all times) is moved by dragging that bar, and the two hubs get the same accent outline. An
+  opaque **Done** box sits in the middle of the screen and is drawn above every window, so it
+  stays readable and clickable while a window is being dragged. Either click **Done** or type
+  `//hud save` to save every position and leave. Drag positions are also saved when the mouse is
+  released. **Reset positions** puts the visible windows back in their default corners.
+- **Clip windows into tabs.** Drag a HUD by its title bar onto another HUD's tab bar: they become
+  one window with a tab per HUD, the same way the hub windows group. The tab bar's left button
+  minimizes the whole group to its tab bar and restores the size it had; right-click it for the
+  usual window menu. Selecting a tab sizes the group to that window's own content (and reopens a
+  minimized group), so the short Chemist page no longer inherits the tall Spells page's size. A
+  tab's X is the same switch as that window's `//hud` toggle (`//hud abilities`, `//hud spells`,
+  `//hud trusts`, `//hud weapon_skills`, each with an optional `on`/`off`). ImGui keeps the group
+  and every floating position in `imgui.ini` under the character's window ids, so a layout
+  survives a restart.
 - **Hide the HUD when a menu or chat is open** hides every Fanxi HUD window (the four action
   windows and the two hubs) whenever a client menu is open or the chat line is being typed in,
   while the game window has focus. The menu hide is suppressed while the player is engaged or has

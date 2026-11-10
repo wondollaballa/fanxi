@@ -24,6 +24,12 @@ echo "== hud cooldowns"
 python3 tests/hud_cool_test.py
 echo "== magic bag"
 python3 tests/magic_bag_test.py
+echo "== hud docking"
+python3 tests/hud_dock_test.py
+if [ -f build/third_party/imgui.a ]; then
+    echo "== hud dock tabs"
+    tests/dock_tabs_test.sh
+fi
 echo "== equip view"
 python3 tests/equipview_hud_test.py
 echo "== item name aliases"

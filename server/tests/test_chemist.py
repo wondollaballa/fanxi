@@ -14,6 +14,7 @@ from unittest import mock
 
 from support import make_service
 
+from fanxi_server import service as service_module
 from fanxi_server.game import base_stats, chemist, effects, modifiers as mod, packets, skills
 from fanxi_server.game.world import World
 from fanxi_server.game.zone import ZoneSession
@@ -176,9 +177,10 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(int(body[0x44 + 23]), 99)
         self.assertEqual(int(body[0x68 + 23]), 0)
 
-    def test_mix_uses_the_synthesis_pose(self):
-        self.assertEqual(int(self.service.job_ability(chemist.MIX)["animation"]),
-                         chemist.CRAFT_ANIMATION)
+    def test_mix_uses_the_entity_synthesis_pose_not_a_spell_animation(self):
+        # 0x028's animation field is a spell animation id (44 is Protect); the
+        # synth pose rides the entity animation, not the ability row.
+        self.assertEqual(int(self.service.job_ability(chemist.MIX)["animation"]), 0)
         self.assertEqual(chemist.CRAFT_ANIMATION, 44)
 
     def test_all_recipes_are_learned(self):
@@ -220,6 +222,14 @@ class ChemistTest(unittest.TestCase):
         packet = bytes([0, 0, 0, 0, int(row["slot"]), 1, 0])
         self.session.equip(packet)
         self.assertEqual(self.session.equipped.get(1), (0, int(row["slot"]), 26457))
+
+    def test_chm_gearswap_library_and_sch_test_gear(self):
+        self.assertIn("CHM", service_module.GEARSWAP_JOBS)
+        library = self.service.gearswap_library(int(self.account["id"]), "CHM")
+        self.assertIn("sets.JA.Mix", library["source"])
+        self.assertIn("Br. Escutcheon", library["source"])
+        kaykaus = self.service.item(25618)  # Kaykaus Mitra +1, SCH JSE
+        self.assertTrue(int(kaykaus["jobs"]) & (1 << 22))
 
     def test_wizard_rod_and_shield_can_be_worn_together(self):
         self.assertGreaterEqual(

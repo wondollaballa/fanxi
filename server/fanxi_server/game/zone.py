@@ -11532,8 +11532,11 @@ class ZoneSession:
         self.queue += [self.char_status(), self.char_update(packets.SEND_HP)]
         self.world.broadcast_player(self, packets.SEND_HP)
         me = int(self.char["char_id"])
+        # 0x028's animation field is the *spell* animation id, and 44 is Protect.
+        # The synthesis pose rides the entity animation (0x00D/0x037), not this
+        # field; putting 44 here played Protect's cast animation instead.
         self.queue.append(sub(0x028, packets.battle_action(
-            me, me, int(item_id), animation=chemist.CRAFT_ANIMATION,
+            me, me, int(item_id), animation=0,
             message=packets.MESSAGE_MAGIC_STARTS_CASTING, kind=0,
             category=packets.ACTION_CATEGORY_MAGIC_START,
             action_id=packets.ACTION_SKILL_USE)))
@@ -11545,7 +11548,7 @@ class ZoneSession:
             self.world.service, int(self.char["id"]), int(item_id))
         me = int(self.char["char_id"])
         self.queue.append(sub(0x028, packets.battle_action(
-            me, me, int(item_id), animation=chemist.CRAFT_ANIMATION, message=0,
+            me, me, int(item_id), animation=0, message=0,
             kind=0, category=packets.ACTION_CATEGORY_MAGIC_FINISH,
             action_id=int(item_id))))
         self.queue += [self.char_status(), self.char_update(packets.SEND_HP)]

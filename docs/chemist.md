@@ -28,9 +28,9 @@ Server slice landed 2026-11-09:
 - a learned recipe book, the Chemistry Toolkit universal reagent and a Mix recipe picker;
 - the Brewer's Escutcheon craft-skill shield (`CRAFT_SKILL`/`ALCHEMY_SKILL` and a 2,000 ms
   synthesis cast);
-- Mix and synthesis use the client's synthesis pose (animation 44), held on the
-  `0x00D`/`0x037` entity animation for the whole cast (the MagicStart result's animation
-  field is ignored by the client);
+- Mix and synthesis use the client's synthesis pose (entity animation 44), held on
+  `0x00D`/`0x037` for the whole cast. The `0x028` result animation stays 0 because that
+  field is a *spell* animation id and 44 is Protect;
 - server tests in `server/tests/test_chemist.py`.
 
 The Fanxi HUD page landed with the same slice: a Chemist window with the Battle Bag, the
@@ -417,6 +417,13 @@ The retail client's item records still carry the 22-job mask, so the native equi
 menu does not list job-23-only gear. Use the server `//equip` command or the launcher's
 Gear page for now; the server validates the migrated `items.jobs` mask and sends the
 normal `0x050`/grap update. A native-menu patch is the Phase 3 item-mask work.
+
+Migration 0197 is a **SCH test pass**: every item whose job mask includes Scholar
+(including all-job gear and SCH JSE/accessories) also gets the CHM bit. `gearswap/CHM.lua`
+is the starter library: rod main, Brewer's Escutcheon sub, Scholar test pieces, and
+`sets.JA.Toss`, `Mix`, `Catalyst`, `Amplify` and `Volatile Synthesis` all keep the shield.
+A recipe craft is server-side (`//chm craft`), so it does not produce a GearSwap action;
+the shield is also in `idle`, `engaged`, `precast` and `midcast`.
 
 ### 6.5 Empyrean "Augments Chemistry"
 

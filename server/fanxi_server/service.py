@@ -122,7 +122,8 @@ JOB_POINT_SPENT = 2100
 JOB_COUNT = 22
 # Per-account GearSwap libraries live in the database so an import follows the account
 # across machines, and an edit never touches the checkout's shared gearswap/*.lua files.
-GEARSWAP_JOBS = tuple(merit_menus.JOB_ABBRS[index] for index in range(1, JOB_COUNT + 1))
+GEARSWAP_JOBS = tuple(merit_menus.JOB_ABBRS[index]
+                     for index in range(1, JOB_COUNT + 1)) + ("CHM",)
 MAX_GEARSWAP_LIBRARY_BYTES = 512 * 1024
 
 # The item slots the Armory offers: weapons and ammo use the hand/range slots, armour the

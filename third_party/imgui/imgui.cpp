@@ -6805,6 +6805,10 @@ static inline ImVec2 CalcWindowMinSize(ImGuiWindow* window)
     // Reduce artifacts with very small windows
     ImGuiWindow* window_for_height = GetWindowForTitleAndMenuHeight(window);
     size_min.y = ImMax(size_min.y, window_for_height->TitleBarHeight + window_for_height->MenuBarHeight + ImMax(0.0f, g.Style.WindowRounding - 1.0f));
+    // [Fanxi] A minimized dock group is only its tab bar. The host window has no title bar of its
+    // own, so the normal window minimum would leave a strip of empty background under the tabs.
+    if (window->DockNodeAsHost && window->DockNodeAsHost->IsMinimized)
+        size_min.y = 4.0f;
     return size_min;
 }
 
@@ -17956,6 +17960,11 @@ void ImGui::DockContextProcessUndockWindow(ImGuiContext* ctx, ImGuiWindow* windo
 {
     ImGuiContext& g = *ctx;
     IMGUI_DEBUG_LOG_DOCKING("[docking] DockContextProcessUndockWindow window '%s', clear_persistent_docking_ref = %d\n", window->Name, clear_persistent_docking_ref);
+    // [Fanxi] Dragging a tab out of a minimized group must not leave the window at tab-bar
+    // height: the action HUDs cannot be resized by hand, so use the group's expanded size.
+    ImVec2 undock_size = window->SizeFull;
+    if (window->DockNode && window->DockNode->IsMinimized && window->DockNode->RestoreSize.x > 0.0f && window->DockNode->RestoreSize.y > 0.0f)
+        undock_size = window->DockNode->RestoreSize;
     if (window->DockNode)
         DockNodeRemoveWindow(window->DockNode, window, clear_persistent_docking_ref ? 0 : window->DockId);
     else
@@ -17963,7 +17972,7 @@ void ImGui::DockContextProcessUndockWindow(ImGuiContext* ctx, ImGuiWindow* windo
     window->Collapsed = false;
     window->DockIsActive = false;
     window->DockNodeIsVisible = window->DockTabIsVisible = false;
-    window->Size = window->SizeFull = FixLargeWindowsWhenUndocking(window->SizeFull, window->Viewport);
+    window->Size = window->SizeFull = FixLargeWindowsWhenUndocking(undock_size, window->Viewport);
 
     MarkIniSettingsDirty();
 }
@@ -18078,6 +18087,9 @@ ImGuiDockNode::ImGuiDockNode(ImGuiID id)
     SelectedTabId = 0;
     WantCloseTabId = 0;
     RefViewportId = 0;
+    AutoSizeRequest = RestoreSize = ImVec2(0.0f, 0.0f);
+    LastAutoSizeTabId = 0;
+    IsMinimized = false;
     AuthorityForPos = AuthorityForSize = ImGuiDataAuthority_DockNode;
     AuthorityForViewport = ImGuiDataAuthority_Auto;
     IsVisible = true;
@@ -18349,6 +18361,18 @@ static ImGuiWindow* ImGui::DockNodeFindWindowByID(ImGuiDockNode* node, ImGuiID i
     IM_ASSERT(id != 0);
     for (ImGuiWindow* window : node->Windows)
         if (window->ID == id)
+            return window;
+    return NULL;
+}
+
+// [Fanxi] Dock settings store the *tab* id (window->TabId), not the window id. The stock
+// DockNodeFindWindowByID() above compares window ids; HUD tab lookup needs the tab id.
+static ImGuiWindow* FanxiDockNodeFindWindowByTabId(ImGuiDockNode* node, ImGuiID tab_id)
+{
+    if (tab_id == 0)
+        return NULL;
+    for (ImGuiWindow* window : node->Windows)
+        if (window->TabId == tab_id)
             return window;
     return NULL;
 }
@@ -18661,6 +18685,30 @@ static void ImGui::DockNodeUpdate(ImGuiDockNode* node)
             else if (node->AuthorityForViewport == ImGuiDataAuthority_Window && node->RefViewportId != 0)
                 SetNextWindowViewport(node->RefViewportId);
 
+            // [Fanxi] A selected HUD tab asks its group to fit the window's own size. Do this
+            // after the regular position/size sync so this frame's host begins at that size.
+            // Only floating root groups (what the HUDs use) are fitted.
+            if (node->AutoSizeRequest.x > 0.0f && node->AutoSizeRequest.y > 0.0f)
+            {
+                ImGuiViewport* viewport = GetMainViewport();
+                ImVec2 view_pos = viewport->WorkPos;
+                ImVec2 view_size = viewport->WorkSize;
+                ImVec2 want = node->AutoSizeRequest;
+                node->AutoSizeRequest = ImVec2(0.0f, 0.0f);
+                const float min_w = 160.0f;
+                const float min_h = GetFrameHeight();
+                want.x = ImClamp(want.x, min_w, ImMax(min_w, view_size.x - 8.0f));
+                want.y = ImClamp(want.y, min_h, ImMax(min_h, view_size.y - 8.0f));
+
+                ImVec2 pos = (node->AuthorityForPos == ImGuiDataAuthority_Window && ref_window) ? ref_window->Pos : node->Pos;
+                pos.x = ImClamp(pos.x, view_pos.x + 4.0f, ImMax(view_pos.x + 4.0f, view_pos.x + view_size.x - want.x - 4.0f));
+                pos.y = ImClamp(pos.y, view_pos.y + 4.0f, ImMax(view_pos.y + 4.0f, view_pos.y + view_size.y - want.y - 4.0f));
+                SetNextWindowPos(pos);
+                SetNextWindowSize(want);
+                node->Pos = pos;
+                node->Size = want;
+            }
+
             SetNextWindowClass(&node->WindowClass);
 
             // Begin into the host window
@@ -18670,6 +18718,9 @@ static void ImGui::DockNodeUpdate(ImGuiDockNode* node)
             window_flags |= ImGuiWindowFlags_NoFocusOnAppearing;
             window_flags |= ImGuiWindowFlags_NoSavedSettings | ImGuiWindowFlags_NoNavFocus | ImGuiWindowFlags_NoCollapse;
             window_flags |= ImGuiWindowFlags_NoTitleBar;
+            // [Fanxi] A minimized group is a tab bar: no resize borders over the buttons.
+            if (node->IsMinimized)
+                window_flags |= ImGuiWindowFlags_NoResize;
 
             SetNextWindowBgAlpha(0.0f); // Don't set ImGuiWindowFlags_NoBackground because it disables borders
             PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
@@ -19025,14 +19076,75 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
     host_window->DrawList->AddRectFilled(title_bar_rect.Min, title_bar_rect.Max, title_bar_col, host_window->WindowRounding, rounding_flags);
 
     // Docking/Collapse button
+    // [Fanxi] On a floating HUD tab group this button minimizes/maximizes the whole group; the
+    // window menu stays available on right-click. Split/dockspace nodes keep the stock menu.
+    const bool can_minimize = node->IsRootNode() && node->IsLeafNode() && !node->IsDockSpace();
     if (has_window_menu_button)
     {
-        if (CollapseButton(host_window->GetID("#COLLAPSE"), window_menu_button_pos, node)) // == DockNodeGetWindowMenuButtonId(node)
-            OpenPopup("#WindowMenu");
+        bool pressed = false;
+        bool hovered = false;
+        if (can_minimize)
+        {
+            ImGuiID button_id = host_window->GetID("#COLLAPSE");
+            ImRect bb(window_menu_button_pos, window_menu_button_pos + ImVec2(g.FontSize, g.FontSize));
+            bool is_clipped = !ItemAdd(bb, button_id);
+            bool held = false;
+            pressed = ButtonBehavior(bb, button_id, &hovered, &held);
+            if (is_clipped)
+                hovered = held = pressed = false;
+            if (hovered || held)
+                host_window->DrawList->AddRectFilled(bb.Min, bb.Max,
+                    GetColorU32((held && hovered) ? ImGuiCol_ButtonActive : hovered ? ImGuiCol_ButtonHovered : ImGuiCol_Button));
+            ImU32 icon_col = GetColorU32(ImGuiCol_Text);
+            if (node->IsMinimized)
+            {
+                // Maximize: the dock menu's bar at the bottom, chevron pointing up.
+                host_window->DrawList->AddRectFilled(window_menu_button_pos + ImVec2(g.FontSize * 0.20f, g.FontSize * 0.70f),
+                    window_menu_button_pos + ImVec2(g.FontSize * 0.80f, g.FontSize * 0.85f), icon_col);
+                RenderArrowPointingAt(host_window->DrawList, window_menu_button_pos + ImVec2(g.FontSize * 0.50f, g.FontSize * 0.15f),
+                    ImVec2(g.FontSize * 0.30f, g.FontSize * 0.40f), ImGuiDir_Up, icon_col);
+            }
+            else
+            {
+                RenderArrowDockMenu(host_window->DrawList, window_menu_button_pos, g.FontSize, icon_col);
+            }
+            if (pressed)
+            {
+                if (node->IsMinimized)
+                {
+                    node->IsMinimized = false;
+                    ImGuiWindow* selected = FanxiDockNodeFindWindowByTabId(node, tab_bar->SelectedTabId);
+                    if (node->RestoreSize.x > 0.0f && node->RestoreSize.y > 0.0f)
+                        node->AutoSizeRequest = node->RestoreSize;
+                    else if (selected)
+                        node->AutoSizeRequest = selected->DockRequestedSize;
+                }
+                else
+                {
+                    node->RestoreSize = node->Size;
+                    node->IsMinimized = true;
+                    node->AutoSizeRequest = ImVec2(node->Size.x, GetFrameHeight());
+                }
+            }
+            if (IsItemClicked(ImGuiMouseButton_Right))
+                OpenPopup("#WindowMenu");
+            if (IsItemActive() && IsMouseDragging(0))
+            {
+                StartMouseMovingWindowOrNode(host_window, node, true);
+            }
+            if (hovered && g.HoveredIdTimer > 0.5f)
+                SetTooltip("%s\nRight-click for the window menu", node->IsMinimized ? "Maximize" : "Minimize");
+        }
+        else
+        {
+            if (CollapseButton(host_window->GetID("#COLLAPSE"), window_menu_button_pos, node)) // == DockNodeGetWindowMenuButtonId(node)
+                OpenPopup("#WindowMenu");
+            hovered = IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_DelayNormal);
+            if (hovered && g.HoveredIdTimer > 0.5f)
+                SetTooltip("%s", LocalizeGetMsg(ImGuiLocKey_DockingDragToUndockOrMoveNode));
+        }
         if (IsItemActive())
             focus_tab_id = tab_bar->SelectedTabId;
-        if (IsItemHovered(ImGuiHoveredFlags_ForTooltip | ImGuiHoveredFlags_DelayNormal) && g.HoveredIdTimer > 0.5f)
-            SetTooltip("%s", LocalizeGetMsg(ImGuiLocKey_DockingDragToUndockOrMoveNode));
     }
 
     // If multiple tabs are appearing on the same frame, sort them based on their persistent DockOrder value
@@ -19202,6 +19314,21 @@ static void ImGui::DockNodeUpdateTabBar(ImGuiDockNode* node, ImGuiWindow* host_w
 
     EndTabBar();
     PopID();
+
+    // [Fanxi] Selecting a HUD tab fits the group to that window's own size. Only on selection:
+    // a manual resize stays put until the user picks another tab. A window's own size is
+    // captured by its Begin(), which runs after this update, so on the frame a tab first
+    // appears it is not known yet: keep the tab pending and retry next frame.
+    if (can_minimize && tab_bar->SelectedTabId != 0 && tab_bar->SelectedTabId != node->LastAutoSizeTabId)
+    {
+        ImGuiWindow* selected = FanxiDockNodeFindWindowByTabId(node, tab_bar->SelectedTabId);
+        if (selected && selected->DockRequestedSize.x > 0.0f && selected->DockRequestedSize.y > 0.0f)
+        {
+            node->LastAutoSizeTabId = tab_bar->SelectedTabId;
+            node->IsMinimized = false;
+            node->AutoSizeRequest = selected->DockRequestedSize;
+        }
+    }
 
     // Restore SkipItems flag
     if (!node->IsDockSpace())
@@ -20672,6 +20799,11 @@ void ImGui::BeginDocked(ImGuiWindow* window, bool* p_open)
 {
     ImGuiContext& g = *GImGui;
 
+    // [Fanxi] Remember the size the window itself asked for before docking overrides it below:
+    // DockNodeUpdateTabBar fits a HUD tab group to this when its tab is selected.
+    if (g.NextWindowData.HasFlags & ImGuiNextWindowDataFlags_HasSize)
+        window->DockRequestedSize = g.NextWindowData.SizeVal;
+
     // Clear fields ahead so most early-out paths don't have to do it
     window->DockIsActive = window->DockNodeIsVisible = window->DockTabIsVisible = false;
 
@@ -21045,8 +21177,11 @@ static void DockSettingsHandler_DockNodeToSettings(ImGuiDockContext* dc, ImGuiDo
     node_settings.Depth = (char)depth;
     node_settings.Flags = (node->LocalFlags & ImGuiDockNodeFlags_SavedFlagsMask_);
     node_settings.Pos = ImVec2ih(node->Pos);
-    node_settings.Size = ImVec2ih(node->Size);
-    node_settings.SizeRef = ImVec2ih(node->SizeRef);
+    // [Fanxi] Save a minimized group's expanded size: the minimize state itself is a session
+    // convenience, and a tiny saved node would otherwise reopen with no way to grow it back.
+    const bool save_restore = node->IsMinimized && node->RestoreSize.x > 0.0f && node->RestoreSize.y > 0.0f;
+    node_settings.Size = ImVec2ih(save_restore ? node->RestoreSize : node->Size);
+    node_settings.SizeRef = ImVec2ih(save_restore ? node->RestoreSize : node->SizeRef);
     dc->NodesSettings.push_back(node_settings);
     if (node->ChildNodes[0])
         DockSettingsHandler_DockNodeToSettings(dc, node->ChildNodes[0], depth + 1);

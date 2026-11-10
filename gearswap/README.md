@@ -1,7 +1,8 @@
 # Mock GearSwap set libraries (one per job)
 
-Twenty-two self-contained GearSwap-style `.lua` files. They are Onedough's current
-set and the server's template for new accounts as well as ordinary importable files.
+Twenty-three self-contained GearSwap-style `.lua` files, including the Chemist's
+starter `CHM.lua`. They are Onedough's current set and the server's template for new
+accounts as well as ordinary importable files.
 Each covers
 the gear categories the Gear window can display and equip: idle/DT, max HP, max
 PDT/MDT, TP (including accuracy, dual-wield and hybrid variants), fast cast,
@@ -48,6 +49,7 @@ Nyame paths, Sakpata's, Gleti's and Agwu's armour and the seven Odyssey weapons,
 | `SCH.lua` | Scholar | healing/nuking, stratagems | 46 |
 | `GEO.lua` | Geomancer | geomancy support/nukes | 31 |
 | `RUN.lua` | Rune Fencer | great-sword tank, runes | 42 |
+| `CHM.lua` | Chemist | Scholar test gear, rod + shield, five CHM JA sets | 18 |
 
 "Sets" is what the launcher lists after import (empty group tables are not
 counted). Together the folder defines **864 importable sets**, counted with the
