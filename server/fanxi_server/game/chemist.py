@@ -57,6 +57,10 @@ CUSTOM_ITEM_BASE = 30000
 # It uses the client-known Alchemy Kit 55 rather than a custom id, so opening the
 # inventory or equipment screen cannot meet an item record the client does not have.
 TOOLKIT_ITEM_ID = 8899  # Alchemy Kit 55: a client-known stackable reagent
+# The first HUD builds granted the old custom item 30008.  Keep it accepted so a
+# character holding a stack from that build can still synthesize; new grants use
+# the client-known Alchemy Kit 55.
+TOOLKIT_ITEM_IDS = (TOOLKIT_ITEM_ID, 30008)
 
 # The client's synthesis pose (LandSandBoat's xi::Animation::Synth).  Mix uses the
 # same animation so the ability visibly reads as preparation, and the synthesis
@@ -218,7 +222,8 @@ def recipe(service, item_id: int) -> dict | None:
 
 def toolkit_count(service, character_id: int) -> int:
     """How many universal Chemistry Toolkits the character carries."""
-    return inventory_quantity(service, character_id, TOOLKIT_ITEM_ID)
+    return sum(inventory_quantity(service, character_id, item_id)
+               for item_id in TOOLKIT_ITEM_IDS)
 
 
 def learned_recipes(service, character_id: int) -> list[dict]:
@@ -303,11 +308,20 @@ def ensure_bag_slot(service, character: dict, item_id: int) -> dict:
 
 
 def _toolkit_available(conn, character_id: int) -> bool:
+    marks = ",".join("?" for _ in TOOLKIT_ITEM_IDS)
     row = conn.execute(
         "SELECT COALESCE(SUM(quantity), 0) AS quantity FROM char_inventory "
-        "WHERE character_id = ? AND container = 0 AND item_id = ?",
-        (int(character_id), TOOLKIT_ITEM_ID)).fetchone()
+        "WHERE character_id = ? AND container = 0 AND item_id IN (%s)" % marks,
+        (int(character_id), *TOOLKIT_ITEM_IDS)).fetchone()
     return bool(row is not None and int(row["quantity"] or 0) > 0)
+
+
+def _take_toolkit(conn, character_id: int) -> int:
+    """Consume one toolkit, preferring the current Alchemy Kit stack."""
+    for item_id in TOOLKIT_ITEM_IDS:
+        if _take_inventory(conn, character_id, int(item_id), 1) >= 1:
+            return int(item_id)
+    return 0
 
 
 def _take_reagents(conn, character_id: int, reagents: list[dict]) -> None:
@@ -498,9 +512,7 @@ def craft(service, character_id: int, item_id: int) -> dict:
             return {"ok": False, "message": "That bag slot is not empty."}
         toolkit_used = _toolkit_available(conn, character_id)
         if toolkit_used:
-            taken = _take_inventory(conn, character_id, TOOLKIT_ITEM_ID, 1)
-            if taken < 1:
-                toolkit_used = False
+            toolkit_used = bool(_take_toolkit(conn, character_id))
         if not toolkit_used:
             try:
                 _take_reagents(conn, character_id, recipe_row["reagents"])

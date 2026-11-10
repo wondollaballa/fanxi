@@ -373,7 +373,6 @@ function W.recipes(api)
     if api.BeginChild('chm_recipes', { 0, 170 }, true) then
         for _, recipe in ipairs(recipes) do
             local label = string.format('%s  x%d', recipe.name, recipe.yield)
-            if not recipe.craftable then label = label .. '  (not craftable)' end
             local chosen = api.Selectable(label .. '##chm_recipe_' .. tostring(recipe.item_id),
                 false, 0, { 0, 19 })
             if api.IsItemHovered and api.IsItemHovered() then
@@ -397,12 +396,12 @@ function W.recipes(api)
                 api.SetTooltip(table.concat(lines, '\n'))
             end
             if chosen then
-                if not recipe.craftable then
-                    notify('Not enough reagents or Alchemy for ' .. recipe.name)
-                else
-                    S.show_recipes = false
-                    run(string.format('//chm craft %d', recipe.item_id))
-                end
+                -- Let the server decide: the polled craftable flag can lag one
+                -- inventory change behind (a purchase or a toolkit stack).  The
+                -- craft command returns the precise missing reagent or Alchemy
+                -- line instead of a stale HUD refusal.
+                S.show_recipes = false
+                run(string.format('//chm craft %d', recipe.item_id))
             end
         end
         api.EndChild()

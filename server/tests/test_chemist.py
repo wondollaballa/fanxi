@@ -197,6 +197,16 @@ class ChemistTest(unittest.TestCase):
         self.assertEqual(chemist.toolkit_count(
             self.service, int(self.character["id"])), 98)
 
+    def test_old_custom_toolkit_stack_still_pays(self):
+        self.give_bag(30000, 0, 2)
+        self.service.add_item(int(self.character["id"]), 30008, 1)
+        result = chemist.craft(self.service, int(self.character["id"]), 30000)
+        self.assertTrue(result["ok"])
+        self.assertTrue(result["toolkit_used"])
+        self.assertEqual(self.bag_quantity(30000), 3)
+        self.assertEqual(chemist.toolkit_count(
+            self.service, int(self.character["id"])), 0)
+
     def test_craft_creates_the_bag_slot(self):
         result = chemist.ensure_bag_slot(self.service, self.session.char, 30000)
         self.assertTrue(result["ok"])

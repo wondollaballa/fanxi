@@ -369,8 +369,9 @@ recipes in the current build, and a new character gets the same rows on creation
 The **Chemistry Toolkit** is the client-known **Alchemy Kit 55** (item 8899), so the
 inventory and equipment screens never meet a custom item record. The HUD labels the
 stack "Chemistry Toolkit"; one kit pays one recipe's entire crystal bill. The launcher's
-Data -> Items tab finds it through the `chemistry toolkit` alias, and a craft with no kit
-falls back to the elemental reagents, so both routes remain valid.
+Data -> Items tab finds it through the `chemistry toolkit` alias. The old custom item
+30008 is still accepted for characters who received a stack before the switch; a craft
+with neither kit falls back to the elemental reagents.
 
 ### 6.3 Cast and interruption
 
